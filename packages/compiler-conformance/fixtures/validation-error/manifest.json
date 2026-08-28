@@ -1,0 +1,4 @@
+{
+  "description": "Calling stylex.create() with a non-object argument fails the transform with a validation error.",
+  "entry": "input.js"
+}
