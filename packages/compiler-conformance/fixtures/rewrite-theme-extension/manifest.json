@@ -1,0 +1,10 @@
+{
+  "description": "With `rewriteAliases`, an import of a `.stylex.js` module has its file extension stripped from the emitted specifier.",
+  "entry": "input.js",
+  "pluginOptions": {
+    "rewriteAliases": true,
+    "unstable_moduleResolution": {
+      "type": "commonJS"
+    }
+  }
+}

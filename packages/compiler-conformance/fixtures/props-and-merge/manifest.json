@@ -1,0 +1,5 @@
+{
+  "description": "stylex.props() with a conditionally applied style compiles to a lookup table indexed by the runtime condition.",
+  "entry": "input.jsx",
+  "syntax": ["flow", "jsx"]
+}
