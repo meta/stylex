@@ -56,9 +56,9 @@ function loadFixture(name) {
     entryPath: path.join(dir, entry),
     name,
     pluginOptions: manifest.pluginOptions ?? {},
-    processOptions: manifest.processOptions ?? DEFAULT_PROCESS_OPTIONS,
+    processOptions: manifest.processOptions ?? { ...DEFAULT_PROCESS_OPTIONS },
     repoRoot: REPO_ROOT,
-    syntax: manifest.syntax ?? DEFAULT_SYNTAX,
+    syntax: manifest.syntax ?? [...DEFAULT_SYNTAX],
   };
 }
 
@@ -72,8 +72,16 @@ function readExpected(name, fixture = loadFixture(name)) {
 }
 
 /** Records a result as the new expectation for a fixture. */
-function writeExpected(name, result, fixture = loadFixture(name)) {
-  writeJson(getExpectedPath(name), normalizeResult(fixture, result));
+function writeExpected(
+  name,
+  result,
+  fixture = loadFixture(name),
+  implementationTag,
+) {
+  writeJson(
+    getExpectedPath(name),
+    normalizeResult(fixture, result, implementationTag),
+  );
 }
 
 module.exports = {

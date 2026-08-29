@@ -30,10 +30,10 @@ describe('@stylexjs/babel-plugin golden fixtures', () => {
     const rawResult = babelAdapter.transform(fixture);
 
     if (UPDATE_GOLDEN) {
-      writeExpected(fixtureName, rawResult, fixture);
+      writeExpected(fixtureName, rawResult, fixture, babelAdapter.name);
     }
 
-    const actual = normalizeResult(fixture, rawResult);
+    const actual = normalizeResult(fixture, rawResult, babelAdapter.name);
     const expected = readExpected(fixtureName, fixture);
 
     // Transform status, StyleX metadata, generated CSS and diagnostics have to

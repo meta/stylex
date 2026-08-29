@@ -23,6 +23,7 @@ const {
   normalizeResult,
 } = require('../src/index');
 
+const IMPLEMENTATION_TAG = '@stylexjs/babel-plugin';
 const FIXTURE = {
   dir: '/repo/packages/compiler-conformance/fixtures/demo',
   entry: 'input.js',
@@ -31,13 +32,47 @@ const FIXTURE = {
 const CONTEXT = {
   entry: FIXTURE.entry,
   fixtureDir: FIXTURE.dir,
+  implementationTag: IMPLEMENTATION_TAG,
   repoRoot: FIXTURE.repoRoot,
 };
+const WINDOWS_CONTEXT = {
+  entry: 'input.js',
+  fixtureDir: 'C:\\repo\\packages\\compiler-conformance\\fixtures\\demo',
+  implementationTag: IMPLEMENTATION_TAG,
+  repoRoot: 'C:\\repo',
+};
+
+function validSuccess(overrides = {}) {
+  return {
+    css: '',
+    errors: [],
+    js: '',
+    metadata: [],
+    status: 'ok',
+    warnings: [],
+    ...overrides,
+  };
+}
 
 describe('normalizePaths', () => {
   test('replaces the fixture directory before the repository root', () => {
     expect(
       normalizePaths(`${FIXTURE.dir}/input.js imports /repo/other.js`, CONTEXT),
+    ).toBe('<FIXTURE_ROOT>/input.js imports <REPO_ROOT>/other.js');
+  });
+
+  test('only replaces roots at a path boundary', () => {
+    expect(normalizePaths('/repo-copy/result.js', CONTEXT)).toBe(
+      '/repo-copy/result.js',
+    );
+  });
+
+  test('normalizes Windows roots and separators', () => {
+    expect(
+      normalizePaths(
+        `${WINDOWS_CONTEXT.fixtureDir}\\input.js imports C:/repo/other.js`,
+        WINDOWS_CONTEXT,
+      ),
     ).toBe('<FIXTURE_ROOT>/input.js imports <REPO_ROOT>/other.js');
   });
 
@@ -60,12 +95,27 @@ describe('normalizeDiagnostic', () => {
     );
   });
 
-  test('collapses the implementation tag', () => {
+  test('drops a Windows location prefix with line and column coordinates', () => {
+    expect(
+      normalizeDiagnostic(
+        `${WINDOWS_CONTEXT.fixtureDir}\\input.js:12:3: bad token`,
+        WINDOWS_CONTEXT,
+      ),
+    ).toBe('bad token');
+  });
+
+  test('collapses the caller-provided implementation tag', () => {
     expect(
       normalizeDiagnostic('[@stylexjs/babel-plugin] Expected a boolean.', {
         ...CONTEXT,
       }),
     ).toBe('[stylex] Expected a boolean.');
+  });
+
+  test('preserves a semantic bracketed prefix', () => {
+    expect(normalizeDiagnostic('[E100] Expected a boolean.', CONTEXT)).toBe(
+      '[E100] Expected a boolean.',
+    );
   });
 
   test('leaves a message that merely opens with a bracket alone', () => {
@@ -78,6 +128,12 @@ describe('normalizeDiagnostic', () => {
     expect(
       normalizeDiagnostic('bad value\n|start| is reserved.', CONTEXT),
     ).toBe('bad value\n|start| is reserved.');
+  });
+
+  test('preserves pipe-prefixed alternatives in a multiline message', () => {
+    expect(
+      normalizeDiagnostic('Expected one of:\n  | string\n  | number', CONTEXT),
+    ).toBe('Expected one of:\n  | string\n  | number');
   });
 
   // Babel's code frame colorizes whenever the environment looks color-capable,
@@ -141,10 +197,24 @@ describe('isJsEquivalent', () => {
   test('ignores how a property key is spelled', () => {
     expect(isJsEquivalent('({a: 1});', '({"a": 1});', ['flow'])).toBe(true);
     expect(isJsEquivalent('({1: x});', '({"1": x});', ['flow'])).toBe(true);
+    expect(isJsEquivalent('({1n: x});', '({"1": x});', ['flow'])).toBe(true);
   });
 
   test('ignores property shorthand', () => {
     expect(isJsEquivalent('({a});', '({a: a});', ['flow'])).toBe(true);
+    expect(
+      isJsEquivalent('const {a} = x;', 'const {a: a} = x;', ['flow']),
+    ).toBe(true);
+  });
+
+  test('preserves the semantic distinction for __proto__ shorthand', () => {
+    expect(
+      isJsEquivalent(
+        'const __proto__ = null; ({__proto__});',
+        'const __proto__ = null; ({__proto__: __proto__});',
+        ['flow'],
+      ),
+    ).toBe(false);
   });
 
   test('reports a genuine difference', () => {
@@ -179,17 +249,26 @@ describe('isJsEquivalent', () => {
       isJsEquivalent('export const a = 1;', 'const = ;', ['flow']),
     ).toThrow(/Failed to parse the actual output as JavaScript/);
   });
+
+  test('fails loudly when identical output is unparseable', () => {
+    expect(() => isJsEquivalent('const = ;', 'const = ;', ['flow'])).toThrow(
+      /Failed to parse the expected output as JavaScript/,
+    );
+  });
 });
 
 describe('normalizeResult', () => {
   test('normalizes a successful transform', () => {
-    const result = normalizeResult(FIXTURE, {
-      css: '.a{color:red}  ',
-      js: '  export const a = 1;  ',
-      metadata: [['a', { rtl: null, ltr: '.a{color:red}' }, 3000]],
-      status: 'ok',
-      warnings: ['[@stylexjs/babel-plugin] heads up'],
-    });
+    const result = normalizeResult(
+      FIXTURE,
+      validSuccess({
+        css: '.a{color:red}  ',
+        js: '  export const a = 1;  ',
+        metadata: [['a', { rtl: null, ltr: '.a{color:red}' }, 3000]],
+        warnings: ['[@stylexjs/babel-plugin] heads up'],
+      }),
+      IMPLEMENTATION_TAG,
+    );
 
     expect(result).toEqual({
       css: '.a{color:red}',
@@ -208,7 +287,9 @@ describe('normalizeResult', () => {
       error: {
         message: `${FIXTURE.dir}/input.js: create() can only accept an object.\n> 1 | x\n    | ^`,
       },
+      errors: [],
       status: 'error',
+      warnings: [],
     });
 
     expect(result).toEqual({
@@ -218,6 +299,47 @@ describe('normalizeResult', () => {
       warnings: [],
     });
     expect(jsPart(result)).toBeNull();
+  });
+
+  test.each([
+    ['a missing status', { errors: [], warnings: [] }, /result.status/],
+    [
+      'an unknown status',
+      { errors: [], status: 'failed', warnings: [] },
+      /result.status/,
+    ],
+    [
+      'missing diagnostics',
+      { css: '', js: '', metadata: [], status: 'ok' },
+      /result.warnings/,
+    ],
+    [
+      'a non-string diagnostic',
+      validSuccess({ warnings: [{}] }),
+      /result.warnings/,
+    ],
+    [
+      'missing JavaScript',
+      { css: '', errors: [], metadata: [], status: 'ok', warnings: [] },
+      /result.js/,
+    ],
+    [
+      'missing metadata',
+      { css: '', errors: [], js: '', status: 'ok', warnings: [] },
+      /result.metadata/,
+    ],
+    [
+      'missing CSS',
+      { errors: [], js: '', metadata: [], status: 'ok', warnings: [] },
+      /result.css/,
+    ],
+    [
+      'a missing fatal message',
+      { error: {}, errors: [], status: 'error', warnings: [] },
+      /result.error.message/,
+    ],
+  ])('rejects %s', (_description, result, expectedError) => {
+    expect(() => normalizeResult(FIXTURE, result)).toThrow(expectedError);
   });
 });
 
@@ -231,5 +353,19 @@ describe('fixtures', () => {
       expect(fs.existsSync(fixture.entryPath)).toBe(true);
       expect(fs.existsSync(getExpectedPath(name))).toBe(true);
     }
+  });
+
+  test('default arrays and objects are isolated between loads', () => {
+    const first = loadFixture('create-basic');
+    const second = loadFixture('create-basic');
+
+    expect(first.processOptions).not.toBe(second.processOptions);
+    expect(first.syntax).not.toBe(second.syntax);
+
+    first.processOptions.useLayers = true;
+    first.syntax.push('jsx');
+
+    expect(second.processOptions.useLayers).toBe(false);
+    expect(second.syntax).toEqual(['flow']);
   });
 });
