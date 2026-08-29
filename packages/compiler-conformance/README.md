@@ -76,13 +76,15 @@ transform.
 
 **`js` is compared semantically**, as a normalized syntax tree. Ignored are
 whitespace, indentation, semicolons, comments, quote style and numeric literal
-spelling, how a non-computed property key is written (`{a: 1}`, `{'a': 1}` and
-`{1: x}` name the same properties as `{"a": 1}`, `{a: 1}` and `{"1": x}`), and
-property shorthand (`{a}` equals `{a: a}`). So an implementation only has to
-agree on the program it emits, not on how it prints it. The string stored in
-`expected.json` is one valid printing of that program; reformatting it does not
-change the outcome. When the programs genuinely differ, the Babel test falls
-back to asserting on the sources so the failure shows a readable diff.
+spelling, how a non-computed property key is written (`{a: 1}`, `{'a': 1}`,
+`{1: x}` and `{1n: x}` name the same properties as `{"a": 1}`, `{a: 1}` and
+`{"1": x}`), and property shorthand (`{a}` equals `{a: a}`). So an
+implementation only has to agree on the program it emits, not on how it prints
+it. The `__proto__` shorthand remains distinct because `{__proto__}` creates a
+data property while `{__proto__: value}` sets the object's prototype. The string
+stored in `expected.json` is one valid printing of that program; reformatting it
+does not change the outcome. When the programs genuinely differ, the Babel test
+falls back to asserting on the sources so the failure shows a readable diff.
 
 **`metadata`, `css`, `warnings`, `errors` and `status` are compared exactly**,
 after normalization:
@@ -91,8 +93,9 @@ after normalization:
   each CSS line.
 - Absolute paths become `<FIXTURE_ROOT>` and `<REPO_ROOT>`.
 - In diagnostics, terminal color escapes are removed, a leading
-  `<FIXTURE_ROOT>/<entry>: ` location prefix is dropped, a trailing source
-  excerpt (code frame) is dropped, and a leading `[implementation-name]` tag is
+  `<FIXTURE_ROOT>/<entry>: ` location prefix is dropped, and a trailing numbered
+  source excerpt (code frame) is dropped. When the adapter passes the exact text
+  of its leading `[implementation-name]` tag to `normalizeResult`, that tag is
   collapsed to `[stylex]`. What is compared is the message itself, not how an
   implementation decorates it. Color matters here in practice: Babel
   syntax-highlights a code frame whenever `CI` is set, so an uncolored message
@@ -123,6 +126,13 @@ or, when the transform fails:
 { status: 'error', error: { message: '…' }, warnings: [...], errors: [...] }
 ```
 
+Every field shown for the selected status is required. `normalizeResult` rejects
+unknown statuses, missing output, and non-string diagnostics instead of filling
+in defaults that could hide an incomplete adapter. If an implementation prefixes
+diagnostics with `[my-compiler]`, pass `my-compiler` as the third argument to
+`normalizeResult`; only that exact tag is collapsed to `[stylex]`, so semantic
+prefixes such as `[E100]` remain part of the contract.
+
 From JavaScript, drive it with the helpers this package exports:
 
 ```js
@@ -138,7 +148,11 @@ const {
 
 for (const name of getFixtureNames()) {
   const fixture = loadFixture(name);
-  const actual = normalizeResult(fixture, myAdapter.transform(fixture));
+  const actual = normalizeResult(
+    fixture,
+    myAdapter.transform(fixture),
+    myAdapter.name,
+  );
   const expected = readExpected(name, fixture);
 
   assert.deepStrictEqual(exactPart(actual), exactPart(expected));

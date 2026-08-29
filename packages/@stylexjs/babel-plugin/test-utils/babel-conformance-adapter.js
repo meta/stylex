@@ -86,6 +86,6 @@ function transform(fixture) {
 }
 
 export const babelAdapter = {
-  name: 'babel',
+  name: '@stylexjs/babel-plugin',
   transform,
 };

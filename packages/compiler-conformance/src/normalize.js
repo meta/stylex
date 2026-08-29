@@ -12,21 +12,16 @@ const path = require('node:path');
 const FIXTURE_ROOT_TOKEN = '<FIXTURE_ROOT>';
 const REPO_ROOT_TOKEN = '<REPO_ROOT>';
 
-// The bracketed tag implementations put in front of non-fatal diagnostics,
-// e.g. `[@stylexjs/babel-plugin] `. The tag names the implementation, so it is
-// collapsed to a single neutral tag before comparing. Tags never contain
-// whitespace, which keeps a message that merely opens with a bracket — say
-// `[1, 2] is not a valid value` — from being mistaken for one.
-const IMPLEMENTATION_TAG = /^\[[^\]\s]+\]\s*/;
-
 // A source excerpt appended to a diagnostic by `@babel/code-frame` and its
 // equivalents:
 //
 //   ` 3 | export const styles = stylex.create(1);`
 //   `   |                       ^^^^^^^^^^^^^^^^`
 //
-// The exact rendering is implementation-specific, so it is dropped.
-const CODE_FRAME_LINE = /^\s*(?:>\s*)?(?:\d+\s*)?\|(?:\s|$)/;
+// The exact rendering is implementation-specific, so it is dropped. Requiring
+// a numbered source line prevents a pipe-prefixed list in the message itself
+// from being mistaken for a code frame.
+const CODE_FRAME_LINE = /^\s*(?:>\s*)?\d+\s*\|(?:\s|$)/;
 
 // Terminal escape sequences. A diagnostic is syntax-highlighted whenever the
 // implementation thinks the environment supports color, and that decision is
@@ -38,12 +33,43 @@ const CODE_FRAME_LINE = /^\s*(?:>\s*)?(?:\d+\s*)?\|(?:\s|$)/;
 // eslint-disable-next-line no-control-regex -- ESC is what this matches.
 const ANSI_ESCAPE = /\u001B\[[0-9;]*[A-Za-z]/g;
 
-function splitJoin(value, search, replacement) {
-  return search === '' ? value : value.split(search).join(replacement);
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function toPosixPath(value) {
   return value.split(path.win32.sep).join(path.posix.sep);
+}
+
+function resolvePath(root) {
+  const value = String(root);
+  const isWindowsPath =
+    path.sep === path.win32.sep ||
+    /^[A-Za-z]:[\\/]/.test(value) ||
+    value.startsWith('\\\\');
+  return (isWindowsPath ? path.win32 : path).resolve(value);
+}
+
+function replacePathRoot(value, root, token) {
+  const absolute = resolvePath(root);
+  const variants = new Set([absolute, toPosixPath(absolute)]);
+  let output = value;
+
+  for (const variant of variants) {
+    const withoutTrailingSeparator = variant.replace(/[\\/]+$/, '');
+    if (withoutTrailingSeparator === '') {
+      continue;
+    }
+    const rootPattern = new RegExp(
+      `${escapeRegExp(withoutTrailingSeparator)}([\\\\/]|$)`,
+      'g',
+    );
+    output = output.replace(rootPattern, (_match, separator) =>
+      separator === '' ? token : `${token}/`,
+    );
+  }
+
+  return output;
 }
 
 /**
@@ -57,12 +83,9 @@ function normalizePaths(value, context) {
     [context.repoRoot, REPO_ROOT_TOKEN],
   ];
   for (const [root, token] of roots) {
-    if (root == null) {
-      continue;
+    if (root != null) {
+      output = replacePathRoot(output, root, token);
     }
-    const absolute = path.resolve(root);
-    output = splitJoin(output, absolute, token);
-    output = splitJoin(output, toPosixPath(absolute), token);
   }
   return output;
 }
@@ -78,6 +101,14 @@ function stripCodeFrame(message) {
   return kept.join('\n');
 }
 
+function normalizeImplementationTag(message, implementationTag) {
+  if (typeof implementationTag !== 'string' || implementationTag === '') {
+    return message;
+  }
+  const prefix = new RegExp(`^\\[${escapeRegExp(implementationTag)}\\]\\s*`);
+  return message.replace(prefix, '[stylex] ');
+}
+
 /**
  * Normalizes a single warning, error or fatal message so that the same
  * behavior reported by two implementations compares equal:
@@ -86,17 +117,19 @@ function stripCodeFrame(message) {
  * - absolute paths become `<FIXTURE_ROOT>` / `<REPO_ROOT>`
  * - a leading `<FIXTURE_ROOT>/<entry>: ` location prefix is dropped
  * - a trailing source excerpt (code frame) is dropped
- * - a leading `[implementation]` tag becomes `[stylex]`
+ * - the caller's exact leading implementation tag becomes `[stylex]`
  */
 function normalizeDiagnostic(message, context) {
   let output = stripCodeFrame(normalizePaths(stripAnsi(message), context));
 
-  const locationPrefix = `${FIXTURE_ROOT_TOKEN}/${context.entry}: `;
-  if (output.startsWith(locationPrefix)) {
-    output = output.slice(locationPrefix.length);
-  }
+  const entry = toPosixPath(context.entry);
+  const locationPrefix = new RegExp(
+    `^${escapeRegExp(`${FIXTURE_ROOT_TOKEN}/${entry}`)}` +
+      '(?::\\d+(?::\\d+)?)?:\\s*',
+  );
+  output = output.replace(locationPrefix, '');
 
-  return output.replace(IMPLEMENTATION_TAG, '[stylex] ').trim();
+  return normalizeImplementationTag(output, context.implementationTag).trim();
 }
 
 /**
@@ -104,7 +137,7 @@ function normalizeDiagnostic(message, context) {
  * so only line endings and trailing whitespace are touched.
  */
 function normalizeCss(css, context) {
-  return normalizePaths(css ?? '', context)
+  return normalizePaths(css, context)
     .split('\n')
     .map((line) => line.replace(/\s+$/, ''))
     .join('\n')
