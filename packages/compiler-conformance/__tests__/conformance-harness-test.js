@@ -79,6 +79,32 @@ describe('normalizeDiagnostic', () => {
       normalizeDiagnostic('bad value\n|start| is reserved.', CONTEXT),
     ).toBe('bad value\n|start| is reserved.');
   });
+
+  // Babel's code frame colorizes whenever the environment looks color-capable,
+  // which on GitHub Actions it does — so this is the shape the very same
+  // diagnostic takes on CI, and the escapes must not hide the excerpt.
+  test('drops a colorized source excerpt', () => {
+    const esc = '\u001B';
+    const message = [
+      `${FIXTURE.dir}/input.js: create() can only accept an object.`,
+      `${esc}[0m ${esc}[90m 1 |${esc}[39m ${esc}[36mimport${esc}[39m stylex${esc}[33m;${esc}[39m`,
+      `${esc}[31m${esc}[1m>${esc}[22m${esc}[39m${esc}[90m 2 |${esc}[39m stylex${esc}[33m.${esc}[39mcreate(${esc}[35m1${esc}[39m)${esc}[33m;${esc}[39m`,
+      `${esc}[90m   |${esc}[39m       ${esc}[31m${esc}[1m^${esc}[22m${esc}[39m${esc}[0m`,
+    ].join('\n');
+
+    expect(normalizeDiagnostic(message, CONTEXT)).toBe(
+      'create() can only accept an object.',
+    );
+  });
+
+  test('removes color from a message that has no source excerpt', () => {
+    expect(
+      normalizeDiagnostic(
+        '\u001B[1m\u001B[31m[@stylexjs/babel-plugin]\u001B[39m Expected a boolean.\u001B[22m',
+        CONTEXT,
+      ),
+    ).toBe('[stylex] Expected a boolean.');
+  });
 });
 
 describe('normalizeCss', () => {
