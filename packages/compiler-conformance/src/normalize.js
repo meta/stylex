@@ -28,6 +28,16 @@ const IMPLEMENTATION_TAG = /^\[[^\]\s]+\]\s*/;
 // The exact rendering is implementation-specific, so it is dropped.
 const CODE_FRAME_LINE = /^\s*(?:>\s*)?(?:\d+\s*)?\|(?:\s|$)/;
 
+// Terminal escape sequences. A diagnostic is syntax-highlighted whenever the
+// implementation thinks the environment supports color, and that decision is
+// made from the environment rather than from the code under test: Babel's code
+// frame colorizes whenever `CI` is set, so the very same error arrives plain on
+// a developer's machine and colorized on CI. Color is presentation, so it is
+// removed before anything else — otherwise the escapes also hide the code frame
+// from the matcher above, and hide absolute paths from the path tokenizer.
+// eslint-disable-next-line no-control-regex -- ESC is what this matches.
+const ANSI_ESCAPE = /\u001B\[[0-9;]*[A-Za-z]/g;
+
 function splitJoin(value, search, replacement) {
   return search === '' ? value : value.split(search).join(replacement);
 }
@@ -57,6 +67,10 @@ function normalizePaths(value, context) {
   return output;
 }
 
+function stripAnsi(value) {
+  return String(value).replace(ANSI_ESCAPE, '');
+}
+
 function stripCodeFrame(message) {
   const lines = message.split('\n');
   const frameStart = lines.findIndex((line) => CODE_FRAME_LINE.test(line));
@@ -68,13 +82,14 @@ function stripCodeFrame(message) {
  * Normalizes a single warning, error or fatal message so that the same
  * behavior reported by two implementations compares equal:
  *
+ * - terminal color escapes are removed
  * - absolute paths become `<FIXTURE_ROOT>` / `<REPO_ROOT>`
  * - a leading `<FIXTURE_ROOT>/<entry>: ` location prefix is dropped
  * - a trailing source excerpt (code frame) is dropped
  * - a leading `[implementation]` tag becomes `[stylex]`
  */
 function normalizeDiagnostic(message, context) {
-  let output = stripCodeFrame(normalizePaths(message, context));
+  let output = stripCodeFrame(normalizePaths(stripAnsi(message), context));
 
   const locationPrefix = `${FIXTURE_ROOT_TOKEN}/${context.entry}: `;
   if (output.startsWith(locationPrefix)) {

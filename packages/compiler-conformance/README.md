@@ -90,10 +90,13 @@ after normalization:
 - Line endings are normalized to `\n`, and trailing whitespace is stripped from
   each CSS line.
 - Absolute paths become `<FIXTURE_ROOT>` and `<REPO_ROOT>`.
-- In diagnostics, a leading `<FIXTURE_ROOT>/<entry>: ` location prefix is
-  dropped, a trailing source excerpt (code frame) is dropped, and a leading
-  `[implementation-name]` tag is collapsed to `[stylex]`. What is compared is
-  the message itself, not how an implementation decorates it.
+- In diagnostics, terminal color escapes are removed, a leading
+  `<FIXTURE_ROOT>/<entry>: ` location prefix is dropped, a trailing source
+  excerpt (code frame) is dropped, and a leading `[implementation-name]` tag is
+  collapsed to `[stylex]`. What is compared is the message itself, not how an
+  implementation decorates it. Color matters here in practice: Babel
+  syntax-highlights a code frame whenever `CI` is set, so an uncolored message
+  locally and a colored one on CI have to normalize to the same text.
 - Object keys are sorted, because key order carries no meaning in JSON. **Array
   order is preserved**, because the order of emitted rules is part of the
   contract.
