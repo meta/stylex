@@ -9,8 +9,8 @@
     "example:serve": "vite preview"
   },
   "dependencies": {
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "@stylexjs/stylex": "0.19.1",
     "@stylexjs/shared-ui": "0.19.1"
   },
@@ -18,8 +18,8 @@
     "@stylexjs/eslint-plugin": "0.19.1",
     "@stylexjs/unplugin": "0.19.1",
     "@vitejs/plugin-react": "latest",
-    "eslint": "^9.39.1",
+    "eslint": "^10.13.0",
     "shx": "^0.4.0",
-    "vite": "^7.3.7"
+    "vite": "^8.3.5"
   }
 }

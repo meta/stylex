@@ -15,21 +15,21 @@
     "@stylexjs/stylex": "0.19.1"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.1",
-    "@sveltejs/adapter-auto": "^7.0.0",
-    "@sveltejs/adapter-vercel": "^5.7.2",
-    "@sveltejs/kit": "^2.60.1",
-    "@sveltejs/vite-plugin-svelte": "^6.2.1",
+    "@eslint/js": "^10.0.1",
+    "@sveltejs/adapter-auto": "^8.0.0",
+    "@sveltejs/adapter-vercel": "^7.0.2",
+    "@sveltejs/kit": "^3.1.1",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@stylexjs/eslint-plugin": "0.19.1",
-    "eslint": "^9.39.1",
-    "eslint-plugin-svelte": "^3.17.0",
-    "globals": "^16.4.0",
-    "svelte": "^5.55.7",
-    "svelte-check": "^4.3.4",
+    "eslint": "^10.13.0",
+    "eslint-plugin-svelte": "^3.23.1",
+    "globals": "^17.13.0",
+    "svelte": "^5.57.3",
+    "svelte-check": "^4.7.7",
     "shx": "^0.4.0",
-    "typescript": "^5.9.3",
+    "typescript": "^7.0.2",
     "typescript-eslint": "^8.58.2",
-    "vite": "^7.3.7",
+    "vite": "^8.3.5",
     "@stylexjs/unplugin": "0.19.1"
   }
 }

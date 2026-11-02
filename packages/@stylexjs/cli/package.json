@@ -15,16 +15,16 @@
     "test": "jest"
   },
   "dependencies": {
-    "@babel/core": "^7.28.5",
-    "@babel/plugin-syntax-jsx": "^7.25.9",
-    "@babel/plugin-syntax-typescript": "^7.25.9",
+    "@babel/core": "^8.0.10",
+    "@babel/plugin-syntax-jsx": "^8.0.1",
+    "@babel/plugin-syntax-typescript": "^8.0.3",
     "@babel/types": "^7.26.8",
     "@stylexjs/babel-plugin": "0.19.1",
-    "ansis": "^3.3.2",
-    "fb-watchman": "^2.0.2",
+    "ansis": "^4.4.0",
+    "fb-watchman": "^2.0.4",
     "json5": "^2.2.3",
     "mkdirp": "^3.0.1",
-    "yargs": "^17.7.2"
+    "yargs": "^18.2.0"
   },
   "devDependencies": {
     "scripts": "0.19.1"

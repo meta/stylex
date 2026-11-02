@@ -11,14 +11,14 @@
   "license": "MIT",
   "dependencies": {
     "@stylexjs/stylex": "0.19.1",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
     "@stylexjs/unplugin": "0.19.1",
     "@stylexjs/eslint-plugin": "0.19.1",
-    "esbuild": "^0.27.0",
-    "eslint": "^8.57.1",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.13.0",
     "shx": "^0.4.0"
   }
 }

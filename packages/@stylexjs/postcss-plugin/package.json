@@ -12,9 +12,9 @@
     "test": "jest"
   },
   "dependencies": {
-    "@babel/core": "^7.26.8",
+    "@babel/core": "^8.0.10",
     "@stylexjs/babel-plugin": "0.19.1",
-    "postcss": "^8.5.10",
+    "postcss": "^8.5.32",
     "fast-glob": "^3.3.2",
     "glob-parent": "^6.0.2",
     "is-glob": "^4.0.3"

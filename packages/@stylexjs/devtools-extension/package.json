@@ -23,20 +23,20 @@
   ],
   "dependencies": {
     "@stylexjs/stylex": "0.19.1",
-    "postcss-selector-parser": "7.1.6",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3"
+    "postcss-selector-parser": "7.1.7",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@babel/plugin-transform-flow-strip-types": "^7.27.1",
+    "@babel/plugin-transform-flow-strip-types": "^8.0.1",
     "@stylexjs/unplugin": "0.19.1",
-    "@rollup/plugin-babel": "^6.0.4",
-    "@rollup/plugin-commonjs": "^28.0.1",
+    "@rollup/plugin-babel": "^7.1.0",
+    "@rollup/plugin-commonjs": "^29.0.3",
     "@rollup/plugin-json": "^6.1.0",
-    "@rollup/plugin-node-resolve": "^15.3.0",
-    "@rollup/plugin-replace": "^6.0.1",
-    "jszip": "3.10.1",
-    "rollup": "^4.24.0",
-    "web-ext": "10.5.0"
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "@rollup/plugin-replace": "^6.0.3",
+    "jszip": "3.10.2",
+    "rollup": "^4.66.0",
+    "web-ext": "10.8.0"
   }
 }

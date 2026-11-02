@@ -8,17 +8,17 @@
     "example:dev": "rspack serve --config ./rspack.config.js"
   },
   "dependencies": {
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "@stylexjs/stylex": "0.19.1"
   },
   "devDependencies": {
-    "@rspack/cli": "^1.6.4",
-    "@rspack/core": "^1.6.4",
+    "@rspack/cli": "^2.3.0",
+    "@rspack/core": "^2.3.0",
     "@stylexjs/eslint-plugin": "0.19.1",
-    "css-loader": "^7.1.2",
+    "css-loader": "^7.1.5",
     "@stylexjs/unplugin": "0.19.1",
-    "eslint": "^9.39.1",
+    "eslint": "^10.13.0",
     "shx": "^0.4.0"
   }
 }
