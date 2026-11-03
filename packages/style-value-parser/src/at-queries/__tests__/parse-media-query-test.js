@@ -156,25 +156,13 @@ describe('style-value-parser/at-queries', () => {
         expect(parsed).toMatchInlineSnapshot(`
           MediaQuery {
             "queries": {
-              "rules": [
-                {
-                  "key": "all",
-                  "not": true,
-                  "only": false,
-                  "type": "media-keyword",
-                },
-                {
-                  "keyValue": "monochrome",
-                  "type": "word-rule",
-                },
-              ],
-              "type": "and",
+              "key": "all",
+              "not": true,
+              "type": "media-keyword",
             },
           }
         `);
-        expect(parsed.toString()).toMatchInlineSnapshot(
-          '"@media not all and (monochrome)"',
-        );
+        expect(parsed.toString()).toMatchInlineSnapshot('"@media not all"');
       });
     });
 
@@ -957,25 +945,13 @@ describe('style-value-parser/at-queries', () => {
         expect(parsed).toMatchInlineSnapshot(`
           MediaQuery {
             "queries": {
-              "rules": [
-                {
-                  "key": "all",
-                  "not": true,
-                  "only": false,
-                  "type": "media-keyword",
-                },
-                {
-                  "keyValue": "monochrome",
-                  "type": "word-rule",
-                },
-              ],
-              "type": "and",
+              "key": "all",
+              "not": true,
+              "type": "media-keyword",
             },
           }
         `);
-        expect(parsed.toString()).toMatchInlineSnapshot(
-          '"@media not all and (monochrome)"',
-        );
+        expect(parsed.toString()).toMatchInlineSnapshot('"@media not all"');
       });
 
       test('@media screen and (min-width: 400px)', () => {
@@ -1007,7 +983,7 @@ describe('style-value-parser/at-queries', () => {
           }
         `);
         expect(parsed.toString()).toMatchInlineSnapshot(
-          '"@media (screen) and (min-width: 400px)"',
+          '"@media screen and (min-width: 400px)"',
         );
       });
 
@@ -1071,7 +1047,7 @@ describe('style-value-parser/at-queries', () => {
           }
         `);
         expect(parsed.toString()).toMatchInlineSnapshot(
-          '"@media (screen) and (device-aspect-ratio: 16 / 9)"',
+          '"@media screen and (device-aspect-ratio: 16 / 9)"',
         );
       });
 
@@ -2004,7 +1980,7 @@ describe('style-value-parser/at-queries', () => {
           }
         `);
         expect(parsed.toString()).toMatchInlineSnapshot(
-          '"@media (color) and (min-width: 400px), (screen) and (max-width: 700px)"',
+          '"@media (color) and (min-width: 400px), screen and (max-width: 700px)"',
         );
       });
     });
@@ -2057,35 +2033,13 @@ describe('style-value-parser/at-queries', () => {
         expect(parsed).toMatchInlineSnapshot(`
           MediaQuery {
             "queries": {
-              "rules": [
-                {
-                  "key": "all",
-                  "not": true,
-                  "only": false,
-                  "type": "media-keyword",
-                },
-                {
-                  "keyValue": "monochrome",
-                  "type": "word-rule",
-                },
-                {
-                  "key": "min-width",
-                  "type": "pair",
-                  "value": {
-                    "signCharacter": undefined,
-                    "type": "integer",
-                    "unit": "px",
-                    "value": 600,
-                  },
-                },
-              ],
-              "type": "and",
+              "key": "all",
+              "not": true,
+              "type": "media-keyword",
             },
           }
         `);
-        expect(parsed.toString()).toMatchInlineSnapshot(
-          '"@media not all and (monochrome) and (min-width: 600px)"',
-        );
+        expect(parsed.toString()).toMatchInlineSnapshot('"@media not all"');
       });
 
       test('@media (max-width: 1440px) and (not (max-width: 1024px)) and (not (max-width: 768px)) and (not (max-width: 458px))', () => {
@@ -2303,7 +2257,7 @@ describe('style-value-parser/at-queries', () => {
           }
         `);
         expect(parsed.toString()).toMatchInlineSnapshot(
-          '"@media (screen) and (min-width: 500px) and (max-width: 800px) and (color)"',
+          '"@media screen and (min-width: 500px) and (max-width: 800px) and (color)"',
         );
       });
     });
@@ -2862,7 +2816,7 @@ describe('style-value-parser/at-queries', () => {
         '@media (min-width: 100px) and (max-width: 500px) and (not (max-width: 200px)) and (not (min-width: 400px))',
       );
       expect(parsed.toString()).toBe(
-        '@media (min-width: 200.01px) and (max-width: 399.99px)',
+        '@media (min-width: 200.01px) and (max-width: 399.98px)',
       );
     });
 

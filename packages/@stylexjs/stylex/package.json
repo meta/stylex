@@ -1,6 +1,6 @@
 {
   "name": "@stylexjs/stylex",
-  "version": "0.19.0",
+  "version": "0.19.1",
   "description": "A library for defining styles for optimized user interfaces.",
   "main": "./lib/cjs/stylex.js",
   "module": "./lib/es/stylex.mjs",
@@ -60,7 +60,7 @@
     "babel-plugin-syntax-hermes-parser": "^0.36.1",
     "cross-env": "^10.1.0",
     "rollup": "^4.59.0",
-    "scripts": "0.19.0"
+    "scripts": "0.19.1"
   },
   "files": [
     "lib/*"

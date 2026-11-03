@@ -187,7 +187,7 @@ const stylexValidShorthands = {
         return;
       }
 
-      if (key === 'flex' && isSingleToken(String(v))) {
+      if ((key === 'flex' || key === 'gridArea') && isSingleToken(String(v))) {
         return;
       }
 

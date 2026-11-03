@@ -5,22 +5,21 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-const BABEL_ENV = process.env['BABEL_ENV'];
+const BABEL_ENV = process.env['BABEL_ENV'] ?? process.env['NODE_ENV'];
 
 module.exports = {
   assumptions: {
     iterableIsArray: true,
   },
   presets: [
-    // [
-    //   '@babel/preset-env',
-    //   {
-    //     exclude: ['@babel/plugin-transform-typeof-symbol'],
-    //     targets: 'defaults',
-    //     // Convert files to cjs for jest testing
-    //     modules: BABEL_ENV === 'test' ? 'cjs' : false,
-    //   },
-    // ],
+    [
+      '@babel/preset-env',
+      {
+        exclude: ['@babel/plugin-transform-typeof-symbol'],
+        targets: 'defaults',
+        modules: BABEL_ENV === 'test' ? 'cjs' : false,
+      },
+    ],
     '@babel/preset-flow',
     '@babel/preset-react',
   ],

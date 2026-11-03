@@ -206,7 +206,6 @@ describe('@stylexjs/babel-plugin', () => {
     describe('props calls with jsx', () => {
       const options = {
         debug: true,
-        enableDebugClassNames: true,
         dev: true,
         enableDevClassNames: false,
         filename: '/js/node_modules/npm-package/dist/components/Foo.react.js',
@@ -239,14 +238,14 @@ describe('@stylexjs/babel-plugin', () => {
           var _inject2 = _inject;
           import stylex from 'stylex';
           _inject2({
-            ltr: ".color-x1e2nbdu{color:red}",
+            ltr: ".x1e2nbdu{color:red}",
             priority: 3000
           });
           function Foo() {
             return <>
-                            <div id="test" className="color-x1e2nbdu" data-style-src="npm-package:js/node_modules/npm-package/dist/components/Foo.react.js:4">Hello World</div>
-                            <div className="test" className="color-x1e2nbdu" data-style-src="npm-package:js/node_modules/npm-package/dist/components/Foo.react.js:4" id="test">Hello World</div>
-                            <div id="test" className="color-x1e2nbdu" data-style-src="npm-package:js/node_modules/npm-package/dist/components/Foo.react.js:4" className="test">Hello World</div>
+                            <div id="test" className="x1e2nbdu" data-style-src="npm-package:js/node_modules/npm-package/dist/components/Foo.react.js:4">Hello World</div>
+                            <div className="test" className="x1e2nbdu" data-style-src="npm-package:js/node_modules/npm-package/dist/components/Foo.react.js:4" id="test">Hello World</div>
+                            <div id="test" className="x1e2nbdu" data-style-src="npm-package:js/node_modules/npm-package/dist/components/Foo.react.js:4" className="test">Hello World</div>
                           </>;
           }"
         `);
@@ -279,14 +278,14 @@ describe('@stylexjs/babel-plugin', () => {
           var _inject2 = _inject;
           import stylex from 'stylex';
           _inject2({
-            ltr: ".color-x1e2nbdu{color:red}",
+            ltr: ".x1e2nbdu{color:red}",
             priority: 3000
           });
           function Foo() {
             return <>
-                            <div id="test" className="color-x1e2nbdu" data-style-src="npm-package:js/node_modules/npm-package/dist/components/Foo.react.js:4">Hello World</div>
-                            <div className="test" className="color-x1e2nbdu" data-style-src="npm-package:js/node_modules/npm-package/dist/components/Foo.react.js:4" id="test">Hello World</div>
-                            <div id="test" className="color-x1e2nbdu" data-style-src="npm-package:js/node_modules/npm-package/dist/components/Foo.react.js:4" className="test">Hello World</div>
+                            <div id="test" className="x1e2nbdu" data-style-src="npm-package:js/node_modules/npm-package/dist/components/Foo.react.js:4">Hello World</div>
+                            <div className="test" className="x1e2nbdu" data-style-src="npm-package:js/node_modules/npm-package/dist/components/Foo.react.js:4" id="test">Hello World</div>
+                            <div id="test" className="x1e2nbdu" data-style-src="npm-package:js/node_modules/npm-package/dist/components/Foo.react.js:4" className="test">Hello World</div>
                           </>;
           }"
         `);
@@ -313,11 +312,11 @@ describe('@stylexjs/babel-plugin', () => {
           var _inject2 = _inject;
           import stylex from 'stylex';
           _inject2({
-            ltr: ".color-x1e2nbdu{color:red}",
+            ltr: ".x1e2nbdu{color:red}",
             priority: 3000
           });
           function Foo() {
-            return <div className="color-x1e2nbdu" data-style-src="npm-package:js/node_modules/npm-package/dist/components/Foo.react.js:4">Hello World</div>;
+            return <div className="x1e2nbdu" data-style-src="npm-package:js/node_modules/npm-package/dist/components/Foo.react.js:4">Hello World</div>;
           }"
         `);
       });
@@ -527,11 +526,11 @@ describe('@stylexjs/babel-plugin', () => {
           var _inject2 = _inject;
           import stylex from 'stylex';
           _inject2({
-            ltr: ".color-x1e2nbdu{color:red}",
+            ltr: ".x1e2nbdu{color:red}",
             priority: 3000
           });
           _inject2({
-            ltr: ".opacity-xb4nw82{opacity:var(--x-opacity)}",
+            ltr: ".xb4nw82{opacity:var(--x-opacity)}",
             priority: 3000
           });
           _inject2({
@@ -540,11 +539,11 @@ describe('@stylexjs/babel-plugin', () => {
           });
           const styles = {
             red: {
-              "color-kMwMTN": "color-x1e2nbdu",
+              "color-kMwMTN": "x1e2nbdu",
               $$css: "npm-package:js/node_modules/npm-package/dist/components/Foo.react.js:4"
             },
-            opacity: opacity => [{
-              "opacity-kSiTet": opacity != null ? "opacity-xb4nw82" : opacity,
+            opacity: opacity => [opacity !== undefined && {
+              "opacity-kSiTet": opacity != null ? "xb4nw82" : "",
               $$css: "npm-package:js/node_modules/npm-package/dist/components/Foo.react.js:7"
             }, {
               "--x-opacity": opacity != null ? opacity : undefined
@@ -583,12 +582,12 @@ describe('@stylexjs/babel-plugin', () => {
           var _inject2 = _inject;
           import stylex from 'stylex';
           _inject2({
-            ltr: ".color-x1e2nbdu{color:red}",
+            ltr: ".x1e2nbdu{color:red}",
             priority: 3000
           });
           const styles = {
             red: {
-              "color-kMwMTN": "color-x1e2nbdu",
+              "color-kMwMTN": "x1e2nbdu",
               $$css: "npm-package:js/node_modules/npm-package/dist/components/Foo.react.js:4"
             }
           };
@@ -805,8 +804,8 @@ describe('@stylexjs/babel-plugin', () => {
             priority: 0
           });
           const styles = {
-            color: c => [{
-              kMwMTN: c != null ? "x14rh7hd" : c,
+            color: c => [c !== undefined && {
+              kMwMTN: c != null ? "x14rh7hd" : "",
               $$css: true
             }, {
               "--x-color": c != null ? c : undefined
@@ -901,8 +900,8 @@ describe('@stylexjs/babel-plugin', () => {
             priority: 0
           });
           const styles = {
-            opacity: o => [{
-              kSiTet: o != null ? "xb4nw82" : o,
+            opacity: o => [o !== undefined && {
+              kSiTet: o != null ? "xb4nw82" : "",
               $$css: true
             }, {
               "--x-opacity": o != null ? o : undefined
@@ -943,8 +942,8 @@ describe('@stylexjs/babel-plugin', () => {
             priority: 0
           });
           const styles = {
-            opacity: o => [{
-              kSiTet: o != null ? "xb4nw82" : o,
+            opacity: o => [o !== undefined && {
+              kSiTet: o != null ? "xb4nw82" : "",
               $$css: true
             }, {
               "--x-opacity": o != null ? o : undefined
@@ -1369,7 +1368,7 @@ describe('@stylexjs/babel-plugin', () => {
       });
 
       describe('with options', () => {
-        test('dev/debug classnames for atoms', () => {
+        test('dev classnames and debug data for atoms', () => {
           const inline = transform(
             `
               import stylex from 'stylex';
@@ -1380,7 +1379,6 @@ describe('@stylexjs/babel-plugin', () => {
               dev: true,
               debug: true,
               enableDevClassNames: true,
-              enableDebugClassNames: true,
               filename: '/tmp/Foo.js',
             },
           );
@@ -1390,11 +1388,11 @@ describe('@stylexjs/babel-plugin', () => {
             import stylex from 'stylex';
             import css from '@stylexjs/atoms';
             _inject2({
-              ltr: ".display-x78zum5{display:flex}",
+              ltr: ".x78zum5{display:flex}",
               priority: 3000
             });
             ({
-              className: "Foo____inline__ display-x78zum5"
+              className: "Foo____inline__ x78zum5"
             });"
           `);
         });
@@ -1881,7 +1879,7 @@ describe('@stylexjs/babel-plugin', () => {
           priority: 3000
         });
         _inject2({
-          ltr: "@media (min-width: 1000px) and (max-width: 1999.99px){.xw6up8c.xw6up8c{background-color:blue}}",
+          ltr: "@media (min-width: 1000px) and (max-width: 1999.98px){.xr725a3.xr725a3{background-color:blue}}",
           priority: 3200
         });
         _inject2({
@@ -1889,7 +1887,7 @@ describe('@stylexjs/babel-plugin', () => {
           priority: 3200
         });
         ({
-          className: "xrkmrrc xw6up8c x1ssfqz5"
+          className: "xrkmrrc xr725a3 x1ssfqz5"
         });"
       `);
     });
@@ -2363,7 +2361,6 @@ describe('@stylexjs/babel-plugin', () => {
           filename: '/html/js/FooBar.react.js',
           dev: true,
           enableInlinedConditionalMerge: false,
-          enableDebugClassNames: true,
           enableDevClassNames: false,
         };
         expect(
@@ -2384,11 +2381,11 @@ describe('@stylexjs/babel-plugin', () => {
           var _inject2 = _inject;
           import stylex from 'stylex';
           _inject2({
-            ltr: ".color-x1e2nbdu{color:red}",
+            ltr: ".x1e2nbdu{color:red}",
             priority: 3000
           });
           ({
-            className: "color-x1e2nbdu",
+            className: "x1e2nbdu",
             "data-style-src": "html/js/FooBar.react.js:4"
           });"
         `);
@@ -2416,22 +2413,22 @@ describe('@stylexjs/babel-plugin', () => {
           var _inject2 = _inject;
           import stylex from 'stylex';
           _inject2({
-            ltr: ".color-x1e2nbdu{color:red}",
+            ltr: ".x1e2nbdu{color:red}",
             priority: 3000
           });
           const styles = {
             default: {
-              "color-kMwMTN": "color-x1e2nbdu",
+              "color-kMwMTN": "x1e2nbdu",
               $$css: "html/js/FooBar.react.js:4"
             }
           };
           _inject2({
-            ltr: ".backgroundColor-x1t391ir{background-color:blue}",
+            ltr: ".x1t391ir{background-color:blue}",
             priority: 3000
           });
           const otherStyles = {
             default: {
-              "backgroundColor-kWkggS": "backgroundColor-x1t391ir",
+              "backgroundColor-kWkggS": "x1t391ir",
               $$css: "html/js/FooBar.react.js:9"
             }
           };
@@ -2443,7 +2440,6 @@ describe('@stylexjs/babel-plugin', () => {
         const options = {
           filename: '/html/js/FooBar.react.js',
           dev: true,
-          enableDebugClassNames: true,
           enableDevClassNames: false,
         };
         expect(
@@ -2469,20 +2465,20 @@ describe('@stylexjs/babel-plugin', () => {
           var _inject2 = _inject;
           import stylex from 'stylex';
           _inject2({
-            ltr: ".color-x1e2nbdu{color:red}",
+            ltr: ".x1e2nbdu{color:red}",
             priority: 3000
           });
           _inject2({
-            ltr: ".backgroundColor-x1t391ir{background-color:blue}",
+            ltr: ".x1t391ir{background-color:blue}",
             priority: 3000
           });
           ({
             0: {
-              className: "color-x1e2nbdu",
+              className: "x1e2nbdu",
               "data-style-src": "html/js/FooBar.react.js:4"
             },
             1: {
-              className: "color-x1e2nbdu backgroundColor-x1t391ir",
+              className: "x1e2nbdu x1t391ir",
               "data-style-src": "html/js/FooBar.react.js:4; html/js/FooBar.react.js:9"
             }
           })[!!isActive << 0];"
@@ -2509,20 +2505,20 @@ describe('@stylexjs/babel-plugin', () => {
           var _inject2 = _inject;
           import stylex from 'stylex';
           _inject2({
-            ltr: ".color-x1e2nbdu{color:red}",
+            ltr: ".x1e2nbdu{color:red}",
             priority: 3000
           });
           _inject2({
-            ltr: ".color-xju2f9n{color:blue}",
+            ltr: ".xju2f9n{color:blue}",
             priority: 3000
           });
           ({
             0: {
-              className: "color-x1e2nbdu",
+              className: "x1e2nbdu",
               "data-style-src": "html/js/FooBar.react.js:4"
             },
             1: {
-              className: "color-xju2f9n",
+              className: "xju2f9n",
               "data-style-src": "html/js/FooBar.react.js:4; html/js/FooBar.react.js:7"
             }
           })[!!isActive << 0];"
@@ -2879,7 +2875,6 @@ describe('@stylexjs/babel-plugin', () => {
         `,
           {
             dev: true,
-            enableDebugClassNames: true,
             enableDevClassNames: false,
           },
         ),
@@ -2888,90 +2883,90 @@ describe('@stylexjs/babel-plugin', () => {
         var _inject2 = _inject;
         import * as stylex from '@stylexjs/stylex';
         _inject2({
-          ltr: ".boxSizing-x9f619{box-sizing:border-box}",
+          ltr: ".x9f619{box-sizing:border-box}",
           priority: 3000
         });
         _inject2({
-          ltr: ".gridArea-x1yc5d2u{grid-area:sidebar}",
+          ltr: ".x1yc5d2u{grid-area:sidebar}",
           priority: 1000
         });
         _inject2({
-          ltr: ".gridArea-x1fdo2jl{grid-area:content}",
+          ltr: ".x1fdo2jl{grid-area:content}",
           priority: 1000
         });
         _inject2({
-          ltr: ".display-xrvj5dj{display:grid}",
+          ltr: ".xrvj5dj{display:grid}",
           priority: 3000
         });
         _inject2({
-          ltr: ".gridTemplateRows-x7k18q3{grid-template-rows:100%}",
+          ltr: ".x7k18q3{grid-template-rows:100%}",
           priority: 3000
         });
         _inject2({
-          ltr: ".gridTemplateAreas-x5gp9wm{grid-template-areas:\\"content\\"}",
+          ltr: ".x5gp9wm{grid-template-areas:\\"content\\"}",
           priority: 2000
         });
         _inject2({
-          ltr: ".gridTemplateColumns-x1rkzygb{grid-template-columns:auto minmax(0,1fr)}",
+          ltr: ".x1rkzygb{grid-template-columns:auto minmax(0,1fr)}",
           priority: 3000
         });
         _inject2({
-          ltr: ".gridTemplateAreas-x17lh93j{grid-template-areas:\\"sidebar content\\"}",
+          ltr: ".x17lh93j{grid-template-areas:\\"sidebar content\\"}",
           priority: 2000
         });
         _inject2({
-          ltr: "@media (max-width: 640px){.gridTemplateRows-xmr4b4k.gridTemplateRows-xmr4b4k{grid-template-rows:minmax(0,1fr) auto}}",
+          ltr: "@media (max-width: 640px){.xmr4b4k.xmr4b4k{grid-template-rows:minmax(0,1fr) auto}}",
           priority: 3200
         });
         _inject2({
-          ltr: "@media (max-width: 640px){.gridTemplateAreas-xesbpuc.gridTemplateAreas-xesbpuc{grid-template-areas:\\"content\\" \\"sidebar\\"}}",
+          ltr: "@media (max-width: 640px){.xesbpuc.xesbpuc{grid-template-areas:\\"content\\" \\"sidebar\\"}}",
           priority: 2200
         });
         _inject2({
-          ltr: "@media (max-width: 640px){.gridTemplateColumns-x15nfgh4.gridTemplateColumns-x15nfgh4{grid-template-columns:100%}}",
+          ltr: "@media (max-width: 640px){.x15nfgh4.x15nfgh4{grid-template-columns:100%}}",
           priority: 3200
         });
         _inject2({
-          ltr: ".gridTemplateColumns-x1mkdm3x{grid-template-columns:minmax(0,1fr)}",
+          ltr: ".x1mkdm3x{grid-template-columns:minmax(0,1fr)}",
           priority: 3000
         });
         export const styles = {
           sidebar: {
-            "boxSizing-kB7OPa": "boxSizing-x9f619",
-            "gridArea-kJuA4N": "gridArea-x1yc5d2u",
+            "boxSizing-kB7OPa": "x9f619",
+            "gridArea-kJuA4N": "x1yc5d2u",
             $$css: "@stylexjs/babel-plugin::4"
           },
           content: {
-            "gridArea-kJuA4N": "gridArea-x1fdo2jl",
+            "gridArea-kJuA4N": "x1fdo2jl",
             $$css: "@stylexjs/babel-plugin::8"
           },
           root: {
-            "display-k1xSpc": "display-xrvj5dj",
-            "gridTemplateRows-k9llMU": "gridTemplateRows-x7k18q3",
-            "gridTemplateAreas-kC13JO": "gridTemplateAreas-x5gp9wm",
+            "display-k1xSpc": "xrvj5dj",
+            "gridTemplateRows-k9llMU": "x7k18q3",
+            "gridTemplateAreas-kC13JO": "x5gp9wm",
             $$css: "@stylexjs/babel-plugin::11"
           },
           withSidebar: {
-            "gridTemplateColumns-kumcoG": "gridTemplateColumns-x1rkzygb",
-            "gridTemplateRows-k9llMU": "gridTemplateRows-x7k18q3",
-            "gridTemplateAreas-kC13JO": "gridTemplateAreas-x17lh93j",
-            "@media (max-width: 640px)_gridTemplateRows-k9pwkU": "gridTemplateRows-xmr4b4k",
-            "@media (max-width: 640px)_gridTemplateAreas-kOnEH4": "gridTemplateAreas-xesbpuc",
-            "@media (max-width: 640px)_gridTemplateColumns-k1JLwA": "gridTemplateColumns-x15nfgh4",
+            "gridTemplateColumns-kumcoG": "x1rkzygb",
+            "gridTemplateRows-k9llMU": "x7k18q3",
+            "gridTemplateAreas-kC13JO": "x17lh93j",
+            "@media (max-width: 640px)_gridTemplateRows-k9pwkU": "xmr4b4k",
+            "@media (max-width: 640px)_gridTemplateAreas-kOnEH4": "xesbpuc",
+            "@media (max-width: 640px)_gridTemplateColumns-k1JLwA": "x15nfgh4",
             $$css: "@stylexjs/babel-plugin::16"
           },
           noSidebar: {
-            "gridTemplateColumns-kumcoG": "gridTemplateColumns-x1mkdm3x",
+            "gridTemplateColumns-kumcoG": "x1mkdm3x",
             $$css: "@stylexjs/babel-plugin::26"
           }
         };
         ({
           0: {
-            className: "display-xrvj5dj gridTemplateColumns-x1rkzygb gridTemplateRows-x7k18q3 gridTemplateAreas-x17lh93j gridTemplateRows-xmr4b4k gridTemplateAreas-xesbpuc gridTemplateColumns-x15nfgh4",
+            className: "xrvj5dj x1rkzygb x7k18q3 x17lh93j xmr4b4k xesbpuc x15nfgh4",
             "data-style-src": "@stylexjs/babel-plugin::11; @stylexjs/babel-plugin::16"
           },
           1: {
-            className: "display-xrvj5dj gridTemplateRows-x7k18q3 gridTemplateAreas-x5gp9wm gridTemplateColumns-x1mkdm3x",
+            className: "xrvj5dj x7k18q3 x5gp9wm x1mkdm3x",
             "data-style-src": "@stylexjs/babel-plugin::11; @stylexjs/babel-plugin::26"
           }
         })[!!(sidebar == null) << 0];"
@@ -3020,279 +3015,6 @@ describe('@stylexjs/babel-plugin', () => {
           {
             filename: '/html/js/FooBar.react.js',
             dev: true,
-            enableDebugClassNames: true,
-            enableDevClassNames: false,
-          },
-        ),
-      ).toMatchInlineSnapshot(`
-        "import _inject from "@stylexjs/stylex/lib/stylex-inject";
-        var _inject2 = _inject;
-        import * as stylex from '@stylexjs/stylex';
-        _inject2({
-          ltr: ".boxSizing-x9f619{box-sizing:border-box}",
-          priority: 3000
-        });
-        _inject2({
-          ltr: ".gridArea-x1yc5d2u{grid-area:sidebar}",
-          priority: 1000
-        });
-        _inject2({
-          ltr: ".gridArea-x1fdo2jl{grid-area:content}",
-          priority: 1000
-        });
-        _inject2({
-          ltr: ".display-xrvj5dj{display:grid}",
-          priority: 3000
-        });
-        _inject2({
-          ltr: ".gridTemplateRows-x7k18q3{grid-template-rows:100%}",
-          priority: 3000
-        });
-        _inject2({
-          ltr: ".gridTemplateAreas-x5gp9wm{grid-template-areas:\\"content\\"}",
-          priority: 2000
-        });
-        _inject2({
-          ltr: ".gridTemplateColumns-x1rkzygb{grid-template-columns:auto minmax(0,1fr)}",
-          priority: 3000
-        });
-        _inject2({
-          ltr: ".gridTemplateAreas-x17lh93j{grid-template-areas:\\"sidebar content\\"}",
-          priority: 2000
-        });
-        _inject2({
-          ltr: "@media (max-width: 640px){.gridTemplateRows-xmr4b4k.gridTemplateRows-xmr4b4k{grid-template-rows:minmax(0,1fr) auto}}",
-          priority: 3200
-        });
-        _inject2({
-          ltr: "@media (max-width: 640px){.gridTemplateAreas-xesbpuc.gridTemplateAreas-xesbpuc{grid-template-areas:\\"content\\" \\"sidebar\\"}}",
-          priority: 2200
-        });
-        _inject2({
-          ltr: "@media (max-width: 640px){.gridTemplateColumns-x15nfgh4.gridTemplateColumns-x15nfgh4{grid-template-columns:100%}}",
-          priority: 3200
-        });
-        _inject2({
-          ltr: ".gridTemplateColumns-x1mkdm3x{grid-template-columns:minmax(0,1fr)}",
-          priority: 3000
-        });
-        const complex = {
-          0: {
-            className: "display-xrvj5dj gridTemplateColumns-x1rkzygb gridTemplateRows-x7k18q3 gridTemplateAreas-x17lh93j gridTemplateRows-xmr4b4k gridTemplateAreas-xesbpuc gridTemplateColumns-x15nfgh4",
-            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:16"
-          },
-          4: {
-            className: "display-xrvj5dj gridTemplateRows-x7k18q3 gridTemplateAreas-x5gp9wm gridTemplateColumns-x1mkdm3x",
-            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:26"
-          },
-          2: {
-            className: "display-xrvj5dj gridTemplateColumns-x1rkzygb gridTemplateRows-x7k18q3 gridTemplateAreas-x17lh93j gridTemplateRows-xmr4b4k gridTemplateAreas-xesbpuc gridTemplateColumns-x15nfgh4 boxSizing-x9f619 gridArea-x1yc5d2u",
-            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:16; html/js/FooBar.react.js:4"
-          },
-          6: {
-            className: "display-xrvj5dj gridTemplateRows-x7k18q3 gridTemplateAreas-x5gp9wm gridTemplateColumns-x1mkdm3x boxSizing-x9f619 gridArea-x1yc5d2u",
-            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:26; html/js/FooBar.react.js:4"
-          },
-          1: {
-            className: "display-xrvj5dj gridTemplateColumns-x1rkzygb gridTemplateRows-x7k18q3 gridTemplateAreas-x17lh93j gridTemplateRows-xmr4b4k gridTemplateAreas-xesbpuc gridTemplateColumns-x15nfgh4 gridArea-x1fdo2jl",
-            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:16; html/js/FooBar.react.js:8"
-          },
-          5: {
-            className: "display-xrvj5dj gridTemplateRows-x7k18q3 gridTemplateAreas-x5gp9wm gridTemplateColumns-x1mkdm3x gridArea-x1fdo2jl",
-            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:26; html/js/FooBar.react.js:8"
-          },
-          3: {
-            className: "display-xrvj5dj gridTemplateColumns-x1rkzygb gridTemplateRows-x7k18q3 gridTemplateAreas-x17lh93j gridTemplateRows-xmr4b4k gridTemplateAreas-xesbpuc gridTemplateColumns-x15nfgh4 boxSizing-x9f619 gridArea-x1fdo2jl",
-            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:16; html/js/FooBar.react.js:4; html/js/FooBar.react.js:8"
-          },
-          7: {
-            className: "display-xrvj5dj gridTemplateRows-x7k18q3 gridTemplateAreas-x5gp9wm gridTemplateColumns-x1mkdm3x boxSizing-x9f619 gridArea-x1fdo2jl",
-            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:26; html/js/FooBar.react.js:4; html/js/FooBar.react.js:8"
-          }
-        }[!!(sidebar == null && !isSidebar) << 2 | !!isSidebar << 1 | !!isContent << 0];"
-      `);
-    });
-
-    test('Stylex call with debug on', () => {
-      expect(
-        transform(
-          `
-          import * as stylex from '@stylexjs/stylex';
-          const styles = stylex.create({
-            sidebar: {
-              boxSizing: 'border-box',
-              gridArea: 'sidebar',
-            },
-            content: {
-              gridArea: 'content',
-            },
-            root: {
-              display: 'grid',
-              gridTemplateRows: '100%',
-              gridTemplateAreas: '"content"',
-            },
-            withSidebar: {
-              gridTemplateColumns: 'auto minmax(0, 1fr)',
-              gridTemplateRows: '100%',
-              gridTemplateAreas: '"sidebar content"',
-              '@media (max-width: 640px)': {
-                gridTemplateRows: 'minmax(0, 1fr) auto',
-                gridTemplateAreas: '"content" "sidebar"',
-                gridTemplateColumns: '100%',
-              },
-            },
-            noSidebar: {
-              gridTemplateColumns: 'minmax(0, 1fr)',
-            },
-          });
-          const complex = stylex.props([
-            styles.root,
-            sidebar == null && !isSidebar ? styles.noSidebar : styles.withSidebar,
-            isSidebar && styles.sidebar,
-            isContent && styles.content,
-          ]);
-        `,
-          {
-            filename: '/html/js/FooBar.react.js',
-            dev: true,
-            debug: true,
-            enableDebugClassNames: true,
-            enableDevClassNames: false,
-          },
-        ),
-      ).toMatchInlineSnapshot(`
-        "import _inject from "@stylexjs/stylex/lib/stylex-inject";
-        var _inject2 = _inject;
-        import * as stylex from '@stylexjs/stylex';
-        _inject2({
-          ltr: ".boxSizing-x9f619{box-sizing:border-box}",
-          priority: 3000
-        });
-        _inject2({
-          ltr: ".gridArea-x1yc5d2u{grid-area:sidebar}",
-          priority: 1000
-        });
-        _inject2({
-          ltr: ".gridArea-x1fdo2jl{grid-area:content}",
-          priority: 1000
-        });
-        _inject2({
-          ltr: ".display-xrvj5dj{display:grid}",
-          priority: 3000
-        });
-        _inject2({
-          ltr: ".gridTemplateRows-x7k18q3{grid-template-rows:100%}",
-          priority: 3000
-        });
-        _inject2({
-          ltr: ".gridTemplateAreas-x5gp9wm{grid-template-areas:\\"content\\"}",
-          priority: 2000
-        });
-        _inject2({
-          ltr: ".gridTemplateColumns-x1rkzygb{grid-template-columns:auto minmax(0,1fr)}",
-          priority: 3000
-        });
-        _inject2({
-          ltr: ".gridTemplateAreas-x17lh93j{grid-template-areas:\\"sidebar content\\"}",
-          priority: 2000
-        });
-        _inject2({
-          ltr: "@media (max-width: 640px){.gridTemplateRows-xmr4b4k.gridTemplateRows-xmr4b4k{grid-template-rows:minmax(0,1fr) auto}}",
-          priority: 3200
-        });
-        _inject2({
-          ltr: "@media (max-width: 640px){.gridTemplateAreas-xesbpuc.gridTemplateAreas-xesbpuc{grid-template-areas:\\"content\\" \\"sidebar\\"}}",
-          priority: 2200
-        });
-        _inject2({
-          ltr: "@media (max-width: 640px){.gridTemplateColumns-x15nfgh4.gridTemplateColumns-x15nfgh4{grid-template-columns:100%}}",
-          priority: 3200
-        });
-        _inject2({
-          ltr: ".gridTemplateColumns-x1mkdm3x{grid-template-columns:minmax(0,1fr)}",
-          priority: 3000
-        });
-        const complex = {
-          0: {
-            className: "display-xrvj5dj gridTemplateColumns-x1rkzygb gridTemplateRows-x7k18q3 gridTemplateAreas-x17lh93j gridTemplateRows-xmr4b4k gridTemplateAreas-xesbpuc gridTemplateColumns-x15nfgh4",
-            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:16"
-          },
-          4: {
-            className: "display-xrvj5dj gridTemplateRows-x7k18q3 gridTemplateAreas-x5gp9wm gridTemplateColumns-x1mkdm3x",
-            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:26"
-          },
-          2: {
-            className: "display-xrvj5dj gridTemplateColumns-x1rkzygb gridTemplateRows-x7k18q3 gridTemplateAreas-x17lh93j gridTemplateRows-xmr4b4k gridTemplateAreas-xesbpuc gridTemplateColumns-x15nfgh4 boxSizing-x9f619 gridArea-x1yc5d2u",
-            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:16; html/js/FooBar.react.js:4"
-          },
-          6: {
-            className: "display-xrvj5dj gridTemplateRows-x7k18q3 gridTemplateAreas-x5gp9wm gridTemplateColumns-x1mkdm3x boxSizing-x9f619 gridArea-x1yc5d2u",
-            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:26; html/js/FooBar.react.js:4"
-          },
-          1: {
-            className: "display-xrvj5dj gridTemplateColumns-x1rkzygb gridTemplateRows-x7k18q3 gridTemplateAreas-x17lh93j gridTemplateRows-xmr4b4k gridTemplateAreas-xesbpuc gridTemplateColumns-x15nfgh4 gridArea-x1fdo2jl",
-            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:16; html/js/FooBar.react.js:8"
-          },
-          5: {
-            className: "display-xrvj5dj gridTemplateRows-x7k18q3 gridTemplateAreas-x5gp9wm gridTemplateColumns-x1mkdm3x gridArea-x1fdo2jl",
-            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:26; html/js/FooBar.react.js:8"
-          },
-          3: {
-            className: "display-xrvj5dj gridTemplateColumns-x1rkzygb gridTemplateRows-x7k18q3 gridTemplateAreas-x17lh93j gridTemplateRows-xmr4b4k gridTemplateAreas-xesbpuc gridTemplateColumns-x15nfgh4 boxSizing-x9f619 gridArea-x1fdo2jl",
-            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:16; html/js/FooBar.react.js:4; html/js/FooBar.react.js:8"
-          },
-          7: {
-            className: "display-xrvj5dj gridTemplateRows-x7k18q3 gridTemplateAreas-x5gp9wm gridTemplateColumns-x1mkdm3x boxSizing-x9f619 gridArea-x1fdo2jl",
-            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:26; html/js/FooBar.react.js:4; html/js/FooBar.react.js:8"
-          }
-        }[!!(sidebar == null && !isSidebar) << 2 | !!isSidebar << 1 | !!isContent << 0];"
-      `);
-    });
-
-    test('Stylex call with debug on and debug classnames off', () => {
-      expect(
-        transform(
-          `
-          import * as stylex from '@stylexjs/stylex';
-          const styles = stylex.create({
-            sidebar: {
-              boxSizing: 'border-box',
-              gridArea: 'sidebar',
-            },
-            content: {
-              gridArea: 'content',
-            },
-            root: {
-              display: 'grid',
-              gridTemplateRows: '100%',
-              gridTemplateAreas: '"content"',
-            },
-            withSidebar: {
-              gridTemplateColumns: 'auto minmax(0, 1fr)',
-              gridTemplateRows: '100%',
-              gridTemplateAreas: '"sidebar content"',
-              '@media (max-width: 640px)': {
-                gridTemplateRows: 'minmax(0, 1fr) auto',
-                gridTemplateAreas: '"content" "sidebar"',
-                gridTemplateColumns: '100%',
-              },
-            },
-            noSidebar: {
-              gridTemplateColumns: 'minmax(0, 1fr)',
-            },
-          });
-          const complex = stylex.props([
-            styles.root,
-            sidebar == null && !isSidebar ? styles.noSidebar : styles.withSidebar,
-            isSidebar && styles.sidebar,
-            isContent && styles.content,
-          ]);
-        `,
-          {
-            filename: '/html/js/FooBar.react.js',
-            dev: true,
-            debug: true,
-            enableDebugClassNames: false,
             enableDevClassNames: false,
           },
         ),
@@ -3385,7 +3107,277 @@ describe('@stylexjs/babel-plugin', () => {
       `);
     });
 
-    test('hoisting correctly with duplicte names', () => {
+    test('Stylex call with debug on', () => {
+      expect(
+        transform(
+          `
+          import * as stylex from '@stylexjs/stylex';
+          const styles = stylex.create({
+            sidebar: {
+              boxSizing: 'border-box',
+              gridArea: 'sidebar',
+            },
+            content: {
+              gridArea: 'content',
+            },
+            root: {
+              display: 'grid',
+              gridTemplateRows: '100%',
+              gridTemplateAreas: '"content"',
+            },
+            withSidebar: {
+              gridTemplateColumns: 'auto minmax(0, 1fr)',
+              gridTemplateRows: '100%',
+              gridTemplateAreas: '"sidebar content"',
+              '@media (max-width: 640px)': {
+                gridTemplateRows: 'minmax(0, 1fr) auto',
+                gridTemplateAreas: '"content" "sidebar"',
+                gridTemplateColumns: '100%',
+              },
+            },
+            noSidebar: {
+              gridTemplateColumns: 'minmax(0, 1fr)',
+            },
+          });
+          const complex = stylex.props([
+            styles.root,
+            sidebar == null && !isSidebar ? styles.noSidebar : styles.withSidebar,
+            isSidebar && styles.sidebar,
+            isContent && styles.content,
+          ]);
+        `,
+          {
+            filename: '/html/js/FooBar.react.js',
+            dev: true,
+            debug: true,
+            enableDevClassNames: false,
+          },
+        ),
+      ).toMatchInlineSnapshot(`
+        "import _inject from "@stylexjs/stylex/lib/stylex-inject";
+        var _inject2 = _inject;
+        import * as stylex from '@stylexjs/stylex';
+        _inject2({
+          ltr: ".x9f619{box-sizing:border-box}",
+          priority: 3000
+        });
+        _inject2({
+          ltr: ".x1yc5d2u{grid-area:sidebar}",
+          priority: 1000
+        });
+        _inject2({
+          ltr: ".x1fdo2jl{grid-area:content}",
+          priority: 1000
+        });
+        _inject2({
+          ltr: ".xrvj5dj{display:grid}",
+          priority: 3000
+        });
+        _inject2({
+          ltr: ".x7k18q3{grid-template-rows:100%}",
+          priority: 3000
+        });
+        _inject2({
+          ltr: ".x5gp9wm{grid-template-areas:\\"content\\"}",
+          priority: 2000
+        });
+        _inject2({
+          ltr: ".x1rkzygb{grid-template-columns:auto minmax(0,1fr)}",
+          priority: 3000
+        });
+        _inject2({
+          ltr: ".x17lh93j{grid-template-areas:\\"sidebar content\\"}",
+          priority: 2000
+        });
+        _inject2({
+          ltr: "@media (max-width: 640px){.xmr4b4k.xmr4b4k{grid-template-rows:minmax(0,1fr) auto}}",
+          priority: 3200
+        });
+        _inject2({
+          ltr: "@media (max-width: 640px){.xesbpuc.xesbpuc{grid-template-areas:\\"content\\" \\"sidebar\\"}}",
+          priority: 2200
+        });
+        _inject2({
+          ltr: "@media (max-width: 640px){.x15nfgh4.x15nfgh4{grid-template-columns:100%}}",
+          priority: 3200
+        });
+        _inject2({
+          ltr: ".x1mkdm3x{grid-template-columns:minmax(0,1fr)}",
+          priority: 3000
+        });
+        const complex = {
+          0: {
+            className: "xrvj5dj x1rkzygb x7k18q3 x17lh93j xmr4b4k xesbpuc x15nfgh4",
+            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:16"
+          },
+          4: {
+            className: "xrvj5dj x7k18q3 x5gp9wm x1mkdm3x",
+            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:26"
+          },
+          2: {
+            className: "xrvj5dj x1rkzygb x7k18q3 x17lh93j xmr4b4k xesbpuc x15nfgh4 x9f619 x1yc5d2u",
+            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:16; html/js/FooBar.react.js:4"
+          },
+          6: {
+            className: "xrvj5dj x7k18q3 x5gp9wm x1mkdm3x x9f619 x1yc5d2u",
+            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:26; html/js/FooBar.react.js:4"
+          },
+          1: {
+            className: "xrvj5dj x1rkzygb x7k18q3 x17lh93j xmr4b4k xesbpuc x15nfgh4 x1fdo2jl",
+            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:16; html/js/FooBar.react.js:8"
+          },
+          5: {
+            className: "xrvj5dj x7k18q3 x5gp9wm x1mkdm3x x1fdo2jl",
+            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:26; html/js/FooBar.react.js:8"
+          },
+          3: {
+            className: "xrvj5dj x1rkzygb x7k18q3 x17lh93j xmr4b4k xesbpuc x15nfgh4 x9f619 x1fdo2jl",
+            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:16; html/js/FooBar.react.js:4; html/js/FooBar.react.js:8"
+          },
+          7: {
+            className: "xrvj5dj x7k18q3 x5gp9wm x1mkdm3x x9f619 x1fdo2jl",
+            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:26; html/js/FooBar.react.js:4; html/js/FooBar.react.js:8"
+          }
+        }[!!(sidebar == null && !isSidebar) << 2 | !!isSidebar << 1 | !!isContent << 0];"
+      `);
+    });
+
+    test('Stylex call with debug on uses hashed classnames', () => {
+      expect(
+        transform(
+          `
+          import * as stylex from '@stylexjs/stylex';
+          const styles = stylex.create({
+            sidebar: {
+              boxSizing: 'border-box',
+              gridArea: 'sidebar',
+            },
+            content: {
+              gridArea: 'content',
+            },
+            root: {
+              display: 'grid',
+              gridTemplateRows: '100%',
+              gridTemplateAreas: '"content"',
+            },
+            withSidebar: {
+              gridTemplateColumns: 'auto minmax(0, 1fr)',
+              gridTemplateRows: '100%',
+              gridTemplateAreas: '"sidebar content"',
+              '@media (max-width: 640px)': {
+                gridTemplateRows: 'minmax(0, 1fr) auto',
+                gridTemplateAreas: '"content" "sidebar"',
+                gridTemplateColumns: '100%',
+              },
+            },
+            noSidebar: {
+              gridTemplateColumns: 'minmax(0, 1fr)',
+            },
+          });
+          const complex = stylex.props([
+            styles.root,
+            sidebar == null && !isSidebar ? styles.noSidebar : styles.withSidebar,
+            isSidebar && styles.sidebar,
+            isContent && styles.content,
+          ]);
+        `,
+          {
+            filename: '/html/js/FooBar.react.js',
+            dev: true,
+            debug: true,
+            enableDevClassNames: false,
+          },
+        ),
+      ).toMatchInlineSnapshot(`
+        "import _inject from "@stylexjs/stylex/lib/stylex-inject";
+        var _inject2 = _inject;
+        import * as stylex from '@stylexjs/stylex';
+        _inject2({
+          ltr: ".x9f619{box-sizing:border-box}",
+          priority: 3000
+        });
+        _inject2({
+          ltr: ".x1yc5d2u{grid-area:sidebar}",
+          priority: 1000
+        });
+        _inject2({
+          ltr: ".x1fdo2jl{grid-area:content}",
+          priority: 1000
+        });
+        _inject2({
+          ltr: ".xrvj5dj{display:grid}",
+          priority: 3000
+        });
+        _inject2({
+          ltr: ".x7k18q3{grid-template-rows:100%}",
+          priority: 3000
+        });
+        _inject2({
+          ltr: ".x5gp9wm{grid-template-areas:\\"content\\"}",
+          priority: 2000
+        });
+        _inject2({
+          ltr: ".x1rkzygb{grid-template-columns:auto minmax(0,1fr)}",
+          priority: 3000
+        });
+        _inject2({
+          ltr: ".x17lh93j{grid-template-areas:\\"sidebar content\\"}",
+          priority: 2000
+        });
+        _inject2({
+          ltr: "@media (max-width: 640px){.xmr4b4k.xmr4b4k{grid-template-rows:minmax(0,1fr) auto}}",
+          priority: 3200
+        });
+        _inject2({
+          ltr: "@media (max-width: 640px){.xesbpuc.xesbpuc{grid-template-areas:\\"content\\" \\"sidebar\\"}}",
+          priority: 2200
+        });
+        _inject2({
+          ltr: "@media (max-width: 640px){.x15nfgh4.x15nfgh4{grid-template-columns:100%}}",
+          priority: 3200
+        });
+        _inject2({
+          ltr: ".x1mkdm3x{grid-template-columns:minmax(0,1fr)}",
+          priority: 3000
+        });
+        const complex = {
+          0: {
+            className: "xrvj5dj x1rkzygb x7k18q3 x17lh93j xmr4b4k xesbpuc x15nfgh4",
+            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:16"
+          },
+          4: {
+            className: "xrvj5dj x7k18q3 x5gp9wm x1mkdm3x",
+            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:26"
+          },
+          2: {
+            className: "xrvj5dj x1rkzygb x7k18q3 x17lh93j xmr4b4k xesbpuc x15nfgh4 x9f619 x1yc5d2u",
+            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:16; html/js/FooBar.react.js:4"
+          },
+          6: {
+            className: "xrvj5dj x7k18q3 x5gp9wm x1mkdm3x x9f619 x1yc5d2u",
+            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:26; html/js/FooBar.react.js:4"
+          },
+          1: {
+            className: "xrvj5dj x1rkzygb x7k18q3 x17lh93j xmr4b4k xesbpuc x15nfgh4 x1fdo2jl",
+            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:16; html/js/FooBar.react.js:8"
+          },
+          5: {
+            className: "xrvj5dj x7k18q3 x5gp9wm x1mkdm3x x1fdo2jl",
+            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:26; html/js/FooBar.react.js:8"
+          },
+          3: {
+            className: "xrvj5dj x1rkzygb x7k18q3 x17lh93j xmr4b4k xesbpuc x15nfgh4 x9f619 x1fdo2jl",
+            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:16; html/js/FooBar.react.js:4; html/js/FooBar.react.js:8"
+          },
+          7: {
+            className: "xrvj5dj x7k18q3 x5gp9wm x1mkdm3x x9f619 x1fdo2jl",
+            "data-style-src": "html/js/FooBar.react.js:11; html/js/FooBar.react.js:26; html/js/FooBar.react.js:4; html/js/FooBar.react.js:8"
+          }
+        }[!!(sidebar == null && !isSidebar) << 2 | !!isSidebar << 1 | !!isContent << 0];"
+      `);
+    });
+
+    test('hoisting correctly with duplicate names', () => {
       expect(
         transform(
           `
@@ -3454,6 +3446,44 @@ describe('@stylexjs/babel-plugin', () => {
                           <Foo />
                           <Bar />
                         </>;
+        }"
+      `);
+    });
+
+    test('does not hoist $$css objects that reference local variables', () => {
+      expect(
+        transform(
+          `
+            import * as stylex from '@stylexjs/stylex';
+            const styles = stylex.create({
+              root: { display: 'flex' },
+            });
+            function Foo({className}) {
+              return <div {...stylex.props(styles.root, className && {$$css: true, __: className})}>Hello, foo!</div>;
+            }
+          `,
+        ),
+      ).toMatchInlineSnapshot(`
+        "import _inject from "@stylexjs/stylex/lib/stylex-inject";
+        var _inject2 = _inject;
+        import * as stylex from '@stylexjs/stylex';
+        _inject2({
+          ltr: ".x78zum5{display:flex}",
+          priority: 3000
+        });
+        const styles = {
+          root: {
+            k1xSpc: "x78zum5",
+            $$css: true
+          }
+        };
+        function Foo({
+          className
+        }) {
+          return <div {...stylex.props(styles.root, className && {
+            $$css: true,
+            __: className
+          })}>Hello, foo!</div>;
         }"
       `);
     });

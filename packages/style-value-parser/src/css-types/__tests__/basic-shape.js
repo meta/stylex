@@ -62,6 +62,23 @@ describe('Basic Shapes', () => {
       expect(() => Inset.parser.parseToEnd('inset(invalid)')).toThrow();
       expect(() => Inset.parser.parseToEnd('inset(10px, invalid)')).toThrow();
     });
+
+    it('should stringify the shortest valid form', () => {
+      const roundtrip = (css: string): string =>
+        Inset.parser.parseToEnd(css).toString();
+      // 1 value: all four sides equal.
+      expect(roundtrip('inset(10px)')).toBe('inset(10px)');
+      // 2 values: vertical / horizontal.
+      expect(roundtrip('inset(10px 20px)')).toBe('inset(10px 20px)');
+      // 3 values: top / horizontal / bottom (left === right).
+      expect(roundtrip('inset(10px 20px 30px)')).toBe('inset(10px 20px 30px)');
+      // 4 values: all distinct (no trailing space before the paren).
+      expect(roundtrip('inset(10px 20px 30px 40px)')).toBe(
+        'inset(10px 20px 30px 40px)',
+      );
+      // round radius is preserved.
+      expect(roundtrip('inset(10px round 5px)')).toBe('inset(10px round 5px)');
+    });
   });
 
   describe('Circle', () => {

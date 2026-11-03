@@ -38,10 +38,10 @@ export default function styleXKeyframes(
   const expandedObject = objMap(frames, (frame) =>
     Pipe.create(frame)
       .pipe((frame) => expandFrameShorthands(frame, options))
-      .pipe((x) => objMapKeys(x, dashify))
       .pipe((x) =>
         objMap(x, (value, key) => transformValue(key, value, options)),
       )
+      .pipe((x) => objMapKeys(x, dashify))
       .done(),
   );
 

@@ -357,6 +357,10 @@ function mergeIntervalsForAnd(
   rules: Array<MediaQueryRule>,
 ): Array<MediaQueryRule> {
   const epsilon: number = 0.01;
+  // Chromium rounds a max-width ending in .99px up to the next whole pixel.
+  // Keep the generated range exclusive at integer breakpoints without
+  // widening the gap more than necessary.
+  const maxWidthEpsilon: number = 0.02;
   const dimensions = ['width', 'height'];
   const intervals: { [dim: string]: Array<[number, number]> } = {
     width: [],
@@ -432,7 +436,13 @@ function mergeIntervalsForAnd(
           hasAnyUnitConflicts = true;
         }
         if (rule.rule.key === `min-${dim}`) {
-          intervals[dim].push([-Infinity, val.value - epsilon]);
+          intervals[dim].push([
+            -Infinity,
+            val.value -
+              (dim === 'width' && val.unit.toLowerCase() === 'px'
+                ? maxWidthEpsilon
+                : epsilon),
+          ]);
         } else {
           intervals[dim].push([val.value + epsilon, Infinity]);
         }
@@ -508,10 +518,207 @@ function mergeAndSimplifyRanges(
   }
 }
 
+// StyleX models the `screen | print | all` media types. A media *type* cannot
+// be used as a boolean feature (e.g. `(print)` or `(not (print))`) — browsers
+// treat that as an unknown feature and the whole query fails to match. The
+// helpers below resolve negated/combined media types into a single positive
+// anchoring media type so they can be serialized correctly, e.g.
+// `(max-width: 900px) and (not print)` becomes `screen and (max-width: 900px)`.
+function complementMediaType(key: string): 'screen' | 'print' | null {
+  if (key === 'print') return 'screen';
+  if (key === 'screen') return 'print';
+  return null; // `not all` matches nothing
+}
+
+// A query that never matches.
+const NEVER_RULE: MediaQueryRule = {
+  type: 'media-keyword',
+  key: 'all',
+  not: true,
+};
+// A query that always matches.
+const ALWAYS_RULE: MediaQueryRule = {
+  type: 'media-keyword',
+  key: 'all',
+  not: false,
+};
+
+function isNeverRule(rule: MediaQueryRule): boolean {
+  return (
+    rule.type === 'media-keyword' && rule.key === 'all' && rule.not === true
+  );
+}
+
+function isAlwaysRule(rule: MediaQueryRule): boolean {
+  return (
+    rule.type === 'media-keyword' &&
+    rule.key === 'all' &&
+    rule.not !== true &&
+    rule.only !== true
+  );
+}
+
+// The positive media type a rule requires, or `undefined` when it does not
+// constrain the media type, or `'never'` when it can never match.
+function mediaTypeRequirement(
+  rule: MediaQueryRule,
+): 'screen' | 'print' | 'all' | 'never' | void {
+  if (rule.type === 'media-keyword') {
+    if (!rule.not) {
+      return rule.key;
+    }
+    const comp = complementMediaType(rule.key);
+    return comp == null ? 'never' : comp;
+  }
+  if (
+    rule.type === 'not' &&
+    rule.rule.type === 'media-keyword' &&
+    !rule.rule.not
+  ) {
+    const comp = complementMediaType(rule.rule.key);
+    return comp == null ? 'never' : comp;
+  }
+  return undefined;
+}
+
+function negateRule(rule: MediaQueryRule): MediaQueryRule {
+  switch (rule.type) {
+    case 'media-keyword':
+      return { ...rule, not: !rule.not };
+    case 'not':
+      return rule.rule;
+    case 'and':
+      return { type: 'or', rules: rule.rules.map(negateRule) };
+    case 'or':
+      return { type: 'and', rules: rule.rules.map(negateRule) };
+    default:
+      return { type: 'not', rule };
+  }
+}
+
+function flattenOrRule(rule: MediaQueryRule): Array<MediaQueryRule> {
+  return rule.type === 'or' ? [...rule.rules] : [rule];
+}
+
+// Whether a subtree references any media type (`screen`/`print`/`all`). When it
+// does not, there is nothing to resolve and the AST is left untouched so that
+// media-type-free queries (e.g. plain width ranges) keep their existing shape.
+function containsMediaKeyword(node: MediaQueryRule): boolean {
+  switch (node.type) {
+    case 'media-keyword':
+      return true;
+    case 'not':
+      return containsMediaKeyword(node.rule);
+    case 'and':
+    case 'or':
+      return node.rules.some(containsMediaKeyword);
+    default:
+      return false;
+  }
+}
+
+// Rewrites an already-normalized media AST so that media types are expressed as
+// valid CSS: a single positive anchoring media type per query, distributing
+// over `or` branches and dropping branches that can never match.
+function resolveMediaTypes(node: MediaQueryRule): MediaQueryRule {
+  if (!containsMediaKeyword(node)) {
+    return node;
+  }
+  switch (node.type) {
+    case 'or': {
+      const rules: Array<MediaQueryRule> = [];
+      for (const child of node.rules) {
+        for (const r of flattenOrRule(resolveMediaTypes(child))) {
+          if (!isNeverRule(r)) {
+            rules.push(r);
+          }
+        }
+      }
+      if (rules.length === 0) return NEVER_RULE;
+      if (rules.some(isAlwaysRule)) return ALWAYS_RULE;
+      if (rules.length === 1) return rules[0];
+      return { type: 'or', rules };
+    }
+    case 'and': {
+      const resolved = node.rules.map(resolveMediaTypes);
+
+      // Distribute over a nested `or` so each branch anchors its own media type.
+      const orIndex = resolved.findIndex((r) => r.type === 'or');
+      if (orIndex !== -1) {
+        const orNode: $FlowFixMe = resolved[orIndex];
+        const rest = resolved.filter((_, i) => i !== orIndex);
+        return resolveMediaTypes({
+          type: 'or',
+          rules: orNode.rules.map((branch) => ({
+            type: 'and',
+            rules: [branch, ...rest],
+          })),
+        });
+      }
+
+      let mediaType: 'screen' | 'print' | 'all' = 'all';
+      let anchorNode: MediaQueryRule | null = null;
+      const others: Array<MediaQueryRule> = [];
+
+      for (const rule of resolved) {
+        if (rule.type === 'media-keyword' && !rule.not) {
+          if (rule.key !== 'all') {
+            if (mediaType === 'all') {
+              mediaType = rule.key;
+              anchorNode = rule;
+            } else if (mediaType !== rule.key) {
+              return NEVER_RULE;
+            } else if (anchorNode == null) {
+              anchorNode = rule;
+            }
+          }
+          continue;
+        }
+        const req = mediaTypeRequirement(rule);
+        if (req === undefined) {
+          others.push(rule);
+          continue;
+        }
+        if (req === 'never') return NEVER_RULE;
+        if (req !== 'all') {
+          if (mediaType === 'all') {
+            mediaType = req;
+          } else if (mediaType !== req) {
+            return NEVER_RULE;
+          }
+        }
+      }
+
+      const rules: Array<MediaQueryRule> = [];
+      if (mediaType !== 'all') {
+        rules.push(
+          anchorNode ?? { type: 'media-keyword', key: mediaType, not: false },
+        );
+      }
+      rules.push(...others);
+      if (rules.length === 0) return ALWAYS_RULE;
+      if (rules.length === 1) return rules[0];
+      return { type: 'and', rules };
+    }
+    case 'not': {
+      const inner = resolveMediaTypes(node.rule);
+      if (inner.type === 'media-keyword') {
+        return resolveMediaTypes({ ...inner, not: !inner.not });
+      }
+      if (inner.type === 'and' || inner.type === 'or') {
+        return resolveMediaTypes(negateRule(inner));
+      }
+      return { type: 'not', rule: inner };
+    }
+    default:
+      return node;
+  }
+}
+
 export class MediaQuery {
   queries: MediaQueryRule;
   constructor(queries: MediaQueryRule) {
-    this.queries = MediaQuery.normalize(queries);
+    this.queries = resolveMediaTypes(MediaQuery.normalize(queries));
   }
   toString(): string {
     return `@media ${this.#toString(this.queries, true)}`;
@@ -519,14 +726,11 @@ export class MediaQuery {
   #toString(queries: MediaQueryRule, isTopLevel: boolean = false): string {
     switch (queries.type) {
       case 'media-keyword': {
+        // A media type is always serialized as a bare keyword. Wrapping it in
+        // parentheses (`(screen)`) would make browsers treat it as an unknown
+        // boolean feature, so the query would never match.
         const prefix = queries.not ? 'not ' : queries.only ? 'only ' : '';
-        const isTypedMediaReference = queries.only || queries.not;
-        return (
-          prefix +
-          (isTopLevel || isTypedMediaReference
-            ? queries.key
-            : `(${queries.key})`)
-        );
+        return prefix + queries.key;
       }
       case 'word-rule':
         return `(${queries.keyValue})`;

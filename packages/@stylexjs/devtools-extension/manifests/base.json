@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "StyleX DevTools",
+  "version": "0.1.1",
+  "description": "Inspect StyleX-applied styles and their sources in the Elements panel.",
+  "devtools_page": "devtools.html",
+  "icons": {
+    "16": "assets/stylex-icon-16.png",
+    "32": "assets/stylex-icon-32.png",
+    "48": "assets/stylex-icon-48.png",
+    "128": "assets/stylex-icon-128.png",
+    "256": "assets/stylex-icon-256.png",
+    "512": "assets/stylex-icon-512.png"
+  }
+}

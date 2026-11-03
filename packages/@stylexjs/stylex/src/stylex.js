@@ -26,6 +26,7 @@ import type {
   StyleX$DefineConsts,
   StyleXArray,
   StyleXClassNameFor,
+  StyleXMarker,
   StyleXStyles,
   StyleXStylesWithout,
   StyleXVar,
@@ -34,7 +35,7 @@ import type {
   PositionTry,
   ViewTransitionClass,
   StyleX$When,
-  MapNamespace,
+  StyleX$DefaultMarker,
   StyleX$DefineMarker,
   StyleX$Env,
 } from './types/StyleXTypes';
@@ -51,6 +52,7 @@ export type {
   StaticStylesWithout,
   StyleXArray,
   StyleXClassNameFor,
+  StyleXMarker,
   StyleXStyles,
   StyleXStylesWithout,
   StyleXVar,
@@ -193,7 +195,13 @@ export function attrs(
   }
   if (style != null) {
     result.style = Object.entries(style)
-      .map(([key, value]) => `${toKebabCase(key)}:${value}`)
+      .map(([key, value]) => {
+        if (key.startsWith('--')) {
+          return `${key}:${value}`;
+        }
+
+        return `${toKebabCase(key)}:${value}`;
+      })
       .join(';');
   }
   if (dataStyleSrc != null) {
@@ -208,11 +216,7 @@ export const viewTransitionClass = (
   throw errorForFn('viewTransitionClass');
 };
 
-export const defaultMarker = (): MapNamespace<
-  Readonly<{
-    marker: 'default-marker',
-  }>,
-> => {
+export const defaultMarker: StyleX$DefaultMarker = () => {
   throw errorForFn('defaultMarker');
 };
 
@@ -313,11 +317,7 @@ type IStyleX = {
   defineConsts: StyleX$DefineConsts,
   defineVars: StyleX$DefineVars,
   env: StyleX$Env,
-  defaultMarker: () => MapNamespace<
-    Readonly<{
-      marker: 'default-marker',
-    }>,
-  >,
+  defaultMarker: StyleX$DefaultMarker,
   defineMarker: StyleX$DefineMarker,
   firstThatWorks: <T extends string | number>(
     ...v: ReadonlyArray<T>

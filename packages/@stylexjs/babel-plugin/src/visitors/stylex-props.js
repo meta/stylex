@@ -286,7 +286,7 @@ export default function transformStylexProps(
               (t.isStringLiteral(prop.key) && prop.key.value === '$$css')) &&
             t.isBooleanLiteral(prop.value, { value: true }),
         );
-        if (hasCssMarker) {
+        if (hasCssMarker && canHoistObject(objPath)) {
           const hoisted = hoistExpression(objPath, objPath.node);
           objPath.replaceWith(hoisted);
         }
@@ -507,6 +507,31 @@ function genBitwiseOrOfConditions(
   return binaryExpressions.reduce((acc, expr) => {
     return t.binaryExpression('|', acc, expr);
   });
+}
+
+function canHoistObject(objPath: NodePath<t.ObjectExpression>): boolean {
+  const programScope = objPath.scope.getProgramParent();
+  for (const prop of objPath.node.properties) {
+    if (!t.isObjectProperty(prop)) {
+      return false;
+    }
+    if (prop.computed && t.isIdentifier(prop.key)) {
+      const binding = objPath.scope.getBinding(prop.key.name);
+      if (binding != null && binding.scope !== programScope) {
+        return false;
+      }
+    }
+    const val = prop.value;
+    if (t.isIdentifier(val)) {
+      const binding = objPath.scope.getBinding(val.name);
+      if (binding != null && binding.scope !== programScope) {
+        return false;
+      }
+    } else if (!t.isLiteral(val)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function getPropsLikeCall(

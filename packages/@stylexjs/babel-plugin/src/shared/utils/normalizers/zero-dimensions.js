@@ -32,11 +32,14 @@ export default function normalizeZeroDimensions(
   let endFunction = 0;
 
   ast.walk((node) => {
-    if (node.type === 'function' && !endFunction) {
-      endFunction = node.sourceEndIndex ?? 0;
+    if (node.type === 'function') {
+      endFunction = Math.max(endFunction, node.sourceEndIndex ?? 0);
     }
     if (endFunction > 0 && node.sourceIndex > endFunction) {
       endFunction = 0;
+    }
+    if (node.type === 'function' && node.value.toLowerCase() === 'url') {
+      return false;
     }
     if (node.type !== 'word') {
       return;

@@ -32,6 +32,16 @@ export const UNEXPECTED_MEMBER_LOOKUP = `Unexpected error:
 Could not determine the property being accessed.
 `;
 
+export const BLOCKED_PROPERTY_ACCESS = `Access to this property is not allowed during compilation.
+Accessing prototype-chain properties such as 'constructor', '__proto__', or 'prototype'
+is blocked to prevent arbitrary code execution.
+`;
+
+export const BLOCKED_FUNCTION_CALL = `Calling this function is not allowed during compilation.
+Functions that compile strings into code, such as 'Function' and 'eval', are blocked to
+prevent arbitrary code execution.
+`;
+
 export const IMPORT_PATH_RESOLUTION_ERROR = `Could not resolve the path to the imported file.
 Please ensure that the theme file has a .stylex.js or .stylex.ts extension and follows the
 rules for defining variables:

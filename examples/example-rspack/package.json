@@ -1,7 +1,7 @@
 {
   "name": "example-rspack",
   "private": true,
-  "version": "0.19.0",
+  "version": "0.19.1",
   "description": "Example: StyleX with Rspack via @stylexjs/unplugin",
   "scripts": {
     "example:build": "rspack build --config ./rspack.config.js",
@@ -10,14 +10,14 @@
   "dependencies": {
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "@stylexjs/stylex": "0.19.0"
+    "@stylexjs/stylex": "0.19.1"
   },
   "devDependencies": {
     "@rspack/cli": "^1.6.4",
     "@rspack/core": "^1.6.4",
-    "@stylexjs/eslint-plugin": "0.19.0",
+    "@stylexjs/eslint-plugin": "0.19.1",
     "css-loader": "^7.1.2",
-    "@stylexjs/unplugin": "0.19.0",
+    "@stylexjs/unplugin": "0.19.1",
     "eslint": "^9.39.1",
     "shx": "^0.4.0"
   }

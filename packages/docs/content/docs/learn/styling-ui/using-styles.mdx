@@ -16,9 +16,14 @@ use them conditionally, or even compose styles across module boundaries.
 ## Merging styles
 
 The `props` function can take a list of styles and merge them in a deterministic
-way, where the last style applied always wins. The order in which the styles are
-defined does not affect the resulting styles, only the order in which they are
-applied to the HTML element.
+way. When two styles set the same property, the last style applied always wins.
+The order in which the styles are defined does not affect the resulting styles,
+only the order in which they are applied to the HTML element.
+
+Shorthand and longhand properties are different keys (`margin` vs `marginTop`).
+By default (`styleResolution: 'property-specificity'`), the longhand wins even
+if the shorthand is applied later. See
+[`styleResolution`](/docs/api/configuration/babel-plugin/#styleresolution).
 
 Using `props` is only required when styles are set on React DOM host elements
 like `<div>`.

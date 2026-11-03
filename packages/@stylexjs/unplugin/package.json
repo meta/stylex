@@ -1,6 +1,6 @@
 {
   "name": "@stylexjs/unplugin",
-  "version": "0.19.0",
+  "version": "0.19.1",
   "private": false,
   "description": "Universal bundler plugin for StyleX using unplugin",
   "license": "MIT",
@@ -82,7 +82,7 @@
     "@babel/plugin-syntax-flow": "^7.26.0",
     "@babel/plugin-syntax-jsx": "^7.25.9",
     "@babel/plugin-syntax-typescript": "^7.25.9",
-    "@stylexjs/babel-plugin": "0.19.0",
+    "@stylexjs/babel-plugin": "0.19.1",
     "browserslist": "^4.24.0",
     "lightningcss": "^1.29.1"
   },

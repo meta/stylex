@@ -188,7 +188,8 @@ export type StyleXStyles<
 > = StyleXArray<
   | ?false
   | GenStylePropType<Readonly<CSS>>
-  | Readonly<[GenStylePropType<Readonly<CSS>>, InlineStyles]>,
+  | Readonly<[GenStylePropType<Readonly<CSS>>, InlineStyles]>
+  | StyleXMarker,
 >;
 
 export type StyleXStylesWithout<
@@ -294,30 +295,34 @@ export type StyleX$CreateTheme = <
   overrides: OverridesForTokenType<TokensFromVarGroup<BaseTokens>>,
 ) => Theme<BaseTokens, ID>;
 
-export type StyleX$DefineMarker = () => MapNamespace<{
+export type StyleXMarker = MapNamespace<{
   readonly marker: 'custom-marker',
 }>;
+
+export type StyleX$DefineMarker = () => StyleXMarker;
+
+export type StyleX$DefaultMarker = () => StyleXMarker;
 
 export type StyleX$When = {
   ancestor: (
     _pseudo?: StringPrefix<':'> | StringPrefix<'['>,
-    _customMarker?: MapNamespace<{ readonly marker: 'custom-marker' }>,
+    _customMarker?: StyleXMarker,
   ) => ':where-ancestor',
   descendant: (
     _pseudo?: StringPrefix<':'> | StringPrefix<'['>,
-    _customMarker?: MapNamespace<{ readonly marker: 'custom-marker' }>,
+    _customMarker?: StyleXMarker,
   ) => ':where-descendant',
   siblingBefore: (
     _pseudo?: StringPrefix<':'> | StringPrefix<'['>,
-    _customMarker?: MapNamespace<{ readonly marker: 'custom-marker' }>,
+    _customMarker?: StyleXMarker,
   ) => ':where-sibling-before',
   siblingAfter: (
     _pseudo?: StringPrefix<':'> | StringPrefix<'['>,
-    _customMarker?: MapNamespace<{ readonly marker: 'custom-marker' }>,
+    _customMarker?: StyleXMarker,
   ) => ':where-sibling-after',
   anySibling: (
     _pseudo?: StringPrefix<':'> | StringPrefix<'['>,
-    _customMarker?: MapNamespace<{ readonly marker: 'custom-marker' }>,
+    _customMarker?: StyleXMarker,
   ) => ':where-any-sibling',
 };
 

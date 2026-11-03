@@ -19,6 +19,7 @@ const colorsValue = {
   textAccent: 'light-dark(#dc362e, rgb(92 213 251))',
   secondaryAccent: 'light-dark(#0F7913, #73C89C)',
   border: 'light-dark(#d3e3fd, #5e5e5eff)',
+  separator: 'light-dark(rgb(0 0 0 / 0.06), rgb(255 255 255 / 0.07))',
 };
 
 export const colors: typeof colorsValue = stylex.defineConsts(colorsValue);

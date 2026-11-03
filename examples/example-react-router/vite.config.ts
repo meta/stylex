@@ -13,7 +13,6 @@ export default defineConfig({
   plugins: [
     stylex.vite({
       useCSSLayers: true,
-      enableDebugClassNames: false,
       runtimeInjection: false,
     }),
     react(),

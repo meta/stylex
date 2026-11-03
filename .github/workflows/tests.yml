@@ -33,6 +33,9 @@ jobs:
       - run: corepack prepare yarn@1.22.22 --activate
       - run: yarn install --frozen-lockfile
       - run: yarn test:packages
+      - run: yarn workspace @stylexjs/devtools-extension build
+      - run: yarn workspace @stylexjs/devtools-extension verify:build
+      - run: yarn workspace @stylexjs/devtools-extension web-ext:lint
 
   prettier:
     runs-on: ubuntu-latest
@@ -64,6 +67,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: crate-ci/typos@master
+      - uses: crate-ci/typos@v1
         with:
           config: .github/workflows/typos.toml

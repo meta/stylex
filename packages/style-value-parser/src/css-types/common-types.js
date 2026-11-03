@@ -93,7 +93,5 @@ export class Percentage {
 export const numberOrPercentage: TokenParser<number | Percentage> =
   TokenParser.oneOf(
     Percentage.parser,
-    TokenParser.token<TokenNumber>(TokenType.Number).map((v) =>
-      v[4].signCharacter === '-' ? -v[4].value : v[4].value,
-    ),
+    TokenParser.token<TokenNumber>(TokenType.Number).map((v) => v[4].value),
   );

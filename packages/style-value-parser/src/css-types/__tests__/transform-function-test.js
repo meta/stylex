@@ -334,6 +334,13 @@ describe('Test CSS Type: <transform-function>', () => {
       expect(TransformFunction.parser.parseToEnd('scale(1.5, 2.5)')).toEqual(
         new Scale(1.5, 2.5),
       );
+      // Negative values must be preserved (e.g. scale(-1) flips/mirrors).
+      expect(TransformFunction.parser.parseToEnd('scale(-1)')).toEqual(
+        new Scale(-1),
+      );
+      expect(TransformFunction.parser.parseToEnd('scale(-1.5, -2)')).toEqual(
+        new Scale(-1.5, -2),
+      );
     });
     test('invalid uses', () => {
       // Not enough values

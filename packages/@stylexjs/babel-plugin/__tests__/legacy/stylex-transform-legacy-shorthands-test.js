@@ -471,60 +471,60 @@ describe('legacy-shorthand-expansion style resolution (enableLogicalStylesPolyfi
           stylex(styles.foo, styles.bar)
           export const string = stylex(styles.foo, styles.bar, xstyle);
         `,
-          { debug: true, enableDebugClassNames: true },
+          { debug: true },
         ),
       ).toMatchInlineSnapshot(`
         "import _inject from "@stylexjs/stylex/lib/stylex-inject";
         var _inject2 = _inject;
         import stylex from 'stylex';
         _inject2({
-          ltr: ".paddingTop-x123j3cw{padding-top:5px}",
+          ltr: ".x123j3cw{padding-top:5px}",
           priority: 4000
         });
         _inject2({
-          ltr: ".paddingBottom-xs9asl8{padding-bottom:5px}",
+          ltr: ".xs9asl8{padding-bottom:5px}",
           priority: 4000
         });
         _inject2({
-          ltr: ".paddingInlineStart-xaso8d8{padding-left:5px}",
-          rtl: ".paddingInlineStart-xaso8d8{padding-right:5px}",
+          ltr: ".xaso8d8{padding-left:5px}",
+          rtl: ".xaso8d8{padding-right:5px}",
           priority: 3000
         });
         _inject2({
-          ltr: ".paddingInlineEnd-x2vl965{padding-right:10px}",
-          rtl: ".paddingInlineEnd-x2vl965{padding-left:10px}",
+          ltr: ".x2vl965{padding-right:10px}",
+          rtl: ".x2vl965{padding-left:10px}",
           priority: 3000
         });
         _inject2({
-          ltr: ".paddingTop-x1nn3v0j{padding-top:2px}",
+          ltr: ".x1nn3v0j{padding-top:2px}",
           priority: 4000
         });
         _inject2({
-          ltr: ".paddingBottom-x1120s5i{padding-bottom:2px}",
+          ltr: ".x1120s5i{padding-bottom:2px}",
           priority: 4000
         });
         _inject2({
-          ltr: ".paddingLeft-xnljgj5{padding-left:22px}",
+          ltr: ".xnljgj5{padding-left:22px}",
           priority: 4000
         });
         const styles = {
           foo: {
-            "paddingTop-kLKAdn": "paddingTop-x123j3cw",
-            "paddingBottom-kGO01o": "paddingBottom-xs9asl8",
-            "paddingInlineStart-kZCmMZ": "paddingInlineStart-xaso8d8",
-            "paddingInlineEnd-kwRFfy": "paddingInlineEnd-x2vl965",
+            "paddingTop-kLKAdn": "x123j3cw",
+            "paddingBottom-kGO01o": "xs9asl8",
+            "paddingInlineStart-kZCmMZ": "xaso8d8",
+            "paddingInlineEnd-kwRFfy": "x2vl965",
             $$css: "@stylexjs/babel-plugin::4"
           },
           bar: {
-            "paddingTop-kLKAdn": "paddingTop-x1nn3v0j",
-            "paddingBottom-kGO01o": "paddingBottom-x1120s5i",
-            "paddingLeft-kE3dHu": "paddingLeft-xnljgj5",
+            "paddingTop-kLKAdn": "x1nn3v0j",
+            "paddingBottom-kGO01o": "x1120s5i",
+            "paddingLeft-kE3dHu": "xnljgj5",
             "paddingInlineStart-kZCmMZ": null,
             "paddingInlineEnd-kwRFfy": null,
             $$css: "@stylexjs/babel-plugin::9"
           }
         };
-        "paddingTop-x1nn3v0j paddingBottom-x1120s5i paddingLeft-xnljgj5";
+        "x1nn3v0j x1120s5i xnljgj5";
         export const string = stylex(styles.foo, styles.bar, xstyle);"
       `);
     });
@@ -1118,7 +1118,6 @@ describe('legacy-shorthand-expansion style resolution (enableLogicalStylesPolyfi
         `,
           {
             debug: true,
-            enableDebugClassNames: true,
             enableDevClassNames: false,
           },
         ),
@@ -1127,52 +1126,52 @@ describe('legacy-shorthand-expansion style resolution (enableLogicalStylesPolyfi
         var _inject2 = _inject;
         import stylex from 'stylex';
         _inject2({
-          ltr: ".listStyleType-x3ct3a4{list-style-type:none}",
+          ltr: ".x3ct3a4{list-style-type:none}",
           priority: 3000
         });
         _inject2({
-          ltr: ".listStyleType-x152237o{list-style-type:square}",
+          ltr: ".x152237o{list-style-type:square}",
           priority: 3000
         });
         _inject2({
-          ltr: ".listStylePosition-x1cy9i3i{list-style-position:inside}",
+          ltr: ".x1cy9i3i{list-style-position:inside}",
           priority: 3000
         });
         _inject2({
-          ltr: ".listStyleType-x1jzm7bx{list-style-type:\\"--\\"}",
+          ltr: ".x1jzm7bx{list-style-type:\\"--\\"}",
           priority: 3000
         });
         _inject2({
-          ltr: ".listStyleType-x1tpmu87{list-style-type:'=='}",
+          ltr: ".x1tpmu87{list-style-type:'=='}",
           priority: 3000
         });
         export const styles = {
           none: {
-            "listStyleType-kH6xsr": "listStyleType-x3ct3a4",
+            "listStyleType-kH6xsr": "x3ct3a4",
             "listStylePosition-kpqbRz": null,
             "listStyleImage-khnUzm": null,
             $$css: "@stylexjs/babel-plugin::4"
           },
           square: {
-            "listStyleType-kH6xsr": "listStyleType-x152237o",
+            "listStyleType-kH6xsr": "x152237o",
             "listStylePosition-kpqbRz": null,
             "listStyleImage-khnUzm": null,
             $$css: "@stylexjs/babel-plugin::7"
           },
           inside: {
             "listStyleType-kH6xsr": null,
-            "listStylePosition-kpqbRz": "listStylePosition-x1cy9i3i",
+            "listStylePosition-kpqbRz": "x1cy9i3i",
             "listStyleImage-khnUzm": null,
             $$css: "@stylexjs/babel-plugin::10"
           },
           custom1: {
-            "listStyleType-kH6xsr": "listStyleType-x1jzm7bx",
+            "listStyleType-kH6xsr": "x1jzm7bx",
             "listStylePosition-kpqbRz": null,
             "listStyleImage-khnUzm": null,
             $$css: "@stylexjs/babel-plugin::13"
           },
           custom2: {
-            "listStyleType-kH6xsr": "listStyleType-x1tpmu87",
+            "listStyleType-kH6xsr": "x1tpmu87",
             "listStylePosition-kpqbRz": null,
             "listStyleImage-khnUzm": null,
             $$css: "@stylexjs/babel-plugin::16"
@@ -1203,7 +1202,6 @@ describe('legacy-shorthand-expansion style resolution (enableLogicalStylesPolyfi
         `,
           {
             debug: true,
-            enableDebugClassNames: true,
             enableDevClassNames: false,
           },
         ),
@@ -1212,60 +1210,60 @@ describe('legacy-shorthand-expansion style resolution (enableLogicalStylesPolyfi
         var _inject2 = _inject;
         import stylex from 'stylex';
         _inject2({
-          ltr: ".listStyleType-x3ct3a4{list-style-type:none}",
+          ltr: ".x3ct3a4{list-style-type:none}",
           priority: 3000
         });
         _inject2({
-          ltr: ".listStylePosition-x1cy9i3i{list-style-position:inside}",
+          ltr: ".x1cy9i3i{list-style-position:inside}",
           priority: 3000
         });
         _inject2({
-          ltr: ".listStyleType-x152237o{list-style-type:square}",
+          ltr: ".x152237o{list-style-type:square}",
           priority: 3000
         });
         _inject2({
-          ltr: ".listStyleImage-xnbnhf8{list-style-image:none}",
+          ltr: ".xnbnhf8{list-style-image:none}",
           priority: 3000
         });
         _inject2({
-          ltr: ".listStyleType-xl2um64{list-style-type:simp-chinese-informal}",
+          ltr: ".xl2um64{list-style-type:simp-chinese-informal}",
           priority: 3000
         });
         _inject2({
-          ltr: ".listStyleImage-x1qcowux{list-style-image:linear-gradient(90deg,white 100%)}",
+          ltr: ".x1qcowux{list-style-image:linear-gradient(90deg,white 100%)}",
           priority: 3000
         });
         _inject2({
-          ltr: ".listStyleType-xqkogtj{list-style-type:\\"+\\"}",
+          ltr: ".xqkogtj{list-style-type:\\"+\\"}",
           priority: 3000
         });
         _inject2({
-          ltr: ".listStylePosition-x43c9pm{list-style-position:outside}",
+          ltr: ".x43c9pm{list-style-position:outside}",
           priority: 3000
         });
         export const styles = {
           one: {
-            "listStyleType-kH6xsr": "listStyleType-x3ct3a4",
-            "listStylePosition-kpqbRz": "listStylePosition-x1cy9i3i",
+            "listStyleType-kH6xsr": "x3ct3a4",
+            "listStylePosition-kpqbRz": "x1cy9i3i",
             "listStyleImage-khnUzm": null,
             $$css: "@stylexjs/babel-plugin::4"
           },
           two: {
-            "listStyleType-kH6xsr": "listStyleType-x152237o",
+            "listStyleType-kH6xsr": "x152237o",
             "listStylePosition-kpqbRz": null,
-            "listStyleImage-khnUzm": "listStyleImage-xnbnhf8",
+            "listStyleImage-khnUzm": "xnbnhf8",
             $$css: "@stylexjs/babel-plugin::7"
           },
           three: {
-            "listStyleType-kH6xsr": "listStyleType-xl2um64",
+            "listStyleType-kH6xsr": "xl2um64",
             "listStylePosition-kpqbRz": null,
-            "listStyleImage-khnUzm": "listStyleImage-x1qcowux",
+            "listStyleImage-khnUzm": "x1qcowux",
             $$css: "@stylexjs/babel-plugin::10"
           },
           four: {
-            "listStyleType-kH6xsr": "listStyleType-xqkogtj",
-            "listStylePosition-kpqbRz": "listStylePosition-x43c9pm",
-            "listStyleImage-khnUzm": "listStyleImage-x1qcowux",
+            "listStyleType-kH6xsr": "xqkogtj",
+            "listStylePosition-kpqbRz": "x43c9pm",
+            "listStyleImage-khnUzm": "x1qcowux",
             $$css: "@stylexjs/babel-plugin::13"
           }
         };"
@@ -1300,7 +1298,6 @@ describe('legacy-shorthand-expansion style resolution (enableLogicalStylesPolyfi
         `,
           {
             debug: true,
-            enableDebugClassNames: true,
             enableDevClassNames: false,
           },
         ),
@@ -1309,52 +1306,52 @@ describe('legacy-shorthand-expansion style resolution (enableLogicalStylesPolyfi
         var _inject2 = _inject;
         import stylex from 'stylex';
         _inject2({
-          ltr: ".listStylePosition-x1cy9i3i{list-style-position:inside}",
+          ltr: ".x1cy9i3i{list-style-position:inside}",
           priority: 3000
         });
         _inject2({
-          ltr: ".listStyleType-x152237o{list-style-type:square}",
+          ltr: ".x152237o{list-style-type:square}",
           priority: 3000
         });
         _inject2({
-          ltr: ".listStyleType-x12kno0j{list-style-type:georgian}",
+          ltr: ".x12kno0j{list-style-type:georgian}",
           priority: 3000
         });
         _inject2({
-          ltr: ".listStyleImage-xnbnhf8{list-style-image:none}",
+          ltr: ".xnbnhf8{list-style-image:none}",
           priority: 3000
         });
         _inject2({
-          ltr: ".listStylePosition-x43c9pm{list-style-position:outside}",
+          ltr: ".x43c9pm{list-style-position:outside}",
           priority: 3000
         });
         _inject2({
-          ltr: ".listStyleImage-x1qcowux{list-style-image:linear-gradient(90deg,white 100%)}",
+          ltr: ".x1qcowux{list-style-image:linear-gradient(90deg,white 100%)}",
           priority: 3000
         });
         export const styles = {
           one: {
-            "listStylePosition-kpqbRz": "listStylePosition-x1cy9i3i",
+            "listStylePosition-kpqbRz": "x1cy9i3i",
             "listStyleImage-khnUzm": null,
-            "listStyleType-kH6xsr": "listStyleType-x152237o",
+            "listStyleType-kH6xsr": "x152237o",
             $$css: "@stylexjs/babel-plugin::4"
           },
           two: {
-            "listStyleType-kH6xsr": "listStyleType-x12kno0j",
-            "listStyleImage-khnUzm": "listStyleImage-xnbnhf8",
-            "listStylePosition-kpqbRz": "listStylePosition-x43c9pm",
+            "listStyleType-kH6xsr": "x12kno0j",
+            "listStyleImage-khnUzm": "xnbnhf8",
+            "listStylePosition-kpqbRz": "x43c9pm",
             $$css: "@stylexjs/babel-plugin::8"
           },
           three: {
-            "listStyleImage-khnUzm": "listStyleImage-x1qcowux",
-            "listStylePosition-kpqbRz": "listStylePosition-x43c9pm",
-            "listStyleType-kH6xsr": "listStyleType-x152237o",
+            "listStyleImage-khnUzm": "x1qcowux",
+            "listStylePosition-kpqbRz": "x43c9pm",
+            "listStyleType-kH6xsr": "x152237o",
             $$css: "@stylexjs/babel-plugin::12"
           },
           four: {
-            "listStyleImage-khnUzm": "listStyleImage-x1qcowux",
-            "listStylePosition-kpqbRz": "listStylePosition-x43c9pm",
-            "listStyleType-kH6xsr": "listStyleType-x152237o",
+            "listStyleImage-khnUzm": "x1qcowux",
+            "listStylePosition-kpqbRz": "x43c9pm",
+            "listStyleType-kH6xsr": "x152237o",
             $$css: "@stylexjs/babel-plugin::17"
           }
         };"

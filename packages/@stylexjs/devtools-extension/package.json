@@ -1,8 +1,8 @@
 {
   "name": "@stylexjs/devtools-extension",
-  "version": "0.19.0",
+  "version": "0.19.1",
   "private": true,
-  "description": "Chrome DevTools extension for debugging StyleX.",
+  "description": "Chrome, Firefox, and Safari DevTools extension for debugging StyleX.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/facebook/stylex.git"
@@ -10,24 +10,33 @@
   "license": "MIT",
   "scripts": {
     "dev": "rollup -c --watch",
-    "build": "rollup -c"
+    "build": "rollup -c",
+    "test": "jest --config jest.config.js --runInBand",
+    "verify:build": "node scripts/verify-build.mjs",
+    "web-ext:lint": "node scripts/lint-firefox.mjs",
+    "web-ext:build": "yarn build && node scripts/package.mjs"
   },
   "files": [
-    "extension/**"
+    "dist/chrome/**",
+    "dist/firefox/**",
+    "dist/safari/**"
   ],
   "dependencies": {
-    "@stylexjs/stylex": "0.19.0",
+    "@stylexjs/stylex": "0.19.1",
+    "postcss-selector-parser": "7.1.6",
     "react": "^19.2.3",
     "react-dom": "^19.2.3"
   },
   "devDependencies": {
     "@babel/plugin-transform-flow-strip-types": "^7.27.1",
-    "@stylexjs/unplugin": "0.19.0",
+    "@stylexjs/unplugin": "0.19.1",
     "@rollup/plugin-babel": "^6.0.4",
     "@rollup/plugin-commonjs": "^28.0.1",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^15.3.0",
     "@rollup/plugin-replace": "^6.0.1",
-    "rollup": "^4.24.0"
+    "jszip": "3.10.1",
+    "rollup": "^4.24.0",
+    "web-ext": "10.5.0"
   }
 }

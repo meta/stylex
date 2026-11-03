@@ -365,6 +365,39 @@ eslintTester.run('stylex-sort-keys', rule.default, {
         },
       });`,
     },
+    {
+      // With `enableMediaQueryOrder`, authored media query order is preserved,
+      // so a max-width cascade written largest-first is reported as valid.
+      options: [{ enableMediaQueryOrder: true }],
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          container: {
+            padding: {
+              default: '2rem',
+              '@media (max-width: 768px)': '1.5rem',
+              '@media (max-width: 640px)': '1rem',
+            },
+          },
+        });
+      `,
+    },
+    {
+      // min-width breakpoints authored smallest-first are also left untouched.
+      options: [{ enableMediaQueryOrder: true }],
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          container: {
+            fontSize: {
+              default: '1rem',
+              '@media (min-width: 640px)': '1.25rem',
+              '@media (min-width: 1024px)': '1.5rem',
+            },
+          },
+        });
+      `,
+    },
   ],
   invalid: [
     {
@@ -1413,6 +1446,71 @@ eslintTester.run('stylex-sort-keys', rule.default, {
         {
           message:
             'StyleX property key ":when:api:active" should be above ":when:api:focus"',
+        },
+      ],
+    },
+    {
+      // Default behavior is unchanged: without the option, max-width media
+      // queries are still reordered alphabetically (the cascade-breaking bug).
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          container: {
+            padding: {
+              default: '2rem',
+              '@media (max-width: 768px)': '1.5rem',
+              '@media (max-width: 640px)': '1rem',
+            },
+          },
+        });
+      `,
+      output: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          container: {
+            padding: {
+              default: '2rem',
+              '@media (max-width: 640px)': '1rem',
+              '@media (max-width: 768px)': '1.5rem',
+            },
+          },
+        });
+      `,
+      errors: [
+        {
+          message:
+            'StyleX property key "@media (max-width: 640px)" should be above "@media (max-width: 768px)"',
+        },
+      ],
+    },
+    {
+      // With `enableMediaQueryOrder`, regular property keys are still sorted;
+      // only media query ordering is left to the author.
+      options: [{ enableMediaQueryOrder: true }],
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          main: {
+            animationDuration: '100ms',
+            padding: 10,
+            fontSize: 12,
+          }
+        });
+      `,
+      output: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          main: {
+            padding: 10,
+            animationDuration: '100ms',
+            fontSize: 12,
+          }
+        });
+      `,
+      errors: [
+        {
+          message:
+            'StyleX property key "padding" should be above "animationDuration"',
         },
       ],
     },

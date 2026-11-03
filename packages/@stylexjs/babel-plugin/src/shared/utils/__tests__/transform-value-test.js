@@ -75,6 +75,57 @@ describe('transformValue content property tests', () => {
     });
   });
 
+  test('adds quotes to plain strings containing quote characters', () => {
+    const strings = [
+      ["Bob's and Jim's", '"Bob\'s and Jim\'s"'],
+      ["It's a test, isn't it", '"It\'s a test, isn\'t it"'],
+      ['He said "hello"', '"He said \\"hello\\""'],
+      ['say "hi" now', '"say \\"hi\\" now"'],
+      ['"hello" is what he said', '"\\"hello\\" is what he said"'],
+    ];
+
+    strings.forEach(([input, expected]) => {
+      expect(transformValue('content', input, {})).toBe(expected);
+    });
+  });
+
+  test('preserves CSS escape sequences when adding quotes', () => {
+    const strings = [
+      // Inside a CSS string a backslash starts an escape sequence. `\2014` is
+      // the escape for an em dash and `\201C` for a left double quotation
+      // mark, so escaping the backslash would print the digits instead.
+      ['\\2014', '"\\2014"'],
+      ['\\201C hello \\201D', '"\\201C hello \\201D"'],
+      ['back\\slash', '"back\\slash"'],
+      // `\\` is the escape for a literal backslash and stays one escape.
+      ['C:\\\\Users', '"C:\\\\Users"'],
+      // A double quote the author already escaped is escaped once, not twice.
+      ['He said \\"hello\\"', '"He said \\"hello\\""'],
+      // A trailing backslash would escape the closing quote, so it is doubled
+      // into the escape for a literal backslash.
+      ['50% off \\', '"50% off \\\\"'],
+      // A CSS string cannot hold a line break, so it is written as `\A`.
+      ['line one\nline two', '"line one\\A line two"'],
+    ];
+
+    strings.forEach(([input, expected]) => {
+      expect(transformValue('content', input, {})).toBe(expected);
+    });
+  });
+
+  test('preserves quote keywords combined with strings', () => {
+    const values = [
+      '"a" "b"',
+      'open-quote "hello"',
+      '"prefix" no-close-quote',
+      'open-quote "text" close-quote',
+    ];
+
+    values.forEach((input) => {
+      expect(transformValue('content', input, {})).toBe(input);
+    });
+  });
+
   test('preserve units in zero values CSS variables', () => {
     const variables = [
       ['--test', '0px', '0px'],

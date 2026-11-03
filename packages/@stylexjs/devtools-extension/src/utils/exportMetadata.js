@@ -14,6 +14,7 @@ import type {
   StylexDeclaration,
   StylexOverride,
 } from '../types.js';
+import { formatCssValue } from './css.js';
 
 // Serializes the StyleX inspection of the selected element into compact
 // markdown. The value here is the StyleX-specific metadata that is hard to
@@ -22,17 +23,10 @@ import type {
 // source file:line that authored it.
 
 function conditionLabel(decl: StylexDeclaration): string {
-  if (decl.conditions != null && decl.conditions.length > 0) {
-    return decl.conditions.join(', ');
-  }
-  if (decl.condition != null && decl.condition !== 'default') {
-    return decl.condition;
+  if (decl.conditions.length > 0) {
+    return decl.conditions.map(({ text }) => text).join(', ');
   }
   return 'default';
-}
-
-function formatValue(value: string, important: boolean): string {
-  return important ? `${value} !important` : value;
 }
 
 function renderSources(data: StylexDebugData): Array<string> {
@@ -46,13 +40,13 @@ function renderSources(data: StylexDebugData): Array<string> {
   return lines;
 }
 
-function renderAppliedStyles(data: StylexDebugData): Array<string> {
+function renderMatchedStyles(data: StylexDebugData): Array<string> {
   // section (pseudo-element, '' for the base element) -> property -> entries
   const sections: Map<
     string,
     Map<string, Array<StylexDeclaration>>,
   > = new Map();
-  for (const cls of data.applied.classes) {
+  for (const cls of data.matched.classes) {
     for (const decl of cls.declarations) {
       const sectionKey = decl.pseudoElement ?? '';
       let properties = sections.get(sectionKey);
@@ -76,7 +70,7 @@ function renderAppliedStyles(data: StylexDebugData): Array<string> {
     ...[...sections.keys()].filter((key) => key !== ''),
   ];
 
-  const lines = ['## Applied styles'];
+  const lines = ['## Matched styles'];
   for (const sectionKey of orderedKeys) {
     const properties = sections.get(sectionKey);
     if (properties == null) continue;
@@ -89,14 +83,14 @@ function renderAppliedStyles(data: StylexDebugData): Array<string> {
         const cond = conditionLabel(entry);
         const condText = cond === 'default' ? '' : ` [${cond}]`;
         lines.push(
-          `- ${property}: ${formatValue(entry.value, entry.important)}${condText} (.${entry.className ?? '?'})`,
+          `- ${property}: ${formatCssValue(entry.value, entry.important)}${condText} (.${entry.className})`,
         );
         continue;
       }
       lines.push(`- ${property}:`);
       for (const entry of entries) {
         lines.push(
-          `  - ${conditionLabel(entry)}: ${formatValue(entry.value, entry.important)} (.${entry.className ?? '?'})`,
+          `  - ${conditionLabel(entry)}: ${formatCssValue(entry.value, entry.important)} (.${entry.className})`,
         );
       }
     }
@@ -109,7 +103,7 @@ function renderOverrides(overrides: Array<StylexOverride>): Array<string> {
   const lines = ['## Overrides (live, not yet in source)'];
   for (const override of overrides) {
     lines.push(
-      `- ${override.property}: ${formatValue(override.value, override.important)} (${override.kind})`,
+      `- ${override.property}: ${formatCssValue(override.value, override.important)} (${override.kind})`,
     );
   }
   return lines;
@@ -119,7 +113,7 @@ export function exportMetadata(data: StylexDebugData): string {
   const blocks: Array<Array<string>> = [
     [`# StyleX metadata — <${data.element.tagName}>`],
     renderSources(data),
-    renderAppliedStyles(data),
+    renderMatchedStyles(data),
     renderOverrides(data.overrides),
   ];
   return blocks

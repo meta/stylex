@@ -41,24 +41,19 @@ export class Inset extends BasicShape {
   }
   // Stringify the shortest possible version of the inset
   toString(): string {
-    const { top, right, bottom, left, round } = this;
+    const { top, right, bottom, left } = this;
     const roundStr =
       this.round != null ? ` round ${this.round.toString()}` : '';
-    if (
-      top === right &&
-      right === bottom &&
-      bottom === left &&
-      left === round
-    ) {
+    if (top === right && right === bottom && bottom === left && left === top) {
       return `inset(${top.toString()}${roundStr})`;
     }
     if (top === bottom && left === right) {
       return `inset(${top.toString()} ${right.toString()}${roundStr})`;
     }
-    if (top === bottom) {
+    if (left === right) {
       return `inset(${top.toString()} ${right.toString()} ${bottom.toString()}${roundStr})`;
     }
-    return `inset(${top.toString()} ${right.toString()} ${bottom.toString()} ${left.toString()} ${roundStr})`;
+    return `inset(${top.toString()} ${right.toString()} ${bottom.toString()} ${left.toString()}${roundStr})`;
   }
 
   static get parser(): TokenParser<Inset> {

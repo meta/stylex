@@ -1024,3 +1024,78 @@ ruleTester.run('stylex-enforce-extension', rule.default, {
     },
   ],
 });
+
+const typeExportRuleTester = new RuleTester({
+  parser: require.resolve('@typescript-eslint/parser'),
+  parserOptions: { sourceType: 'module' },
+});
+
+typeExportRuleTester.run(
+  'stylex-enforce-extension (type exports)',
+  rule.default,
+  {
+    valid: [
+      {
+        code: `
+        import * as stylex from '@stylexjs/stylex';
+        export const colors = stylex.defineVars({
+          primary: 'blue',
+          secondary: 'green',
+          accent: 'coral',
+        });
+        export type Colors = keyof typeof colors;
+      `,
+        filename: 'colors.stylex.ts',
+      },
+      {
+        code: `
+        import * as stylex from '@stylexjs/stylex';
+        export const colors = stylex.defineConsts({
+          primary: 'blue',
+          secondary: 'green',
+        });
+        export type Colors = keyof typeof colors;
+      `,
+        filename: 'colors.stylex.const.ts',
+        options: [{ enforceDefineConstsExtension: true }],
+      },
+      {
+        code: `
+        import * as stylex from '@stylexjs/stylex';
+        type Colors = keyof typeof colors;
+        export const colors = stylex.defineVars({
+          primary: 'blue',
+          secondary: 'green',
+        });
+        export type { Colors };
+      `,
+        filename: 'colors.stylex.ts',
+      },
+      {
+        code: `
+        import * as stylex from '@stylexjs/stylex';
+        type Colors = keyof typeof colors;
+        export const colors = stylex.defineVars({
+          primary: 'blue',
+          secondary: 'green',
+        });
+        export { type Colors };
+      `,
+        filename: 'colors.stylex.ts',
+      },
+    ],
+
+    invalid: [
+      {
+        code: `
+        import * as stylex from '@stylexjs/stylex';
+        export const colors = stylex.defineVars({ primary: 'blue' });
+        export type Colors = keyof typeof colors;
+        export const helper = someFunction();
+      `,
+        filename: 'colors.stylex.ts',
+        errors: [{ message: invalidExportFromThemeFiles }],
+      },
+    ],
+  },
+);

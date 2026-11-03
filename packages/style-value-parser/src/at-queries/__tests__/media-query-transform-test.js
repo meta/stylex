@@ -33,6 +33,26 @@ describe('Media Query Transformer', () => {
     expect(JSON.stringify(result)).toBe(JSON.stringify(expectedStyles));
   });
 
+  test('keeps Chromium from rounding generated max-width boundaries', () => {
+    const originalStyles = {
+      color: {
+        default: 'blue',
+        '@media (min-width: 400px)': 'red',
+        '@media (min-width: 600px)': 'green',
+      },
+    };
+
+    const result = lastMediaQueryWinsTransform(originalStyles);
+
+    expect(result).toEqual({
+      color: {
+        default: 'blue',
+        '@media (min-width: 400px) and (max-width: 599.98px)': 'red',
+        '@media (min-width: 600px)': 'green',
+      },
+    });
+  });
+
   test('basic usage: nested query', () => {
     const originalStyles = {
       gridColumn: {
@@ -171,8 +191,8 @@ describe('Media Query Transformer', () => {
     const expectedStyles = {
       gridColumn: {
         default: '1 / 2',
-        '@media (min-width: 768px) and (max-width: 1023.99px)': '1 / -1',
-        '@media (min-width: 1024px) and (max-width: 1439.99px)': '1 / 3',
+        '@media (min-width: 768px) and (max-width: 1023.98px)': '1 / -1',
+        '@media (min-width: 1024px) and (max-width: 1439.98px)': '1 / 3',
         '@media (min-width: 1440px)': '1 / 4',
       },
     };
@@ -283,7 +303,7 @@ describe('Media Query Transformer', () => {
     const expectedStyles = {
       width: {
         default: '100%',
-        '@media (screen) and (not (max-width: 500px)), (min-width: 500.01px) and (max-width: 800px)':
+        '@media screen and (not (max-width: 500px)), (min-width: 500.01px) and (max-width: 800px)':
           '80%',
         '@media (max-width: 500px)': '60%',
       },
@@ -332,6 +352,37 @@ describe('Media Query Transformer', () => {
         '@media screen and (min-width: 900px) and (not (print and (max-width: 500px)))':
           '80%',
         '@media print and (max-width: 500px)': '50%',
+      },
+    };
+
+    const result = lastMediaQueryWinsTransform(originalStyles);
+    expect(JSON.stringify(result)).toBe(JSON.stringify(expectedStyles));
+  });
+
+  test('mixed responsive and print values anchor to a screen media type', () => {
+    // Regression test for https://github.com/facebook/stylex/issues/1860.
+    // A `print` media type must not be emitted as a `(not (print))` boolean
+    // feature (which never matches in browsers); the responsive branch is
+    // instead anchored to the complementary `screen` media type.
+    const originalStyles = {
+      marginLeft: {
+        default: 224,
+        '@media (max-width: 900px)': {
+          default: 168,
+          '@media (max-width: 620px)': 132,
+        },
+        '@media print': 0,
+      },
+    };
+
+    const expectedStyles = {
+      marginLeft: {
+        default: 224,
+        '@media screen and (max-width: 900px)': {
+          default: 168,
+          '@media (max-width: 620px)': 132,
+        },
+        '@media print': 0,
       },
     };
 
@@ -526,7 +577,7 @@ describe('Media Query Transformer', () => {
       foo: {
         gridColumn: {
           default: '1 / 2',
-          '@media ((min-width: 900px) and (max-width: 999.99px)) or ((min-width: 1100.01px) and (max-width: 1440px))':
+          '@media ((min-width: 900px) and (max-width: 999.98px)) or ((min-width: 1100.01px) and (max-width: 1440px))':
             '1 / 4',
           '@media (min-width: 1000px) and (max-width: 1100px)': '1 / 3',
           '@media (min-width: 400px) and (max-width: 500px)': '1 / 1',
@@ -553,7 +604,7 @@ describe('Media Query Transformer', () => {
       foo: {
         gridColumn: {
           default: '1 / 2',
-          '@media ((min-width: 900px) and (max-width: 999.99px)) or ((min-width: 1100.01px) and (max-width: 1440px))':
+          '@media ((min-width: 900px) and (max-width: 999.98px)) or ((min-width: 1100.01px) and (max-width: 1440px))':
             '1 / 4',
           '@media (min-width: 1000px) and (max-width: 1100px)': '1 / 3',
         },
@@ -580,9 +631,9 @@ describe('Media Query Transformer', () => {
       foo: {
         gridColumn: {
           default: '1 / 2',
-          '@media ((min-width: 900px) and (max-width: 999.99px)) or ((min-width: 1100.01px) and (max-width: 1440px))':
+          '@media ((min-width: 900px) and (max-width: 999.98px)) or ((min-width: 1100.01px) and (max-width: 1440px))':
             '1 / 4',
-          '@media ((min-width: 1000px) and (max-width: 1009.99px)) or ((min-width: 1050.01px) and (max-width: 1100px))':
+          '@media ((min-width: 1000px) and (max-width: 1009.98px)) or ((min-width: 1050.01px) and (max-width: 1100px))':
             '1 / 3',
           '@media (min-width: 1010px) and (max-width: 1050px)': '1 / -1',
         },

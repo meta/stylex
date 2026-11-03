@@ -329,7 +329,11 @@ const absoluteSize: RuleCheck = makeUnionRule(
   makeLiteralRule('xx-large'),
 );
 const fontFamily: RuleCheck = isString;
-const gridLine: RuleCheck = makeUnionRule(makeLiteralRule('auto'), isString);
+const gridLine: RuleCheck = makeUnionRule(
+  makeLiteralRule('auto'),
+  isString,
+  isNumber,
+);
 const gridTemplate: RuleCheck = makeUnionRule(
   makeLiteralRule('none'),
   makeLiteralRule('subgrid'),
@@ -1124,6 +1128,8 @@ const pageBreakInside: RuleCheck = makeUnionRule(
   makeLiteralRule('auto'),
   makeLiteralRule('avoid'),
 );
+// `auto | <custom-ident>` — any string is a valid named page
+const page: RuleCheck = makeUnionRule(all, isString);
 const perspective: RuleCheck = makeUnionRule(
   makeLiteralRule('none'),
   isNumber,
@@ -2094,7 +2100,11 @@ const CSSProperties = {
     'inset',
     'outset',
   ) as RuleCheck,
-  outlineWidth: makeUnionRule(isNumber, isLength) as RuleCheck,
+  outlineWidth: makeUnionRule(
+    isNumber,
+    isLength,
+    isNonNumericString,
+  ) as RuleCheck,
   blockOverflow: overflow, // TODO - Add support to Babel Plugin
   inlineOverflow: overflow, // TODO - Add support to Babel Plugin
   overflow: overflow,
@@ -2131,6 +2141,7 @@ const CSSProperties = {
   paddingRight: length,
   paddingTop: length,
 
+  page: page,
   pageBreakAfter: pageBreak,
   pageBreakBefore: pageBreak,
   pageBreakInside: pageBreakInside,
@@ -2369,6 +2380,10 @@ export const pseudoElements: RuleCheck = makeUnionRule(
   makeLiteralRule('::-moz-range-thumb'),
   makeLiteralRule('::-moz-range-track'),
   makeLiteralRule('::-moz-range-progress'),
+  // For progress elements
+  makeLiteralRule('::-webkit-progress-bar'),
+  makeLiteralRule('::-webkit-progress-value'),
+  makeLiteralRule('::-moz-progress-bar'),
 );
 
 export const pseudoClassesAndAtRules: RuleCheck = makeUnionRule(

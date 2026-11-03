@@ -1,7 +1,7 @@
 {
   "private": true,
   "name": "example-rollup",
-  "version": "0.19.0",
+  "version": "0.19.1",
   "description": "A simple rollup example to test stylexjs/rollup-plugin",
   "main": "index.js",
   "scripts": {
@@ -11,7 +11,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@stylexjs/stylex": "0.19.0",
+    "@stylexjs/stylex": "0.19.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
@@ -24,8 +24,8 @@
     "@rollup/plugin-commonjs": "^26.0.1",
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-replace": "^5.0.7",
-    "@stylexjs/eslint-plugin": "0.19.0",
-    "@stylexjs/rollup-plugin": "0.19.0",
+    "@stylexjs/eslint-plugin": "0.19.1",
+    "@stylexjs/rollup-plugin": "0.19.1",
     "eslint": "^9.39.1",
     "rollup": "^4.59.0",
     "shx": "^0.4.0",

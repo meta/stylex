@@ -535,4 +535,68 @@ describe('@stylexjs/postcss-plugin', () => {
       infoSpy.mockRestore();
     }
   });
+
+  test('concurrent builds do not skip files mid transform', async () => {
+    const stylesPath = path.join(fixturesDir, 'concurrent-styles.js');
+    const stylexPostcssPlugin = createPlugin();
+    const plugin = stylexPostcssPlugin({
+      cwd: fixturesDir,
+      include: ['concurrent-styles.js'],
+      babelConfig: {
+        configFile: path.join(fixturesDir, '.babelrc.js'),
+      },
+    });
+    const processor = postcss([plugin]);
+    const input = {
+      from: path.join(fixturesDir, 'input.css'),
+    };
+
+    fs.writeFileSync(
+      stylesPath,
+      [
+        "import * as stylex from '@stylexjs/stylex';",
+        '',
+        'export const styles = stylex.create({',
+        '  container: {',
+        "    backgroundColor: 'red',",
+        '  },',
+        '});',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+
+    try {
+      await processor.process('@stylex;', input);
+
+      fs.writeFileSync(
+        stylesPath,
+        [
+          "import * as stylex from '@stylexjs/stylex';",
+          '',
+          'export const styles = stylex.create({',
+          '  container: {',
+          "    backgroundColor: 'blue',",
+          '  },',
+          '});',
+          '',
+        ].join('\n'),
+        'utf8',
+      );
+      const nextMtime = fs.statSync(stylesPath).mtimeMs + 1000;
+      fs.utimesSync(stylesPath, new Date(nextMtime), new Date(nextMtime));
+
+      const [first, second] = await Promise.all([
+        processor.process('@stylex;', input),
+        processor.process('@stylex;', input),
+      ]);
+
+      expect(first.css).toContain('background-color:blue');
+      expect(second.css).toContain('background-color:blue');
+      expect(first.css).not.toContain('background-color:red');
+      expect(second.css).not.toContain('background-color:red');
+    } finally {
+      fs.rmSync(stylesPath, { force: true });
+    }
+  });
 });

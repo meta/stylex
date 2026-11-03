@@ -58,8 +58,6 @@ const styles = stylex.create({
     // marginBottom: '0.5em',
   },
   anchor: {
-    display: 'inline-flex',
-    gap: 8,
     color: 'inherit',
     textDecoration: 'none',
   },

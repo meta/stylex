@@ -1,6 +1,6 @@
 {
   "name": "@redwoodjs/starter",
-  "version": "0.19.0",
+  "version": "0.19.1",
   "description": "A bare-bones RedwoodSDK starter",
   "main": "index.js",
   "type": "module",
@@ -22,17 +22,17 @@
     "types": "tsc"
   },
   "dependencies": {
-    "@stylexjs/stylex": "0.19.0",
+    "@stylexjs/stylex": "0.19.1",
     "capnweb": "~0.2.0",
     "react": "19.3.0-canary-561ee24d-20251101",
     "react-dom": "19.3.0-canary-561ee24d-20251101",
-    "react-server-dom-webpack": "19.2.6",
+    "react-server-dom-webpack": "19.2.8",
     "rwsdk": "1.0.0-beta.31",
-    "@stylexjs/shared-ui": "0.19.0"
+    "@stylexjs/shared-ui": "0.19.1"
   },
   "devDependencies": {
-    "@stylexjs/eslint-plugin": "0.19.0",
-    "@stylexjs/unplugin": "0.19.0",
+    "@stylexjs/eslint-plugin": "0.19.1",
+    "@stylexjs/unplugin": "0.19.1",
     "@typescript-eslint/parser": "^8.58.2",
     "@cloudflare/vite-plugin": "^1.15.2",
     "@cloudflare/workers-types": "^4.20260120.0",
@@ -42,7 +42,7 @@
     "eslint": "^9.39.1",
     "shx": "^0.4.0",
     "typescript": "^5.9.3",
-    "vite": "^7.2.4",
+    "vite": "^7.3.7",
     "wrangler": "^4.50.0"
   },
   "pnpm": {

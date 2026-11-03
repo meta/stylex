@@ -12,42 +12,9 @@
 import * as React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { StylexDebugData } from '../../types.js';
+import { copyText } from '../../utils/clipboard.js';
 import { exportMetadata } from '../../utils/exportMetadata.js';
 import { Button } from './Button';
-
-declare const navigator: any;
-declare const document: any;
-
-// Clipboard access can be flaky inside a DevTools panel context, so fall back
-// to a hidden-textarea + execCommand copy when the async clipboard API is
-// unavailable or rejects (e.g. the panel is not focused).
-async function copyText(text: string): Promise<boolean> {
-  try {
-    if (
-      navigator.clipboard &&
-      typeof navigator.clipboard.writeText === 'function'
-    ) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {
-    // fall through to the execCommand path
-  }
-  try {
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.style.position = 'fixed';
-    textarea.style.opacity = '0';
-    document.body.appendChild(textarea);
-    textarea.focus();
-    textarea.select();
-    const ok = document.execCommand('copy');
-    document.body.removeChild(textarea);
-    return ok;
-  } catch {
-    return false;
-  }
-}
 
 export function CopyMetadataButton({
   data,
@@ -57,8 +24,6 @@ export function CopyMetadataButton({
   const [label, setLabel] = useState('Copy metadata');
   const timeoutRef = useRef<?TimeoutID>(null);
 
-  // The panel re-mounts on refresh (its `key` changes), so clear any pending
-  // label-reset timeout on unmount to avoid a state update after unmount.
   useEffect(
     () => () => {
       if (timeoutRef.current != null) {

@@ -20,6 +20,7 @@ import {
   objEntries,
   objMapKeys,
   objMap,
+  objMapEntry,
   Pipe,
 } from './utils/object-utils';
 import { defaultOptions } from './utils/default-options';
@@ -38,12 +39,13 @@ export default function styleXPositionTry(
     .pipe((x) => objMap(x, (value, key) => transformValue(key, value, options)))
     .done();
 
-  const ltrStyles = objMap(expandedObject, (value, key) =>
-    generateLtr([key, value]),
+  // The generators return a `[key, value]` pair; a direction flip can rewrite the key.
+  const ltrStyles = objMapEntry(expandedObject, (entry) =>
+    generateLtr(entry, options),
   );
-  const rtlStyles = objMap(
+  const rtlStyles = objMapEntry(
     expandedObject,
-    (value, key) => generateRtl([key, value]) ?? value,
+    (entry) => generateRtl(entry, options) ?? entry,
   );
 
   const ltrString = constructPositionTryObj(ltrStyles);

@@ -1,0 +1,11 @@
+{
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "stylex-devtools@stylexjs.com",
+      "strict_min_version": "153.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  }
+}

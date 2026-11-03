@@ -431,6 +431,9 @@ const stylexEnforceExtension = {
         });
       },
       'ExportNamedDeclaration, ExportDefaultDeclaration'(node: Node): void {
+        if ((node as any).exportKind === 'type') {
+          return;
+        }
         reportedDefaultExportError = false;
         checkExports(node);
         if (!reportedDefaultExportError) {

@@ -40,17 +40,17 @@ describe('@stylexjs/babel-plugin', () => {
 
       expect(code).toMatchInlineSnapshot(`
         "import * as stylex from '@stylexjs/stylex';
-        export const name = "--xhs37kq";"
+        export const name = "--x1v351di";"
       `);
 
       expect(metadata).toMatchInlineSnapshot(`
         {
           "stylex": [
             [
-              "--xhs37kq",
+              "--x1v351di",
               {
-                "ltr": "@position-try --xhs37kq {height:height;height:100px;left:left;left:0;position-anchor:position-anchor;position-anchor:--anchor;top:top;top:0;width:width;width:100px;}",
-                "rtl": "@position-try --xhs37kq {height:100px;left:0;position-anchor:--anchor;top:0;width:100px;}",
+                "ltr": "@position-try --x1v351di {height:100px;left:0;position-anchor:--anchor;top:0;width:100px;}",
+                "rtl": null,
               },
               0,
             ],
@@ -75,17 +75,17 @@ describe('@stylexjs/babel-plugin', () => {
       expect(code).toMatchInlineSnapshot(`
         "import * as stylex from '@stylexjs/stylex';
         const SIZE = '100px';
-        export const name = "--xhs37kq";"
+        export const name = "--x1v351di";"
       `);
 
       expect(metadata).toMatchInlineSnapshot(`
         {
           "stylex": [
             [
-              "--xhs37kq",
+              "--x1v351di",
               {
-                "ltr": "@position-try --xhs37kq {height:height;height:100px;left:left;left:0;position-anchor:position-anchor;position-anchor:--anchor;top:top;top:0;width:width;width:100px;}",
-                "rtl": "@position-try --xhs37kq {height:100px;left:0;position-anchor:--anchor;top:0;width:100px;}",
+                "ltr": "@position-try --x1v351di {height:100px;left:0;position-anchor:--anchor;top:0;width:100px;}",
+                "rtl": null,
               },
               0,
             ],
@@ -114,10 +114,10 @@ describe('@stylexjs/babel-plugin', () => {
       expect(code).toMatchInlineSnapshot(`
         "import * as stylex from '@stylexjs/stylex';
         const SIZE = '100px';
-        const name = "--x1oyda6q";
+        const name = "--x1lerlyv";
         export const styles = {
           root: {
-            k9M3vk: "x4uh2cz",
+            k9M3vk: "x188f6ho",
             $$css: true
           }
         };"
@@ -127,17 +127,17 @@ describe('@stylexjs/babel-plugin', () => {
         {
           "stylex": [
             [
-              "--x1oyda6q",
+              "--x1lerlyv",
               {
-                "ltr": "@position-try --x1oyda6q {height:height;height:100px;left:left;left:0;top:top;top:0;width:width;width:100px;}",
-                "rtl": "@position-try --x1oyda6q {height:100px;left:0;top:0;width:100px;}",
+                "ltr": "@position-try --x1lerlyv {height:100px;left:0;top:0;width:100px;}",
+                "rtl": null,
               },
               0,
             ],
             [
-              "x4uh2cz",
+              "x188f6ho",
               {
-                "ltr": ".x4uh2cz{position-try-fallbacks:--x1oyda6q}",
+                "ltr": ".x188f6ho{position-try-fallbacks:--x1lerlyv}",
                 "rtl": null,
               },
               3000,
@@ -167,7 +167,7 @@ describe('@stylexjs/babel-plugin', () => {
         "import * as stylex from '@stylexjs/stylex';
         export const styles = {
           root: {
-            k9M3vk: "xlj2pck",
+            k9M3vk: "x1kvy05d",
             $$css: true
           }
         };"
@@ -177,17 +177,17 @@ describe('@stylexjs/babel-plugin', () => {
         {
           "stylex": [
             [
-              "--xhs37kq",
+              "--x1v351di",
               {
-                "ltr": "@position-try --xhs37kq {height:height;height:100px;left:left;left:0;position-anchor:position-anchor;position-anchor:--anchor;top:top;top:0;width:width;width:100px;}",
-                "rtl": "@position-try --xhs37kq {height:100px;left:0;position-anchor:--anchor;top:0;width:100px;}",
+                "ltr": "@position-try --x1v351di {height:100px;left:0;position-anchor:--anchor;top:0;width:100px;}",
+                "rtl": null,
               },
               0,
             ],
             [
-              "xlj2pck",
+              "x1kvy05d",
               {
-                "ltr": ".xlj2pck{position-try-fallbacks:--xhs37kq}",
+                "ltr": ".x1kvy05d{position-try-fallbacks:--x1v351di}",
                 "rtl": null,
               },
               3000,
@@ -195,6 +195,48 @@ describe('@stylexjs/babel-plugin', () => {
           ],
         }
       `);
+    });
+
+    test('processStylexRules does not inject ancestor selector into @position-try', () => {
+      const { metadata } = transform(`
+        import * as stylex from '@stylexjs/stylex';
+        export const name = stylex.positionTry({
+          positionAnchor: '--anchor',
+          top: '0',
+          left: '0',
+          width: '100px',
+          height: '100px'
+        });
+      `);
+
+      const css = stylexPlugin.default.processStylexRules(metadata.stylex, {
+        enableLTRRTLComments: false,
+      });
+
+      expect(css).not.toContain("html[dir='rtl'] height");
+      expect(css).not.toContain("html[dir='rtl'] width");
+      expect(css).toContain('@position-try --x1v351di {height:');
+    });
+
+    test('processStylexRules does not inject specificity into @position-try', () => {
+      const { metadata } = transform(`
+        import * as stylex from '@stylexjs/stylex';
+        export const name = stylex.positionTry({
+          positionAnchor: '--anchor',
+          top: '0',
+          left: '0',
+          width: '100px',
+          height: '100px'
+        });
+      `);
+
+      const css = stylexPlugin.default.processStylexRules(metadata.stylex, {
+        useLayers: false,
+        legacyDisableLayers: false,
+      });
+
+      expect(css).not.toContain('@position-try --x1v351di :not(#\\#)');
+      expect(css).toContain('@position-try --x1v351di {height:');
     });
   });
 });

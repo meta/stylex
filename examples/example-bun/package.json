@@ -1,7 +1,7 @@
 {
   "private": true,
   "name": "example-bun",
-  "version": "0.19.0",
+  "version": "0.19.1",
   "description": "Example: StyleX with Bun via @stylexjs/unplugin",
   "main": "src/App.jsx",
   "scripts": {
@@ -12,13 +12,13 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@stylexjs/stylex": "0.19.0",
+    "@stylexjs/stylex": "0.19.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
-    "@stylexjs/unplugin": "0.19.0",
-    "@stylexjs/eslint-plugin": "0.19.0",
+    "@stylexjs/unplugin": "0.19.1",
+    "@stylexjs/eslint-plugin": "0.19.1",
     "eslint": "^8.57.1",
     "shx": "^0.4.0"
   }

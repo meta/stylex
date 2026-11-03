@@ -1,6 +1,6 @@
 {
   "name": "@stylexjs/babel-plugin",
-  "version": "0.19.0",
+  "version": "0.19.1",
   "description": "StyleX babel plugin.",
   "main": "lib/index.js",
   "browser": "lib/index.browser.js",
@@ -23,8 +23,8 @@
     "@babel/traverse": "^7.26.8",
     "@babel/types": "^7.26.8",
     "@dual-bundle/import-meta-resolve": "^4.1.0",
-    "@stylexjs/shared": "0.19.0",
-    "@stylexjs/stylex": "0.19.0",
+    "@stylexjs/shared": "0.19.1",
+    "@stylexjs/stylex": "0.19.1",
     "postcss-value-parser": "^4.1.0"
   },
   "devDependencies": {
@@ -37,7 +37,7 @@
     "babel-plugin-syntax-hermes-parser": "^0.36.1",
     "path-browserify": "^1.0.1",
     "rollup": "^4.59.0",
-    "scripts": "0.19.0"
+    "scripts": "0.19.1"
   },
   "files": [
     "flow_modules/*",

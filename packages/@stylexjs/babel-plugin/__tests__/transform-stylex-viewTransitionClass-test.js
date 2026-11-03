@@ -214,6 +214,37 @@ describe('@stylexjs/babel-plugin', () => {
       `);
     });
 
+    test('unitless numbers', () => {
+      const { code, metadata } = transform(`
+        import * as stylex from '@stylexjs/stylex';
+        export const cls = stylex.viewTransitionClass({
+          group: {
+            animationIterationCount: 2,
+          },
+        });
+      `);
+
+      expect(code).toMatchInlineSnapshot(`
+        "import * as stylex from '@stylexjs/stylex';
+        export const cls = "x1cr1834";"
+      `);
+
+      expect(metadata).toMatchInlineSnapshot(`
+        {
+          "stylex": [
+            [
+              "x1cr1834",
+              {
+                "ltr": "::view-transition-group(*.x1cr1834){animation-iteration-count:2;}",
+                "rtl": null,
+              },
+              1,
+            ],
+          ],
+        }
+      `);
+    });
+
     test.skip('using contextual styles', () => {
       const { code, metadata } = transform(`
         import * as stylex from 'stylex';

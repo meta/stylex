@@ -275,7 +275,7 @@ function evaluateObjKey(
   } else if (keyPath.isIdentifier()) {
     key = keyPath.node.name;
   } else {
-    // TODO: This is'nt handling all possible types that `keyPath` could be
+    // TODO: This isn't handling all possible types that `keyPath` could be
     key = (keyPath.node as $FlowFixMe).value;
   }
   return {

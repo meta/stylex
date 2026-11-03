@@ -473,6 +473,17 @@ eslintTester.run('stylex-valid-shorthands', rule.default, {
       })
     `,
     },
+    // grid-area: single-value custom-ident
+    {
+      code: `
+      import * as stylex from '@stylexjs/stylex';
+      const styles = stylex.create({
+        main: {
+          gridArea: 'header',
+        },
+      })
+    `,
+    },
     // Already-longhand grid properties
     {
       code: `
@@ -1529,34 +1540,6 @@ eslintTester.run('stylex-valid-shorthands', rule.default, {
         {
           message:
             'Property shorthands using multiple values like "borderColor: oklch(0.7 0.15 180) rgb(255 0 0)" are not supported in StyleX. Separate into individual properties.',
-        },
-      ],
-    },
-    // grid-area: custom-ident expands to 4 longhands
-    {
-      code: `
-        import * as stylex from '@stylexjs/stylex';
-        const styles = stylex.create({
-          main: {
-            gridArea: 'header',
-          },
-        });
-      `,
-      output: `
-        import * as stylex from '@stylexjs/stylex';
-        const styles = stylex.create({
-          main: {
-            gridColumnEnd: 'header',
-            gridColumnStart: 'header',
-            gridRowEnd: 'header',
-            gridRowStart: 'header',
-          },
-        });
-      `,
-      errors: [
-        {
-          message:
-            'Property shorthands using multiple values like "gridArea: header" are not supported in StyleX. Separate into individual properties.',
         },
       ],
     },

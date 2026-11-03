@@ -1,6 +1,6 @@
 {
   "name": "@stylexjs/eslint-plugin",
-  "version": "0.19.0",
+  "version": "0.19.1",
   "description": "StyleX eslint plugin.",
   "main": "lib/index.js",
   "repository": {
@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@csstools/css-tokenizer": "^3.0.3",
-    "@stylexjs/shared": "0.19.0",
+    "@stylexjs/shared": "0.19.1",
     "micromatch": "^4.0.5",
     "postcss-value-parser": "^4.2.0"
   },

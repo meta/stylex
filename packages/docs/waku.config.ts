@@ -88,7 +88,6 @@ export default defineConfig({
       stylex.vite({
         debug: process.env.NODE_ENV === 'development',
         treeshakeCompensation: true,
-        enableDebugClassNames: false,
         enableDevClassNames: false,
         useCSSLayers: true,
         devMode: 'css-only',

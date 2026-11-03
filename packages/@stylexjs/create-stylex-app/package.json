@@ -1,6 +1,6 @@
 {
   "name": "create-stylex-app",
-  "version": "0.19.0",
+  "version": "0.19.1",
   "description": "Scaffold a new StyleX project from official templates",
   "repository": "https://www.github.com/facebook/stylex",
   "license": "MIT",
@@ -33,6 +33,6 @@
     "@babel/core": "^7.26.8",
     "@babel/preset-env": "^7.26.8",
     "cross-env": "^10.1.0",
-    "scripts": "0.19.0"
+    "scripts": "0.19.1"
   }
 }

@@ -12,7 +12,10 @@ const os = require('node:os');
 const path = require('node:path');
 
 const { unplugin } = require('../src');
-const { unpluginFactory } = require('../src/core');
+const {
+  unpluginFactory,
+  pickCssAssetFromRollupBundle,
+} = require('../src/core');
 const { Features, browserslistToTargets } = require('lightningcss');
 const browserslist = require('browserslist');
 
@@ -24,6 +27,20 @@ describe('@stylexjs/unplugin', () => {
     }
     const result = await plugin.transform('const noop = 1;', '/virtual/foo.js');
     expect(result).toBeNull();
+  });
+
+  test('still transforms built-in imports when a custom importSource is set', async () => {
+    const plugin = unplugin.raw({ importSources: ['custom-stylex'] });
+    if (typeof plugin.buildStart === 'function') {
+      plugin.buildStart();
+    }
+    const source = `
+      import * as stylex from '@stylexjs/stylex';
+      const styles = stylex.create({ foo: { color: 'red' } });
+      export default styles;
+    `;
+    const result = await plugin.transform(source, '/virtual/example.js');
+    expect(result).not.toBeNull();
   });
 
   test('writes fallback CSS asset when no CSS bundle entry exists', async () => {
@@ -271,6 +288,119 @@ describe('@stylexjs/unplugin', () => {
     }
   });
 
+  describe('CSS asset selection', () => {
+    // File names taken from a production `vite build`, which hashes assets
+    // with the default `assetFileNames` of `assets/[name]-[hash][extname]`.
+    const ENTRY_CSS = 'assets/index-W1erjkBN.css';
+    const ROUTE_CSS = 'assets/admin-CyH6f07N.css';
+    const asset = (fileName) => ({ type: 'asset', fileName, source: '' });
+
+    test('prefers the hashed entry stylesheet over other stylesheets', () => {
+      const bundle = {
+        [ROUTE_CSS]: asset(ROUTE_CSS),
+        [ENTRY_CSS]: asset(ENTRY_CSS),
+      };
+      expect(pickCssAssetFromRollupBundle(bundle).fileName).toBe(ENTRY_CSS);
+    });
+
+    // Rollup's default `hashCharacters` is base64url, so a hash can contain
+    // `-` and `_`. Both names below came out of a real `vite build`.
+    test('prefers an entry stylesheet whose hash contains an underscore', () => {
+      const entryCss = 'assets/index-BVm_Qe95.css';
+      const bundle = {
+        [ROUTE_CSS]: asset(ROUTE_CSS),
+        [entryCss]: asset(entryCss),
+      };
+      expect(pickCssAssetFromRollupBundle(bundle).fileName).toBe(entryCss);
+    });
+
+    test('prefers an entry stylesheet whose hash contains a hyphen', () => {
+      const entryCss = 'assets/index-CnU-v52M.css';
+      const bundle = {
+        [ROUTE_CSS]: asset(ROUTE_CSS),
+        [entryCss]: asset(entryCss),
+      };
+      expect(pickCssAssetFromRollupBundle(bundle).fileName).toBe(entryCss);
+    });
+
+    test('prefers a hashed style.css over other stylesheets', () => {
+      const styleCss = 'assets/style-BpQ2m1Zx.css';
+      const bundle = {
+        [ROUTE_CSS]: asset(ROUTE_CSS),
+        [styleCss]: asset(styleCss),
+      };
+      expect(pickCssAssetFromRollupBundle(bundle).fileName).toBe(styleCss);
+    });
+
+    test('still prefers unhashed index.css', () => {
+      const bundle = {
+        'assets/vendor.css': asset('assets/vendor.css'),
+        'assets/index.css': asset('assets/index.css'),
+      };
+      expect(pickCssAssetFromRollupBundle(bundle).fileName).toBe(
+        'assets/index.css',
+      );
+    });
+
+    test('does not treat a longer name ending in index as the entry', () => {
+      const resetCss = 'assets/reset-index-BpQ2m1Zx.css';
+      const bundle = {
+        [ROUTE_CSS]: asset(ROUTE_CSS),
+        [resetCss]: asset(resetCss),
+      };
+      expect(pickCssAssetFromRollupBundle(bundle).fileName).toBe(ROUTE_CSS);
+    });
+
+    test('cssInjectionTarget still overrides the preferred names', () => {
+      const bundle = {
+        [ENTRY_CSS]: asset(ENTRY_CSS),
+        [ROUTE_CSS]: asset(ROUTE_CSS),
+      };
+      const chosen = pickCssAssetFromRollupBundle(bundle, (f) =>
+        f.includes('admin'),
+      );
+      expect(chosen.fileName).toBe(ROUTE_CSS);
+    });
+
+    test('writeBundle fallback appends to the hashed entry stylesheet', async () => {
+      const plugin = unplugin.rollup({
+        runtimeInjection: false,
+        devPersistToDisk: false,
+        dev: false,
+      });
+      if (typeof plugin.buildStart === 'function') {
+        plugin.buildStart();
+      }
+      // A value that survives minification, so it is easy to locate on disk.
+      const marker = '987654';
+      const source = `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({ foo: { zIndex: ${marker} } });
+        export default styles;
+      `;
+      await plugin.transform(source, '/virtual/example.js');
+
+      const tempDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'stylex-unplugin-hashed-'),
+      );
+      try {
+        const assetsDir = path.join(tempDir, 'assets');
+        fs.mkdirSync(assetsDir, { recursive: true });
+        const entryFile = path.join(assetsDir, 'index-W1erjkBN.css');
+        const routeFile = path.join(assetsDir, 'admin-CyH6f07N.css');
+        fs.writeFileSync(entryFile, 'body{color:red}', 'utf8');
+        fs.writeFileSync(routeFile, '.admin{color:green}', 'utf8');
+
+        await plugin.writeBundle({ dir: tempDir }, {});
+
+        expect(fs.readFileSync(entryFile, 'utf8')).toContain(marker);
+        expect(fs.readFileSync(routeFile, 'utf8')).not.toContain(marker);
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+  });
+
   describe('browserslist & light-dark() handling', () => {
     const LIGHT_DARK_SOURCE = `
       import * as stylex from '@stylexjs/stylex';
@@ -329,6 +459,75 @@ describe('@stylexjs/unplugin', () => {
       // The key assertion: the output is non-empty and contains the color rule.
       expect(css).toContain('color:');
       expect(css).toContain('.x1aif7nf');
+    });
+  });
+
+  // Regression: https://github.com/facebook/stylex/issues/1836
+  // The Vite adapter's shared-store polling timer must never keep the process
+  // alive. Vitest's Vite server has no `httpServer`, so the `close` cleanup is
+  // skipped and a still-referenced interval would hang `vitest run` on exit.
+  describe('Vite dev shared-store polling timer', () => {
+    function makeServer(httpServer) {
+      return {
+        middlewares: { use: () => {} },
+        ws: { send: () => {} },
+        httpServer,
+      };
+    }
+
+    test('is unref’d when the server has no httpServer (Vitest)', () => {
+      const plugin = unplugin.vite({ dev: true });
+      expect(typeof plugin.configureServer).toBe('function');
+
+      const server = makeServer(null);
+      plugin.configureServer(server);
+
+      const interval = server.__stylexSharedPollingInterval;
+      expect(interval).toBeDefined();
+      // The timer must not hold the event loop open.
+      expect(typeof interval.hasRef).toBe('function');
+      expect(interval.hasRef()).toBe(false);
+      clearInterval(interval);
+    });
+
+    test('is cleared when the httpServer closes', () => {
+      jest.useFakeTimers();
+      try {
+        const plugin = unplugin.vite({ dev: true });
+        const closeListeners = [];
+        const httpServer = {
+          once(event, fn) {
+            if (event === 'close') closeListeners.push(fn);
+          },
+        };
+        const sent = [];
+        const server = {
+          middlewares: { use: () => {} },
+          ws: { send: (msg) => sent.push(msg) },
+          httpServer,
+        };
+        plugin.configureServer(server);
+        expect(server.__stylexSharedPollingInterval).toBeDefined();
+        expect(closeListeners).toHaveLength(1);
+
+        const shared = plugin.__stylexGetSharedStore();
+        const updates = () =>
+          sent.filter((m) => m && m.event === 'stylex:css-update');
+
+        // A version bump is picked up on the next poll.
+        shared.version += 1;
+        jest.advanceTimersByTime(150);
+        expect(updates()).toHaveLength(1);
+
+        // Simulate the server closing: the timer is cleared, so later bumps
+        // are never broadcast.
+        closeListeners[0]();
+        shared.version += 1;
+        jest.advanceTimersByTime(1500);
+        expect(updates()).toHaveLength(1);
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 });

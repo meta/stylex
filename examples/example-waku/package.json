@@ -1,6 +1,6 @@
 {
   "name": "example-waku",
-  "version": "0.19.0",
+  "version": "0.19.1",
   "type": "module",
   "private": true,
   "scripts": {
@@ -9,16 +9,16 @@
     "example:serve": "waku start"
   },
   "dependencies": {
-    "@stylexjs/stylex": "0.19.0",
+    "@stylexjs/stylex": "0.19.1",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-server-dom-webpack": "19.2.6",
     "waku": "1.0.0-alpha.0",
-    "@stylexjs/shared-ui": "0.19.0"
+    "@stylexjs/shared-ui": "0.19.1"
   },
   "devDependencies": {
-    "@stylexjs/eslint-plugin": "0.19.0",
-    "@stylexjs/unplugin": "0.19.0",
+    "@stylexjs/eslint-plugin": "0.19.1",
+    "@stylexjs/unplugin": "0.19.1",
     "@typescript-eslint/parser": "^8.58.2",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",

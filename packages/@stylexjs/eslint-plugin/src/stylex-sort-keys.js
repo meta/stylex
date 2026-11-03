@@ -36,6 +36,7 @@ type Schema = {
   order: 'default' | 'clean' | 'recess',
   minKeys: number,
   allowLineSeparatedGroups: boolean,
+  enableMediaQueryOrder: boolean,
 };
 
 type Stack = null | {
@@ -54,11 +55,28 @@ type SortableProperty = {
   rangeEnd: number,
 };
 
+function isMediaQuery(name: string): boolean {
+  return typeof name === 'string' && name.startsWith('@media');
+}
+
 function isValidOrder(
   prevName: string,
   currName: string,
   order: Schema['order'],
+  enableMediaQueryOrder: boolean,
 ): boolean {
+  // When `enableMediaQueryOrder` is set, StyleX resolves overlapping media
+  // queries by source order ("last media query wins"). Sorting `@media`
+  // condition keys alphabetically inverts that cascade, so we treat any
+  // authored order between two media queries as valid and leave it untouched.
+  if (
+    enableMediaQueryOrder &&
+    isMediaQuery(prevName) &&
+    isMediaQuery(currName)
+  ) {
+    return true;
+  }
+
   const prev = getPropertyPriorityAndType(prevName, order);
   const curr = getPropertyPriorityAndType(currName, order);
 
@@ -74,12 +92,20 @@ function comparePropertyNames(
   aName: string,
   bName: string,
   order: Schema['order'],
+  enableMediaQueryOrder: boolean,
 ): number {
   if (aName === bName) {
     return 0;
   }
 
-  return isValidOrder(aName, bName, order) ? -1 : 1;
+  // Preserve the authored relative order of media queries so the autofix does
+  // not reshuffle them (the sort below is stable and falls back to the
+  // original index when this returns 0).
+  if (enableMediaQueryOrder && isMediaQuery(aName) && isMediaQuery(bName)) {
+    return 0;
+  }
+
+  return isValidOrder(aName, bName, order, enableMediaQueryOrder) ? -1 : 1;
 }
 
 const stylexSortKeys = {
@@ -124,6 +150,10 @@ const stylexSortKeys = {
             type: 'boolean',
             default: false,
           },
+          enableMediaQueryOrder: {
+            type: 'boolean',
+            default: false,
+          },
         },
         additionalProperties: false,
       },
@@ -135,6 +165,7 @@ const stylexSortKeys = {
       order = 'default',
       minKeys = 2,
       allowLineSeparatedGroups = false,
+      enableMediaQueryOrder = false,
     }: Schema = context.options[0] || {};
 
     const importTracker = createImportTracker(importsToLookFor);
@@ -293,7 +324,7 @@ const stylexSortKeys = {
           return;
         }
 
-        if (!isValidOrder(prevName, currName, order)) {
+        if (!isValidOrder(prevName, currName, order, enableMediaQueryOrder)) {
           context.report({
             // $FlowFixMe[incompatible-type]
             node,
@@ -305,6 +336,7 @@ const stylexSortKeys = {
               sourceCode,
               order,
               allowLineSeparatedGroups,
+              enableMediaQueryOrder,
             }),
           });
         }
@@ -328,11 +360,13 @@ function createFix({
   sourceCode,
   order,
   allowLineSeparatedGroups,
+  enableMediaQueryOrder,
 }: {
   currNode: Property,
   sourceCode: SourceCode,
   order: Schema['order'],
   allowLineSeparatedGroups: boolean,
+  enableMediaQueryOrder: boolean,
 }) {
   return function (fixer: RuleFixer) {
     const group = getSortableGroup(currNode);
@@ -342,7 +376,12 @@ function createFix({
     }
 
     const sortedGroup = [...group].sort((a, b) => {
-      const result = comparePropertyNames(a.name, b.name, order);
+      const result = comparePropertyNames(
+        a.name,
+        b.name,
+        order,
+        enableMediaQueryOrder,
+      );
 
       return result === 0 ? group.indexOf(a) - group.indexOf(b) : result;
     });

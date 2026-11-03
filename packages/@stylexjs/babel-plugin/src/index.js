@@ -12,6 +12,9 @@ import type { PluginObj } from '@babel/core';
 import type { StyleXOptions } from './utils/state-manager';
 
 import * as t from '@babel/types';
+import { getPriority } from '@stylexjs/shared';
+import { MediaQuery } from 'style-value-parser';
+import type { MediaQueryRule } from 'style-value-parser';
 import StateManager from './utils/state-manager';
 import {
   EXTENSIONS,
@@ -503,6 +506,177 @@ function getLogicalFloatVars(rules: Array<Rule>): string {
     : '';
 }
 
+type WidthBound = $ReadOnly<{ kind: 'min' | 'max', value: number }>;
+
+// A rule's width bound plus the at-rule context it sits in. Only rules with
+// an identical context are comparable: a breakpoint nested under `@supports`
+// says nothing about one nested under a different condition.
+type WidthSortKey = $ReadOnly<{ context: string, bound: WidthBound }>;
+
+// The `min-width`/`max-width` px bounds a media query imposes, or null if it
+// has none to sort by: `not` and `or` can widen the matched range or split it
+// in two, and rem/em bounds are unreadable at build time. Zero counts as a
+// bound whatever unit it carries, or none at all.
+function collectWidthBounds(rule: MediaQueryRule): Array<WidthBound> | null {
+  if (rule.type === 'pair') {
+    // Media feature names are ASCII case-insensitive.
+    const key = rule.key.toLowerCase();
+    const kind =
+      key === 'min-width' ? 'min' : key === 'max-width' ? 'max' : null;
+    // A non-width feature (e.g. `orientation`) constrains no width.
+    if (kind == null) {
+      return [];
+    }
+
+    const v = rule.value;
+    // Zero is the one length that needs no unit. Any other unitless number is
+    // invalid CSS for a media feature — the browser drops the whole query — so
+    // leave those unsorted rather than assume px.
+    if (v === 0) {
+      return [{ kind, value: 0 }];
+    }
+
+    if (
+      v != null &&
+      typeof v === 'object' &&
+      // A `Fraction` value (e.g. `aspect-ratio`) is array-shaped, not a length.
+      !Array.isArray(v) &&
+      typeof v.value === 'number' &&
+      // Units are ASCII case-insensitive, and zero is zero in any unit.
+      (v.value === 0 || String(v.unit).toLowerCase() === 'px')
+    ) {
+      return [{ kind, value: v.value }];
+    }
+    return null;
+  }
+  if (rule.type === 'and') {
+    const bounds: Array<WidthBound> = [];
+    for (const r of rule.rules) {
+      const found = collectWidthBounds(r);
+      if (found == null) {
+        return null;
+      }
+
+      bounds.push(...found);
+    }
+
+    return bounds;
+  }
+
+  // A negated media type (e.g. `not screen`) inverts the whole expression.
+  if (rule.type === 'media-keyword') {
+    return rule.not ? null : [];
+  }
+
+  return null;
+}
+
+// The single width bound a media query sorts by, or null if it has none.
+function mediaQueryWidthSortKey(prelude: string): WidthBound | null {
+  let parsed;
+  try {
+    parsed = MediaQuery.parser.parseToEnd(prelude);
+  } catch {
+    return null;
+  }
+  const bounds = collectWidthBounds(parsed.queries);
+  // Zero bounds means no width condition; more than one (a range, or a
+  // redundant pair like `(min-width: 500px) and (min-width: 900px)`) has no
+  // single value to sort by.
+  if (bounds == null || bounds.length !== 1) {
+    return null;
+  }
+
+  return bounds[0];
+}
+
+// The leading at-rule preludes of a rule, outermost first, e.g.
+// `@supports (x){@media (y){.a{…}}}` -> ['@supports (x)', '@media (y)'].
+function atRulePreludes(rule: string): Array<string> {
+  const preludes = [];
+  let index = 0;
+  while (rule[index] === '@') {
+    const brace = rule.indexOf('{', index);
+    if (brace === -1) {
+      break;
+    }
+
+    preludes.push(rule.slice(index, brace).trimEnd());
+    index = brace + 1;
+  }
+
+  return preludes;
+}
+
+// The sort key for a rule's at-rule chain, or null if it has no single
+// `@media` to sort by. Media queries nested in other at-rules still sort, but
+// only against rules sharing the same surrounding conditions.
+function widthSortKeyForChain(preludes: Array<string>): WidthSortKey | null {
+  const mediaIndexes = [];
+  preludes.forEach((prelude, i) => {
+    if (prelude.startsWith('@media ')) {
+      mediaIndexes.push(i);
+    }
+  });
+  // Zero means nothing to sort by; more than one means nested media queries
+  // whose combined bound isn't a single value.
+  if (mediaIndexes.length !== 1) {
+    return null;
+  }
+
+  const mediaIndex = mediaIndexes[0];
+  const bound = mediaQueryWidthSortKey(preludes[mediaIndex]);
+  if (bound == null) {
+    return null;
+  }
+
+  // Blank out the media query itself so the context captures the surrounding
+  // at-rules and the query's depth among them, but not its breakpoint.
+  const context = preludes
+    .map((p, i) => (i === mediaIndex ? '@media' : p))
+    .join('{');
+  return { context, bound };
+}
+
+// The property name a rule declares, e.g. `.a{width:500px}` -> `width`.
+// Breakpoints are ordered within a property, so the property has to be
+// compared without its value — two breakpoints for the same property differ
+// in value by definition, and comparing that first would preempt the order.
+function declaredPropertyName(rule: string): string {
+  const declaration = rule.slice(rule.lastIndexOf('{') + 1);
+  const colon = declaration.indexOf(':');
+  return colon === -1 ? declaration : declaration.slice(0, colon);
+}
+
+// A total ordering over width sort keys, so the sort stays consistent no
+// matter which pairs get compared: rules with a bound first, then grouped by
+// at-rule context, then `min-width` ascending ahead of `max-width` descending
+// — the conventional mobile-first order.
+function compareWidthSortKeys(
+  a: WidthSortKey | null,
+  b: WidthSortKey | null,
+): number {
+  if (a == null || b == null) {
+    if (a == null && b == null) {
+      return 0;
+    }
+
+    return a == null ? 1 : -1;
+  }
+
+  if (a.context !== b.context) {
+    return a.context.localeCompare(b.context);
+  }
+
+  if (a.bound.kind !== b.bound.kind) {
+    return a.bound.kind === 'min' ? -1 : 1;
+  }
+
+  return a.bound.kind === 'min'
+    ? a.bound.value - b.bound.value
+    : b.bound.value - a.bound.value;
+}
+
 function processStylexRules(
   rules: Array<Rule>,
   config?:
@@ -576,7 +750,7 @@ function processStylexRules(
       if (refValue == null) continue;
       visited.add(ref);
       const replacement = resolveConstant(refValue, visited);
-      result = result.replace(match[0], replacement.toString());
+      result = result.replace(match[0], () => replacement.toString());
       visited.delete(ref);
       regex.lastIndex = 0;
     }
@@ -587,57 +761,124 @@ function processStylexRules(
     constsMap.set(key, resolveConstant(value));
   }
 
-  const sortedRules = nonConstantRules.sort(
-    (
-      [classname1, { ltr: rule1 }, firstPriority]: [string, any, number],
-      [classname2, { ltr: rule2 }, secondPriority]: [string, any, number],
-    ) => {
-      const priorityComparison = firstPriority - secondPriority;
-      if (priorityComparison !== 0) return priorityComparison;
-
-      if (useLegacyClassnamesSort) {
-        return classname1.localeCompare(classname2);
-      } else {
-        const property1 = rule1.slice(rule1.lastIndexOf('{'));
-        const property2 = rule2.slice(rule2.lastIndexOf('{'));
-        const propertyComparison = property1.localeCompare(property2);
-        if (propertyComparison !== 0) return propertyComparison;
-        return rule1.localeCompare(rule2);
+  // A `defineConsts` at-rule used as a condition key in `stylex.create()` is
+  // compiled as a `var(--hash){…}` wrapper, and its share of the rule's priority
+  // comes from that placeholder, which `getPriority` cannot tell from a
+  // selector. Now that the constant's value is known, give it the share the
+  // literal at-rule gets, so the rule sorts (and lands in the layer) exactly as
+  // if it were written inline. Variable and theme rules count at-rules in their
+  // own fractional priorities, which never include the placeholder's share, so
+  // they are left as they are.
+  const constWrapperPattern = /var\(--[A-Za-z0-9_-]+\)(?=\{)/g;
+  const adjustConstAtRulePriority = (
+    rule: unknown,
+    priority: number,
+  ): number => {
+    if (typeof rule !== 'string' || constsMap.size === 0) {
+      return priority;
+    }
+    let adjusted = priority;
+    for (const match of rule.matchAll(constWrapperPattern)) {
+      const placeholder = match[0];
+      const value = constsMap.get(placeholder);
+      const placeholderShare = getPriority(placeholder);
+      if (
+        typeof value === 'string' &&
+        value.startsWith('@') &&
+        adjusted >= placeholderShare
+      ) {
+        adjusted += getPriority(value) - placeholderShare;
       }
-    },
-  );
+    }
+    return adjusted;
+  };
+
+  // Parsing is expensive and the comparator runs O(n log n) times. Key on the
+  // at-rule chain, not the whole rule — every rule has a distinct class name,
+  // so a full-rule key would never hit.
+  const widthSortKeys: Map<string, WidthSortKey | null> = new Map();
+  const getWidthSortKey = (rule: string): WidthSortKey | null => {
+    if (rule[0] !== '@') {
+      return null;
+    }
+
+    const preludes = atRulePreludes(rule);
+    const chain = preludes.join('{');
+    const cached = widthSortKeys.get(chain);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const key = widthSortKeyForChain(preludes);
+    widthSortKeys.set(chain, key);
+    return key;
+  };
+
+  const sortedRules: Array<Rule> = nonConstantRules
+    .map(([key, { ...styleObj }, priority]): Rule => {
+      const adjustedPriority = adjustConstAtRulePriority(
+        styleObj.ltr,
+        priority,
+      );
+      Object.keys(styleObj).forEach((dir) => {
+        let original = styleObj[dir];
+        for (const [varRef, constValue] of constsMap.entries()) {
+          if (typeof original !== 'string') continue;
+          const replacement = String(constValue);
+          original = original.replaceAll(varRef, () => replacement);
+          if (replacement.startsWith('var(') && replacement.endsWith(')')) {
+            const inside = replacement.slice(4, -1).trim();
+            const commaIdx = inside.indexOf(',');
+            const targetName = (
+              commaIdx >= 0 ? inside.slice(0, commaIdx) : inside
+            ).trim();
+            const constName = varRef.slice(4, -1);
+            original = original.replaceAll(`${constName}:`, `${targetName}:`);
+          }
+          styleObj[dir] = original;
+        }
+      });
+      return [key, styleObj, adjustedPriority];
+    })
+    .sort(
+      (
+        [classname1, { ltr: rule1 }, firstPriority]: [string, any, number],
+        [classname2, { ltr: rule2 }, secondPriority]: [string, any, number],
+      ) => {
+        const priorityComparison = firstPriority - secondPriority;
+        if (priorityComparison !== 0) return priorityComparison;
+
+        if (useLegacyClassnamesSort) {
+          return classname1.localeCompare(classname2);
+        } else {
+          const nameComparison = declaredPropertyName(rule1).localeCompare(
+            declaredPropertyName(rule2),
+          );
+          if (nameComparison !== 0) return nameComparison;
+
+          // Only rules for the same property compete in the cascade, so the
+          // breakpoint order applies within a property, after it. Ordering by
+          // width first would decide some pairs by width and others by
+          // declaration text, which is not a consistent ordering.
+          const mqComparison = compareWidthSortKeys(
+            getWidthSortKey(rule1),
+            getWidthSortKey(rule2),
+          );
+          if (mqComparison !== 0) return mqComparison;
+
+          const property1 = rule1.slice(rule1.lastIndexOf('{'));
+          const property2 = rule2.slice(rule2.lastIndexOf('{'));
+          const propertyComparison = property1.localeCompare(property2);
+          if (propertyComparison !== 0) return propertyComparison;
+          return rule1.localeCompare(rule2);
+        }
+      },
+    );
 
   let lastKPri = -1;
   const grouped = sortedRules.reduce((acc: Array<Array<Rule>>, rule) => {
-    const [key, { ...styleObj }, priority] = rule;
+    const [key, styleObj, priority] = rule;
     const priorityLevel = Math.floor(priority / 1000);
-
-    Object.keys(styleObj).forEach((dir) => {
-      let original = styleObj[dir];
-
-      for (const [varRef, constValue] of constsMap.entries()) {
-        if (typeof original !== 'string') continue;
-
-        const replacement = String(constValue);
-
-        original = original.replaceAll(varRef, replacement);
-
-        // When the replacement is a variable, we need to replace the key to allow variable overrides
-        if (replacement.startsWith('var(') && replacement.endsWith(')')) {
-          const inside = replacement.slice(4, -1).trim();
-          // Account for fallback variables
-          const commaIdx = inside.indexOf(',');
-          const targetName = (
-            commaIdx >= 0 ? inside.slice(0, commaIdx) : inside
-          ).trim();
-
-          const constName = varRef.slice(4, -1);
-          original = original.replaceAll(`${constName}:`, `${targetName}:`);
-        }
-
-        styleObj[dir] = original;
-      }
-    });
 
     if (priorityLevel === lastKPri) {
       acc[acc.length - 1].push([key, styleObj, priority]);
@@ -649,7 +890,7 @@ function processStylexRules(
     return acc;
   }, []);
 
-  const logicalFloatVars = getLogicalFloatVars(nonConstantRules);
+  const logicalFloatVars = getLogicalFloatVars(sortedRules);
 
   const layerName = (index: number): string =>
     layerPrefix
@@ -666,55 +907,73 @@ function processStylexRules(
       ';\n'
     : '';
 
-  const collectedCSS = grouped
-    .map((group, index) => {
-      const pri = group[0][2];
-      const collectedCSS = Array.from(
-        new Map(group.map(([a, b]) => [a, b])).values(),
-      )
-        .flatMap((rule) => {
-          const { ltr, rtl } = rule;
-          let ltrRule = ltr,
-            rtlRule = rtl;
+  const collectRules = (rules: Array<Rule>, index: number): string =>
+    Array.from(new Map(rules.map(([a, b]) => [a, b])).values())
+      .flatMap((rule) => {
+        const { ltr, rtl } = rule;
+        let ltrRule = ltr,
+          rtlRule = rtl;
 
-          if (!useLayers && !legacyDisableLayers) {
-            ltrRule = addSpecificityLevel(ltrRule, index);
-            rtlRule = rtlRule && addSpecificityLevel(rtlRule, index);
-          }
+        if (!useLayers && !legacyDisableLayers) {
+          ltrRule = addSpecificityLevel(ltrRule, index);
+          rtlRule = rtlRule && addSpecificityLevel(rtlRule, index);
+        }
 
-          // check if the selector looks like .xtrlmmh, .xtrlmmh:root
-          // if so, turn it into .xtrlmmh.xtrlmmh, .xtrlmmh.xtrlmmh:root
-          // This is to ensure the themes always have precedence over the
-          // default variable values
-          ltrRule = ltrRule.replace(
+        // check if the selector looks like .xtrlmmh, .xtrlmmh:root
+        // if so, turn it into .xtrlmmh.xtrlmmh, .xtrlmmh.xtrlmmh:root
+        // This is to ensure the themes always have precedence over the
+        // default variable values
+        ltrRule = ltrRule.replace(
+          /\.([a-zA-Z0-9]+), \.([a-zA-Z0-9]+):root/g,
+          '.$1.$1, .$1.$1:root',
+        );
+        if (rtlRule) {
+          rtlRule = rtlRule.replace(
             /\.([a-zA-Z0-9]+), \.([a-zA-Z0-9]+):root/g,
             '.$1.$1, .$1.$1:root',
           );
-          if (rtlRule) {
-            rtlRule = rtlRule.replace(
-              /\.([a-zA-Z0-9]+), \.([a-zA-Z0-9]+):root/g,
-              '.$1.$1, .$1.$1:root',
-            );
-          }
+        }
 
-          return rtlRule
-            ? enableLTRRTLComments
-              ? [
-                  `/* @ltr begin */${ltrRule}/* @ltr end */`,
-                  `/* @rtl begin */${rtlRule}/* @rtl end */`,
-                ]
-              : [
-                  addAncestorSelector(ltrRule, "html:not([dir='rtl'])"),
-                  addAncestorSelector(rtlRule, "html[dir='rtl']"),
-                ]
-            : [ltrRule];
-        })
-        .join('\n');
+        return rtlRule
+          ? enableLTRRTLComments
+            ? [
+                `/* @ltr begin */${ltrRule}/* @ltr end */`,
+                `/* @rtl begin */${rtlRule}/* @rtl end */`,
+              ]
+            : [
+                addAncestorSelector(ltrRule, "html:not([dir='rtl'])"),
+                addAncestorSelector(rtlRule, "html[dir='rtl']"),
+              ]
+          : [ltrRule];
+      })
+      .join('\n');
 
+  const collectedCSS = grouped
+    .map((group, index) => {
+      // A `priorityLevel` (Math.floor(priority / 1000)) can mix rules that must
+      // stay outside layers (`@property`, `@keyframes`, `@position-try` are all
+      // priority 0) with rules that belong inside them (CSS custom properties
+      // are priority 1). Deciding based on `group[0][2]` alone would let the
+      // first rule's priority pull the whole group out of its layer, so we
+      // partition the group by whether each rule is layerable (priority > 0).
+      if (!useLayers) {
+        return collectRules(group, index);
+      }
+
+      const layerable = group.filter(([, , pri]) => pri > 0);
+      const unlayered = group.filter(([, , pri]) => pri === 0);
+
+      const parts = [];
+      if (unlayered.length > 0) {
+        parts.push(collectRules(unlayered, index));
+      }
       // Don't put @property, @keyframe, @position-try in layers
-      return useLayers && pri > 0
-        ? `@layer ${layerName(index)}{\n${collectedCSS}\n}`
-        : collectedCSS;
+      if (layerable.length > 0) {
+        parts.push(
+          `@layer ${layerName(index)}{\n${collectRules(layerable, index)}\n}`,
+        );
+      }
+      return parts.join('\n');
     })
     .join('\n');
 
@@ -732,7 +991,11 @@ function addAncestorSelector(
   selector: string,
   ancestorSelector: string,
 ): string {
-  if (selector.startsWith('@keyframes')) {
+  // These at-rules contain declarations, not selectors, so we cannot add one.
+  if (
+    selector.startsWith('@keyframes') ||
+    selector.startsWith('@position-try')
+  ) {
     return selector;
   }
   if (!selector.startsWith('@')) {
@@ -750,7 +1013,10 @@ function addAncestorSelector(
  * Adds :not(#\#) to bump up specificity. as a polyfill for @layer
  */
 function addSpecificityLevel(selector: string, index: number): string {
-  if (selector.startsWith('@keyframes')) {
+  if (
+    selector.startsWith('@keyframes') ||
+    selector.startsWith('@position-try')
+  ) {
     return selector;
   }
   const pseudo = Array.from({ length: index })

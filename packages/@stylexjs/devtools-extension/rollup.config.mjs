@@ -5,124 +5,169 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import fs from 'node:fs/promises';
 import { babel } from '@rollup/plugin-babel';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import { nodeResolve } from '@rollup/plugin-node-resolve';
 import replace from '@rollup/plugin-replace';
-import { browserslistToTargets } from 'lightningcss';
-import browserslist from 'browserslist';
 import stylex from '@stylexjs/unplugin';
-import { Features } from 'lightningcss';
+import browserslist from 'browserslist';
+import { browserslistToTargets, Features } from 'lightningcss';
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
-const outDir = path.resolve(rootDir, 'extension');
+const distDir = path.join(rootDir, 'dist');
+const sharedDir = path.join(distDir, '.shared');
+const appOutDir = path.join(sharedDir, 'app');
+const runtimeOutDir = path.join(sharedDir, 'runtime');
 const extensions = ['.js', '.jsx'];
 const isWatch = Boolean(process.env.ROLLUP_WATCH);
 
-function cssBundle({ fileName = 'assets/style.css' } = {}) {
-  let styles = new Map();
+function cleanDirectory(directory) {
   return {
-    name: 'css-bundle',
-    buildStart() {
-      styles = new Map();
-    },
-    resolveId(source, importer) {
-      if (!source.endsWith('.css')) return null;
-      const resolved = importer
-        ? path.resolve(path.dirname(importer), source)
-        : path.resolve(source);
-      return { id: resolved, moduleSideEffects: true };
-    },
-    async load(id) {
-      if (!id.endsWith('.css')) return null;
-      const css = await fs.readFile(id, 'utf8');
-      styles.set(id, css);
-      this.addWatchFile(id);
-      return 'export default ""';
-    },
-    generateBundle() {
-      if (styles.size === 0) return;
-      const combined = Array.from(styles.values()).join('\n');
-      this.emitFile({
-        type: 'asset',
-        fileName,
-        source: combined,
-      });
+    name: `clean-${path.basename(directory)}`,
+    async buildStart() {
+      await fs.rm(directory, { recursive: true, force: true });
     },
   };
 }
 
-function copyStatic({ outDir, targets }) {
-  const resolved = targets.map(({ src, dest }) => ({
-    src: path.resolve(rootDir, src),
-    dest: path.resolve(outDir, dest),
-  }));
-  // The StyleX unplugin merges its CSS into the `.css` asset and may rename it
-  // (e.g. `style.css` -> `style2.css`) to avoid collisions. It rewrites
-  // references inside bundled JS, but these HTML files are copied verbatim and
-  // are not part of the bundle, so their `<link href>` must be rewritten to the
-  // actual emitted CSS filename — otherwise the panel loads with no styles.
-  async function copyAll(bundle) {
-    const cssAsset = bundle
-      ? Object.values(bundle).find(
-          (item) =>
-            item != null &&
-            item.type === 'asset' &&
-            typeof item.fileName === 'string' &&
-            item.fileName.endsWith('.css'),
-        )
-      : null;
-    const cssHref = cssAsset ? `./${cssAsset.fileName}` : null;
-
-    await fs.mkdir(outDir, { recursive: true });
-    await Promise.all(
-      resolved.map(async ({ src, dest }) => {
-        await fs.mkdir(path.dirname(dest), { recursive: true });
-        if (cssHref != null && dest.endsWith('.html')) {
-          const html = await fs.readFile(src, 'utf8');
-          const rewritten = html.replace(
-            /(<link\b[^>]*\bhref=")[^"]*\.css(")/g,
-            `$1${cssHref}$2`,
-          );
-          await fs.writeFile(dest, rewritten);
-          return;
-        }
-        await fs.copyFile(src, dest);
-      }),
-    );
-  }
+function copyStaticFiles() {
+  const files = [
+    ['devtools.html', 'devtools.html'],
+    ['panel.html', 'panel.html'],
+    ['src/panel/index.css', 'assets/reset.css'],
+    ['icons/stylex-icon.svg', 'assets/stylex-icon.svg'],
+    ['icons/stylex-icon-16.png', 'assets/stylex-icon-16.png'],
+    ['icons/stylex-icon-32.png', 'assets/stylex-icon-32.png'],
+    ['icons/stylex-icon-48.png', 'assets/stylex-icon-48.png'],
+    ['icons/stylex-icon-128.png', 'assets/stylex-icon-128.png'],
+    ['icons/stylex-icon-256.png', 'assets/stylex-icon-256.png'],
+    ['icons/stylex-icon-512.png', 'assets/stylex-icon-512.png'],
+  ];
   return {
-    name: 'copy-static',
+    name: 'copy-static-files',
     buildStart() {
-      for (const { src } of resolved) {
-        this.addWatchFile(src);
+      for (const [source] of files) {
+        this.addWatchFile(path.join(rootDir, source));
       }
     },
-    async generateBundle(_opts, bundle) {
-      await copyAll(bundle);
+    writeBundle: {
+      sequential: true,
+      async handler() {
+        for (const [source, destination] of files) {
+          const output = path.join(appOutDir, destination);
+          await fs.mkdir(path.dirname(output), { recursive: true });
+          await fs.copyFile(path.join(rootDir, source), output);
+        }
+      },
     },
   };
 }
 
-export default {
+async function readManifest(name) {
+  return JSON.parse(
+    await fs.readFile(path.join(rootDir, 'manifests', `${name}.json`), 'utf8'),
+  );
+}
+
+let assemblyQueue = Promise.resolve();
+async function assembleBrowserOutputs() {
+  const baseManifest = await readManifest('base');
+  for (const browserName of ['chrome', 'firefox', 'safari']) {
+    const output = path.join(distDir, browserName);
+    const overlay = await readManifest(browserName);
+    await fs.rm(output, { recursive: true, force: true });
+    await fs.mkdir(output, { recursive: true });
+    const sources = [appOutDir, runtimeOutDir];
+    for (const source of sources) {
+      try {
+        await fs.cp(source, output, { recursive: true });
+      } catch (error) {
+        if (error?.code !== 'ENOENT') throw error;
+      }
+    }
+    await fs.writeFile(
+      path.join(output, 'manifest.json'),
+      `${JSON.stringify({ ...baseManifest, ...overlay }, null, 2)}\n`,
+    );
+  }
+}
+
+function assembleBrowsers() {
+  return {
+    name: 'assemble-browser-outputs',
+    writeBundle: {
+      order: 'post',
+      sequential: true,
+      async handler() {
+        assemblyQueue = assemblyQueue
+          .catch(() => {})
+          .then(assembleBrowserOutputs);
+        await assemblyQueue;
+      },
+    },
+  };
+}
+
+function babelPlugin() {
+  return babel({
+    babelHelpers: 'bundled',
+    extensions,
+    babelrc: true,
+    configFile: path.join(rootDir, '.babelrc.js'),
+    include: [
+      path.join(rootDir, 'src/**/*'),
+      path.join(rootDir, 'flow-types/**/*'),
+    ],
+    exclude: ['**/node_modules/**'],
+  });
+}
+
+const resolvePlugin = () =>
+  nodeResolve({
+    browser: true,
+    extensions,
+    preferBuiltins: false,
+  });
+
+const runtimeConfig = {
+  input: path.join(rootDir, 'src/inspected/runtimeEntry.js'),
+  output: {
+    dir: runtimeOutDir,
+    format: 'iife',
+    name: 'StylexInspectedRuntime',
+    entryFileNames: 'assets/inspected-runtime.js',
+    inlineDynamicImports: true,
+    sourcemap: false,
+  },
+  plugins: [
+    cleanDirectory(runtimeOutDir),
+    babelPlugin(),
+    resolvePlugin(),
+    json(),
+    commonjs({ include: /node_modules/ }),
+    assembleBrowsers(),
+  ],
+};
+
+const appConfig = {
   input: {
-    devtools: path.resolve(rootDir, 'src/devtools/main.js'),
-    panel: path.resolve(rootDir, 'src/panel/main.js'),
+    devtools: path.join(rootDir, 'src/devtools/main.js'),
+    panel: path.join(rootDir, 'src/panel/main.js'),
   },
   output: {
-    dir: outDir,
+    dir: appOutDir,
     format: 'es',
-    sourcemap: true,
+    sourcemap: false,
     entryFileNames: 'assets/[name].js',
-    chunkFileNames: 'assets/[name]-[hash].js',
+    chunkFileNames: 'assets/chunk-[hash].js',
     assetFileNames: 'assets/[name][extname]',
   },
   plugins: [
-    cssBundle(),
+    cleanDirectory(appOutDir),
     replace({
       preventAssignment: true,
       values: {
@@ -139,31 +184,18 @@ export default {
         exclude: Features.LightDark,
       },
     }),
-    babel({
-      babelHelpers: 'bundled',
-      extensions,
-      babelrc: true,
-      configFile: path.resolve(rootDir, '.babelrc.js'),
-      include: [
-        path.resolve(rootDir, 'src/**/*'),
-        path.resolve(rootDir, 'flow-types/**/*'),
-      ],
-      exclude: ['**/node_modules/**'],
-    }),
-    nodeResolve({
-      browser: true,
-      extensions,
-      preferBuiltins: false,
-    }),
+    babelPlugin(),
+    resolvePlugin(),
     json(),
     commonjs({ include: /node_modules/ }),
-    copyStatic({
-      outDir,
-      targets: [
-        { src: 'devtools.html', dest: 'devtools.html' },
-        { src: 'panel.html', dest: 'panel.html' },
-        { src: 'public/manifest.json', dest: 'manifest.json' },
-      ],
-    }),
+    copyStaticFiles(),
+    assembleBrowsers(),
   ],
 };
+
+async function getConfigs() {
+  await fs.rm(distDir, { recursive: true, force: true });
+  return [runtimeConfig, appConfig];
+}
+
+export default getConfigs();

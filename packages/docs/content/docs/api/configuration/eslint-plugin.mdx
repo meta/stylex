@@ -178,6 +178,19 @@ type Options = {
 };
 ```
 
+### `@stylexjs/no-conflicting-props` rule
+
+Disallows using `className` or `style` props on elements that spread `stylex.props()`, which would cause conflicts.
+
+```ts
+type Options = {
+  // Possible strings where you can import stylex from
+  //
+  // Default: ['stylex', '@stylexjs/stylex']
+  validImports: Array<string | { from: string; as: string }>;
+};
+```
+
 ### `@stylexjs/no-legacy-contextual-styles` rule
 
 ```ts

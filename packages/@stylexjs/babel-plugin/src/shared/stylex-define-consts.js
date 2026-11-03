@@ -20,7 +20,7 @@ export default function styleXDefineConsts<Vars: ConstsConfig>(
   { [string]: string | number }, // jsOutput JS output
   { [string]: InjectableConstStyle }, // metadata for registerinjectableStyles
 ] {
-  const { classNamePrefix, exportId, debug, enableDebugClassNames } = {
+  const { classNamePrefix, exportId } = {
     ...defaultOptions,
     ...options,
   };
@@ -29,15 +29,9 @@ export default function styleXDefineConsts<Vars: ConstsConfig>(
   const injectableStyles: { [string]: InjectableConstStyle } = {};
 
   for (const [key, value] of Object.entries(constants)) {
-    const varSafeKey = (
-      key[0] >= '0' && key[0] <= '9' ? `_${key}` : key
-    ).replace(/[^a-zA-Z0-9]/g, '_');
-
     const constKey = key.startsWith('--')
       ? key.slice(2)
-      : debug && enableDebugClassNames
-        ? `${varSafeKey}-${classNamePrefix}${createHash(`${exportId}.${key}`)}`
-        : `${classNamePrefix}${createHash(`${exportId}.${key}`)}`;
+      : `${classNamePrefix}${createHash(`${exportId}.${key}`)}`;
 
     jsOutput[key] = value;
     injectableStyles[constKey] = {

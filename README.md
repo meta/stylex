@@ -51,7 +51,7 @@ This is the development monorepo for StyleX.
   - [postcss-plugin](https://github.com/facebook/stylex/blob/main/packages/@stylexjs/postcss-plugin)
   - [rollup-plugin](https://github.com/facebook/stylex/blob/main/packages/@stylexjs/rollup-plugin)
   - [scripts](https://github.com/facebook/stylex/blob/main/packages/scripts)
-  - [shared](https://github.com/facebook/stylex/blob/main/packages/@stylexjs/babel-plugin/shared)
+  - [shared](https://github.com/facebook/stylex/tree/main/packages/@stylexjs/shared)
   - [style-value-parser](https://github.com/facebook/stylex/blob/main/packages/style-value-parser)
   - [stylex](https://github.com/facebook/stylex/blob/main/packages/@stylexjs/stylex)
 

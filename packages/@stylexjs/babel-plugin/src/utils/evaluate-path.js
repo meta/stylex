@@ -33,23 +33,150 @@ import fs from 'node:fs';
 
 // This file contains Babels metainterpreter that can evaluate static code.
 
+// This evaluator also ships in a browser bundle, where Node's `global` alias
+// does not exist.
+const globalObject: any = globalThis;
+
 const VALID_CALLEES = ['String', 'Number', 'Math', 'Object', 'Array'];
-const INVALID_METHODS = [
-  'random',
-  'assign',
-  'defineProperties',
-  'defineProperty',
-  'freeze',
-  'seal',
-  'splice',
-];
+
+// The static methods that may be called on the globals in `VALID_CALLEES`.
+//
+// This is an allowlist rather than a denylist because `Object` exposes
+// reflective methods — `getPrototypeOf`, `getOwnPropertyDescriptor`, `create`
+// — that hand back objects from the prototype chain. Any one of them is a path
+// from a plain object to `Function`, and therefore to arbitrary code execution
+// inside the compiler. Only pure methods that return plain data belong here.
+//
+// A `Map` is used so that a crafted callee name such as `constructor` cannot
+// match a property inherited from `Object.prototype`.
+const VALID_CALLEE_METHODS: Map<string, Set<string>> = new Map([
+  ['String', new Set(['fromCharCode', 'fromCodePoint', 'raw'])],
+  [
+    'Number',
+    new Set([
+      'isFinite',
+      'isInteger',
+      'isNaN',
+      'isSafeInteger',
+      'parseFloat',
+      'parseInt',
+    ]),
+  ],
+  [
+    'Math',
+    new Set([
+      // `random` is deliberately absent: compilation must be deterministic.
+      'abs',
+      'acos',
+      'acosh',
+      'asin',
+      'asinh',
+      'atan',
+      'atan2',
+      'atanh',
+      'cbrt',
+      'ceil',
+      'clz32',
+      'cos',
+      'cosh',
+      'exp',
+      'expm1',
+      'f16round',
+      'floor',
+      'fround',
+      'hypot',
+      'imul',
+      'log',
+      'log10',
+      'log1p',
+      'log2',
+      'max',
+      'min',
+      'pow',
+      'round',
+      'sign',
+      'sin',
+      'sinh',
+      'sqrt',
+      'tan',
+      'tanh',
+      'trunc',
+    ]),
+  ],
+  [
+    'Object',
+    // Everything here returns plain data: own values, names or booleans.
+    // Excluded are the mutating methods (`assign`, `defineProperty`, `freeze`,
+    // `seal`, `preventExtensions`), which were already rejected before, and the
+    // reflective ones (`create`, `getPrototypeOf`, `setPrototypeOf`,
+    // `getOwnPropertyDescriptor`), which hand back prototype chain objects.
+    new Set([
+      'entries',
+      'fromEntries',
+      'getOwnPropertyNames',
+      'getOwnPropertySymbols',
+      'groupBy',
+      'hasOwn',
+      'is',
+      'isExtensible',
+      'isFrozen',
+      'isSealed',
+      'keys',
+      'values',
+    ]),
+  ],
+  ['Array', new Set(['from', 'isArray', 'of'])],
+]);
 
 function isValidCallee(val: string): boolean {
   return (VALID_CALLEES as $ReadOnlyArray<string>).includes(val);
 }
 
-function isInvalidMethod(val: string): boolean {
-  return INVALID_METHODS.includes(val);
+function isValidCalleeMethod(callee: string, method: string): boolean {
+  return VALID_CALLEE_METHODS.get(callee)?.has(method) === true;
+}
+
+// Properties that expose the prototype chain. Reading any of these off an
+// evaluated value lets an attacker walk from a plain object to `Function`
+// (e.g. `({}).constructor.constructor`), which is enough to construct and run
+// arbitrary code. Access to these is always blocked during static evaluation.
+const BLOCKED_PROPERTIES = new Set(['constructor', '__proto__', 'prototype']);
+
+function isBlockedProperty(property: mixed): boolean {
+  return typeof property === 'string' && BLOCKED_PROPERTIES.has(property);
+}
+
+// Functions that turn data into executable code. Reaching one of these through
+// a gadget this file does not yet know about would mean arbitrary code
+// execution at build time, so invoking them is refused outright. This is the
+// backstop behind `BLOCKED_PROPERTIES` and `VALID_CALLEE_METHODS`.
+function isBlockedFunction(fn: mixed): boolean {
+  if (typeof fn !== 'function') {
+    return false;
+  }
+  const callable: $FlowFixMe = fn;
+  return (
+    // `Function` itself, plus the async, generator and async-generator function
+    // constructors, which are the only functions that inherit directly from
+    // `Function` rather than from `Function.prototype`.
+    callable === Function ||
+    Object.getPrototypeOf(callable) === Function ||
+    // Referenced, never called: this is a value the evaluator refuses to run.
+    // eslint-disable-next-line no-eval
+    callable === globalObject.eval
+  );
+}
+
+// `state.functions.identifiers` and `state.functions.memberExpressions` are
+// plain objects, so a bare `config[name]` lookup also finds inherited members:
+// `memberExpressions['constructor']` resolves to `Object`, from which
+// `constructor.constructor` resolves to `Function`. Only ever read own keys.
+function getOwnProperty(obj: $FlowFixMe, key: string): $FlowFixMe {
+  if (obj == null) {
+    return undefined;
+  }
+  // $FlowFixMe[method-unbinding]
+  return Object.prototype.hasOwnProperty.call(obj, key) ? obj[key] : undefined;
 }
 
 const MUTATING_ARRAY_METHODS = new Set([
@@ -186,18 +313,8 @@ function resolveVarGroupKey(
   }
 
   const strToHash = utils.genFileBasedIdentifier({ fileName, exportName, key });
-  const { debug, enableDebugClassNames, classNamePrefix } =
-    traversalState.options;
-
-  const varSafeKey = (key[0] >= '0' && key[0] <= '9' ? `_${key}` : key).replace(
-    /[^a-zA-Z0-9]/g,
-    '_',
-  );
-
-  const varName =
-    debug && enableDebugClassNames
-      ? `${varSafeKey}-${classNamePrefix}${utils.hash(strToHash)}`
-      : classNamePrefix + utils.hash(strToHash);
+  const { classNamePrefix } = traversalState.options;
+  const varName = classNamePrefix + utils.hash(strToHash);
 
   return `var(--${varName})`;
 }
@@ -577,16 +694,28 @@ function _evaluate(path: NodePath<>, state: State): any {
 
     let property;
     if (path.node.computed) {
-      property = evaluateCached(propPath, state);
+      const computedKey = evaluateCached(propPath, state);
       if (!state.confident) {
         return;
       }
+      if (typeof computedKey === 'symbol') {
+        return deopt(propPath, state, errMsgs.UNEXPECTED_MEMBER_LOOKUP);
+      }
+      // Normalize the key the way the runtime would before checking it against
+      // the blocklist, and then look the property up with the normalized key.
+      // Without this a boxed value such as `Object('constructor')` slips past
+      // the check as a non-string yet still resolves to `constructor`.
+      property = String(computedKey);
     } else if (propPath.isIdentifier()) {
       property = propPath.node.name;
     } else if (propPath.isStringLiteral()) {
       property = propPath.node.value;
     } else {
       return deopt(propPath, state, errMsgs.UNEXPECTED_MEMBER_LOOKUP);
+    }
+
+    if (isBlockedProperty(property)) {
+      return deopt(propPath, state, errMsgs.BLOCKED_PROPERTY_ACCESS);
     }
 
     return object[property];
@@ -953,12 +1082,12 @@ function _evaluate(path: NodePath<>, state: State): any {
       !path.scope.getBinding(callee.node.name) &&
       isValidCallee(callee.node.name)
     ) {
-      func = global[callee.node.name];
+      func = globalObject[callee.node.name];
     } else if (
       callee.isIdentifier() &&
-      state.functions.identifiers[callee.node.name]
+      getOwnProperty(state.functions.identifiers, callee.node.name)
     ) {
-      func = state.functions.identifiers[callee.node.name];
+      func = getOwnProperty(state.functions.identifiers, callee.node.name);
     } else if (callee.isIdentifier()) {
       const maybeFunction = evaluateCached(callee, state);
       if (state.confident) {
@@ -976,30 +1105,34 @@ function _evaluate(path: NodePath<>, state: State): any {
       if (object.isIdentifier() && property.isIdentifier()) {
         if (
           isValidCallee(object.node.name) &&
-          !isInvalidMethod(property.node.name)
+          isValidCalleeMethod(object.node.name, property.node.name)
         ) {
-          context = global[object.node.name];
+          context = globalObject[object.node.name];
           // @ts-expect-error property may not exist in context object
           func = context[property.node.name];
-        } else if (
-          state.functions.memberExpressions[object.node.name] &&
-          state.functions.memberExpressions[object.node.name][
-            property.node.name
-          ]
-        ) {
-          context = state.functions.memberExpressions[object.node.name];
-          func = context[property.node.name];
+        } else {
+          const memberFns = getOwnProperty(
+            state.functions.memberExpressions,
+            object.node.name,
+          );
+          const memberFn = getOwnProperty(memberFns, property.node.name);
+          if (memberFn) {
+            context = memberFns;
+            func = memberFn;
+          }
         }
       }
 
-      if (
-        object.isIdentifier() &&
-        property.isStringLiteral() &&
-        state.functions.memberExpressions[object.node.name] &&
-        state.functions.memberExpressions[object.node.name][property.node.value]
-      ) {
-        context = state.functions.memberExpressions[object.node.name];
-        func = context[property.node.value];
+      if (object.isIdentifier() && property.isStringLiteral()) {
+        const memberFns = getOwnProperty(
+          state.functions.memberExpressions,
+          object.node.name,
+        );
+        const memberFn = getOwnProperty(memberFns, property.node.value);
+        if (memberFn) {
+          context = memberFns;
+          func = memberFn;
+        }
       }
 
       // "abc".charCodeAt(4)
@@ -1007,6 +1140,9 @@ function _evaluate(path: NodePath<>, state: State): any {
         (object.isStringLiteral() || object.isNumericLiteral()) &&
         property.isIdentifier()
       ) {
+        if (isBlockedProperty(property.node.name)) {
+          return deopt(property, state, errMsgs.BLOCKED_PROPERTY_ACCESS);
+        }
         const val: number | string = object.node.value;
         func = (val as $FlowFixMe)[property.node.name];
         if (typeof val === 'string') {
@@ -1021,10 +1157,16 @@ function _evaluate(path: NodePath<>, state: State): any {
           state.functions,
         );
         if (parsedObj.confident && property.isIdentifier()) {
+          if (isBlockedProperty(property.node.name)) {
+            return deopt(property, state, errMsgs.BLOCKED_PROPERTY_ACCESS);
+          }
           func = parsedObj.value[property.node.name];
           context = parsedObj.value;
         }
         if (parsedObj.confident && property.isStringLiteral()) {
+          if (isBlockedProperty(property.node.value)) {
+            return deopt(property, state, errMsgs.BLOCKED_PROPERTY_ACCESS);
+          }
           func = parsedObj.value[property.node.value];
           context = parsedObj.value;
         }
@@ -1032,6 +1174,10 @@ function _evaluate(path: NodePath<>, state: State): any {
     }
 
     if (func) {
+      if (isBlockedFunction(func) || isBlockedFunction(func.fn)) {
+        return deopt(path, state, errMsgs.BLOCKED_FUNCTION_CALL);
+      }
+
       if (func.takesPath) {
         const args = path.get('arguments');
         return func.fn(...args);

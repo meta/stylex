@@ -75,6 +75,10 @@ type CSSPropertiesWithExtras = Partial<
       '::-moz-range-thumb'?: CSSProperties;
       '::-moz-range-track'?: CSSProperties;
       '::-moz-range-progress'?: CSSProperties;
+      // For progress elements
+      '::-webkit-progress-bar'?: CSSProperties;
+      '::-webkit-progress-value'?: CSSProperties;
+      '::-moz-progress-bar'?: CSSProperties;
     }
   >
 >;
@@ -230,6 +234,7 @@ export type StyleXStyles<
   | false
   | GenStylePropType<CSS>
   | Readonly<[GenStylePropType<CSS>, InlineStyles]>
+  | StyleXMarker
 >;
 export type StyleXStylesWithout<CSS extends UserAuthoredStyles> = StyleXStyles<
   Omit<CSSPropertiesWithExtras, keyof CSS>
@@ -314,9 +319,13 @@ export type StyleX$CreateTheme = <
   overrides: OverridesForTokenType<TokensFromVarGroup<TVars>>,
 ) => Theme<TVars, ThemeID>;
 
-export type StyleX$DefineMarker = () => MapNamespace<{
+export type StyleXMarker = MapNamespace<{
   readonly marker: symbol;
 }>;
+
+export type StyleX$DefineMarker = () => StyleXMarker;
+
+export type StyleX$DefaultMarker = () => StyleXMarker;
 
 export type StyleX$When = {
   ancestor: <

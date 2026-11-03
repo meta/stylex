@@ -60,6 +60,37 @@ describe('rollup-plugin-stylex', () => {
     return { css, js, output };
   }
 
+  it('still transforms built-in imports when a custom importSource is set', async () => {
+    const { css } = await runStylex({
+      fileName: 'stylex.css',
+      importSources: ['custom-stylex'],
+    });
+    expect(css).toContain('display: flex;');
+  });
+
+  it('transforms a module that imports from a custom importSource', async () => {
+    const bundle = await rollup.rollup({
+      external: ['custom-stylex', '@stylexjs/stylex/lib/stylex-inject'],
+      input: path.resolve(__dirname, '__fixtures__/customSource.js'),
+      plugins: [
+        babel({
+          babelHelpers: 'bundled',
+          configFile: path.resolve(__dirname, '__fixtures__/.babelrc.json'),
+        }),
+        stylexPlugin({
+          fileName: 'stylex.css',
+          importSources: ['custom-stylex'],
+          lightningcssOptions: { minify: false },
+        }),
+      ],
+    });
+    const { output } = await bundle.generate({
+      file: path.resolve(__dirname, '/__builds__/bundle.js'),
+    });
+    const css = output.find((o) => o.fileName === 'stylex.css')?.source;
+    expect(css).toContain('color: red;');
+  });
+
   it('extracts CSS and removes stylex.inject calls', async () => {
     const { css, js } = await runStylex({ fileName: 'stylex.css' });
 
@@ -192,7 +223,6 @@ describe('rollup-plugin-stylex', () => {
     it('preserves stylex.inject calls and does not extract CSS', async () => {
       const { css, js } = await runStylex({
         debug: true,
-        enableDebugClassNames: true,
         runtimeInjection: true,
       });
 
@@ -211,17 +241,17 @@ describe('rollup-plugin-stylex', () => {
 
         var _inject2$2 = _inject;
         _inject2$2({
-          ltr: ".display-x1lliihq{display:block}",
+          ltr: ".x1lliihq{display:block}",
           priority: 3000
         });
         _inject2$2({
-          ltr: ".width-xh8yej3{width:100%}",
+          ltr: ".xh8yej3{width:100%}",
           priority: 4000
         });
         var styles$2 = {
           bar: {
-            "display-k1xSpc": "display-x1lliihq",
-            "width-kzqmXN": "width-xh8yej3",
+            "display-k1xSpc": "x1lliihq",
+            "width-kzqmXN": "xh8yej3",
             $$css: "@stylexjs/rollup-plugin:__tests__/__fixtures__/otherStyles.js:14"
           }
         };
@@ -235,22 +265,22 @@ describe('rollup-plugin-stylex', () => {
 
         var _inject2$1 = _inject;
         _inject2$1({
-          ltr: ".display-xt0psk2{display:inline}",
+          ltr: ".xt0psk2{display:inline}",
           priority: 3000
         });
         _inject2$1({
-          ltr: ".height-x1egiwwb{height:500px}",
+          ltr: ".x1egiwwb{height:500px}",
           priority: 4000
         });
         _inject2$1({
-          ltr: ".width-x3hqpx7{width:50%}",
+          ltr: ".x3hqpx7{width:50%}",
           priority: 4000
         });
         const styles$1 = {
           baz: {
-            "display-k1xSpc": "display-xt0psk2",
-            "height-kZKoxP": "height-x1egiwwb",
-            "width-kzqmXN": "width-x3hqpx7",
+            "display-k1xSpc": "xt0psk2",
+            "height-kZKoxP": "x1egiwwb",
+            "width-kzqmXN": "x3hqpx7",
             $$css: "@stylexjs/rollup-plugin:__tests__/__fixtures__/npmStyles.js:15"
           }
         };
@@ -268,42 +298,42 @@ describe('rollup-plugin-stylex', () => {
           priority: 0
         });
         _inject2({
-          ltr: ".animationName-xeuoslp{animation-name:xgnty7z-B}",
+          ltr: ".xeuoslp{animation-name:xgnty7z-B}",
           priority: 3000
         });
         _inject2({
-          ltr: ".backgroundColor-x1gykpug:hover{background-color:red}",
+          ltr: ".x1gykpug:hover{background-color:red}",
           priority: 3130
         });
         _inject2({
-          ltr: ".borderStartStartRadius-xu4yf9m{border-start-start-radius:7.5px}",
+          ltr: ".xu4yf9m{border-start-start-radius:7.5px}",
           priority: 3000
         });
         _inject2({
-          ltr: ".display-x78zum5{display:flex}",
+          ltr: ".x78zum5{display:flex}",
           priority: 3000
         });
         _inject2({
-          ltr: ".height-x1egiwwb{height:500px}",
+          ltr: ".x1egiwwb{height:500px}",
           priority: 4000
         });
         _inject2({
-          ltr: ".marginInlineStart-x1hm9lzh{margin-inline-start:10px}",
+          ltr: ".x1hm9lzh{margin-inline-start:10px}",
           priority: 3000
         });
         _inject2({
-          ltr: ".marginTop-xlrshdv{margin-top:99px}",
+          ltr: ".xlrshdv{margin-top:99px}",
           priority: 4000
         });
         var styles = {
           foo: {
-            "animationName-kKVMdj": "animationName-xeuoslp",
-            "backgroundColor-kWkggS": "backgroundColor-x1gykpug",
-            "borderStartStartRadius-krdFHd": "borderStartStartRadius-xu4yf9m",
-            "display-k1xSpc": "display-x78zum5",
-            "height-kZKoxP": "height-x1egiwwb",
-            "marginInlineStart-keTefX": "marginInlineStart-x1hm9lzh",
-            "marginTop-keoZOQ": "marginTop-xlrshdv",
+            "animationName-kKVMdj": "xeuoslp",
+            "backgroundColor-kWkggS": "x1gykpug",
+            "borderStartStartRadius-krdFHd": "xu4yf9m",
+            "display-k1xSpc": "x78zum5",
+            "height-kZKoxP": "x1egiwwb",
+            "marginInlineStart-keTefX": "x1hm9lzh",
+            "marginTop-keoZOQ": "xlrshdv",
             $$css: "@stylexjs/rollup-plugin:__tests__/__fixtures__/index.js:24"
           }
         };

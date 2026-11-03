@@ -95,7 +95,6 @@ export type StyleXOptions = $ReadOnly<{
   ...RuntimeOptions,
   aliases?: ?$ReadOnly<{ [string]: string | $ReadOnlyArray<string> }>,
   propertyValidationMode?: 'throw' | 'warn' | 'silent',
-  enableDebugClassNames?: boolean,
   enableDebugDataProp?: boolean,
   enableDevClassNames?: boolean,
   enableInlinedConditionalMerge?: boolean,
@@ -227,14 +226,6 @@ export default class StateManager {
       false,
       'options.debug',
     );
-
-    const enableDebugClassNames: StyleXStateOptions['enableDebugClassNames'] =
-      z.logAndDefault(
-        z.boolean(),
-        options.enableDebugClassNames ?? defaultOptions.enableDebugClassNames,
-        true,
-        'options.enableDebugClassNames',
-      );
 
     const enableDebugDataProp: StyleXStateOptions['enableDebugDataProp'] =
       z.logAndDefault(
@@ -445,7 +436,6 @@ export default class StateManager {
       dev,
       propertyValidationMode,
       env,
-      enableDebugClassNames,
       enableDebugDataProp,
       enableDevClassNames,
       enableFontSizePxToRem,
