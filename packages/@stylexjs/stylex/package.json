@@ -37,8 +37,6 @@
     "test": "cross-env BABEL_ENV=test jest --coverage"
   },
   "dependencies": {
-    "css-mediaquery": "^0.1.2",
-    "invariant": "^2.2.4",
     "styleq": "0.2.1"
   },
   "devDependencies": {
