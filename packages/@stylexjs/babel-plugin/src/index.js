@@ -614,7 +614,9 @@ function atRulePreludes(rule: string): Array<string> {
 function widthSortKeyForChain(preludes: Array<string>): WidthSortKey | null {
   const mediaIndexes = [];
   preludes.forEach((prelude, i) => {
-    if (prelude.startsWith('@media ')) {
+    // `@media all` is used to keep a logical-property fallback and its native
+    // rule in one insertable block. It imposes no width bound.
+    if (prelude.startsWith('@media ') && prelude.trim() !== '@media all') {
       mediaIndexes.push(i);
     }
   });
@@ -1022,6 +1024,49 @@ function addSpecificityLevel(selector: string, index: number): string {
   const pseudo = Array.from({ length: index })
     .map(() => ':not(#\\#)')
     .join('');
+
+  if (index === 0) {
+    return selector;
+  }
+
+  // Radius fallbacks contain several nested rules in one insertable block, so
+  // every selector in the block needs the specificity bump.
+  if (selector.includes('@media all{')) {
+    let result = '';
+    let cursor = 0;
+    while (cursor < selector.length) {
+      const openCurly = selector.indexOf('{', cursor);
+      if (openCurly === -1) {
+        result += selector.slice(cursor);
+        break;
+      }
+
+      const prelude = selector.slice(cursor, openCurly);
+      const boundary = Math.max(
+        prelude.lastIndexOf('{'),
+        prelude.lastIndexOf('}'),
+      );
+      const beforeSelector = prelude.slice(0, boundary + 1);
+      const selectorText = prelude.slice(boundary + 1);
+
+      if (selectorText.trimStart().startsWith('@')) {
+        result += `${prelude}{`;
+      } else {
+        const pseudoIndex = selectorText.includes('::')
+          ? selectorText.indexOf('::')
+          : selectorText.length;
+        result +=
+          beforeSelector +
+          selectorText.slice(0, pseudoIndex) +
+          pseudo +
+          selectorText.slice(pseudoIndex) +
+          '{';
+      }
+
+      cursor = openCurly + 1;
+    }
+    return result;
+  }
 
   const lastOpenCurly = selector.includes('::')
     ? selector.indexOf('::')

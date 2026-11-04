@@ -995,6 +995,43 @@ describe('@stylexjs/babel-plugin', () => {
       `);
     });
 
+    test('logical border radius fallback stays a single insertable rule', () => {
+      const rules = [
+        [
+          'x1',
+          {
+            ltr: "@media all{@supports not (border-start-start-radius: 0){html:not([dir='rtl']) .x1{border-top-left-radius:5px}html[dir='rtl'] .x1{border-top-right-radius:5px}}.x1{border-start-start-radius:5px}}",
+            rtl: null,
+          },
+          3000,
+        ],
+        [
+          'x2',
+          {
+            ltr: "@media (min-width: 600px){@media all{@supports not (border-end-end-radius: 0){html:not([dir='rtl']) .x2{border-bottom-right-radius:10px}html[dir='rtl'] .x2{border-bottom-left-radius:10px}}.x2{border-end-end-radius:10px}}}",
+            rtl: null,
+          },
+          3000,
+        ],
+      ];
+
+      expect(stylexPlugin.processStylexRules(rules, { useLayers: false }))
+        .toMatchInlineSnapshot(`
+        "@media (min-width: 600px){@media all{@supports not (border-end-end-radius: 0){html:not([dir='rtl']) .x2{border-bottom-right-radius:10px}html[dir='rtl'] .x2{border-bottom-left-radius:10px}}.x2{border-end-end-radius:10px}}}
+        @media all{@supports not (border-start-start-radius: 0){html:not([dir='rtl']) .x1{border-top-left-radius:5px}html[dir='rtl'] .x1{border-top-right-radius:5px}}.x1{border-start-start-radius:5px}}"
+      `);
+
+      expect(stylexPlugin.processStylexRules(rules, true))
+        .toMatchInlineSnapshot(`
+        "
+        @layer priority1;
+        @layer priority1{
+        @media (min-width: 600px){@media all{@supports not (border-end-end-radius: 0){html:not([dir='rtl']) .x2{border-bottom-right-radius:10px}html[dir='rtl'] .x2{border-bottom-left-radius:10px}}.x2{border-end-end-radius:10px}}}
+        @media all{@supports not (border-start-start-radius: 0){html:not([dir='rtl']) .x1{border-top-left-radius:5px}html[dir='rtl'] .x1{border-top-right-radius:5px}}.x1{border-start-start-radius:5px}}
+        }"
+      `);
+    });
+
     // The `float` value arrives via a constant, so it is only recognizable as a
     // logical float after constants are substituted.
     test('logical float vars are emitted when the float comes from a constant', () => {

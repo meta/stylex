@@ -1443,8 +1443,7 @@ describe('@stylexjs/babel-plugin', () => {
           var _inject2 = _inject;
           import stylex from 'stylex';
           _inject2({
-            ltr: ".x13t61ll{border-top-left-radius:5px}",
-            rtl: ".x13t61ll{border-top-right-radius:5px}",
+            ltr: "@media all{@supports not (border-start-start-radius: 0){html:not([dir='rtl']) .x13t61ll{border-top-left-radius:5px}html[dir='rtl'] .x13t61ll{border-top-right-radius:5px}}.x13t61ll{border-start-start-radius:5px}}",
             priority: 3000
           });
           const classnames = "x13t61ll";"
@@ -1469,8 +1468,7 @@ describe('@stylexjs/babel-plugin', () => {
           var _inject2 = _inject;
           import stylex from 'stylex';
           _inject2({
-            ltr: ".xbxn0j6{border-bottom-left-radius:5px}",
-            rtl: ".xbxn0j6{border-bottom-right-radius:5px}",
+            ltr: "@media all{@supports not (border-end-start-radius: 0){html:not([dir='rtl']) .xbxn0j6{border-bottom-left-radius:5px}html[dir='rtl'] .xbxn0j6{border-bottom-right-radius:5px}}.xbxn0j6{border-end-start-radius:5px}}",
             priority: 3000
           });
           const classnames = "xbxn0j6";"
@@ -1495,11 +1493,49 @@ describe('@stylexjs/babel-plugin', () => {
           var _inject2 = _inject;
           import stylex from 'stylex';
           _inject2({
-            ltr: ".x1kchd1x{border-top-right-radius:5px}",
-            rtl: ".x1kchd1x{border-top-left-radius:5px}",
+            ltr: "@media all{@supports not (border-start-end-radius: 0){html:not([dir='rtl']) .x1kchd1x{border-top-right-radius:5px}html[dir='rtl'] .x1kchd1x{border-top-left-radius:5px}}.x1kchd1x{border-start-end-radius:5px}}",
             priority: 3000
           });
           const classnames = "x1kchd1x";"
+        `);
+      });
+
+      test('borderRadius with pseudo selectors and media queries', () => {
+        expect(
+          transform(
+            `
+            import stylex from 'stylex';
+            const styles = stylex.create({
+              x: {
+                borderTopStartRadius: 5,
+                ':hover': { borderBottomEndRadius: 10 },
+                '@media (min-width: 600px)': { borderTopEndRadius: 15 }
+              }
+            });
+            const classnames = stylex(styles.x);
+          `,
+            {
+              styleResolution: 'legacy-expand-shorthands',
+              enableLogicalStylesPolyfill: true,
+            },
+          ),
+        ).toMatchInlineSnapshot(`
+          "import _inject from "@stylexjs/stylex/lib/stylex-inject";
+          var _inject2 = _inject;
+          import stylex from 'stylex';
+          _inject2({
+            ltr: "@media all{@supports not (border-start-start-radius: 0){html:not([dir='rtl']) .x13t61ll{border-top-left-radius:5px}html[dir='rtl'] .x13t61ll{border-top-right-radius:5px}}.x13t61ll{border-start-start-radius:5px}}",
+            priority: 3000
+          });
+          _inject2({
+            ltr: "@media all{@supports not (border-end-end-radius: 0){html:not([dir='rtl']) .xomk977:hover{border-bottom-right-radius:10px}html[dir='rtl'] .xomk977:hover{border-bottom-left-radius:10px}}.xomk977:hover{border-end-end-radius:10px}}",
+            priority: 3130
+          });
+          _inject2({
+            ltr: "@media (min-width: 600px){@media all{@supports not (border-start-end-radius: 0){html:not([dir='rtl']) .xw0ibk9{border-top-right-radius:15px}html[dir='rtl'] .xw0ibk9{border-top-left-radius:15px}}.xw0ibk9{border-start-end-radius:15px}}}",
+            priority: 3200
+          });
+          const classnames = "x13t61ll xomk977 xw0ibk9";"
         `);
       });
 
@@ -1521,8 +1557,7 @@ describe('@stylexjs/babel-plugin', () => {
           var _inject2 = _inject;
           import stylex from 'stylex';
           _inject2({
-            ltr: ".x1u0fnx4{border-bottom-right-radius:5px}",
-            rtl: ".x1u0fnx4{border-bottom-left-radius:5px}",
+            ltr: "@media all{@supports not (border-end-end-radius: 0){html:not([dir='rtl']) .x1u0fnx4{border-bottom-right-radius:5px}html[dir='rtl'] .x1u0fnx4{border-bottom-left-radius:5px}}.x1u0fnx4{border-end-end-radius:5px}}",
             priority: 3000
           });
           const classnames = "x1u0fnx4";"
