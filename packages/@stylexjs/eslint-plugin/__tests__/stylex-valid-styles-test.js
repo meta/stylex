@@ -2623,7 +2623,7 @@ This property is not supported in legacy StyleX resolution.`,
 auto
 a number literal or math expression
 a number ending in px, mm, in, pc, pt
-a number ending in ch, em, ex, ic, rem, vh, vw, vmin, vmax, svh, dvh, lvh, svw, dvw, ldw, cqw, cqh, cqmin, cqmax
+a number ending in ch, em, ex, ic, rem, vh, vw, vmin, vmax, svh, dvh, lvh, svw, dvw, lvw, cqw, cqh, cqmin, cqmax
 A string literal representing a percentage (e.g. 100%)
 null
 initial
@@ -2683,7 +2683,7 @@ revert`,
             'fit-content\n' +
             'auto\n' +
             'a number ending in px, mm, in, pc, pt\n' +
-            'a number ending in ch, em, ex, ic, rem, vh, vw, vmin, vmax, svh, dvh, lvh, svw, dvw, ldw, cqw, cqh, cqmin, cqmax\n' +
+            'a number ending in ch, em, ex, ic, rem, vh, vw, vmin, vmax, svh, dvh, lvh, svw, dvw, lvw, cqw, cqh, cqmin, cqmax\n' +
             'A string literal representing a percentage (e.g. 100%)\n' +
             'null\n' +
             'initial\n' +
@@ -2713,7 +2713,7 @@ revert`,
 auto
 a number literal or math expression
 a number ending in px, mm, in, pc, pt
-a number ending in ch, em, ex, ic, rem, vh, vw, vmin, vmax, svh, dvh, lvh, svw, dvw, ldw, cqw, cqh, cqmin, cqmax
+a number ending in ch, em, ex, ic, rem, vh, vw, vmin, vmax, svh, dvh, lvh, svw, dvw, lvw, cqw, cqh, cqmin, cqmax
 A string literal representing a percentage (e.g. 100%)
 null
 initial
@@ -2739,7 +2739,7 @@ revert`,
 auto
 a number literal or math expression
 a number ending in px, mm, in, pc, pt
-a number ending in ch, em, ex, ic, rem, vh, vw, vmin, vmax, svh, dvh, lvh, svw, dvw, ldw, cqw, cqh, cqmin, cqmax
+a number ending in ch, em, ex, ic, rem, vh, vw, vmin, vmax, svh, dvh, lvh, svw, dvw, lvw, cqw, cqh, cqmin, cqmax
 A string literal representing a percentage (e.g. 100%)
 null
 initial

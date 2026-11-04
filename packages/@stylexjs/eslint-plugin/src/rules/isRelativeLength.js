@@ -33,7 +33,7 @@ const relativeLengthUnits = new Set([
   'lvh',
   'svw',
   'dvw',
-  'ldw',
+  'lvw',
   // container units
   'cqw',
   'cqh',
