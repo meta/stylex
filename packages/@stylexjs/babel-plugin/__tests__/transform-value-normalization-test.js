@@ -278,6 +278,20 @@ describe('@stylexjs/babel-plugin', () => {
       `);
     });
 
+    test('timing values converted to seconds carry no floating-point noise', () => {
+      const output = transform(`
+        import stylex from 'stylex';
+        const styles = stylex.create({
+          x: { transitionDuration: '33.3ms' },
+          y: { animationDelay: '11.3ms' },
+          z: { transition: 'opacity 13.8ms ease-in 10.2ms' }
+        });
+      `);
+      expect(output).toContain('transition-duration:.0333s');
+      expect(output).toContain('animation-delay:.0113s');
+      expect(output).toContain('transition:opacity .0138s ease-in .0102s');
+    });
+
     test('transforms non-unitless property values', () => {
       expect(
         transform(`
