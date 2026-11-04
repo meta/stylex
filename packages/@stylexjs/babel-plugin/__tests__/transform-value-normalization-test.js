@@ -191,6 +191,40 @@ describe('@stylexjs/babel-plugin', () => {
       `);
     });
 
+    test('0 dimensions keep their unit category whatever its case', () => {
+      expect(
+        transform(`
+          import stylex from 'stylex';
+          const styles = stylex.create({
+            x: { transitionDuration: '0MS' },
+            y: { animationDelay: '0S' },
+            z: { transform: '0DEG' },
+            w: { gridTemplateColumns: '0FR 1fr' }
+          });
+        `),
+      ).toMatchInlineSnapshot(`
+        "import _inject from "@stylexjs/stylex/lib/stylex-inject";
+        var _inject2 = _inject;
+        import stylex from 'stylex';
+        _inject2({
+          ltr: ".x1mq3mr6{transition-duration:0s}",
+          priority: 3000
+        });
+        _inject2({
+          ltr: ".x1uzojwf{animation-delay:0s}",
+          priority: 3000
+        });
+        _inject2({
+          ltr: ".x1jpfit1{transform:0deg}",
+          priority: 3000
+        });
+        _inject2({
+          ltr: ".xkxvfks{grid-template-columns:0fr 1fr}",
+          priority: 3000
+        });"
+      `);
+    });
+
     test('calc() preserves spaces around "+" and "-"', () => {
       expect(
         transform(`
