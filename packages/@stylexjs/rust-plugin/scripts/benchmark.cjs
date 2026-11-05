@@ -162,16 +162,10 @@ function measure(run, files, iterations) {
 
 // Cold time: a fresh process loads the engine and performs the first transform.
 function cold(engine, entry) {
-  const script = `
-    const start = process.hrtime.bigint();
-    const run = require(${JSON.stringify(__filename)}).loadEngine(${JSON.stringify(engine)});
-    const entry = require(${JSON.stringify(__filename)}).cases().find((item) => item.name === ${JSON.stringify(entry.name)});
-    for (const input of entry.files) run(input);
-    process.stdout.write(String(Number(process.hrtime.bigint() - start) / 1e6));
-  `;
+  const child = path.join(__dirname, 'benchmark-cold.cjs');
   const samples = [];
   for (let i = 0; i < 3; i += 1) {
-    const result = spawnSync(process.execPath, ['-e', script], {
+    const result = spawnSync(process.execPath, [child, engine, entry.name], {
       cwd: packageRoot,
       encoding: 'utf8',
       env: { ...process.env, STYLEX_BENCHMARK_CHILD: '1' },

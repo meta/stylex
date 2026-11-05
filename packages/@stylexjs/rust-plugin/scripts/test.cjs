@@ -31,6 +31,10 @@ const steps = [
     ['--test', path.join(root, 'tests/native_api_current.cjs')],
   ],
   [process.execPath, ['--test', path.join(root, 'tests/unplugin_current.cjs')]],
+  [
+    process.execPath,
+    ['--test', path.join(root, 'tests/benchmark_current.cjs')],
+  ],
   // `compare` (used on Windows) requires the native compiler to reproduce the
   // JS compiler's results there, including the unchanged suite's own
   // platform-specific failures; elsewhere every test must pass.
