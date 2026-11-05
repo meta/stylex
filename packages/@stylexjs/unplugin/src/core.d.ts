@@ -19,6 +19,7 @@ export type CSSLayersConfig =
     };
 
 export type UserOptions = StyleXOptions & {
+  compiler?: 'babel' | 'rust';
   useCSSLayers?: CSSLayersConfig;
   enableLTRRTLComments?: boolean;
   legacyDisableLayers?: boolean;
