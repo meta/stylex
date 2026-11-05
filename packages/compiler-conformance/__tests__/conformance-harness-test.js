@@ -8,8 +8,11 @@
 'use strict';
 
 const fs = require('node:fs');
+const path = require('node:path');
 
 const {
+  FIXTURES_DIR,
+  MANIFEST_FILE,
   exactPart,
   getExpectedPath,
   getFixtureNames,
@@ -21,8 +24,17 @@ const {
   normalizeDiagnostic,
   normalizePaths,
   normalizeResult,
+  readExpected,
 } = require('../src/index');
 
+// The fields of the `manifest.json` schema in README.md.
+const MANIFEST_FIELDS = [
+  'description',
+  'entry',
+  'pluginOptions',
+  'processOptions',
+  'syntax',
+];
 const IMPLEMENTATION_TAG = '@stylexjs/babel-plugin';
 const FIXTURE = {
   dir: '/repo/packages/compiler-conformance/fixtures/demo',
@@ -52,6 +64,10 @@ function validSuccess(overrides = {}) {
     warnings: [],
     ...overrides,
   };
+}
+
+function readJson(filePath) {
+  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
 
 describe('normalizePaths', () => {
@@ -343,18 +359,42 @@ describe('normalizeResult', () => {
   });
 });
 
-describe('fixtures', () => {
-  test('every fixture ships an entry file and a recorded result', () => {
-    const names = getFixtureNames();
-    expect(names.length).toBeGreaterThan(0);
+describe.each(getFixtureNames())('fixture %s', (name) => {
+  // `loadFixture` ignores fields it does not know, so a misspelled
+  // `pluginOption` would compile the fixture with default options and record
+  // that as its expectation. `syntax` must stay abstract names: a string would
+  // be split into one-letter parser plugins, and a Babel `[name, options]` pair
+  // would make the contract Babel-specific.
+  test('manifest sets only schema fields, a description, and an existing entry', () => {
+    const manifest = readJson(path.join(FIXTURES_DIR, name, MANIFEST_FILE));
+    const fixture = loadFixture(name);
 
-    for (const name of names) {
-      const fixture = loadFixture(name);
-      expect(fs.existsSync(fixture.entryPath)).toBe(true);
-      expect(fs.existsSync(getExpectedPath(name))).toBe(true);
-    }
+    expect(
+      Object.keys(manifest).filter((field) => !MANIFEST_FIELDS.includes(field)),
+    ).toEqual([]);
+    expect(fixture.description).toMatch(/\S/);
+    expect(fixture.syntax).toBeInstanceOf(Array);
+    expect(fixture.syntax.filter((item) => typeof item !== 'string')).toEqual(
+      [],
+    );
+    expect(fs.existsSync(fixture.entryPath)).toBe(true);
   });
 
+  // `readExpected` normalizes on read, so a hand edit that normalization undoes
+  // (unsorted keys, an absolute path, trailing CSS whitespace, a code frame)
+  // would still pass the golden test while the stored file drifts from what
+  // `writeExpected` records, and from what an implementation reading
+  // expected.json directly compares against.
+  test('expected.json is stored already normalized', () => {
+    const stored = readJson(getExpectedPath(name));
+
+    expect(JSON.stringify(stored, null, 2)).toBe(
+      JSON.stringify(readExpected(name), null, 2),
+    );
+  });
+});
+
+describe('loadFixture', () => {
   test('default arrays and objects are isolated between loads', () => {
     const first = loadFixture('create-basic');
     const second = loadFixture('create-basic');
