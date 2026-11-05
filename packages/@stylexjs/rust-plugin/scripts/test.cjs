@@ -25,7 +25,16 @@ const steps = [
     ['--test', path.join(root, 'tests/native_api_current.cjs')],
   ],
   [process.execPath, ['--test', path.join(root, 'tests/unplugin_current.cjs')]],
-  [process.execPath, [path.join(__dirname, 'parity.cjs'), 'rust']],
+  // `compare` (used on Windows) requires the native compiler to reproduce the
+  // JS compiler's results there, including the unchanged suite's own
+  // platform-specific failures; elsewhere every test must pass.
+  [
+    process.execPath,
+    [
+      path.join(__dirname, 'parity.cjs'),
+      process.env.STYLEX_PARITY_MODE || 'rust',
+    ],
+  ],
 ];
 for (const [command, args] of steps) {
   const result = spawnSync(command, args, {

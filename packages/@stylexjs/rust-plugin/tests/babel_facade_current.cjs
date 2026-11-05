@@ -23,6 +23,8 @@ function transform(
     filename,
     babelrc: false,
     configFile: false,
+    // Code frames are compared as text; keep them uncoloured on CI terminals.
+    highlightCode: false,
     parserOpts: { plugins: parserPlugins },
     plugins: [...extraPlugins, [plugin, options]],
   });

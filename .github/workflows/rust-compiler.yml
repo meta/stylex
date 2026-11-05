@@ -53,18 +53,32 @@ jobs:
       - run: corepack prepare yarn@1.22.22 --activate
       - run: yarn install --frozen-lockfile --ignore-scripts
       - name: Build the JavaScript packages the suites import
-        run: npm run build --workspace=style-value-parser --workspace=@stylexjs/shared --workspace=@stylexjs/stylex --workspace=@stylexjs/babel-plugin --workspace=@stylexjs/unplugin
+        run:
+          npm run build --workspace=style-value-parser
+          --workspace=@stylexjs/shared --workspace=@stylexjs/stylex
+          --workspace=@stylexjs/babel-plugin --workspace=@stylexjs/unplugin
       - name: Build native compiler
         run: npm run build:native --workspace=@stylexjs/rust-plugin
       - name: Rust formatting
-        run: cargo fmt --manifest-path packages/@stylexjs/rust-plugin/Cargo.toml -- --check
+        run:
+          cargo fmt --manifest-path packages/@stylexjs/rust-plugin/Cargo.toml --
+          --check
       - name: Rust lint
         run: |
           cargo clippy --locked --manifest-path packages/@stylexjs/rust-plugin/Cargo.toml --all-targets -- -D warnings
           cargo clippy --locked --manifest-path packages/@stylexjs/rust-plugin/Cargo.toml --features node --lib -- -D warnings
+      # The unchanged JS suite hardcodes POSIX paths in snapshots and mocks, so
+      # it does not pass on Windows even with the JS compiler; there the native
+      # run is compared test for test against the JS compiler instead.
       - name: Current Babel reference suite
+        if: runner.os != 'Windows'
         run: node packages/@stylexjs/rust-plugin/scripts/parity.cjs babel
-      - name: Rust, native API, bundler, and unchanged Babel suites on the native compiler
+      - name:
+          Rust, native API, bundler, and unchanged Babel suites on the native
+          compiler
+        env:
+          STYLEX_PARITY_MODE:
+            ${{ runner.os == 'Windows' && 'compare' || 'rust' }}
         run: npm run test:native --workspace=@stylexjs/rust-plugin
 
   node18:
@@ -84,6 +98,17 @@ jobs:
           workspaces: packages/@stylexjs/rust-plugin
       - run: corepack prepare yarn@1.22.22 --activate
       - run: yarn install --frozen-lockfile --ignore-scripts --ignore-engines
+      - name: Build the JavaScript packages the suites import
+        run:
+          npm run build --workspace=style-value-parser
+          --workspace=@stylexjs/shared --workspace=@stylexjs/stylex
+          --workspace=@stylexjs/babel-plugin --workspace=@stylexjs/unplugin
       - run: npm run build:native --workspace=@stylexjs/rust-plugin
-      - name: Native API and Babel adapter on the oldest supported Node
-        run: node --test packages/@stylexjs/rust-plugin/tests/babel_facade_current.cjs
+      - name:
+          Native API, Babel adapter, and bundler plugin on the oldest supported
+          Node
+        run:
+          node --test
+          packages/@stylexjs/rust-plugin/tests/babel_facade_current.cjs
+          packages/@stylexjs/rust-plugin/tests/native_api_current.cjs
+          packages/@stylexjs/rust-plugin/tests/unplugin_current.cjs

@@ -126,7 +126,11 @@ fn two_thousand_else_if_arms_match_swc_and_babel_acceptance() {
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(test_file)
         };
         let package = test_file.parent().unwrap().parent().unwrap();
+        // Whether Babel's recursive parser fits 2000 arms in Node's default
+        // ~1 MB JS stack varies by Node version (22 overflows, 24 fits), so
+        // the oracle gets a fixed 4 MB stack, well within the 8 MB main thread.
         let mut child = std::process::Command::new("node")
+            .arg("--stack-size=4000")
             .arg("-e")
             .arg("require('@babel/core').parseSync(require('node:fs').readFileSync(0,'utf8'),{sourceType:'module',babelrc:false,configFile:false});console.log('Babel accepted 2000 else-if arms');")
             .current_dir(package)
