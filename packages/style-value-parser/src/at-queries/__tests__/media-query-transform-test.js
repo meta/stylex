@@ -747,4 +747,53 @@ describe('Media Query Transformer', () => {
     const result = lastMediaQueryWinsTransform(originalStyles);
     expect(JSON.stringify(result)).toBe(JSON.stringify(expectedStyles));
   });
+
+  test('reuses parsed queries without letting one property change another', () => {
+    const originalStyles = {
+      foo: {
+        width: {
+          default: '100%',
+          '@media (min-width: 640px)': '50%',
+          '@media (min-width: 1024px)': '33%',
+        },
+      },
+      bar: {
+        height: {
+          default: 'auto',
+          '@media (min-width: 640px)': '10px',
+        },
+        margin: {
+          default: '0',
+          '@media (min-width: 1024px)': '4px',
+          '@media (min-width: 640px)': '2px',
+        },
+      },
+    };
+
+    const expectedStyles = {
+      foo: {
+        width: {
+          default: '100%',
+          '@media (min-width: 640px) and (max-width: 1023.98px)': '50%',
+          '@media (min-width: 1024px)': '33%',
+        },
+      },
+      bar: {
+        height: {
+          default: 'auto',
+          '@media (min-width: 640px)': '10px',
+        },
+        margin: {
+          default: '0',
+          '@media not all': '4px',
+          '@media (min-width: 640px)': '2px',
+        },
+      },
+    };
+
+    const first = lastMediaQueryWinsTransform(originalStyles);
+    const second = lastMediaQueryWinsTransform(originalStyles);
+    expect(JSON.stringify(first)).toBe(JSON.stringify(expectedStyles));
+    expect(JSON.stringify(second)).toBe(JSON.stringify(expectedStyles));
+  });
 });
