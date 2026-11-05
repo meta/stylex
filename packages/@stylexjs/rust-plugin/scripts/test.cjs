@@ -14,7 +14,13 @@ const root = path.resolve(__dirname, '..');
 const steps = [
   [
     'cargo',
-    ['test', '--locked', '--manifest-path', path.join(root, 'Cargo.toml')],
+    [
+      'test',
+      '--locked',
+      '--no-fail-fast',
+      '--manifest-path',
+      path.join(root, 'Cargo.toml'),
+    ],
   ],
   [
     process.execPath,
@@ -36,12 +42,17 @@ const steps = [
     ],
   ],
 ];
+// Run every suite so one failure does not hide the others.
+let failed = 0;
 for (const [command, args] of steps) {
   const result = spawnSync(command, args, {
     cwd: root,
     env: process.env,
     stdio: 'inherit',
   });
-  if (result.status !== 0)
-    process.exit(result.status == null ? 1 : result.status);
+  if (result.status !== 0) {
+    failed++;
+    console.error(`\nFAILED: ${[command, ...args].join(' ')}\n`);
+  }
 }
+process.exitCode = failed === 0 ? 0 : 1;

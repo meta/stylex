@@ -753,9 +753,11 @@ fn creation_current_evaluated_arrow_errors_preserve_kind_and_absent_range() {
             let message = expected["error"].as_str().unwrap();
             assert_eq!(
                 actual.message,
+                // Babel prefixes the resolved filename, which on Windows is
+                // `D:\tmp\…` rather than the POSIX spelling passed in.
                 message
-                    .strip_prefix(&format!("{filename}: "))
-                    .unwrap_or(message),
+                    .split_once("app.js: ")
+                    .map_or(message, |(_, rest)| rest),
                 "plain error message: {source}"
             );
             assert!(
