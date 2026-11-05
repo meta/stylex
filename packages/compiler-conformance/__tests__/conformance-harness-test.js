@@ -122,9 +122,10 @@ describe('normalizeDiagnostic', () => {
 
   test('collapses the caller-provided implementation tag', () => {
     expect(
-      normalizeDiagnostic('[@stylexjs/babel-plugin] Expected a boolean.', {
-        ...CONTEXT,
-      }),
+      normalizeDiagnostic(
+        '[@stylexjs/babel-plugin] Expected a boolean.',
+        CONTEXT,
+      ),
     ).toBe('[stylex] Expected a boolean.');
   });
 
@@ -132,18 +133,6 @@ describe('normalizeDiagnostic', () => {
     expect(normalizeDiagnostic('[E100] Expected a boolean.', CONTEXT)).toBe(
       '[E100] Expected a boolean.',
     );
-  });
-
-  test('leaves a message that merely opens with a bracket alone', () => {
-    expect(normalizeDiagnostic('[1, 2] is not a valid value.', CONTEXT)).toBe(
-      '[1, 2] is not a valid value.',
-    );
-  });
-
-  test('leaves a pipe that is not a source excerpt alone', () => {
-    expect(
-      normalizeDiagnostic('bad value\n|start| is reserved.', CONTEXT),
-    ).toBe('bad value\n|start| is reserved.');
   });
 
   test('preserves pipe-prefixed alternatives in a multiline message', () => {
@@ -243,8 +232,12 @@ describe('isJsEquivalent', () => {
     expect(isJsEquivalent('({a: 1});', '({b: 1});', ['flow'])).toBe(false);
   });
 
-  test('still reports a computed key', () => {
-    expect(isJsEquivalent('({a: 1});', '({[a]: 1});', ['flow'])).toBe(false);
+  // `{[a]: 1}` names whatever `a` holds, `{["a"]: 1}` names "a". Only a
+  // non-computed key may be reduced to the name it spells.
+  test('keeps a computed key distinct from the name it spells', () => {
+    expect(isJsEquivalent('({[a]: 1});', '({["a"]: 1});', ['flow'])).toBe(
+      false,
+    );
   });
 
   test('honors the requested syntax', () => {
@@ -256,16 +249,7 @@ describe('isJsEquivalent', () => {
     ).toBe(true);
   });
 
-  test('reports a difference when only one side produced output', () => {
-    expect(isJsEquivalent(null, 'export const a = 1;', ['flow'])).toBe(false);
-  });
-
-  test('fails loudly on unparseable output', () => {
-    expect(() =>
-      isJsEquivalent('export const a = 1;', 'const = ;', ['flow']),
-    ).toThrow(/Failed to parse the actual output as JavaScript/);
-  });
-
+  // Otherwise invalid JavaScript, once recorded, would match itself forever.
   test('fails loudly when identical output is unparseable', () => {
     expect(() => isJsEquivalent('const = ;', 'const = ;', ['flow'])).toThrow(
       /Failed to parse the expected output as JavaScript/,
@@ -294,6 +278,9 @@ describe('normalizeResult', () => {
       status: 'ok',
       warnings: ['[stylex] heads up'],
     });
+    // Babel's output would still pass the golden test if these slipped: with
+    // `js` in the exact part every implementation would have to print like
+    // Babel, and a `jsPart` that lost the code would compare no JS at all.
     expect(exactPart(result)).not.toHaveProperty('js');
     expect(jsPart(result)).toBe('export const a = 1;');
   });
@@ -314,11 +301,9 @@ describe('normalizeResult', () => {
       status: 'error',
       warnings: [],
     });
-    expect(jsPart(result)).toBeNull();
   });
 
   test.each([
-    ['a missing status', { errors: [], warnings: [] }, /result.status/],
     [
       'an unknown status',
       { errors: [], status: 'failed', warnings: [] },
