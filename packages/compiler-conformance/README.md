@@ -26,7 +26,7 @@ fixtures/<fixture-name>/
 
 | Field            | Type       | Default                                               | Meaning                                                      |
 | ---------------- | ---------- | ----------------------------------------------------- | ------------------------------------------------------------ |
-| `description`    | `string`   | `""`                                                  | What behavior this fixture pins down.                        |
+| `description`    | `string`   | required                                              | What behavior this fixture pins down.                        |
 | `entry`          | `string`   | `"input.js"`                                          | File in the fixture directory to compile.                    |
 | `syntax`         | `string[]` | `["flow"]`                                            | Source syntax the entry uses, e.g. `["flow", "jsx"]`.        |
 | `pluginOptions`  | `object`   | `{}`                                                  | StyleX compiler options.                                     |
@@ -35,6 +35,10 @@ fixtures/<fixture-name>/
 `pluginOptions` and `processOptions` are StyleX's own documented options, so
 they carry over unchanged between implementations. `syntax` is deliberately
 abstract: an adapter maps it onto whatever its parser needs.
+
+This package's tests reject fields missing from this table and require a
+`description`, so a misspelled `pluginOption` fails instead of quietly compiling
+the fixture with default options.
 
 Avoid options that take an absolute path. Fixture output must not depend on
 where the repository is checked out.
@@ -71,6 +75,10 @@ For a fixture whose transform is expected to fail:
 were reported on. A fixture can succeed and still report diagnostics —
 `options-warning` does exactly that. `error` is the fatal one that ended the
 transform.
+
+Every `expected.json` is stored already normalized (see below), exactly as the
+update command records it, so an implementation reading it directly only has to
+normalize its own output. This package's tests enforce that.
 
 ## How results are compared
 
