@@ -1,0 +1,7 @@
+{
+  "description": "With `rewriteAliases`, a relative import of a `.stylex.js` file is emitted without its `.js` extension. Only the extension rewrite is covered: resolving an `aliases` entry needs an absolute target path, which fixtures avoid.",
+  "entry": "input.js",
+  "pluginOptions": {
+    "rewriteAliases": true
+  }
+}
