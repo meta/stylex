@@ -882,8 +882,17 @@ fn jsx_attributes(object: &ObjectLit) -> Option<Vec<JSXAttrOrSpread>> {
             let value = match &*kv.value {
                 Expr::Lit(Lit::Str(value)) => {
                     let mut value = value.clone();
-                    // JSX attribute literals are XML text, not JS quoted tokens.
-                    value.raw = None;
+                    // Babel's raw spelling is preserved for generated attributes
+                    // (not authored XML text), including doubled backslashes.
+                    // Its escaped-double-quote spelling is invalid JSX, so keep
+                    // native's valid quote selection for that documented case.
+                    value.span = DUMMY_SP;
+                    let text = value.value.as_str()?;
+                    value.raw = if text.contains('"') {
+                        None
+                    } else {
+                        Some(super::render::js_string_literal(text).into())
+                    };
                     JSXAttrValue::Str(value)
                 }
                 _ => JSXAttrValue::JSXExprContainer(JSXExprContainer {

@@ -23,6 +23,11 @@ use swc_ecma_codegen::{text_writer::JsWriter, Config, Emitter, Node};
 use swc_ecma_parser::Syntax;
 use swc_ecma_visit::{Visit, VisitMut, VisitMutWith, VisitWith};
 
+#[path = "js_literal.rs"]
+pub(crate) mod js_literal;
+#[path = "source_jsx.rs"]
+mod source_jsx;
+
 #[path = "source_compare.rs"]
 mod source_compare;
 #[path = "source_typed.rs"]
@@ -1540,7 +1545,7 @@ fn verify_output_typed(
     );
     let mut errors = Vec::new();
     let generated_comments = SingleThreadedComments::default();
-    let (parsed, actual_source_type) = with_bounded_file_parser(
+    let (mut parsed, actual_source_type) = with_bounded_file_parser(
         &generated,
         grammar.syntax,
         EsVersion::Es2022,
@@ -1583,6 +1588,7 @@ fn verify_output_typed(
         }
         cursor += 1;
     }
+    source_jsx::validate_generated_attribute_text(&mut parsed, expected)?;
     if !source_compare::modules_equivalent(&parsed, expected) {
         bail!("source edits do not reproduce the transformed AST; refusing a lossy or ambiguous emission");
     }

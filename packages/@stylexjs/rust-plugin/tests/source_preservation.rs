@@ -1225,6 +1225,96 @@ fn authored_script_hoists_keep_sloppy_function_grammar_without_module_reparse() 
 }
 
 #[test]
+fn generated_jsx_literals_match_babel_text_without_unescaping_authored_attributes() {
+    for value in [
+        r"a\b",
+        r"C:\repo\App.tsx",
+        "é😀",
+        "x\u{2028}\u{2029}y",
+        r"&amp;\0",
+    ] {
+        let source = r#"const view = <Box original='a\b' />;"#;
+        let parsed = parse_module(source, "generated-jsx.jsx").unwrap();
+        let mut transformed = parsed.module.clone();
+        let ModuleItem::Stmt(Stmt::Decl(Decl::Var(var))) = &mut transformed.body[0] else {
+            panic!("variable");
+        };
+        let Expr::JSXElement(element) = &mut **var.decls[0].init.as_mut().unwrap() else {
+            panic!("JSX");
+        };
+        let raw = source_engine::js_literal::string_literal(value);
+        element
+            .opening
+            .attrs
+            .push(JSXAttrOrSpread::JSXAttr(JSXAttr {
+                span: DUMMY_SP,
+                name: JSXAttrName::Ident(IdentName::new("data-style-src".into(), DUMMY_SP)),
+                value: Some(JSXAttrValue::Str(Str {
+                    span: DUMMY_SP,
+                    value: value.into(),
+                    raw: Some(raw.clone().into()),
+                })),
+            }));
+        let output =
+            emit_source_preserving(&parsed.file, &parsed.module, &transformed, &parsed.comments)
+                .unwrap();
+        assert!(
+            output.code.contains(&format!("data-style-src={raw}")),
+            "{}",
+            output.code
+        );
+        assert!(output.code.contains(r"original='a\b'"));
+        let reparsed = parse_module(&output.code, "generated-jsx.jsx").unwrap();
+        let ModuleItem::Stmt(Stmt::Decl(Decl::Var(var))) = &reparsed.module.body[0] else {
+            panic!("variable");
+        };
+        let Expr::JSXElement(element) = &**var.decls[0].init.as_ref().unwrap() else {
+            panic!("JSX");
+        };
+        let JSXAttrOrSpread::JSXAttr(attr) = &element.opening.attrs[0] else {
+            panic!("attribute");
+        };
+        assert!(
+            matches!(&attr.value, Some(JSXAttrValue::Str(text)) if text.value.as_str() == Some(r"a\b"))
+        );
+    }
+}
+
+#[test]
+fn generated_double_quote_jsx_literals_keep_valid_single_quote_native_output() {
+    let source = "const view = <Box/>;";
+    let parsed = parse_module(source, "quote.jsx").unwrap();
+    let mut transformed = parsed.module.clone();
+    let ModuleItem::Stmt(Stmt::Decl(Decl::Var(var))) = &mut transformed.body[0] else {
+        panic!("variable");
+    };
+    let Expr::JSXElement(element) = &mut **var.decls[0].init.as_mut().unwrap() else {
+        panic!("JSX");
+    };
+    element
+        .opening
+        .attrs
+        .push(JSXAttrOrSpread::JSXAttr(JSXAttr {
+            span: DUMMY_SP,
+            name: JSXAttrName::Ident(IdentName::new("data-style-src".into(), DUMMY_SP)),
+            value: Some(JSXAttrValue::Str(Str {
+                span: DUMMY_SP,
+                value: "a\"b".into(),
+                raw: None,
+            })),
+        }));
+    let output =
+        emit_source_preserving(&parsed.file, &parsed.module, &transformed, &parsed.comments)
+            .unwrap();
+    assert!(
+        output.code.contains("data-style-src='a\"b'"),
+        "{}",
+        output.code
+    );
+    assert!(parse_module(&output.code, "quote.jsx").is_ok());
+}
+
+#[test]
 fn validates_edit_overlap_and_utf8_boundaries() {
     let parsed = parse_module("const value='😀';", "bounds.js").unwrap();
     let ModuleItem::Stmt(Stmt::Decl(Decl::Var(var))) = &parsed.module.body[0] else {

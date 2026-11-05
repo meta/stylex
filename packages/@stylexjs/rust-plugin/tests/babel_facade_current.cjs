@@ -256,6 +256,79 @@ test('diagnostic columns count Unicode line separators', () => {
   }
 });
 
+test('generated JSX backslashes match Babel in direct and adapter output', () => {
+  const native = require('../index');
+  const source = `import stylex from "stylex";
+const styles = stylex.create({ red: { color: "red" } });
+function Foo() { return <div css={styles.red}>Hello</div>; }`;
+  for (const debugPath of [
+    'package:dist/compo\\nents/Foo.js',
+    'npm-package:js\\node_modules\\npm-package\\dist\\components\\Foo.js',
+  ]) {
+    const options = {
+      dev: true,
+      enableDevClassNames: false,
+      sxPropName: 'css',
+      debugFilePath: () => debugPath,
+    };
+    const expected = `import stylex from "stylex";
+function Foo() {
+  return <div className="x1e2nbdu" data-style-src=${JSON.stringify(debugPath + ':2')}>Hello</div>;
+}`;
+    const direct = native.transformSync(source, { ...options, filename });
+    const printed = babel.transformSync(direct.code, {
+      filename,
+      babelrc: false,
+      configFile: false,
+      parserOpts: { plugins: ['jsx'] },
+    });
+    assert.equal(printed.code, expected);
+    const adapted = babel.transformSync(source, {
+      filename,
+      babelrc: false,
+      configFile: false,
+      parserOpts: { plugins: ['jsx'] },
+      plugins: [[plugin, options]],
+    });
+    assert.equal(adapted.code, expected);
+    assert.ok(adapted.code.includes('\\\\'));
+  }
+});
+
+test('generated JSX double quotes retain valid native single-quote spelling', () => {
+  const native = require('../index');
+  const source = `import stylex from "stylex";
+const styles=stylex.create({red:{color:"red"}});
+const view=<div css={styles.red}/>;`;
+  const options = {
+    dev: true,
+    enableDevClassNames: false,
+    sxPropName: 'css',
+    debugFilePath: () => 'package:dist/compo"nents/Foo.js',
+  };
+  const direct = native.transformSync(source, { ...options, filename });
+  assert.doesNotThrow(() =>
+    babel.parseSync(direct.code, {
+      filename,
+      babelrc: false,
+      configFile: false,
+      parserOpts: { plugins: ['jsx'] },
+    }),
+  );
+  const adapted = babel.transformSync(source, {
+    filename,
+    babelrc: false,
+    configFile: false,
+    parserOpts: { plugins: ['jsx'] },
+    plugins: [[plugin, options]],
+  });
+  assert.equal(
+    adapted.code,
+    `import stylex from "stylex";
+const view = <div className="x1e2nbdu" data-style-src='package:dist/compo"nents/Foo.js:2' />;`,
+  );
+});
+
 test('ordered conditionals match the raw Babel snapshot', () => {
   const result = transform(
     "import * as stylex from '@stylexjs/stylex';const styles=stylex.create({red:{color:'red'},blue:{color:'blue'}});const p=stylex.props(flag&&styles.red,styles.blue);",
