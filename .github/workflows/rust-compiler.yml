@@ -1,0 +1,89 @@
+name: rust-compiler
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'packages/@stylexjs/rust-plugin/**'
+      - 'packages/@stylexjs/babel-plugin/**'
+      - 'packages/@stylexjs/unplugin/**'
+      - 'packages/@stylexjs/shared/**'
+      - 'packages/style-value-parser/**'
+      - '.github/workflows/rust-compiler.yml'
+  push:
+    branches: ['main', 'feat/stylex-rust-port']
+    paths:
+      - 'packages/@stylexjs/rust-plugin/**'
+      - 'packages/@stylexjs/babel-plugin/**'
+      - 'packages/@stylexjs/unplugin/**'
+      - 'packages/@stylexjs/shared/**'
+      - 'packages/style-value-parser/**'
+      - '.github/workflows/rust-compiler.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ['22.x', '24.x']
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      CARGO_BUILD_JOBS: '2'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: yarn
+          cache-dependency-path: yarn.lock
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.96.1'
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/@stylexjs/rust-plugin
+      - run: corepack prepare yarn@1.22.22 --activate
+      - run: yarn install --frozen-lockfile --ignore-scripts
+      - name: Build the JavaScript packages the suites import
+        run: npm run build --workspace=style-value-parser --workspace=@stylexjs/shared --workspace=@stylexjs/stylex --workspace=@stylexjs/babel-plugin --workspace=@stylexjs/unplugin
+      - name: Build native compiler
+        run: npm run build:native --workspace=@stylexjs/rust-plugin
+      - name: Rust formatting
+        run: cargo fmt --manifest-path packages/@stylexjs/rust-plugin/Cargo.toml -- --check
+      - name: Rust lint
+        run: |
+          cargo clippy --locked --manifest-path packages/@stylexjs/rust-plugin/Cargo.toml --all-targets -- -D warnings
+          cargo clippy --locked --manifest-path packages/@stylexjs/rust-plugin/Cargo.toml --features node --lib -- -D warnings
+      - name: Current Babel reference suite
+        run: node packages/@stylexjs/rust-plugin/scripts/parity.cjs babel
+      - name: Rust, native API, bundler, and unchanged Babel suites on the native compiler
+        run: npm run test:native --workspace=@stylexjs/rust-plugin
+
+  node18:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '18.x'
+          cache: yarn
+          cache-dependency-path: yarn.lock
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.96.1'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/@stylexjs/rust-plugin
+      - run: corepack prepare yarn@1.22.22 --activate
+      - run: yarn install --frozen-lockfile --ignore-scripts --ignore-engines
+      - run: npm run build:native --workspace=@stylexjs/rust-plugin
+      - name: Native API and Babel adapter on the oldest supported Node
+        run: node --test packages/@stylexjs/rust-plugin/tests/babel_facade_current.cjs

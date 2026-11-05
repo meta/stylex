@@ -6,6 +6,8 @@ extend-exclude = [
   "packages/**/__tests__/",
   # Fixture data has lots of typos
   "packages/benchmarks/**/fixtures/",
+  # Vendored third-party crate
+  "packages/@stylexjs/rust-plugin/vendor/",
 ]
 
 [default.extend-words]
