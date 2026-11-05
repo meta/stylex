@@ -1,0 +1,47 @@
+[package]
+name = "stylex_rust_compiler"
+edition = "2021"
+license = "MIT"
+version = "0.19.1"
+rust-version = "1.88"
+
+[lib]
+name = "stylex_swc_plugin"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+node = ["dep:napi", "dep:napi-derive", "dep:napi-build"]
+
+[dependencies]
+anyhow = "1.0.98"
+indexmap = { version = "2.10.0", features = ["serde"] }
+regex = "1.11.1"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = { version = "1.0.140", features = ["preserve_order"] }
+ryu-js = "1.0.2"
+stacker = "0.1.23"
+icu_collator = "2.4.0"
+icu_locale_core = "2.4.0"
+swc_common = { version = "21.0.1", features = ["sourcemap"] }
+swc_ecma_ast = { version = "23.0.0", features = ["serde-impl"] }
+swc_ecma_codegen = "26.0.1"
+swc_ecma_parser = { version = "38.0.2", features = ["flow", "unstable"] }
+swc_ecma_visit = "23.0.0"
+swc_ecma_transforms_base = "41.0.1"
+napi = { version = "3.9.0", default-features = false, features = ["napi8", "serde-json"], optional = true }
+napi-derive = { version = "3.5.0", optional = true }
+
+[build-dependencies]
+napi-build = { version = "2.3.0", optional = true }
+
+[dev-dependencies]
+pretty_assertions = "1.4.1"
+
+[patch.crates-io]
+swc_ecma_parser = { path = "vendor/swc_ecma_parser" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"
