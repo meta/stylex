@@ -1825,6 +1825,128 @@ describe('@stylexjs/babel-plugin', () => {
             }
           `);
         });
+
+        test('args: var, number', () => {
+          const { code, metadata } = transform(`
+            import * as stylex from '@stylexjs/stylex';
+            export const styles = stylex.create({
+              root: {
+                zIndex: stylex.firstThatWorks('var(--zIndex)', 10),
+                width: stylex.firstThatWorks('var(--width)', 100),
+                margin: stylex.firstThatWorks('var(--margin)', 0),
+              }
+            });
+          `);
+          expect(code).toMatchInlineSnapshot(`
+            "import * as stylex from '@stylexjs/stylex';
+            export const styles = {
+              root: {
+                kY2c9j: "x3xjs1h",
+                kzqmXN: "x8s6kak",
+                kogj98: "x16rdii4",
+                $$css: true
+              }
+            };"
+          `);
+          expect(metadata).toMatchInlineSnapshot(`
+            {
+              "stylex": [
+                [
+                  "x3xjs1h",
+                  {
+                    "ltr": ".x3xjs1h{z-index:var(--zIndex,10)}",
+                    "rtl": null,
+                  },
+                  3000,
+                ],
+                [
+                  "x8s6kak",
+                  {
+                    "ltr": ".x8s6kak{width:var(--width,100px)}",
+                    "rtl": null,
+                  },
+                  4000,
+                ],
+                [
+                  "x16rdii4",
+                  {
+                    "ltr": ".x16rdii4{margin:var(--margin,0)}",
+                    "rtl": null,
+                  },
+                  1000,
+                ],
+              ],
+            }
+          `);
+        });
+
+        test('args: var, var, number', () => {
+          const { code, metadata } = transform(`
+            import * as stylex from '@stylexjs/stylex';
+            export const styles = stylex.create({
+              root: {
+                width: stylex.firstThatWorks('var(--width)', 'var(--otherWidth)', 100),
+              }
+            });
+          `);
+          expect(code).toMatchInlineSnapshot(`
+            "import * as stylex from '@stylexjs/stylex';
+            export const styles = {
+              root: {
+                kzqmXN: "x1rfoypi",
+                $$css: true
+              }
+            };"
+          `);
+          expect(metadata).toMatchInlineSnapshot(`
+            {
+              "stylex": [
+                [
+                  "x1rfoypi",
+                  {
+                    "ltr": ".x1rfoypi{width:var(--width,var(--otherWidth,100px))}",
+                    "rtl": null,
+                  },
+                  4000,
+                ],
+              ],
+            }
+          `);
+        });
+
+        test('args: func, number', () => {
+          const { code, metadata } = transform(`
+            import * as stylex from '@stylexjs/stylex';
+            export const styles = stylex.create({
+              root: {
+                top: stylex.firstThatWorks('anchor(--anchor bottom)', 0),
+              }
+            });
+          `);
+          expect(code).toMatchInlineSnapshot(`
+            "import * as stylex from '@stylexjs/stylex';
+            export const styles = {
+              root: {
+                k87sOh: "x1uunrfy",
+                $$css: true
+              }
+            };"
+          `);
+          expect(metadata).toMatchInlineSnapshot(`
+            {
+              "stylex": [
+                [
+                  "x1uunrfy",
+                  {
+                    "ltr": ".x1uunrfy{top:0;top:anchor(--anchor bottom)}",
+                    "rtl": null,
+                  },
+                  4000,
+                ],
+              ],
+            }
+          `);
+        });
       });
 
       describe.skip('function value: stylex.types.*()', () => {

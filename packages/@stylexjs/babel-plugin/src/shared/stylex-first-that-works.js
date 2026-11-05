@@ -7,12 +7,12 @@
  * @flow strict
  */
 
-const isVar = (arg: string) =>
+const isVar = (arg: string | number) =>
   typeof arg === 'string' && arg.match(/^var\(--[a-zA-Z0-9-_]+\)$/);
 
 export default function stylexFirstThatWorks(
-  ...args: $ReadOnlyArray<string>
-): $ReadOnlyArray<string> | string {
+  ...args: ReadonlyArray<string | number>
+): ReadonlyArray<string | number> | string {
   const firstVar = args.findIndex(isVar);
 
   if (firstVar === -1) {
@@ -25,22 +25,27 @@ export default function stylexFirstThatWorks(
     .slice(0, firstNonVar === -1 ? rest.length : firstNonVar + 1)
     .reverse();
 
-  const vars = varParts.map((arg) => (isVar(arg) ? arg.slice(4, -1) : arg));
-
-  const returnValue = [
-    vars.reduce<string>(
-      (soFar, varName) =>
-        soFar
-          ? `var(${varName}, ${String(soFar)})`
-          : varName.startsWith('--')
-            ? `var(${varName})`
-            : varName,
-      '',
-    ),
-    ...priorities,
-  ];
-  if (returnValue.length === 1) {
-    return returnValue[0];
+  // A number fallback only gets its unit once the property is known, so keep
+  // each var separate and let the compiler add the unit and nest them.
+  if (typeof varParts[0] === 'number') {
+    return [...varParts, ...priorities];
   }
-  return returnValue;
+
+  const vars = varParts
+    .map(String)
+    .map((arg) => (isVar(arg) ? arg.slice(4, -1) : arg));
+
+  const varChain = vars.reduce<string>(
+    (soFar, varName) =>
+      soFar
+        ? `var(${varName}, ${String(soFar)})`
+        : varName.startsWith('--')
+          ? `var(${varName})`
+          : varName,
+    '',
+  );
+  if (priorities.length === 0) {
+    return varChain;
+  }
+  return [varChain, ...priorities];
 }
