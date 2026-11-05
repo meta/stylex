@@ -264,11 +264,60 @@ const stylexEnforceExtension = {
       return false;
     }
 
+    function isDefineVariable(name: ?string): boolean {
+      return (
+        name != null &&
+        (defineVarsVariables.has(name) ||
+          defineConstsVariables.has(name) ||
+          defineMarkerVariables.has(name))
+      );
+    }
+
+    function reportAliasedExport(
+      node: Node,
+      localName: string,
+      exportedName: string,
+    ): void {
+      context.report({
+        node,
+        message: `\`${exportedName}\` is another name for \`${localName}\`. StyleX derives variable names from the export name, so importing \`${exportedName}\` references variables that are never defined. Export each \`stylex.defineVars()\`, \`stylex.defineConsts()\`, or \`stylex.defineMarker()\` result under exactly one name.`,
+      });
+    }
+
+    function checkExportSpecifiers(node: Node): void {
+      const specifiers = (node as any).specifiers || [];
+      specifiers.forEach((specifier: any) => {
+        if (specifier.exportKind === 'type') {
+          return;
+        }
+        const localName = specifier.local?.name;
+        const exportedName =
+          specifier.exported?.name ?? specifier.exported?.value;
+        if (
+          (node as any).source == null &&
+          localName !== exportedName &&
+          isDefineVariable(localName)
+        ) {
+          reportAliasedExport(specifier, localName, exportedName);
+        } else {
+          hasOtherExports = true;
+        }
+      });
+    }
+
     function checkExports(node: Node): void {
       const declaration = (node as any).declaration;
       const isDefaultExport = node.type === 'ExportDefaultDeclaration';
 
-      if (!declaration) return;
+      if (node.type === 'ExportAllDeclaration') {
+        hasOtherExports = true;
+        return;
+      }
+
+      if (!declaration) {
+        checkExportSpecifiers(node);
+        return;
+      }
 
       if (isDefaultExport && checkDefaultExport(node, declaration)) {
         return;
@@ -302,6 +351,18 @@ const stylexEnforceExtension = {
             decl.id?.type === 'Identifier'
           ) {
             defineMarkerVariables.add(decl.id.name);
+          }
+        } else if (
+          decl.type === 'VariableDeclarator' &&
+          decl.id?.type === 'Identifier' &&
+          decl.init?.type === 'Identifier'
+        ) {
+          const exportedName = decl.id.name;
+          const localName = decl.init.name;
+          if (isDefineVariable(localName)) {
+            reportAliasedExport(decl, localName, exportedName);
+          } else {
+            hasOtherExports = true;
           }
         } else {
           hasOtherExports = true;
@@ -430,7 +491,9 @@ const stylexEnforceExtension = {
           }
         });
       },
-      'ExportNamedDeclaration, ExportDefaultDeclaration'(node: Node): void {
+      'ExportNamedDeclaration, ExportDefaultDeclaration, ExportAllDeclaration'(
+        node: Node,
+      ): void {
         if ((node as any).exportKind === 'type') {
           return;
         }
