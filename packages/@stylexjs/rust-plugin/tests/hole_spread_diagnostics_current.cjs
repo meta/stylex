@@ -125,6 +125,42 @@ for (const [label, prelude, value] of [
   }
 }
 
+test('spread-operand hole diagnostics preserve their complete base frames', () => {
+  const holeText = `${filename}: Unexpected error:\nCould not resolve the code being evaluated.\n`;
+  for (const [prelude, value, frame] of [
+    ["const holey = ['x', , 'y'];\n", '[...holey].length',
+      "  1 | import * as stylex from '@stylexjs/stylex';\n" +
+      "  2 | const holey = ['x', , 'y'];\n" +
+      '> 3 | export const s = stylex.create({ x: { width: [...holey].length } });\n' +
+      '    |                                                  ^^^^^'],
+    ['', '[...[, 1]].length',
+      "  1 | import * as stylex from '@stylexjs/stylex';\n" +
+      '> 2 | export const s = stylex.create({ x: { width: [...[, 1]].length } });\n' +
+      '    |                                                  ^^^^^'],
+    ["const holey = ['x', , 'y'];\n", '((a,b,c)=>a+b+c)(...holey)',
+      "  1 | import * as stylex from '@stylexjs/stylex';\n" +
+      "> 2 | const holey = ['x', , 'y'];\n" +
+      '    |               ^^^^^^^^^^^^\n' +
+      '  3 | export const s = stylex.create({ x: { width: ((a,b,c)=>a+b+c)(...holey) } });'],
+    ['', 'Math.max(...[1, , 3])',
+      "  1 | import * as stylex from '@stylexjs/stylex';\n" +
+      '> 2 | export const s = stylex.create({ x: { width: Math.max(...[1, , 3]) } });\n' +
+      '    |                                                          ^^^^^^^^'],
+    ['', 'Math.min(...[, 2])',
+      "  1 | import * as stylex from '@stylexjs/stylex';\n" +
+      '> 2 | export const s = stylex.create({ x: { width: Math.min(...[, 2]) } });\n' +
+      '    |                                                          ^^^^^'],
+  ]) {
+    for (const engine of ['direct', 'facade']) {
+      assert.deepEqual(failure(engine, prelude, value), {
+        kind: 'SyntaxError',
+        code: 'BABEL_TRANSFORM_ERROR',
+        message: holeText + frame,
+      }, `${engine}: ${value}`);
+    }
+  }
+});
+
 test('a hole in the argument is not relabeled as a receiver-call refusal', () => {
   const value = "['a'].join([, 1])";
   const expected = failure('babel', '', value);
