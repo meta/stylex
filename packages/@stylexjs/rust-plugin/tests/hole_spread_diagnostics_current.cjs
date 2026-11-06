@@ -37,17 +37,17 @@ for (const [label, prelude, value] of [
   ['binding', 'const lit = [1, 2];\n', '[, ...lit].length'],
   ['wrapped', 'const lit = [1, 2];\n', 'String([, ...lit].length)'],
 ]) {
-  test(`hole-first ${label} length matches Babel's unlocated SyntaxError`, () => {
-    const expected = failure('babel', prelude, value);
-    assert.deepEqual(expected, {
-      kind: 'SyntaxError',
-      code: 'BABEL_TRANSFORM_ERROR',
-      message: `${filename}: Unexpected error:\nCould not resolve the code being evaluated.\n`,
-    });
-    for (const engine of ['direct', 'facade']) {
+  for (const engine of ['direct', 'facade']) {
+    test(`hole-first ${label} length matches Babel's unlocated SyntaxError (${engine})`, () => {
+      const expected = failure('babel', prelude, value);
+      assert.deepEqual(expected, {
+        kind: 'SyntaxError',
+        code: 'BABEL_TRANSFORM_ERROR',
+        message: `${filename}: Unexpected error:\nCould not resolve the code being evaluated.\n`,
+      });
       assert.deepEqual(failure(engine, prelude, value), expected, engine);
-    }
-  });
+    });
+  }
 }
 
 // Pin the complete native messages captured from the exact 2d78c64 addon.
