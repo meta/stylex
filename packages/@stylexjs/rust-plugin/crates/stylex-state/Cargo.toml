@@ -46,6 +46,7 @@ criterion.workspace = true
 ctor.workspace = true
 path-clean.workspace = true
 pretty_env_logger.workspace = true
+stacker.workspace = true
 swc_core = { workspace = true, features = ["ecma_parser"] }
 swc_malloc.workspace = true
 

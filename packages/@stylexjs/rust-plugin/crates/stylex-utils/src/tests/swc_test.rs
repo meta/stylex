@@ -5,6 +5,16 @@
 // variant it came from — a mapping written from the variant names would agree
 // with itself and still be wrong.
 
+/// Runs a deep fixture's parse, walk and drop with stack claimed for its
+/// nesting, as the compiler claims it around the parser and the transform
+/// (`stacker::maybe_grow`), rather than on whatever a test thread has left.
+/// The claim is per nesting level, the cost the evaluator's growable stack
+/// measures a parser level at (`BYTES_PER_LEVEL`, 64 KiB), plus a megabyte.
+fn on_a_stack_for<R>(levels: usize, work: impl FnOnce() -> R) -> R {
+  let claim = levels * 64 * 1024 + 1024 * 1024;
+  stacker::maybe_grow(claim, claim, work)
+}
+
 mod node_kind {
   use crate::swc::get_expr_node_kind;
   use crate::test_support::{es_jsx, parse_expr};
@@ -232,17 +242,22 @@ mod node_kind {
   /// is ever asked for, which would test the parser rather than this.
   #[test]
   fn names_only_the_outermost_node_of_deep_syntax() {
-    let parens = format!("{}a{}", "(".repeat(500), ")".repeat(500));
+    let depth = 500;
+    let parens = format!("{}a{}", "(".repeat(depth), ")".repeat(depth));
 
-    assert_kind(&parens, es_jsx(), "ParenthesizedExpression");
+    super::on_a_stack_for(depth, || {
+      assert_kind(&parens, es_jsx(), "ParenthesizedExpression")
+    });
 
-    let calls = format!("a{}", "()".repeat(500));
+    let calls = format!("a{}", "()".repeat(depth));
 
-    assert_kind(&calls, es_jsx(), "CallExpression");
+    super::on_a_stack_for(depth, || assert_kind(&calls, es_jsx(), "CallExpression"));
 
-    let members = format!("a{}", ".b".repeat(500));
+    let members = format!("a{}", ".b".repeat(depth));
 
-    assert_kind(&members, es_jsx(), "MemberExpression");
+    super::on_a_stack_for(depth, || {
+      assert_kind(&members, es_jsx(), "MemberExpression")
+    });
   }
 
   /// Non-ASCII and escaped identifiers are ordinary identifiers. The label is
@@ -436,17 +451,18 @@ mod stmt_kind {
   /// otherwise overflow before the label was ever asked for.
   #[test]
   fn names_only_the_outermost_statement_of_deep_syntax() {
-    let blocks = format!("{}a;{}", "{".repeat(200), "}".repeat(200));
-    assert_kind(&blocks, es(), "BlockStatement");
+    let depth = 200;
+    let blocks = format!("{}a;{}", "{".repeat(depth), "}".repeat(depth));
+    super::on_a_stack_for(depth, || assert_kind(&blocks, es(), "BlockStatement"));
 
-    let loops = format!("{}a;", "while (a) ".repeat(200));
-    assert_kind(&loops, es(), "WhileStatement");
+    let loops = format!("{}a;", "while (a) ".repeat(depth));
+    super::on_a_stack_for(depth, || assert_kind(&loops, es(), "WhileStatement"));
 
     let labels = format!(
       "{}a;",
-      (0..200).map(|n| format!("l{}: ", n)).collect::<String>()
+      (0..depth).map(|n| format!("l{}: ", n)).collect::<String>()
     );
-    assert_kind(&labels, es(), "LabeledStatement");
+    super::on_a_stack_for(depth, || assert_kind(&labels, es(), "LabeledStatement"));
 
     // A statement whose *body* is a different kind is still named for itself.
     assert_kind("if (a) { for (;;) ; }", es(), "IfStatement");

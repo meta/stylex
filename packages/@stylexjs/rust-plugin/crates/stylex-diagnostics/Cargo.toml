@@ -37,6 +37,7 @@ stylex_utils = { path = "../stylex-utils" }
 
 [dev-dependencies]
 ctor.workspace = true
+stacker.workspace = true
 url.workspace = true
 
 [lints]

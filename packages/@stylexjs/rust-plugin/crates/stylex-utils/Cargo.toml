@@ -22,5 +22,8 @@ swc_core = { workspace = true, features = ["common", "ecma_ast", "ecma_utils"] }
 swc_ecma_parser.workspace = true
 xxhash-rust.workspace = true
 
+[dev-dependencies]
+stacker.workspace = true
+
 [lints]
 workspace = true

@@ -35,6 +35,16 @@ fn parse(source: &str) -> Module {
   }
 }
 
+/// Runs a deep fixture's parse, walk and drop with stack claimed for its
+/// nesting, as the compiler claims it around the parser and the transform
+/// (`stacker::maybe_grow`), rather than on whatever a test thread has left.
+/// The claim is per nesting level, the cost the evaluator's growable stack
+/// measures a parser level at (`BYTES_PER_LEVEL`, 64 KiB), plus a megabyte.
+fn on_a_stack_for<R>(levels: usize, work: impl FnOnce() -> R) -> R {
+  let claim = levels * 64 * 1024 + 1024 * 1024;
+  stacker::maybe_grow(claim, claim, work)
+}
+
 /// The source text `name`'s declaration span covers.
 ///
 /// Each fixture is parsed into a source map of its own, whose first byte is
@@ -398,7 +408,7 @@ fn a_deeply_nested_pattern_is_walked_to_the_bottom() {
     " }".repeat(depth)
   );
 
-  assert_eq!(declaration_line(&source, "c"), 1);
+  assert_eq!(on_a_stack_for(depth, || declaration_line(&source, "c")), 1);
 }
 
 /// A name declared only inside TypeScript syntax the transform strips is not a

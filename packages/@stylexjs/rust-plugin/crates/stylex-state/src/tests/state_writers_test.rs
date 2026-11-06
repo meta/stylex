@@ -864,6 +864,16 @@ mod fill_call_positions_tests {
     }
   }
 
+  /// Runs a deep fixture's parse, walk and drop with stack claimed for its
+  /// nesting, as the compiler claims it around the parser and the transform
+  /// (`stacker::maybe_grow`), rather than on whatever a test thread has left.
+  /// The claim is per nesting level, the cost the evaluator's growable stack
+  /// measures a parser level at (`BYTES_PER_LEVEL`, 64 KiB), plus a megabyte.
+  fn on_a_stack_for<R>(levels: usize, work: impl FnOnce() -> R) -> R {
+    let claim = levels * 64 * 1024 + 1024 * 1024;
+    stacker::maybe_grow(claim, claim, work)
+  }
+
   /// Statements nested as deep as a generated module nests them. The walk is
   /// recursive, so the depth it survives is worth stating.
   #[test]
@@ -875,7 +885,9 @@ mod fill_call_positions_tests {
       "}".repeat(depth)
     );
 
-    assert!(!only_call_is_program_level(&source));
+    assert!(!on_a_stack_for(depth, || only_call_is_program_level(
+      &source
+    )));
   }
 
   /// A namespace body holds module items, so its statements look like the
