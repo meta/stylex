@@ -13,6 +13,7 @@ extend-exclude = [
   # Third-party crate names and verbatim license texts
   "packages/@stylexjs/rust-plugin/LICENSE_PROVENANCE.json",
   "packages/@stylexjs/rust-plugin/RUST_DEPENDENCY_LICENSES.md",
+  "packages/@stylexjs/rust-plugin/scripts/licenses-supplement.json",
   "packages/@stylexjs/rust-plugin/THIRD_PARTY_NOTICES.md",
 ]
 

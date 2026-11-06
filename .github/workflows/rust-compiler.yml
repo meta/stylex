@@ -78,6 +78,13 @@ jobs:
         run: npm run build:native --workspace=@stylexjs/rust-plugin
       - name: Check the addon for build-machine paths
         run: node packages/@stylexjs/rust-plugin/scripts/check-binary-paths.cjs
+      - name: Rust dependency license inventory is current
+        if: runner.os == 'Linux' && matrix.node == '24.x'
+        working-directory: packages/@stylexjs/rust-plugin
+        # The build fetched only Linux crates; the inventory covers every target.
+        run: |
+          cargo fetch --locked
+          node scripts/licenses.cjs --check
       # The unchanged JS suite hardcodes POSIX paths in snapshots and mocks, so
       # it does not pass on Windows even with the JS compiler; there the native
       # run is compared test for test against the JS compiler instead.
