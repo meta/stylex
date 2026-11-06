@@ -43,6 +43,56 @@ describe('@stylexjs/unplugin', () => {
     expect(result).not.toBeNull();
   });
 
+  describe('treeshakeCompensation default', () => {
+    const VARS_IMPORT_SOURCE = `
+      import * as stylex from '@stylexjs/stylex';
+      import { vars } from './tokens.stylex';
+      export const styles = stylex.create({ box: { color: vars.accent } });
+    `;
+
+    async function transformWithFramework(framework) {
+      const tempDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'stylex-unplugin-treeshake-'),
+      );
+      try {
+        fs.writeFileSync(
+          path.join(tempDir, 'tokens.stylex.ts'),
+          `import * as stylex from '@stylexjs/stylex';
+          export const vars = stylex.defineVars({ accent: 'rebeccapurple' });`,
+        );
+        const plugin = unpluginFactory(
+          {
+            runtimeInjection: false,
+            unstable_moduleResolution: { type: 'commonJS', rootDir: tempDir },
+          },
+          { framework },
+        );
+        plugin.buildStart();
+        const result = await plugin.transform.call(
+          {},
+          VARS_IMPORT_SOURCE,
+          path.join(tempDir, 'main.ts'),
+        );
+        return result.code;
+      } finally {
+        // Vite shares collected rules through a global store; keep them out
+        // of the tests that assert on the emitted CSS.
+        delete globalThis.__stylex_unplugin_store;
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    }
+
+    // TypeScript elides the vars import once StyleX inlines the variable
+    // reference, so the bundler would never load the `.stylex` file.
+    test.each(['vite', 'rollup', 'rolldown', 'esbuild', 'bun'])(
+      'keeps a side-effect import of .stylex files for %s',
+      async (framework) => {
+        const code = await transformWithFramework(framework);
+        expect(code).toMatch(/import\s+['"]\.\/tokens\.stylex['"]/);
+      },
+    );
+  });
+
   test('writes fallback CSS asset when no CSS bundle entry exists', async () => {
     const plugin = unplugin.rollup({
       runtimeInjection: false,
