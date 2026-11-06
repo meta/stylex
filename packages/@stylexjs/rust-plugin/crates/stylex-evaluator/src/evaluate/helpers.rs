@@ -438,7 +438,19 @@ pub(super) fn evaluate_func_call_args(
   let mut args = Vec::with_capacity(call.args.len());
 
   for arg in &call.args {
-    let value = evaluate_cached(&arg.expr, state, traversal_state, fns)?;
+    let value = evaluate_cached(&arg.expr, state, traversal_state, fns);
+    if value.is_none()
+      && arg.spread.is_some()
+      && matches!(&state.deopt_path, Some(Expr::Seq(seq)) if seq.span.is_dummy() && seq.exprs.is_empty())
+    {
+      let fault = normalize_expr(&arg.expr)
+        .as_ident()
+        .and_then(|id| traversal_state.declaration_of(id))
+        .and_then(|declaration| declaration.init.as_deref())
+        .unwrap_or(&arg.expr);
+      state.deopt_path = Some(fault.clone());
+    }
+    let value = value?;
     if arg.spread.is_some() {
       match super::iterable_values::iterable_values(&value, traversal_state) {
         Ok(Some(values)) => args.extend(values),

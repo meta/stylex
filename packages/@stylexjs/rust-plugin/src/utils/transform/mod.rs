@@ -409,6 +409,13 @@ fn core_error(
     if span.is_dummy() && recorded_span.is_none() {
         return crate::utils::diagnostics::Diagnostic::plain(message.to_owned()).into_error();
     }
+    let message = message
+        .strip_suffix('\n')
+        .filter(|body| {
+            !span.is_dummy()
+                && *body == stylex_constants::constants::evaluation_errors::PATH_WITHOUT_NODE
+        })
+        .unwrap_or(message);
     crate::utils::diagnostics::Diagnostic::syntax(message.to_owned(), span).into_error()
 }
 
@@ -588,6 +595,51 @@ mod isolation_tests {
                 assert_eq!(diagnostic.name, kind);
                 assert_eq!(diagnostic.message, message);
                 assert!(diagnostic.range.is_none());
+            });
+        }
+    }
+
+    #[test]
+    fn a_framed_hole_message_keeps_the_base_separator_only() {
+        use stylex_constants::constants::evaluation_errors::PATH_WITHOUT_NODE;
+        use stylex_diagnostics::code_frame::build_code_frame_error;
+        use swc_core::{
+            common::{BytePos, Span},
+            ecma::ast::{Expr, Invalid, Module},
+        };
+        for (message, expected) in [
+            (
+                format!("{PATH_WITHOUT_NODE}\n"),
+                PATH_WITHOUT_NODE.to_owned(),
+            ),
+            (
+                "other diagnostic\n\n".to_owned(),
+                "other diagnostic\n\n".to_owned(),
+            ),
+        ] {
+            isolated(|| {
+                let fault = Expr::Invalid(Invalid {
+                    span: Span::new(BytePos(1), BytePos(2)),
+                });
+                let mut state = stylex_state::state_manager::StateManager::default();
+                let _quiet = stylex_macros::stylex_error::SuppressPanicStderr::new();
+                let payload = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    stylex_macros::stylex_panic!(
+                        "{}",
+                        build_code_frame_error(&fault, &fault, &message, &mut state)
+                    );
+                }))
+                .unwrap_err();
+                let module = Module {
+                    span: swc_core::common::DUMMY_SP,
+                    body: Vec::new(),
+                    shebang: None,
+                };
+                let diagnostic =
+                    crate::utils::diagnostics::from_error(&super::core_error(&payload, &module));
+                assert_eq!(diagnostic.name, "SyntaxError");
+                assert_eq!(diagnostic.message, expected);
+                assert!(diagnostic.range.is_some());
             });
         }
     }
