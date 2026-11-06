@@ -1,5 +1,4 @@
-//! Serialization-focused tests for MetaData.
-//! Keeps JSON output behavior separated from constructor/accessor tests.
+//! Serialization tests for MetaData.
 
 use serde_json::json;
 

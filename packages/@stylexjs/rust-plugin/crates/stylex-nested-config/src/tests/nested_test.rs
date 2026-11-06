@@ -121,7 +121,6 @@ fn flatten_nested_overrides_config_csstype_uses_value_with_default() {
   let mut top = IndexMap::new();
   top.insert("a".to_string(), NestedVarsValue::CssType(simple_css_type()));
   let out = flatten_nested_overrides_config(&top);
-  // value_with_default_to_expr should yield a string expr (since value is a Map with a default).
   assert!(out.contains_key("a"));
   assert!(matches!(out.get("a"), Some(Expr::Object(_))));
 }
@@ -314,8 +313,7 @@ fn value_with_default_to_expr_map_recurses() {
 
 #[test]
 fn vars_config_handles_literal_value_kinds_via_conditional_object() {
-  // is_conditional_object is satisfied by { default, @… }; the @-branch values
-  // exercise to_vars_config_nested_value's Lit::Num/Bool/Null arms.
+  // `{ default, @… }` is conditional; the @-values hit the Lit::Num/Bool/Null arms.
   let inner = obj(vec![
     ("default", Expr::Lit(create_string_lit("d"))),
     ("@media a", Expr::Lit(create_number_lit_2(3.0))),
@@ -324,7 +322,6 @@ fn vars_config_handles_literal_value_kinds_via_conditional_object() {
   ]);
   let outer = obj(vec![("a", Expr::Object(inner))]);
   let m = object_lit_to_nested_vars_config(&outer);
-  // It should be classified as Conditional.
   assert!(matches!(m.get("a"), Some(NestedVarsValue::Conditional(_))));
 }
 
@@ -371,8 +368,7 @@ fn create_null_lit() -> Lit {
 
 #[test]
 fn _sanity_convert_lit_to_string_through_consts_parsing() {
-  // Ensure convert_lit_to_string (used by object_lit_to_nested_string/vars) is
-  // exercised here so coverage attributes the call to this crate's tests too.
+  // Exercised here so coverage attributes `convert_lit_to_string` to this crate.
   let lit = create_string_lit("hello");
   assert_eq!(convert_lit_to_string(&lit), Some("hello".into()));
   let _ = create_string_expr("x");
@@ -450,7 +446,7 @@ fn object_lit_to_nested_string_config_skips_non_str_non_object() {
   let inner = obj(vec![("nope", create_number_expr(1.0))]);
   let outer = obj(vec![("n", Expr::Object(inner))]);
   let m = object_lit_to_nested_string_config(&outer);
-  // The outer key "n" still maps to a Namespace, but the inner "nope" is filtered.
+  // The outer key still maps to a Namespace; only the inner entry is filtered.
   if let Some(NestedStringValue::Namespace(map)) = m.get("n") {
     assert!(!map.contains_key("nope"));
   } else {

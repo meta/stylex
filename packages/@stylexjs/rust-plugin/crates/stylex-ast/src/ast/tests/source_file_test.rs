@@ -15,9 +15,6 @@ fn real(path: &str) -> FileName {
 }
 
 /// Fails unless the call panicked with the given message.
-///
-/// A bare "it panicked" assertion also passes when an unrelated panic happens
-/// first, which would hide the branch the test is there to reach.
 fn assert_panic_message<T>(result: Result<T, Box<dyn Any + Send>>, expected: &str) {
   let payload = match result {
     Ok(_) => panic!("expected a panic carrying {expected:?}, but the call returned"),
@@ -33,9 +30,7 @@ fn assert_panic_message<T>(result: Result<T, Box<dyn Any + Send>>, expected: &st
   );
 }
 
-// ──────────────────────────────────────────────
 // extract_filename_from_path
-// ──────────────────────────────────────────────
 
 mod extract_filename_from_path_tests {
   use super::*;
@@ -77,9 +72,7 @@ mod extract_filename_from_path_tests {
   }
 }
 
-// ──────────────────────────────────────────────
 // extract_path
-// ──────────────────────────────────────────────
 
 mod extract_path_tests {
   use super::*;
@@ -103,9 +96,7 @@ mod extract_path_tests {
   }
 }
 
-// ──────────────────────────────────────────────
 // extract_filename_with_ext_from_path
-// ──────────────────────────────────────────────
 
 mod extract_filename_with_ext_from_path_tests {
   use super::*;
@@ -147,13 +138,9 @@ mod extract_filename_with_ext_from_path_tests {
   }
 }
 
-// ──────────────────────────────────────────────
 // Virtual files
-// ──────────────────────────────────────────────
 
-/// A virtual file has no name to read. Each variant gives back an empty value
-/// instead of an error, so the caller does not have to know which kind of
-/// virtual file it holds.
+/// Virtual files give back an empty value rather than an error.
 mod virtual_file_tests {
   use super::*;
 
@@ -192,9 +179,7 @@ mod virtual_file_tests {
   }
 }
 
-// ──────────────────────────────────────────────
-// Real paths at the edge of what a path may be
-// ──────────────────────────────────────────────
+// Edge-case real paths
 
 mod unusual_path_tests {
   use super::*;
@@ -212,8 +197,7 @@ mod unusual_path_tests {
     );
   }
 
-  /// A trailing slash names the directory. The last component is still read as
-  /// the file name.
+  /// A trailing slash still reads the last component as the file name.
   #[test]
   fn reads_through_a_trailing_slash() {
     assert_eq!(
@@ -245,8 +229,6 @@ mod unusual_path_tests {
     }
   }
 
-  /// A generated or bundled path can be much deeper than a path written by
-  /// hand. The readers must give the same answer for it.
   #[test]
   fn reads_an_extremely_long_and_deep_path() {
     let deep = "/".to_string() + &"segment/".repeat(10_000) + "file.stylex.js";
@@ -267,17 +249,12 @@ mod unusual_path_tests {
   }
 }
 
-// ──────────────────────────────────────────────
 // Paths with no name to read
-// ──────────────────────────────────────────────
 
-/// These real paths name no file. A compiled module cannot have such a path,
-/// so the readers stop with a panic. An invented empty name would give a wrong
-/// class name instead.
+/// Real paths naming no file panic rather than produce a wrong class name.
 mod nameless_path_tests {
   use super::*;
 
-  /// A root, a parent reference and an empty path have no last component.
   fn nameless_paths() -> Vec<&'static str> {
     vec!["/", "..", "", "/..", "../..", "./.."]
   }
@@ -301,8 +278,7 @@ mod nameless_path_tests {
     }
   }
 
-  /// A nameless path is still a path. Reading the whole path thus works, even
-  /// though reading a name does not.
+  /// Reading the whole path still works.
   #[test]
   fn whole_path_of_a_nameless_path_is_readable() {
     for path in nameless_paths() {
@@ -311,23 +287,14 @@ mod nameless_path_tests {
   }
 }
 
-// ──────────────────────────────────────────────
 // Paths that are not valid UTF-8
-// ──────────────────────────────────────────────
 
-/// A file system can hold a name that is not valid UTF-8. Everything that reads
-/// the name later — class names, injected CSS, source maps — is UTF-8 text, so
-/// the readers stop with a panic instead of passing on bytes that nothing can
-/// encode.
-///
-/// The invalid name is built differently per platform, but the tests are the
-/// same everywhere. A platform-gated test module would leave these branches
-/// uncovered on the platform it skips.
+/// Non-UTF-8 names panic, since everything downstream is UTF-8. The invalid name is built per
+/// platform so the tests run everywhere.
 mod invalid_utf8_path_tests {
   use super::*;
 
-  /// A path that holds one unit no UTF-8 decoder accepts: the byte `0xff` on
-  /// Unix, an unpaired surrogate on Windows.
+  /// One unit no UTF-8 decoder accepts: `0xff` on Unix, an unpaired surrogate on Windows.
   #[cfg(unix)]
   fn invalid_utf8_path(prefix: &str, suffix: &str) -> PathBuf {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
@@ -370,8 +337,7 @@ mod invalid_utf8_path_tests {
     assert_panic_message(result, INVALID_UTF8);
   }
 
-  /// Invalid bytes in a directory name do not touch the file name. Only the
-  /// reader of the whole path fails.
+  /// Only the whole-path reader fails on an invalid directory name.
   #[test]
   fn invalid_bytes_in_a_directory_leave_the_file_name_readable() {
     let path = FileName::Real(invalid_utf8_path("/src/", "/file.js"));

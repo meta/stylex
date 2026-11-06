@@ -1,14 +1,7 @@
-//! Inline atomic-style transform for `@stylexjs/atoms`.
-//!
-//! Detects and compiles inline atomic-style expressions:
+//! Inline atomic-style transform for `@stylexjs/atoms`:
 //!
 //! - `css.display.flex` → `{ $$css: true, display: "x..." }` (static)
 //! - `css.color(value)` → a hoisted dynamic-style function call (dynamic)
-//!
-//! The detection and AST rewriting live here; the heavy style-compilation
-//! utilities (the `compile` object plus the needed `StateManager` access)
-//! are injected through the [`Compile`] trait so this crate does not depend on
-//! `stylex-transform`.
 
 use rustc_hash::FxHashMap;
 use stylex_ast::ast::{
@@ -32,8 +25,7 @@ use swc_core::ecma::{
 /// The npm package name that marks an import as an atoms source.
 pub const ATOMS_SOURCE: &str = "@stylexjs/atoms";
 
-/// A flat compiled-style value, representing the subset of compiled values that
-/// atoms produce (string class names, the `$$css` marker, or `null`).
+/// A flat compiled value: a class name string, the `$$css` marker, or `null`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum AtomFlatValue {
   String(String),
@@ -50,17 +42,13 @@ pub struct InjectedAtomStyle {
   pub rtl: Option<String>,
 }
 
-/// The result of compiling a single `{ [property]: value }` atom through the
-/// injected [`Compile::style_x_create_set`].
+/// The result of compiling one `{ [property]: value }` atom via [`Compile::style_x_create_set`].
 #[derive(Debug, Clone)]
 pub struct AtomCompileResult {
-  /// The compiled `__inline__` namespace as an object-literal expression,
-  /// e.g. `{ display: "x78zum5", $$css: true }`.
+  /// The compiled `__inline__` namespace, e.g. `{ display: "x78zum5", $$css: true }`.
   pub compiled_ast: Expr,
-  /// A flat key/value view of the same namespace, used to locate the property
-  /// hash + class name when building a dynamic-style function.
+  /// Flat view of the same namespace, used to find the property hash and class name.
   pub compiled_flat: Vec<(String, AtomFlatValue)>,
-  /// The injected CSS rules for this atom.
   pub injected: Vec<InjectedAtomStyle>,
 }
 
@@ -71,45 +59,31 @@ pub struct StaticStyle {
   pub value: String,
 }
 
-/// A detected dynamic style, e.g. `css.color(value)` →
-/// `{ property: "color", value: <value expr> }`.
+/// A detected dynamic style, e.g. `css.color(value)` → `{ property: "color", value }`.
 #[derive(Debug, Clone)]
 pub struct DynamicStyle {
   pub property: String,
   pub value: Box<Expr>,
 }
 
-/// Compilation utilities injected by the consumer (the JS `compile` object plus
-/// the `StateManager` access the atoms transform needs).
+/// Compilation utilities injected by the consumer (JS `compile` plus `StateManager` access).
 pub trait Compile {
-  /// Map of local identifier → imported name. Namespace/default imports map to
-  /// `"*"`. Populated while reading import declarations.
+  /// Local identifier → imported name; namespace/default imports map to `"*"`.
   fn atom_imports(&self) -> &FxHashMap<Id, String>;
 
-  /// Compile a single `{ [property]: value }` style, returning the compiled
-  /// object AST, a flat view of it, and the injected CSS rules. Equivalent to
-  /// `compile.styleXCreateSet` (plus dev class names) applied to
-  /// `{ __inline__: { [property]: value } }`.
-  ///
-  /// `None` says the compiler has nothing to put in place of the style, and the
-  /// caller then leaves the expression the author wrote for the runtime. The
-  /// compiler in this repository never answers it: it writes the object it
-  /// compiles from two string literals, which the fold always reads.
+  /// `compile.styleXCreateSet` (plus dev class names) on `{ __inline__: { [property]: value } }`.
+  /// `None` leaves the authored expression for the runtime.
   fn style_x_create_set(&mut self, property: &str, value: &str) -> Option<AtomCompileResult>;
 
-  /// Register injected CSS rules so they are emitted at runtime / collected as
-  /// metadata. Equivalent to `state.registerStyles`.
+  /// Registers injected CSS rules (`state.registerStyles`).
   fn register_styles(&mut self, injected: &[InjectedAtomStyle]);
 
-  /// Hoist an expression to module scope and return an identifier referencing
-  /// it. Equivalent to `compile.hoistExpression`.
+  /// Hoists an expression to module scope, returning a reference (`compile.hoistExpression`).
   fn hoist_expression(&mut self, expr: Expr) -> Expr;
 }
 
-/// Strips a single leading underscore from CSS values. This allows using
-/// underscore-prefixed identifiers for CSS values that conflict with JS
-/// reserved words or start with a digit (e.g., `css.display._flex` or
-/// `css.zIndex._1`).
+/// Strips one leading underscore, for values that clash with JS reserved words or start with a
+/// digit (`css.display._flex`, `css.zIndex._1`).
 pub fn normalize_value(value: &str) -> String {
   match value.strip_prefix('_') {
     Some(stripped) => stripped.to_string(),
@@ -117,18 +91,13 @@ pub fn normalize_value(value: &str) -> String {
   }
 }
 
-/// Whether `ident` refers to an atoms import.
-///
-/// Atoms imports are keyed by full SWC `Id` (`Atom` plus `SyntaxContext`) so a
-/// shadowed local with the same symbol text is not mistaken for the import after
-/// the resolver pass has assigned distinct contexts.
+/// Whether `ident` refers to an atoms import (keyed by full `Id`, so shadowed locals don't match).
 pub fn is_utility_styles_identifier(ident: &Ident, atom_imports: &FxHashMap<Id, String>) -> bool {
   atom_imports.contains_key(&ident.to_id())
 }
 
-/// Detects a static atom from a member expression:
-/// `css.display.flex`, `css.width['calc(...)']`, or the default-import
-/// `css.flex` form.
+/// Detects a static atom: `css.display.flex`, `css.width['calc(...)']`, or default-import
+/// `css.flex`.
 pub fn get_static_style_from_path(
   member: &MemberExpr,
   atom_imports: &FxHashMap<Id, String>,
@@ -166,8 +135,7 @@ pub fn get_static_style_from_path(
   }
 }
 
-/// Detects a dynamic atom from a call expression: `css.color(value)` or
-/// `css.a.b(value)` (single argument).
+/// Detects a dynamic atom: `css.color(value)` or `css.a.b(value)` (single argument).
 pub fn get_dynamic_style_from_path(
   call: &CallExpr,
   atom_imports: &FxHashMap<Id, String>,
@@ -215,12 +183,8 @@ pub fn get_dynamic_style_from_path(
   }
 }
 
-/// Compile a static atom directly to a compiled style object.
-/// `css.display.flex` → `{ $$css: true, display: "x78zum5" }`.
-///
-/// Returns `None` when the member is not an atom, or when the compiler answers
-/// nothing for the style; the caller then leaves the original expression in
-/// place.
+/// Compiles `css.display.flex` → `{ $$css: true, display: "x78zum5" }`; `None` leaves the
+/// original expression.
 pub fn compile_static_style<T: Compile>(compiler: &mut T, member: &MemberExpr) -> Option<Expr> {
   let style = get_static_style_from_path(member, compiler.atom_imports())?;
 
@@ -231,13 +195,7 @@ pub fn compile_static_style<T: Compile>(compiler: &mut T, member: &MemberExpr) -
   Some(result.compiled_ast)
 }
 
-/// Compile a dynamic atom to a hoisted function pattern.
-/// `css.color(value)` → `_temp.color(value)`.
-///
-/// Returns `None` when the call is not a dynamic atom, when its property is no
-/// safe CSS name, when the compiler answers nothing for the style, or when the
-/// compiled style carries no property class to build the function on; the
-/// caller then leaves the original call in place.
+/// Compiles `css.color(value)` → `_temp.color(value)`; `None` leaves the original call.
 pub fn compile_dynamic_style<T: Compile>(compiler: &mut T, call: &CallExpr) -> Option<Expr> {
   let style = get_dynamic_style_from_path(call, compiler.atom_imports())?;
   let property = style.property;
@@ -251,8 +209,7 @@ pub fn compile_dynamic_style<T: Compile>(compiler: &mut T, call: &CallExpr) -> O
 
   let mut result = compiler.style_x_create_set(&property, &css_value)?;
 
-  // compiled_flat has: [($$css, true), (prop-hash, "xAbc123"), maybe (devClass, devClass)].
-  // We need the prop-hash key (not $$css, not the dev class name where key === value).
+  // Find the prop-hash key: not `$$css`, not the dev class name (where key == value).
   let (prop_key, class_name) = result.compiled_flat.iter().find_map(|(key, value)| {
     if key == COMPILED_KEY {
       return None;
@@ -311,9 +268,7 @@ pub fn compile_dynamic_style<T: Compile>(compiler: &mut T, call: &CallExpr) -> O
   )))
 }
 
-/// A `VisitMut` pass that transforms utility style expressions into compiled
-/// style objects. Member expressions become static compiled objects and call
-/// expressions become hoisted dynamic-style calls.
+/// Rewrites atom member expressions to static objects and atom calls to hoisted calls.
 pub struct UtilityStylesVisitor<'a, T: Compile> {
   compiler: &'a mut T,
 }
@@ -332,10 +287,8 @@ impl<T: Compile> VisitMut for UtilityStylesVisitor<'_, T> {
           return;
         }
 
-        // Not a dynamic atom call. Descend into computed callee keys so atoms
-        // nested there are compiled, but never compile any member in the callee
-        // chain itself as a static atom: a member carrying call arguments is not
-        // a static style.
+        // Not a dynamic atom: visit computed callee keys, but never compile the callee chain
+        // itself as a static atom.
         call.args.visit_mut_with(self);
         if let Callee::Expr(callee_expr) = &mut call.callee {
           match callee_expr.as_mut() {

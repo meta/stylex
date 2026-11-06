@@ -77,7 +77,7 @@ fn key_computed_string_literal() {
 
 #[test]
 fn key_computed_number_literal_via_to_string() {
-  // Lit::Num goes through convert_lit_to_string which serialises to text.
+  // Lit::Num is serialized via convert_lit_to_string.
   let kv = key_value_with_name(PropName::Computed(ComputedPropName {
     span: DUMMY_SP,
     expr: Box::new(Expr::Lit(create_number_lit(3.5))),
@@ -107,7 +107,6 @@ fn key_computed_simple_template_literal() {
 #[test]
 #[should_panic(expected = "Computed property key must be a string or number literal")]
 fn key_computed_non_string_literal_panics() {
-  // null literal is unsupported.
   let kv = key_value_with_name(PropName::Computed(ComputedPropName {
     span: DUMMY_SP,
     expr: Box::new(Expr::Lit(swc_core::ecma::ast::Lit::Null(
@@ -120,7 +119,6 @@ fn key_computed_non_string_literal_panics() {
 #[test]
 #[should_panic(expected = "Computed key is not a literal")]
 fn key_computed_complex_template_panics() {
-  // Template with an expression interpolation is not a simple literal.
   let tpl = Tpl {
     span: DUMMY_SP,
     exprs: vec![Box::new(Expr::Ident(create_ident("x")))],
@@ -170,12 +168,11 @@ fn extracts_key_value_props() {
 
 #[test]
 fn expands_shorthand_props() {
-  // Shorthand prop: { foo } → key:foo, value:foo (ident).
+  // Shorthand `{ foo }` expands to `foo: foo`.
   let prop = PropOrSpread::Prop(Box::new(Prop::Shorthand(create_ident("foo"))));
   let obj = create_object_lit(vec![prop]);
   let result = get_key_values_from_object(&obj);
   assert_eq!(result.len(), 1);
-  // After expansion the prop becomes a key/value with both sides "foo".
   match &result[0].key {
     PropName::Ident(ident) => assert_eq!(ident.sym.as_ref(), "foo"),
     _ => panic!("expected expanded ident name"),
@@ -195,7 +192,7 @@ fn spread_prop_panics() {
 #[test]
 #[should_panic(expected = "style value")]
 fn non_key_value_prop_panics() {
-  // Use a getter to produce a non key-value, non-shorthand prop.
+  // A getter is neither key-value nor shorthand.
   let getter = Prop::Getter(swc_core::ecma::ast::GetterProp {
     span: DUMMY_SP,
     key: PropName::Ident(IdentName {
@@ -216,12 +213,7 @@ fn empty_object_returns_empty_vec() {
 
 // ---------- key_value_name ----------
 
-/// A key that already holds its name is borrowed, not copied.
-///
-/// This is the whole reason the reader answers a `Cow`: an identifier and a
-/// string hold their own text, and a lookup that compares every property of an
-/// object copied each of them to read it. The text itself is pinned by the
-/// cases above, which the owned form and this one both answer through.
+/// Identifier and string keys are borrowed, not copied.
 #[test]
 fn a_key_that_holds_its_name_is_borrowed() {
   let ident = key_value_with_name(PropName::Ident(IdentName {
@@ -238,8 +230,7 @@ fn a_key_that_holds_its_name_is_borrowed() {
   assert!(matches!(key_value_name(&string), Cow::Borrowed(_)));
 }
 
-/// The three shapes that spell a name the key does not hold own what they
-/// build, so nothing borrows from a value that goes out of scope.
+/// Names the key doesn't hold are owned.
 #[test]
 fn a_key_that_spells_its_name_is_owned() {
   let shapes = [

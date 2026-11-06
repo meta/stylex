@@ -81,16 +81,12 @@ fn default_imports() -> FxHashMap<Id, String> {
   map
 }
 
-/// Selects the shape of the flat compiled namespace returned by the mock, so a
-/// single `Compile` implementation can exercise every branch of the prop-hash
-/// search in `compile_dynamic_style` (keeping the generic functions to a single
-/// monomorphization).
+/// The flat namespace shape the mock returns, covering each branch of the prop-hash search.
 #[derive(Clone, Copy)]
 enum FlatShape {
   /// `[prop-hash, $$css]` — a normal compiled namespace.
   Normal,
-  /// `[$$css, devClass(key == value), prop-hash]` — the marker and dev class
-  /// must both be skipped before the real property hash is found.
+  /// `[$$css, devClass(key == value), prop-hash]` — both must be skipped.
   DevClassLead,
   /// `[$$css, devClass(key == value)]` — no property hash at all.
   MarkerOnly,
@@ -331,8 +327,7 @@ fn compile_dynamic_style_hoists_and_appends_property_rule() {
   let call = call_member("css", ident_prop("color"), Expr::Ident(ident("value")));
   let result = compile_dynamic_style(&mut compiler, &call);
 
-  // It hoists exactly once and returns `_temp.color(value)` for identifier-safe
-  // CSS property names.
+  // Hoists once and returns `_temp.color(value)` for identifier-safe names.
   assert_eq!(compiler.hoist_count, 1);
   let call_expr = match result {
     Some(Expr::Call(call)) => call,
@@ -368,8 +363,7 @@ fn str_expr(value: &str) -> Expr {
   }))
 }
 
-/// A computed member key whose expression is a non-literal (e.g. `css[dyn]`),
-/// which `convert_member_prop_to_string` cannot resolve to a name.
+/// A non-literal computed key (e.g. `css[dyn]`), which cannot be resolved to a name.
 fn computed_ident_prop(name: &str) -> MemberProp {
   MemberProp::Computed(ComputedPropName {
     span: DUMMY_SP,
@@ -423,8 +417,7 @@ fn convert_member_prop_to_string_returns_none_for_computed_non_literal_and_priva
 
 #[test]
 fn convert_member_prop_to_string_numeric_renders_value_ignoring_raw() {
-  // The numeric *value* is rendered, never the raw source token (matching
-  // `String(prop.value)`): `css[0x10]` keys on "16", not "0x10".
+  // The value is rendered, not the raw token (`String(prop.value)`): `css[0x10]` keys on "16".
   assert_eq!(
     convert_member_prop_to_string(&computed_num_prop(16.0, Some("0x10"))).as_deref(),
     Some("16")
@@ -443,8 +436,7 @@ fn convert_member_prop_to_string_numeric_renders_value_ignoring_raw() {
 
 #[test]
 fn get_static_style_namespace_single_level() {
-  // `css.flex` where `css` is a namespace/default import (`*`): the property is
-  // taken from the value key itself.
+  // `css.flex` with a namespace/default import: the property comes from the value key.
   let imports = default_imports();
   let member = one_level_member("css", ident_prop("flex"));
   assert_eq!(
@@ -564,8 +556,7 @@ fn get_dynamic_style_non_ident_non_member_object_returns_none() {
 
 #[test]
 fn compile_dynamic_style_skips_marker_and_dev_class_keys() {
-  // The flat namespace leads with `$$css` and a dev class name (key == value),
-  // both of which must be skipped before the real property hash is found.
+  // `$$css` and a dev class lead the namespace and must be skipped.
   let mut compiler = MockCompiler::with_shape(default_imports(), FlatShape::DevClassLead);
   let call = call_member("css", ident_prop("color"), Expr::Ident(ident("value")));
   let result = compile_dynamic_style(&mut compiler, &call);
@@ -608,8 +599,7 @@ fn visitor_compiles_static_atom_member() {
 #[test]
 fn visitor_leaves_non_atom_member_untouched() {
   let mut compiler = MockCompiler::new(default_imports());
-  // `styles.foo` is not an atom import: `compile_static_style` returns `None`,
-  // so the member is left as-is and its children are still traversed.
+  // `styles.foo` is not an atom: left as-is, children still traversed.
   let mut expr = Expr::Member(one_level_member("styles", ident_prop("foo")));
   let mut visitor = create_utility_styles_visitor(&mut compiler);
   expr.visit_mut_with(&mut visitor);
@@ -623,8 +613,7 @@ fn visitor_leaves_non_atom_member_untouched() {
 #[test]
 fn visitor_visits_nested_args_without_compiling_the_callee() {
   let mut compiler = MockCompiler::new(default_imports());
-  // `foo([css.display.flex])` — `foo` is not an atom, so the callee is skipped
-  // while the static atom nested inside the array argument is compiled.
+  // `foo([css.display.flex])`: the callee is skipped, the nested atom compiled.
   let array = Expr::Array(ArrayLit {
     span: DUMMY_SP,
     elems: vec![Some(ExprOrSpread {
@@ -827,8 +816,7 @@ fn get_dynamic_style_returns_none_for_unkeyable_parent_prop() {
 
 #[test]
 fn compile_dynamic_style_returns_none_without_property_hash() {
-  // The flat namespace has only the `$$css` marker and a dev class name, so the
-  // prop-hash search finds nothing and the dynamic atom bails out.
+  // Only `$$css` and a dev class: no prop hash, so the dynamic atom bails out.
   let mut compiler = MockCompiler::with_shape(default_imports(), FlatShape::MarkerOnly);
   let call = call_member("css", ident_prop("color"), Expr::Ident(ident("value")));
   assert!(compile_dynamic_style(&mut compiler, &call).is_none());
@@ -846,8 +834,7 @@ fn compile_dynamic_style_does_not_register_styles_without_property_hash() {
 
 #[test]
 fn compile_static_style_returns_none_when_not_evaluable() {
-  // `style_x_create_set` returns `None` (the inline style is not statically
-  // evaluable): `compile_static_style` must bail out instead of panicking.
+  // `style_x_create_set` returns `None`: bail out instead of panicking.
   let mut compiler = MockCompiler::with_shape(default_imports(), FlatShape::NonEvaluable);
   let member = two_level_member("css", ident_prop("display"), ident_prop("flex"));
   assert!(compile_static_style(&mut compiler, &member).is_none());
@@ -864,8 +851,7 @@ fn compile_dynamic_style_returns_none_when_not_evaluable() {
 
 #[test]
 fn visitor_leaves_non_evaluable_atom_untouched() {
-  // A non-evaluable static atom is left exactly as written, so it survives to
-  // runtime rather than crashing the compiler.
+  // A non-evaluable static atom is left as written for the runtime.
   let mut compiler = MockCompiler::with_shape(default_imports(), FlatShape::NonEvaluable);
   let mut expr = Expr::Member(two_level_member(
     "css",
@@ -986,8 +972,7 @@ fn compile_dynamic_style_emits_computed_member_for_invalid_identifier_start() {
 
 #[test]
 fn convert_member_prop_to_string_numeric_renders_js_edge_values() {
-  // Non-finite numeric keys render exactly as JS `String(Number)` does, never
-  // a saturated integer cast or Rust's `inf`/`NaN` lowercase spellings.
+  // Non-finite keys render as JS `String(Number)` does, not Rust's `inf`/`NaN`.
   assert_eq!(
     convert_member_prop_to_string(&computed_num_prop(f64::NAN, None)).as_deref(),
     Some("NaN")
@@ -1000,9 +985,7 @@ fn convert_member_prop_to_string_numeric_renders_js_edge_values() {
     convert_member_prop_to_string(&computed_num_prop(f64::NEG_INFINITY, None)).as_deref(),
     Some("-Infinity")
   );
-  // A magnitude beyond the safe-integer range stays on the float path rather
-  // than going through a saturating `as i64` cast, and renders in JS's
-  // exponential spelling — the key the property is actually looked up by.
+  // Beyond the safe-integer range: JS exponential spelling, no saturating cast.
   assert_eq!(
     convert_member_prop_to_string(&computed_num_prop(1e21, None)).as_deref(),
     Some("1e+21")

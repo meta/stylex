@@ -20,11 +20,8 @@ pub enum CSSSyntax {
 }
 
 impl CSSSyntax {
-  /// Returns the CSS-syntax token for this variant. Allocation-free; the
-  /// returned slice has `'static` lifetime so callers can use it without
-  /// forcing a `.to_string()`.
-  // JS-parity: stylex/packages/shared/lib/common-types.js — `CSSSyntax`
-  // string literals.
+  /// The CSS-syntax token for this variant.
+  // JS-parity: stylex/packages/shared/lib/common-types.js — `CSSSyntax` string literals.
   #[must_use]
   pub const fn as_str(&self) -> &'static str {
     match self {

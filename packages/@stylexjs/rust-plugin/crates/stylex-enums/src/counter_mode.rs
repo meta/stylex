@@ -1,17 +1,12 @@
 /// Counter mode for UidGenerator
 #[derive(Clone, Debug)]
 pub enum CounterMode {
-  /// Use global counters shared across all instances (default behavior).
-  /// This ensures unique identifiers across the entire application.
+  /// Global counters shared across all instances (default).
   _Global,
-  /// Use local counters specific to each instance (legacy behavior).
-  /// Each UidGenerator instance maintains its own counter, which can lead to
-  /// duplicate identifiers across different instances with the same prefix.
+  /// Per-instance counters (legacy); can duplicate identifiers across instances.
   Local,
-  /// Use thread-local counters for test isolation.
-  /// Each thread gets its own set of counters, perfect for parallel testing.
+  /// Thread-local counters, for test isolation.
   ThreadLocal,
-  /// Use a combination of thread ID and prefix for maximum uniqueness.
-  /// This mode uses thread ID as part of the identifier generation.
+  /// Thread ID plus prefix.
   _ThreadUnique,
 }

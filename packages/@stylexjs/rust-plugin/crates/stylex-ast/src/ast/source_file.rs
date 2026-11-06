@@ -1,7 +1,4 @@
-//! Reading the parts of a source file's name that the compiler needs.
-//!
-//! A virtual file (anything other than a real path on disk) has no name to
-//! read, so each of these answers with an empty value rather than refusing.
+//! Reading parts of a source file name; virtual files answer with an empty value.
 
 use stylex_constants::constants::messages::INVALID_UTF8;
 use stylex_macros::stylex_panic;

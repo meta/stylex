@@ -28,27 +28,22 @@ fn named(local: &str, imported: Option<ModuleExportName>) -> ImportSpecifier {
   })
 }
 
-// ──────────────────────────────────────────────
 // The three import forms
-// ──────────────────────────────────────────────
 
-/// The plain form, `import { create } from '...'`. The local name and the
-/// imported name are the same.
+/// `import { create } from '...'`.
 #[test]
 fn reads_a_plain_named_import() {
   assert_eq!(binding_of(&named("create", None)), "create");
 }
 
-/// A renamed import, `import { create as make } from '...'`. The binding is
-/// the alias, never the name the module exported.
+/// `import { create as make } from '...'`: the binding is the alias.
 #[test]
 fn reads_the_alias_of_a_renamed_named_import() {
   let specifier = named("make", Some(ModuleExportName::Ident(ident("create"))));
   assert_eq!(binding_of(&specifier), "make");
 }
 
-/// A string export name, `import { 'create-style' as make } from '...'`. Such
-/// a name cannot be an identifier, so the alias is the only usable binding.
+/// `import { 'create-style' as make } from '...'`: only the alias is usable.
 #[test]
 fn reads_the_alias_when_the_export_name_is_a_string() {
   let specifier = named(
@@ -82,8 +77,6 @@ fn reads_a_namespace_import() {
   assert_eq!(binding_of(&specifier), "stylex");
 }
 
-/// A type-only specifier binds its name in the same way. It is not a special
-/// case.
 #[test]
 fn reads_a_type_only_named_import() {
   let specifier = ImportSpecifier::Named(ImportNamedSpecifier {
@@ -95,12 +88,9 @@ fn reads_a_type_only_named_import() {
   assert_eq!(binding_of(&specifier), "StyleXStyles");
 }
 
-// ──────────────────────────────────────────────
-// Names at the edge of what an identifier may be
-// ──────────────────────────────────────────────
+// Edge-case names
 
-/// JavaScript identifiers are not limited to ASCII. Nothing here parses the
-/// name, so it must come back exactly as the parser made it.
+/// Non-ASCII names come back exactly as parsed.
 #[test]
 fn reads_names_that_are_not_plain_ascii() {
   for name in [
@@ -117,27 +107,21 @@ fn reads_names_that_are_not_plain_ascii() {
   }
 }
 
-/// A minified bundle can carry a name much longer than a hand-written one.
-/// The reader must give it back complete.
 #[test]
 fn reads_an_extremely_long_name() {
   let name = "a".repeat(100_000);
   assert_eq!(binding_of(&named(&name, None)), name);
 }
 
-/// An empty name is not valid JavaScript, but the AST can hold one. The
-/// function gives back what is there and does not check it.
+/// An empty name (invalid JS, but representable) is returned unchecked.
 #[test]
 fn reads_an_empty_name_without_failing() {
   assert_eq!(binding_of(&named("", None)), "");
 }
 
-// ──────────────────────────────────────────────
-// What the caller gets back
-// ──────────────────────────────────────────────
+// Return value
 
-/// The result borrows from the specifier and does not copy it. This is what
-/// lets a caller compare bindings without an allocation.
+/// The result borrows from the specifier.
 #[test]
 fn borrows_from_the_specifier_it_was_given() {
   let specifier = named("create", None);
@@ -150,8 +134,6 @@ fn borrows_from_the_specifier_it_was_given() {
   assert!(std::ptr::eq(binding, expected));
 }
 
-/// All specifiers of one statement are read in the same way, so a whole import
-/// list gives its bindings in order.
 #[test]
 fn reads_every_specifier_of_one_import_statement() {
   let specifiers = [

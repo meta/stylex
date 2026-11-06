@@ -91,8 +91,7 @@ fn flatten_nested_consts_impl(
   }
 }
 
-// The `Namespace` arm is statically unreachable: the flattening helpers invoke
-// the transform on values that `is_vars_leaf` accepts, which excludes Namespace.
+// The `Namespace` arm is unreachable: callers pass only `is_vars_leaf` values.
 fn transform_vars_leaf(value: &NestedVarsValue) -> Expr {
   match value {
     NestedVarsValue::Str(value) => create_string_expr(value),

@@ -348,9 +348,7 @@ fn create_unary_expr_rebuilds_the_operator_and_its_operand() {
   assert!(matches!(rebuilt.arg.as_ref(), Expr::Lit(Lit::Str(_))));
 }
 
-/// The clone is a deep one, which is the cost the factory exists to name: the
-/// rebuilt operand is an independent subtree, so a caller holding it outlives
-/// the borrow it was built from.
+/// The rebuilt operand is an independent deep copy.
 #[test]
 fn create_unary_expr_deep_clones_a_nested_operand() {
   let inner = UnaryExpr {

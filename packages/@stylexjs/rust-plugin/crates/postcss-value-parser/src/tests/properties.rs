@@ -1,9 +1,4 @@
-//! What a table of inputs cannot answer.
-//!
-//! The parity table in `parity.rs` measures agreement on 698 specific values.
-//! These tests say the things that have to hold for *every* value: that nothing
-//! crashes the parser, that the offsets the normalizers navigate by are well
-//! formed, and that a walk visits what a caller is promised it will.
+//! Invariants that must hold for every value: no crashes, well-formed offsets, walk order.
 
 use crate::{
   Node, NodeKind, ValueParser, parse, stringify, stringify_node, stringify_node_with,
@@ -12,8 +7,7 @@ use crate::{
 
 use super::dump::dump;
 
-/// The characters the scanner actually branches on, plus one ordinary letter
-/// and one digit to stand for everything it does not.
+/// The characters the scanner branches on, plus one letter and one digit.
 const ALPHABET: &[char] = &['(', ')', '\'', '"', '\\', '/', '*', ',', ':', ' ', 'a', '0'];
 
 /// Every string of `length` characters drawn from [`ALPHABET`].
@@ -51,26 +45,16 @@ fn all_nodes(nodes: &[Node]) -> Vec<&Node> {
   out
 }
 
-/// The parser is documented as never failing. That is a claim about every
-/// input, not about the ones somebody thought to write down, so it is measured
-/// against every four-character string the scanner can distinguish — every
-/// arrangement of brackets, quotes, escapes, comment markers and separators,
-/// closed and unclosed, balanced and not.
 #[test]
 fn no_arrangement_of_the_characters_it_branches_on_can_crash_it() {
   for input in combinations(4) {
     let nodes = parse(&input);
-    // Serialising and dumping are part of the claim: a tree nothing can be
-    // read out of is not a parse that succeeded.
     let _ = stringify(&nodes);
     let _ = dump(&nodes);
   }
 }
 
-/// The same claim over the single characters and pairs the four-character sweep
-/// cannot reach, because they are outside its alphabet: control characters,
-/// every printable ASCII character, and the non-ASCII shapes a real stylesheet
-/// carries.
+/// Control, printable ASCII and non-ASCII characters outside [`ALPHABET`].
 #[test]
 fn no_short_input_of_any_character_can_crash_it() {
   let mut inputs: Vec<String> = (0u8..=0x7f)
@@ -111,14 +95,6 @@ fn no_short_input_of_any_character_can_crash_it() {
   }
 }
 
-/// Offsets are load-bearing: the zero-dimension normalizer decides whether a
-/// token sits inside a function by comparing them. A span that ran backwards
-/// would send it the wrong answer silently.
-///
-/// A span may end one byte past the input, and only one. Two shapes do it, both
-/// documented on the module: an unclosed string extends the buffer offsets are
-/// measured against by the quote it invents, and a trailing backslash makes the
-/// word scan step over a character that is not there.
 #[test]
 fn every_span_runs_forward_and_ends_within_a_byte_of_the_input() {
   for input in combinations(3) {
@@ -135,8 +111,6 @@ fn every_span_runs_forward_and_ends_within_a_byte_of_the_input() {
   }
 }
 
-/// The two shapes that reach one byte past the end, pinned by name so that the
-/// slack in the invariant above stays exactly as wide as it needs to be.
 #[test]
 fn only_an_invented_quote_and_a_trailing_backslash_reach_past_the_input() {
   let overshooting: Vec<String> = combinations(3)
@@ -172,14 +146,7 @@ fn only_an_invented_quote_and_a_trailing_backslash_reach_past_the_input() {
   );
 }
 
-/// The comparison the normalizer makes is "is this token's start past the end
-/// of the function I last saw", which only answers correctly if a function's
-/// children start where the function does or later.
-///
-/// Containment is asserted on the start offset alone. A child's *end* can pass
-/// its parent's when a trailing backslash makes the word scan overshoot, and
-/// that is behaviour rather than damage — the normalizer never reads a child's
-/// end.
+/// Children start no earlier than their function (ends may overshoot on a trailing backslash).
 #[test]
 fn every_function_starts_no_later_than_its_children() {
   fn check(input: &str, nodes: &[Node], enclosing: Option<&Node>) {
@@ -202,10 +169,6 @@ fn every_function_starts_no_later_than_its_children() {
   }
 }
 
-/// Offsets count bytes, not characters. Their one consumer compares them
-/// against each other, so the unit does not matter to it — but it matters very
-/// much that the unit is consistent, because a mixture would make a token after
-/// an emoji look as though it started before the function containing it.
 #[test]
 fn offsets_count_bytes_through_multi_byte_characters() {
   let nodes = parse("🙂 x");
@@ -216,8 +179,6 @@ fn offsets_count_bytes_through_multi_byte_characters() {
   );
 }
 
-/// A value with nothing in it parses to nothing in it — not to one empty word,
-/// which every normalizer downstream would then have to know to ignore.
 #[test]
 fn an_empty_value_parses_to_no_nodes() {
   assert!(parse("").is_empty());
@@ -225,9 +186,6 @@ fn an_empty_value_parses_to_no_nodes() {
   assert_eq!(ValueParser::new("").to_string(), "");
 }
 
-/// Nesting deep enough to matter. 512 is far past anything an author writes and
-/// well inside what serialising, walking and dumping — all three recursive —
-/// can carry on a test thread's stack.
 #[test]
 fn deeply_nested_functions_parse_serialize_and_walk() {
   let depth = 512;
@@ -248,9 +206,6 @@ fn deeply_nested_functions_parse_serialize_and_walk() {
   assert_eq!(visited, depth + 1);
 }
 
-/// The same depth without any of the closing brackets. Every level is flagged
-/// unclosed and every level's span is stretched to the end of the input, which
-/// is the state the unclosed-function detector reads.
 #[test]
 fn deeply_nested_unclosed_functions_are_all_flagged() {
   let depth = 512;
@@ -274,8 +229,7 @@ fn deeply_nested_unclosed_functions_are_all_flagged() {
   assert_eq!(functions, depth);
 }
 
-/// Values long enough that a scanner doing something quadratic would be
-/// noticed, and long enough to rule out a fixed-size buffer nobody declared.
+/// Long values, to catch quadratic scanning or fixed-size buffers.
 #[test]
 fn very_long_values_are_scanned_whole() {
   for input in [
@@ -290,8 +244,6 @@ fn very_long_values_are_scanned_whole() {
   }
 }
 
-/// A walk reaches nested nodes, and reports each node's index among its own
-/// siblings rather than a running count.
 #[test]
 fn a_walk_visits_nested_nodes_with_sibling_indices() {
   let mut parsed = ValueParser::new("a calc(1px + 2px)");
@@ -320,8 +272,6 @@ fn a_walk_visits_nested_nodes_with_sibling_indices() {
   );
 }
 
-/// Answering `false` for a function skips its children. Nothing in this project
-/// needs that yet, and it is the kind of thing that gets dropped silently.
 #[test]
 fn a_walk_that_declines_a_function_does_not_enter_it() {
   let mut parsed = ValueParser::new("calc(1px) 2px");
@@ -338,8 +288,6 @@ fn a_walk_that_declines_a_function_does_not_enter_it() {
   assert_eq!(seen, ["calc", " ", "2px"]);
 }
 
-/// Bubbling visits children before their parent — and descends unconditionally,
-/// because the callback's answer is never consulted on that path.
 #[test]
 fn a_bubbling_walk_visits_children_first_and_ignores_the_answer() {
   let mut parsed = ValueParser::new("fn2( fn3())");
@@ -358,9 +306,7 @@ fn a_bubbling_walk_visits_children_first_and_ignores_the_answer() {
   assert_eq!(seen, ["fn3", "fn2"]);
 }
 
-/// Descent is decided by the node's kind *after* the callback has run, so a
-/// callback that re-kinds a function stops the walk entering it — even though
-/// the children are still there.
+/// Descent is decided by the kind after the callback, so re-kinding a function skips it.
 #[test]
 fn re_kinding_a_function_mid_walk_stops_the_walk_entering_it() {
   let mut parsed = ValueParser::new("fn( ) fn2( fn3())");
@@ -381,8 +327,7 @@ fn re_kinding_a_function_mid_walk_stops_the_walk_entering_it() {
   assert_eq!(seen, ["function:fn", "space: ", "word:fn2"]);
 }
 
-/// A walk that does nothing leaves the value spelled exactly as it arrived.
-/// The two values are the ones the JavaScript checks this with.
+/// The two values are the ones upstream's test uses.
 #[test]
 fn a_walk_that_does_nothing_changes_nothing() {
   for input in [
@@ -396,9 +341,6 @@ fn a_walk_that_does_nothing_changes_nothing() {
   }
 }
 
-/// A walk that edits nodes edits the tree, rather than copies of it — the
-/// normalizers are written as "inspect the kind, then assign to the value
-/// field", and that only works if the assignment lands.
 #[test]
 fn a_walk_can_rewrite_the_tree_it_is_walking() {
   let mut parsed = ValueParser::new("calc(500ms) 500ms");
@@ -416,9 +358,7 @@ fn a_walk_can_rewrite_the_tree_it_is_walking() {
   assert_eq!(parsed.to_string(), "calc(.5s) .5s");
 }
 
-/// A node list is the caller's to restructure, before the walk or after it —
-/// the walk lends out a node, never the list holding it. The normalizer that
-/// drops the space before an `!important` has to do it here, outside.
+/// Lists are restructured outside the walk (e.g. dropping the space before `!important`).
 #[test]
 fn a_node_list_is_restructured_outside_the_walk() {
   let mut parsed = ValueParser::new("1px !important");
@@ -440,10 +380,6 @@ fn a_node_list_is_restructured_outside_the_walk() {
   assert_eq!(parsed.to_string(), "1px!important");
 }
 
-/// A quoted string keeps the quote character the author chose, and keeps its
-/// contents byte for byte — escapes, non-ASCII and the other quote character
-/// included. Rewriting `'` to `"` was one of the reported divergences, and
-/// nothing in this parser is in a position to do it.
 #[test]
 fn a_string_keeps_its_own_quote_and_its_own_bytes() {
   for (input, quote, contents) in [
@@ -470,8 +406,6 @@ fn a_string_keeps_its_own_quote_and_its_own_bytes() {
   }
 }
 
-/// Unclosed strings, comments and functions are flagged rather than rejected,
-/// and are spelled back out without the terminator the author never typed.
 #[test]
 fn what_ran_off_the_end_of_the_input_is_flagged_not_rejected() {
   for (input, kind) in [
@@ -494,9 +428,6 @@ fn what_ran_off_the_end_of_the_input_is_flagged_not_rejected() {
   }
 }
 
-/// A url body is taken whole. Everything inside it that would otherwise
-/// separate tokens — colons, slashes, commas, quotes, parentheses spelled as
-/// escapes — stays part of one word.
 #[test]
 fn a_url_body_is_one_word_however_much_css_syntax_it_contains() {
   for (input, body) in [
@@ -531,8 +462,6 @@ fn a_url_body_is_one_word_however_much_css_syntax_it_contains() {
   }
 }
 
-/// A quoted url body is *not* taken whole: it is a string node, and the quote
-/// the author chose survives.
 #[test]
 fn a_quoted_url_body_stays_a_string() {
   let nodes = parse("url('a,b.png')");
@@ -547,9 +476,6 @@ fn a_quoted_url_body_stays_a_string() {
   );
 }
 
-/// Splitting a word into a number and a unit is how three normalizers decide
-/// whether a token is theirs. A word that does not start with a number has no
-/// split at all, which is a different answer from a split with an empty number.
 #[test]
 fn a_word_that_does_not_start_with_a_number_has_no_split() {
   for input in [
@@ -559,8 +485,6 @@ fn a_word_that_does_not_start_with_a_number_has_no_split() {
   }
 }
 
-/// A `U+...` range is its own kind, so that the `+` in it is not read as the
-/// start of a signed number.
 #[test]
 fn a_unicode_range_is_not_a_word_followed_by_a_signed_number() {
   for input in ["U+26", "u+26", "U+0-7F", "U+4??"] {
@@ -583,9 +507,7 @@ fn a_unicode_range_is_not_a_word_followed_by_a_signed_number() {
   }
 }
 
-/// Serialising a node that lost its child list falls back to the bare function
-/// name rather than emitting a parenthesis it cannot close. The parser never
-/// produces such a node; a normalizer building one by hand could.
+/// A function without a child list (only buildable by hand) spells as its bare name.
 #[test]
 fn a_function_with_no_child_list_serializes_as_its_name() {
   let node = Node::new(NodeKind::Function, String::from("calc"), 0, 4);
@@ -594,8 +516,7 @@ fn a_function_with_no_child_list_serializes_as_its_name() {
   assert_eq!(stringify(std::slice::from_ref(&node)), "calc");
 }
 
-/// A string node with no quote character — again, only reachable by hand —
-/// serialises as its contents.
+/// A string node with no quote (only buildable by hand) spells as its contents.
 #[test]
 fn a_string_with_no_quote_serializes_as_its_contents() {
   let node = Node::new(NodeKind::String, String::from("abc"), 0, 3);
@@ -603,8 +524,6 @@ fn a_string_with_no_quote_serializes_as_its_contents() {
   assert_eq!(stringify_node(&node), "abc");
 }
 
-/// One node and a list of exactly that node spell out the same. The two entry
-/// points are the same walk; only the argument differs.
 #[test]
 fn one_node_and_a_list_of_it_spell_out_the_same() {
   for input in [
@@ -628,9 +547,6 @@ fn one_node_and_a_list_of_it_spell_out_the_same() {
   }
 }
 
-/// An override that declines every node leaves the serialisation untouched, and
-/// one that replaces a node replaces it wherever it sits — including inside a
-/// function it is not itself.
 #[test]
 fn an_override_reaches_nested_nodes_and_may_decline() {
   let nodes = parse("calc(1px + var(--bar))");

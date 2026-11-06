@@ -52,7 +52,7 @@ fn computed(expr: Expr) -> ComputedPropName {
   }
 }
 
-/// A template literal with no expressions, which reads back as its one quasi.
+/// A template literal with no expressions.
 fn static_tpl(text: &str) -> Tpl {
   Tpl {
     span: DUMMY_SP,
@@ -66,8 +66,7 @@ fn static_tpl(text: &str) -> Tpl {
   }
 }
 
-/// A template literal with an interpolation, so nothing static can be read off
-/// it.
+/// A template literal with an interpolation.
 fn dynamic_tpl() -> Tpl {
   Tpl {
     span: DUMMY_SP,
@@ -129,9 +128,7 @@ fn reads_an_integer_number_key() {
   assert_eq!(namespace_name_from_prop_key(&key), Some(Atom::new("42")));
 }
 
-/// `1e21` is where the two spellings part: JavaScript prints `1e+21`, Rust
-/// prints the twenty-two digits. The key names a property, so the spelling
-/// reaches the stylesheet and has to be the language's.
+/// `1e21`: JavaScript prints `1e+21`, Rust prints the digits; the key needs JS's spelling.
 #[test]
 fn reads_a_number_key_the_way_javascript_spells_it() {
   let key = PropName::Num(number_lit(1e21));
@@ -139,8 +136,6 @@ fn reads_a_number_key_the_way_javascript_spells_it() {
   assert_eq!(namespace_name_from_prop_key(&key), Some(Atom::new("1e+21")));
 }
 
-/// The same number written as a computed key reads the same way, because it
-/// names the same property.
 #[test]
 fn reads_a_computed_number_key_the_way_javascript_spells_it() {
   let key = PropName::Computed(computed(Expr::Lit(Lit::Num(number_lit(1e21)))));
@@ -148,8 +143,6 @@ fn reads_a_computed_number_key_the_way_javascript_spells_it() {
   assert_eq!(namespace_name_from_prop_key(&key), Some(Atom::new("1e+21")));
 }
 
-/// A member is read by the same literal reader, so a computed member of that
-/// number gets the JavaScript spelling too.
 #[test]
 fn reads_a_computed_number_member_the_way_javascript_spells_it() {
   let prop = MemberProp::Computed(computed(Expr::Lit(Lit::Num(number_lit(1e21)))));
@@ -160,13 +153,8 @@ fn reads_a_computed_number_member_the_way_javascript_spells_it() {
   );
 }
 
-/// The far ends of the range, where a spelling mistake is most visible: small
-/// magnitudes take an exponent, `-0` loses its sign as `String(-0)` does, and
-/// the three non-finite values keep their names.
-///
-/// No JavaScript source spells a key `NaN` or `Infinity` as a number literal,
-/// so these reach the reader only from a tree the compiler builds itself. They
-/// are asserted anyway, to hold the reader to one spelling for every `f64`.
+/// Small magnitudes take an exponent, `-0` loses its sign, and non-finite values keep their
+/// names (only reachable from compiler-built trees).
 #[test]
 fn spells_every_number_key_the_way_javascript_does() {
   let cases = [
@@ -256,8 +244,7 @@ fn refuses_a_computed_key_that_is_not_a_literal() {
 
 // ---------- try_namespace_name_from_prop_key ----------
 
-/// Storage that is valid WTF-8 but not valid UTF-8: a lone surrogate, which a
-/// JavaScript source can spell as `"\ud800"`.
+/// A lone surrogate (`"\ud800"`): valid WTF-8, invalid UTF-8.
 fn lossy_wtf8_atom() -> Wtf8Atom {
   unsafe { Wtf8Atom::from_bytes_unchecked(&[0xed, 0xa0, 0x80]) }
 }
@@ -270,9 +257,7 @@ fn lossy_string_lit() -> Str {
   }
 }
 
-/// The two readers must answer alike on every shape that carries a readable
-/// name, so a caller can pick either one on the strength of what it wants done
-/// with unreadable text alone.
+/// Both readers agree on every shape with a readable name.
 #[test]
 fn both_readers_agree_on_every_readable_shape() {
   let keys = [
@@ -317,8 +302,7 @@ fn skips_a_computed_string_key_that_cannot_be_read() {
   assert_eq!(try_namespace_name_from_prop_key(&key), None);
 }
 
-/// A template element keeps its cooked text as the same storage a string
-/// literal does, so the same unreadable text reaches the reader through it.
+/// Unreadable text reaches the reader through a template element's cooked text too.
 #[test]
 fn skips_a_computed_template_key_that_cannot_be_read() {
   let tpl = Tpl {
@@ -338,8 +322,7 @@ fn skips_a_computed_template_key_that_cannot_be_read() {
   );
 }
 
-/// A template element with no cooked text spells an invalid escape sequence.
-/// It names no property, and the reader says so rather than refusing.
+/// No cooked text (an invalid escape) names nothing; the reader answers `None`.
 #[test]
 fn skips_a_computed_template_key_with_no_cooked_text() {
   let tpl = Tpl {
@@ -446,8 +429,6 @@ fn refuses_a_method() {
 
 // ---------- named_key_value ----------
 
-/// The name and the property come back together, whichever shape the key is
-/// written in.
 #[test]
 fn reads_the_name_and_the_property_together() {
   let prop = key_value_prop(
@@ -576,8 +557,7 @@ fn skips_properties_that_have_no_readable_key() {
   );
 }
 
-/// A large object, to show the readers stay linear and do not overflow a
-/// recursion limit on width.
+/// A wide object, to show the readers stay linear.
 #[test]
 fn collects_every_key_of_a_very_wide_object() {
   const WIDTH: usize = 10_000;
@@ -600,8 +580,6 @@ fn collects_every_key_of_a_very_wide_object() {
   assert_eq!(keys.last(), Some(&Atom::new("9999")));
 }
 
-/// An arrow value carries no key of its own, so the property is read by its key
-/// alone.
 #[test]
 fn reads_a_key_whose_value_is_a_function() {
   let object = object_of(vec![key_value_prop(

@@ -53,8 +53,7 @@ fn test_default_injectable_const_style() {
   assert_eq!(style.rtl, None);
   assert_eq!(style.priority, Some(0.0));
   assert_eq!(style.const_key, "");
-  // The field holds JSON, and an empty text spells none, so the value a
-  // default carries is the JSON for a constant that holds nothing.
+  // The field holds JSON, so "no value" is `null`.
   assert_eq!(style.const_value, "null");
 }
 

@@ -1,9 +1,5 @@
-//! Does this agree with the JavaScript it stands in for?
-//!
-//! Every expectation here is that JavaScript's own answer, printed by
-//! `scripts/generate-value-parser-cases.mjs` into `cases.rs`. Nothing in this
-//! file is written by eye, and nothing in it should be: a hand-edited
-//! expectation here is just a divergence with a test blessing it.
+//! Parity with the JavaScript: every expectation comes from
+//! `scripts/generate-value-parser-cases.mjs` via `cases.rs`; never edit them by hand.
 //!
 //! Regenerate the table after adding an input to the generator:
 //!
@@ -43,15 +39,7 @@ fn serializes_every_value_into_the_same_text() {
   }
 }
 
-/// The property the rest of the normalization effort rests on: what no
-/// normalizer rewrites comes back exactly as the author wrote it — hex
-/// spelling, letter case, quote character, exponent and whitespace positions
-/// included.
-///
-/// Four corpus values are excluded, and they are the exception that proves
-/// the agreement is real rather than merely plausible. `/*/` closes the comment
-/// it opens, so a value containing one comes back changed. Matching that is the
-/// requirement; improving on it would change class names.
+/// Unrewritten text round-trips byte for byte; the four `/*/` corpus values are excluded.
 #[test]
 fn round_trips_every_value_byte_for_byte() {
   let mut quirks = Vec::new();
@@ -95,8 +83,6 @@ fn splits_every_word_into_the_same_number_and_unit() {
   }
 }
 
-/// The entry point ties the three together, so it is measured against the same
-/// answers rather than trusted to call them correctly.
 #[test]
 fn the_entry_point_parses_and_serializes_like_its_parts() {
   for case in PARSER_CASES {
@@ -117,8 +103,7 @@ fn the_entry_point_parses_and_serializes_like_its_parts() {
   }
 }
 
-/// Collapses a function to `name[arg,arg,arg]`, ignoring everything else. The
-/// twin of `bracketFunctions` in the generator.
+/// Collapses a function to `name[arg,arg,arg]`; twin of `bracketFunctions` in the generator.
 fn bracket_functions(node: &Node) -> Option<String> {
   if node.kind != NodeKind::Function {
     return None;
@@ -134,11 +119,7 @@ fn bracket_functions(node: &Node) -> Option<String> {
   Some(format!("{}[{}]", node.value, args.join(",")))
 }
 
-/// Serialising with a per-node override, against the answers a real run gave.
-///
-/// Each scenario is written twice on purpose — once in the generator, once here
-/// — because an override is behaviour rather than data. What is never written
-/// twice is the answer.
+/// Serializing with a per-node override; scenarios mirror the generator's.
 #[test]
 fn an_override_replaces_the_same_nodes() {
   for case in OVERRIDE_CASES {
@@ -158,8 +139,7 @@ fn an_override_replaces_the_same_nodes() {
         false => None,
       }),
       "override-declines-every-node" => stringify_with(&nodes, &mut |_: &Node| None),
-      // No override at all: a node re-kinded after parsing spells out as its
-      // kind says, dropping the children and parentheses it still carries.
+      // A re-kinded node spells out as its new kind, dropping children and parentheses.
       "function-retyped-as-word" => {
         match nodes.get_mut(1) {
           Some(node) => node.kind = NodeKind::Word,
@@ -167,9 +147,7 @@ fn an_override_replaces_the_same_nodes() {
         }
         stringify(&nodes)
       },
-      // And the kind that is not tested before the children are: it keeps them
-      // and drops the name and parentheses instead. The two scenarios differ
-      // only in the kind assigned, which is the whole point of having both.
+      // Unicode-range keeps the children and drops the name and parentheses.
       "function-retyped-as-unicode-range" => {
         match nodes.get_mut(1) {
           Some(node) => node.kind = NodeKind::UnicodeRange,
@@ -184,15 +162,7 @@ fn an_override_replaces_the_same_nodes() {
   }
 }
 
-/// The one thing about an override that is *not* parity: the order it is
-/// consulted in.
-///
-/// The JavaScript builds its result by prepending each node's text to what it
-/// has so far, so a stateful override sees the siblings right to left. This
-/// crate writes into a single sink and therefore sees them left to right. The
-/// text both produce is identical, which is why no in-repo caller — all of
-/// them stateless — can tell. Pinned so that a future rewrite has to decide to
-/// change it rather than change it by accident.
+/// Not parity: siblings reach the override left to right (upstream: right to left).
 #[test]
 fn an_override_is_consulted_left_to_right() {
   let nodes = parse("a b c");
@@ -207,8 +177,7 @@ fn an_override_is_consulted_left_to_right() {
   assert_eq!(text, "a b c");
 }
 
-/// And a parent still precedes its children, which is the half that *does*
-/// match the JavaScript.
+/// A parent still precedes its children, as in upstream.
 #[test]
 fn an_override_sees_a_function_before_its_arguments() {
   let nodes = parse("calc(1px + 2px)");

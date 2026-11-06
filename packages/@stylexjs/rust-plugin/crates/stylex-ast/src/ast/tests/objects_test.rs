@@ -119,12 +119,7 @@ fn make_getter_prop(key: &str) -> PropOrSpread {
   })))
 }
 
-/// A property whose key is an expression: `{ [key]: val }`.
-///
-/// The key is a number so a test can write the spelling of an array index and
-/// still get a computed key. Nothing reads it: a computed key has to be
-/// evaluated before it names anything, so every reader here answers "no name"
-/// for it, whatever the expression would evaluate to.
+/// A computed-key property `{ [key]: val }`; readers never name it.
 fn make_computed_key_prop(key: f64, val: f64) -> PropOrSpread {
   PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
     key: PropName::Computed(ComputedPropName {
@@ -213,8 +208,7 @@ fn values_of(props: &[PropOrSpread]) -> Vec<f64> {
     .collect()
 }
 
-/// Each property's key beside the number it holds, so a test can prove a value
-/// travelled with the key it was written under.
+/// Each key with its value, to prove values travel with their keys.
 fn pairs_of(props: &[PropOrSpread]) -> Vec<(String, f64)> {
   keys_of(props)
     .into_iter()
@@ -234,9 +228,7 @@ fn pairs_of(props: &[PropOrSpread]) -> Vec<(String, f64)> {
 mod remove_duplicates_tests {
   use super::*;
 
-  /// A repeated key keeps the place it first took, and takes the last value.
-  /// `Object.entries({ color: 1, opacity: 2, color: 3 })` gives
-  /// `[["color", 3], ["opacity", 2]]`, so `color` stays first.
+  /// `Object.entries({ color: 1, opacity: 2, color: 3 })` → `[["color", 3], ["opacity", 2]]`.
   #[test]
   fn a_repeated_key_keeps_the_place_it_first_took() {
     let props = vec![
@@ -252,14 +244,8 @@ mod remove_duplicates_tests {
     assert_eq!(number_value_of(&result[1]), Some(2.0));
   }
 
-  /// Two keys that both repeat keep both of their first places, and a key
-  /// declared after them stays behind them.
-  /// `Object.entries({ b: 1, a: 2, b: 3, c: 4, a: 5 })` gives
-  /// `[["b", 3], ["a", 5], ["c", 4]]`.
-  ///
-  /// The third key is what makes this case tell the two rules apart. With
-  /// `b, a, b, a` alone, each key takes its last place in the same order as
-  /// its first, so both rules give the same answer.
+  /// `Object.entries({ b: 1, a: 2, b: 3, c: 4, a: 5 })` → `[["b", 3], ["a", 5], ["c", 4]]`;
+  /// the trailing `c` is what distinguishes first-place from last-place ordering.
   #[test]
   fn two_repeated_keys_each_keep_their_first_place() {
     let props = vec![
@@ -278,10 +264,7 @@ mod remove_duplicates_tests {
     assert_eq!(number_value_of(&result[2]), Some(4.0));
   }
 
-  /// A key that repeats three times is replaced twice, and the second
-  /// replacement still lands in the place the key first took.
-  /// `Object.entries({ a: 1, b: 2, a: 3, c: 4, a: 5 })` gives
-  /// `[["a", 5], ["b", 2], ["c", 4]]`.
+  /// `Object.entries({ a: 1, b: 2, a: 3, c: 4, a: 5 })` → `[["a", 5], ["b", 2], ["c", 4]]`.
   #[test]
   fn a_key_declared_three_times_keeps_its_first_place() {
     let props = vec![
@@ -298,9 +281,7 @@ mod remove_duplicates_tests {
     assert_eq!(number_value_of(&result[0]), Some(5.0));
   }
 
-  /// A dropped property between two declarations of one key does not move the
-  /// key. The place comes from the properties kept so far, and not from the
-  /// place the property had in the input.
+  /// Positions come from the properties kept so far, not the input positions.
   #[test]
   fn a_dropped_property_between_two_declarations_does_not_move_the_key() {
     let props = vec![
@@ -403,14 +384,10 @@ mod remove_duplicates_tests {
   fn keeps_a_numeric_key() {
     let props = vec![make_kv_num_key_prop(42.0, 1.0)];
 
-    // A numeric key names a property like any other, so it is kept. It used to
-    // be dropped: the key reader had no arm for it, and a declaration written
-    // `{ 42: 1 }` vanished from the object it was written in.
     assert_eq!(keys_of(&remove_duplicates(props)), vec!["42"]);
   }
 
-  // A computed key has to be evaluated before it names anything, so the reader
-  // answers "no name" and the property goes the way a spread does.
+  // A computed key names nothing, so it is dropped like a spread.
   #[test]
   fn drops_a_computed_key_because_it_names_nothing_readable() {
     let props = vec![make_kv_prop("a", 1.0), make_computed_key_prop(0.0, 2.0)];
@@ -418,8 +395,6 @@ mod remove_duplicates_tests {
     assert_eq!(keys_of(&remove_duplicates(props)), vec!["a"]);
   }
 
-  // Two computed keys are two unreadable names, not one repeated name. Both go,
-  // and neither takes a readable property with it.
   #[test]
   fn drops_every_computed_key_and_keeps_the_readable_ones() {
     let props = vec![
@@ -432,9 +407,7 @@ mod remove_duplicates_tests {
     assert_eq!(keys_of(&remove_duplicates(props)), vec!["a", "b"]);
   }
 
-  // A computed key spelled like a real one does not collide with it. The
-  // expression `['a']` would name `a` in the language, and reading it that way
-  // here would drop the property the source actually wrote.
+  // `['a']` would name `a` in JS, but unevaluated it must not collide with `a`.
   #[test]
   fn a_computed_key_does_not_collide_with_the_name_it_would_spell() {
     let props = vec![
@@ -475,8 +448,7 @@ mod assign_props_tests {
 
     let result = assign_props(old, new);
 
-    // `Object.assign` is shallow, so the nested `x` is gone rather than merged
-    // in. A deep merge here quietly kept declarations the source had replaced.
+    // `Object.assign` is shallow: the nested `x` is replaced, not merged.
     assert_eq!(keys_of(&result), vec!["shared"]);
     assert_eq!(inner_keys_of(&result[0]), vec!["y"]);
   }
@@ -488,8 +460,7 @@ mod assign_props_tests {
 
     let result = assign_props(old, new);
 
-    // `{ '42': x }` and `{ 42: y }` name one property in the language, so they
-    // collide and the later one wins.
+    // `{ '42': x }` and `{ 42: y }` name one property, so the later wins.
     assert_eq!(keys_of(&result), vec!["42"]);
     assert_eq!(inner_keys_of(&result[0]), vec!["y"]);
   }
@@ -499,8 +470,6 @@ mod assign_props_tests {
     let old = vec![make_kv_num_key_obj_prop(42.0, vec![make_kv_prop("x", 1.0)])];
     let new = vec![make_kv_num_key_obj_prop(42.0, vec![make_kv_prop("y", 2.0)])];
 
-    // This used to answer an empty object -- the key was matched by the merge
-    // and then dropped by the deduplication, which read no name for it.
     assert_eq!(keys_of(&assign_props(old, new)), vec!["42"]);
   }
 
@@ -509,7 +478,7 @@ mod assign_props_tests {
     let old = vec![make_bigint_obj_prop(42, vec![make_kv_prop("x", 1.0)])];
     let new = vec![make_bigint_obj_prop(42, vec![make_kv_prop("y", 2.0)])];
 
-    // `{ 42n: x }` names the property `"42"`, so the two collide.
+    // `{ 42n: x }` names `"42"`.
     assert_eq!(keys_of(&assign_props(old, new)), vec!["42"]);
   }
 
@@ -534,8 +503,7 @@ mod assign_props_tests {
     assert_eq!(keys_of(&assign_props(vec![], new)), vec!["a"]);
   }
 
-  // A property that names no readable key collides with nothing: it keeps its
-  // place, on either side of the merge.
+  // Unnamed properties collide with nothing and keep their place.
 
   #[test]
   fn an_old_getter_keeps_its_place() {
@@ -574,16 +542,12 @@ mod assign_props_tests {
     let old = vec![make_computed_key_prop(0.0, 1.0), make_kv_prop("a", 2.0)];
     let new = vec![make_computed_key_prop(0.0, 3.0)];
 
-    // Three properties out of three in: neither computed key names anything to
-    // collide with, so neither replaces the other.
     assert_eq!(
       keys_of(&assign_props(old, new)),
       vec!["<computed>", "a", "<computed>"]
     );
   }
 
-  // Every property unreadable, on both sides. Nothing collides, nothing is
-  // dropped, and the merge is the two lists end to end.
   #[test]
   fn a_merge_of_nothing_readable_keeps_every_property() {
     let old = vec![make_computed_key_prop(0.0, 1.0), make_spread_prop()];
@@ -595,8 +559,6 @@ mod assign_props_tests {
     );
   }
 
-  // A large merge where one key repeats through every round: the repeated key
-  // keeps the position it first took, and the unreadable properties keep theirs.
   #[test]
   fn a_long_merge_keeps_one_position_for_a_repeated_key() {
     let old: Vec<PropOrSpread> = (0..500)
@@ -657,8 +619,7 @@ mod order_own_keys_tests {
 
   #[test]
   fn a_key_that_is_not_the_canonical_spelling_is_a_string_key() {
-    // `00`, `01` and `+0` all round-trip to a different string, so the
-    // language enumerates them in insertion order rather than as indices.
+    // `00`, `01` and `+0` don't round-trip, so they are string keys.
     let props = vec![
       make_kv_str_key_prop("00", 1.0),
       make_kv_str_key_prop("1", 2.0),
@@ -671,8 +632,7 @@ mod order_own_keys_tests {
 
   #[test]
   fn the_largest_unsigned_value_is_not_an_index() {
-    // 2^32 - 1 is one past the last index an array can hold, so it enumerates
-    // as a string key. One below it is an index.
+    // 2^32 - 1 is not an array index; one below is.
     let props = vec![
       make_kv_str_key_prop("4294967295", 1.0),
       make_kv_str_key_prop("4294967294", 2.0),
@@ -722,10 +682,7 @@ mod order_own_keys_tests {
     assert_eq!(keys_of(&order_own_keys(props)), vec!["0", "<computed>"]);
   }
 
-  // A getter, a setter and a method declare a name that no index reading
-  // reaches: the key is there, but the property is not a key-value pair, so the
-  // ordering answers "no index" at the property rather than at the key. They
-  // stay among the string keys, in the order they were written.
+  // Accessors and methods never count as indices, so they stay among the string keys.
   #[test]
   fn an_accessor_or_a_method_keeps_its_place_among_the_string_keys() {
     let props = vec![
@@ -741,8 +698,7 @@ mod order_own_keys_tests {
     );
   }
 
-  // The same property with a name that *is* an array index. A getter named `0`
-  // still does not move: the ordering never reads its key.
+  // Even when named `0`.
   #[test]
   fn a_getter_named_by_digits_is_not_an_index() {
     let props = vec![make_getter_prop("0"), make_kv_str_key_prop("1", 1.0)];
@@ -767,17 +723,14 @@ mod order_own_keys_tests {
 
   #[test]
   fn a_number_key_orders_exactly_as_the_name_it_spells() {
-    // The reorder reads a number key as a number rather than rendering it, so
-    // every reading has to agree with the string the language spells. Each pair
-    // below is the number and that string; both lists have to come out the same
-    // way round.
+    // Number keys are read as numbers; each must agree with the JS string spelling.
     let cases: Vec<(f64, &str)> = vec![
       (0.0, "0"),
-      // `-0` names the property `0`, as `String(-0)` gives.
+      // `String(-0)` is `"0"`.
       (-0.0, "0"),
       (1000.0, "1000"),
       (4294967294.0, "4294967294"),
-      // One past the last index, so a string key.
+      // Not an index.
       (4294967295.0, "4294967295"),
       (4294967296.0, "4294967296"),
       (1.5, "1.5"),
@@ -797,10 +750,7 @@ mod order_own_keys_tests {
         make_kv_str_key_prop(name, 2.0),
       ]);
 
-      // Compared by the value each property carries rather than by its key:
-      // Rust renders the key `-0` as `-0` where the language renders it `0`,
-      // and the question here is where the property lands, not how a test
-      // helper spells it.
+      // Compared by value: Rust renders the key `-0` as `-0`, JS as `0`.
       assert_eq!(
         values_of(&by_number),
         values_of(&by_name),
@@ -824,8 +774,6 @@ mod order_own_keys_tests {
 
   #[test]
   fn a_shorthand_property_named_by_digits_is_an_index() {
-    // A shorthand carries its name in the identifier, and the reorder has to
-    // read it there as well as in a key-value key.
     let props = vec![make_kv_prop("a", 1.0), make_shorthand_prop("0")];
 
     assert_eq!(keys_of(&order_own_keys(props)), vec!["0", "a"]);
@@ -833,8 +781,7 @@ mod order_own_keys_tests {
 
   #[test]
   fn keeps_the_value_beside_its_key_when_the_keys_move() {
-    // The reorder moves whole properties. A sort that moved keys without their
-    // values would still pass every key-only assertion above.
+    // Values must move with their keys.
     let props = vec![
       make_kv_prop("color", 10.0),
       make_kv_str_key_prop("1", 11.0),
@@ -853,9 +800,7 @@ mod order_own_keys_tests {
 
   #[test]
   fn orders_a_long_run_of_indices_written_backwards() {
-    // Ten thousand index keys in descending order. The result has to be the
-    // ascending run, which also proves the sort reads the value of a key and
-    // not its spelling -- `10` sorts after `9`, where a text sort puts it first.
+    // Descending index keys come out ascending, by value (`10` after `9`).
     let count = 10_000u32;
     let props = (0..count)
       .rev()
@@ -871,8 +816,7 @@ mod order_own_keys_tests {
 
   #[test]
   fn holds_a_long_run_of_string_keys_in_place() {
-    // The same size with one index key at the end, so the sort does run. Every
-    // other key has to come out in the order it was written.
+    // One index key at the end forces the sort; the others keep insertion order.
     let count = 10_000usize;
     let mut props = (0..count)
       .map(|position| make_kv_prop(&format!("k{}", position), position as f64))
@@ -892,7 +836,7 @@ mod order_own_map_keys_tests {
 
   use super::*;
 
-  /// The map the namespace reader hands over: an ordered map keyed by name.
+  /// An ordered map keyed by name, as the namespace reader produces.
   fn map_of(names: &[&str]) -> IndexMap<String, usize> {
     names
       .iter()
@@ -951,8 +895,7 @@ mod order_own_map_keys_tests {
 
   #[test]
   fn a_key_with_no_readable_name_keeps_its_place_among_the_string_keys() {
-    // `name_of` answers nothing for `hidden`, which is what an unreadable key
-    // gives. It ranks with the string keys rather than with the indices.
+    // `hidden` has no name, so it ranks with the string keys.
     let mut map = map_of(&["a", "hidden", "0"]);
 
     order_own_map_keys(&mut map, |name| match name.as_str() {
@@ -1004,8 +947,7 @@ mod order_own_map_keys_tests {
 
   #[test]
   fn two_keys_that_read_as_the_same_name_keep_their_order() {
-    // Distinct keys can spell one name once `name_of` trims them. They rank
-    // equal, and a stable sort leaves the first one first.
+    // Keys that trim to one name rank equal; the stable sort keeps the first first.
     let mut map = map_of(&["a1", "0", "a2"]);
 
     order_own_map_keys(&mut map, |name| Some(&name[..1]));

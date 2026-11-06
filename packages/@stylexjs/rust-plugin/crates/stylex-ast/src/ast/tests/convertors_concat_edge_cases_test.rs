@@ -76,8 +76,7 @@ fn concat_call_to_template_literal_returns_none_for_super_callee() {
   assert!(concat_call_to_template_literal(&call).is_none());
 }
 
-/// An Expr callee that is a plain Ident (not a MemberExpr) makes `as_member()`
-/// return None.
+/// A plain Ident callee makes `as_member()` return None.
 #[test]
 fn concat_call_to_template_literal_returns_none_for_ident_callee() {
   let call = CallExpr {
@@ -110,15 +109,13 @@ fn concat_call_to_template_literal_returns_none_for_computed_prop() {
   assert!(concat_call_to_template_literal(&call).is_none());
 }
 
-/// A `concat` call whose object is an Ident (not a Lit) makes `as_lit()` return
-/// None.
+/// An Ident object makes `as_lit()` return None.
 #[test]
 fn concat_call_to_template_literal_returns_none_when_obj_is_not_lit() {
   let call = CallExpr {
     span: DUMMY_SP,
     callee: Callee::Expr(Box::new(Expr::Member(MemberExpr {
       span: DUMMY_SP,
-      // obj is an Ident — not a Lit, so as_lit() returns None
       obj: Box::new(create_ident_expr("someVariable")),
       prop: MemberProp::Ident(swc_core::ecma::ast::IdentName::new(
         "concat".into(),
@@ -132,8 +129,7 @@ fn concat_call_to_template_literal_returns_none_when_obj_is_not_lit() {
   assert!(concat_call_to_template_literal(&call).is_none());
 }
 
-/// A `concat` call whose object is a numeric Lit (not a string) makes
-/// `extract_str_lit_ref` return None, causing `.map()?` to yield None.
+/// A numeric Lit object makes `extract_str_lit_ref` return None.
 #[test]
 fn concat_call_to_template_literal_returns_none_when_obj_is_non_string_lit() {
   let call = CallExpr {
@@ -153,8 +149,7 @@ fn concat_call_to_template_literal_returns_none_when_obj_is_non_string_lit() {
   assert!(concat_call_to_template_literal(&call).is_none());
 }
 
-/// Spread arguments are intentionally ignored during concat -> template
-/// conversion.
+/// Spread arguments are intentionally ignored during concat → template conversion.
 #[test]
 fn concat_call_to_template_literal_skips_spread_arguments() {
   let call = CallExpr {

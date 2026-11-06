@@ -17,19 +17,8 @@ pub enum InjectableStyleBaseKind {
 }
 
 impl InjectableStyleKind {
-  /// The rule text this style contributes, whichever direction carries it.
-  ///
-  /// Both kinds hold an `ltr` and an optional `rtl`, and a directional rule is
-  /// spelled with an empty `ltr` — so a reader wanting "the rule" has to pick,
-  /// and picking is the same two lines at every site. Answered here so the kinds
-  /// stay this module's business.
-  ///
-  /// The empty-`ltr` arm is this compiler's spelling of a directional rule, not
-  /// a fallback the reference implementation has: upstream takes `ltr` whenever
-  /// it is a string, and `generateCSSRule` always produces a non-empty one, so
-  /// it never reads `rtl` here. Faithful to the code this was lifted out of, and
-  /// unreachable from `generate_css_rule` output — but a new caller should not
-  /// read it as upstream behaviour.
+  /// The rule text: `ltr`, or `rtl` when `ltr` is empty (this compiler's spelling of a
+  /// directional rule; upstream always reads `ltr`).
   pub fn rule_text(&self) -> &str {
     let (ltr, rtl) = self.directional_rules();
 
@@ -40,12 +29,7 @@ impl InjectableStyleKind {
     }
   }
 
-  /// The `ltr` rule and the optional `rtl` one, whichever kind carries them.
-  ///
-  /// Both kinds hold the same pair, so every reader that wants it wrote the
-  /// same two arms. Answered here for the reason [`Self::rule_text`] is: the
-  /// kinds are this module's business, and a reader that only ever meets one of
-  /// them leaves the other arm with no test to reach it.
+  /// The `ltr` rule and the optional `rtl` one.
   pub fn directional_rules(&self) -> (&str, Option<&str>) {
     match self {
       Self::Regular(style) => (style.ltr.as_str(), style.rtl.as_deref()),
@@ -53,10 +37,7 @@ impl InjectableStyleKind {
     }
   }
 
-  /// The order this style is injected in, or `0.0` where the kind names none.
-  ///
-  /// The same two arms as [`Self::directional_rules`], and answered here for
-  /// the same reason.
+  /// The injection priority, or `0.0` where the kind has none.
   pub fn priority(&self) -> f64 {
     match self {
       Self::Regular(style) => style.priority.unwrap_or(0.0),

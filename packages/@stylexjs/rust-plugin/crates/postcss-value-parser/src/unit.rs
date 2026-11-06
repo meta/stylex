@@ -1,5 +1,4 @@
-//! Splitting a word into a number and a unit. See the crate documentation in
-//! `lib.rs` for what it is and who holds its copyright.
+//! Splitting a word into a number and a unit.
 
 const MINUS: u32 = b'-' as u32;
 const PLUS: u32 = b'+' as u32;
@@ -7,8 +6,7 @@ const DOT: u32 = b'.' as u32;
 const EXP: u32 = b'e' as u32;
 const EXP_UPPER: u32 = b'E' as u32;
 
-/// See `parse::char_code_at` — the same stand-in for reading past the end of
-/// the string, chosen so that every comparison below fails the way `NaN` does.
+/// Stand-in for JS `NaN` past the end of the string; see `parse::char_code_at`.
 const OUT_OF_RANGE: u32 = u32::MAX;
 
 fn char_code_at(value: &[u8], pos: usize) -> u32 {
@@ -22,20 +20,12 @@ fn is_digit(code: u32) -> bool {
   (48..=57).contains(&code)
 }
 
-/// A word split into the number it starts with and whatever follows.
-///
-/// The unit is whatever the number scan did not consume, whether or not it is a
-/// real CSS unit: `10px` splits as `("10", "px")` and `10zz` as `("10", "zz")`.
-///
-/// Both halves borrow the word rather than owning copies of it. Four
-/// normalizers ask this of every word in every value, and each only reads or
-/// compares what comes back — building a replacement string, when there is one
-/// to build, is a separate step that happens far less often.
+/// A word split into its leading number and whatever follows (`10zz` → `("10", "zz")`).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Dimension<'value> {
-  /// The leading number, spelled exactly as the author wrote it.
+  /// The leading number, as written.
   pub number: &'value str,
-  /// Everything after it, empty when the word is a bare number.
+  /// The rest; empty for a bare number.
   pub unit: &'value str,
 }
 
@@ -61,11 +51,8 @@ fn like_number(value: &[u8]) -> bool {
   is_digit(code)
 }
 
-/// Splits a word into its leading number and its unit, per
-/// <https://www.w3.org/TR/css-syntax-3/#consume-number>.
-///
-/// Returns `None` when the word does not start with a number at all — which is
-/// how the normalizers tell `0px` apart from `auto`.
+/// Splits a word into its leading number and unit, per
+/// <https://www.w3.org/TR/css-syntax-3/#consume-number>; `None` if it doesn't start with one.
 pub fn unit(value: &str) -> Option<Dimension<'_>> {
   let bytes = value.as_bytes();
   let length = bytes.len();
@@ -97,8 +84,7 @@ pub fn unit(value: &str) -> Option<Dimension<'_>> {
   let next_code = char_code_at(bytes, pos + 1);
   let next_next_code = char_code_at(bytes, pos + 2);
 
-  // An exponent joins the number only when it is complete. `1e` and `1e+` split
-  // as `("1", "e")` and `("1", "e+")`, because the exponent never happened.
+  // An exponent joins only when complete: `1e+` splits as `("1", "e+")`.
   if (code == EXP || code == EXP_UPPER)
     && (is_digit(next_code)
       || ((next_code == PLUS || next_code == MINUS) && is_digit(next_next_code)))
@@ -113,11 +99,7 @@ pub fn unit(value: &str) -> Option<Dimension<'_>> {
     }
   }
 
-  // Every cut lands after an ASCII digit, sign, dot or exponent marker, so the
-  // split is always on a character boundary. The fallbacks are what JavaScript
-  // `slice` would do with an out-of-range index — the whole word, then nothing
-  // — rather than the empty split a `unwrap_or_default` on both halves would
-  // invent, which reads as a successful parse of a number that is not there.
+  // Cuts are always on character boundaries; the fallbacks mirror JS `slice`.
   Some(Dimension {
     number: value.get(..pos).unwrap_or(value),
     unit: value.get(pos..).unwrap_or(""),

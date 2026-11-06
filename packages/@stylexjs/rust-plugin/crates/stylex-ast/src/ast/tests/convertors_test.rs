@@ -49,10 +49,7 @@ fn convert_lit_to_number_null_returns_err() {
   assert!(convert_lit_to_number(&lit).is_err());
 }
 
-/// The error names the literal kind it could not read. It used to report
-/// `Expr::get_type`, which answers the value an expression would produce and is
-/// `Unknown` for every literal that reaches this arm — so the label said
-/// nothing. Which literal was passed is the only thing a caller can act on.
+/// The error names the literal kind it could not read.
 #[test]
 fn convert_lit_to_number_names_the_literal_kind_it_refused() {
   let cases = [
@@ -190,10 +187,7 @@ fn atom_utf16_length_counts_code_units() {
   assert_eq!(atom_utf16_length(&Wtf8Atom::from("\u{1F600}a")), 3);
 }
 
-/// The case that rules out reading the atom as a `String` first. An unpaired
-/// surrogate is a legal JavaScript string literal and has no UTF-8 form, so
-/// `convert_atom_to_string` aborts on it — from inside an evaluation that is
-/// allowed to fail. Its length needs no valid scalar to answer.
+/// An unpaired surrogate is a legal JS string with no UTF-8 form; measuring it must not panic.
 #[test]
 fn atom_utf16_length_counts_an_unpaired_surrogate() {
   let lone = Wtf8Atom::from(Wtf8Buf::from_ill_formed_utf16(&[0xD83D]));
@@ -209,11 +203,7 @@ fn atom_utf16_length_counts_an_unpaired_surrogate() {
   assert_eq!(atom_utf16_length(&around), 3);
 }
 
-/// The character at a UTF-16 index, which is how the language indexes a string.
-///
-/// The index counts code units and not Rust characters, so the character after
-/// an astral one sits at index two rather than one. Past the end there is no
-/// character, which the caller reads as `undefined`.
+/// Indices count UTF-16 units: the character after an astral one is at index two.
 #[test]
 fn atom_utf16_char_at_reads_the_code_unit() {
   let text = Wtf8Atom::from("a\u{1F600}b");
@@ -224,14 +214,8 @@ fn atom_utf16_char_at_reads_the_code_unit() {
   assert_eq!(atom_utf16_char_at(&Wtf8Atom::from(""), 0), None);
 }
 
-/// A unit that is half of an astral character has no `char` of its own, and
-/// answers the replacement character -- which is what the reference
-/// implementation's own output becomes once it is written to a file, and the
-/// substitution the engine fold already makes for every string it carries back.
-///
-/// Both readings answer it: a well-formed text holding an astral character, and
-/// one that already holds a lone surrogate and so has no `str` to read from.
-/// `None` is left to mean one thing, an index past the end.
+/// Half of an astral character answers U+FFFD, from both well-formed and lone-surrogate text;
+/// `None` means only past the end.
 #[test]
 fn atom_utf16_char_at_replaces_half_of_a_character() {
   let paired = Wtf8Atom::from("\u{1F600}a");
@@ -261,9 +245,6 @@ fn atom_utf16_char_at_replaces_half_of_a_character() {
   assert_eq!(atom_utf16_char_at(&lone, 3), None);
 }
 
-/// A paired surrogate is the same two code units whether it arrives as a scalar
-/// or as its halves, so the two readings inside `atom_utf16_length` agree where
-/// they overlap.
 #[test]
 fn atom_utf16_length_agrees_across_both_readings() {
   let paired = Wtf8Atom::from(Wtf8Buf::from_ill_formed_utf16(&[0xD83D, 0xDE00]));
@@ -548,8 +529,7 @@ fn convert_member_prop_to_string_numeric_uses_parsed_value_not_raw() {
 
 #[test]
 fn convert_member_prop_to_string_numeric_zero() {
-  // JS `String(0)` (and `String(-0)`) is "0"; the zero fast-path returns it
-  // without going through exponential rendering.
+  // JS `String(0)` and `String(-0)` are "0".
   assert_eq!(
     convert_member_prop_to_string(&computed_num_member_prop(0.0, None)).as_deref(),
     Some("0")
@@ -591,9 +571,7 @@ fn convert_member_prop_to_string_numeric_js_edge_values() {
 
 #[test]
 fn convert_member_prop_to_string_numeric_renders_shortest_decimal() {
-  // A computed numeric key is looked up by `String(Number)`, so the rendering
-  // has to be JS's spelling — exponential outside the fixed-notation range —
-  // and not merely a decimal that parses back to the same `f64`.
+  // Must be JS's spelling (exponential outside fixed range), not just a round-trippable decimal.
   assert_eq!(
     convert_member_prop_to_string(&computed_num_member_prop(1e-7, None)).as_deref(),
     Some("1e-7")
@@ -706,7 +684,7 @@ fn normalize_expr_handles_deeply_nested_parens_without_recursion() {
   assert!(matches!(normalize_expr(&expr), Expr::Lit(Lit::Str(_))));
   *normalize_expr_mut(&mut expr) = create_string_expr("after");
 
-  // Consume the chain iteratively as well so test cleanup does not recurse.
+  // Drop iteratively so cleanup does not recurse.
   while let Expr::Paren(paren) = expr {
     expr = *paren.expr;
   }
@@ -734,14 +712,8 @@ fn get_expr_from_var_decl_panics_without_initializer() {
   get_expr_from_var_decl(&decl);
 }
 
-// ── is_js_undefined ─────────────────────────────────────────────────
+// is_js_undefined
 
-/// The one predicate several evaluator steps share for "this is the *value*
-/// `undefined`", rather than a name that failed to resolve. A key an object does
-/// not carry, an index past the end of an array and a member read off a fold all
-/// answer with it, and each of those readers has to recognise it on the way back
-/// out — so the test is here, beside the predicate, rather than in whichever
-/// caller happens to exist.
 #[test]
 fn is_js_undefined_recognises_only_the_exact_name() {
   assert!(is_js_undefined(&create_ident("undefined")));
@@ -765,17 +737,12 @@ fn is_js_undefined_recognises_only_the_exact_name() {
   }
 }
 
-/// The predicate reads the name and nothing else, so the ident a caller hands it
-/// answers the same whatever span or syntax context it carries. That is what
-/// makes it safe to share between readers that got their ident from different
-/// places -- one from the source, one synthesized, one out of a resolved module
-/// where every binding carries a mark.
+/// Only the name matters, not span or syntax context.
 #[test]
 fn is_js_undefined_ignores_span_and_context() {
   use swc_core::common::{BytePos, GLOBALS, Globals, Mark, Span, SyntaxContext};
 
-  // A `Mark` can only be minted inside a `GLOBALS` scope, so the resolved-ident
-  // half of this case has to run in one.
+  // `Mark` can only be minted inside `GLOBALS`.
   GLOBALS.set(&Globals::new(), || {
     let synthesized = create_ident("undefined");
 
@@ -793,8 +760,6 @@ fn is_js_undefined_ignores_span_and_context() {
       );
     }
 
-    // And a shadowing binding is still not the value, however it is spelled --
-    // the chain refuses one before any of these readers is asked.
     let mut shadowing = create_ident("undefined2");
     shadowing.ctxt = SyntaxContext::empty().apply_mark(Mark::new());
     assert!(!is_js_undefined(&shadowing));

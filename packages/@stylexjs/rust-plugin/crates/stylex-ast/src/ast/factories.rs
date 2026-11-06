@@ -16,8 +16,7 @@ use super::convertors::{
   create_string_expr,
 };
 
-/// Wraps an owned expression in a ParenExpr with DUMMY_SP span.
-/// This is commonly used when creating error contexts.
+/// Wraps an owned expression in a `ParenExpr` with `DUMMY_SP`.
 ///
 /// # Example
 /// ```ignore
@@ -31,9 +30,7 @@ pub fn wrap_in_paren(expr: Expr) -> Expr {
   })
 }
 
-/// Wraps a reference to an expression in a ParenExpr with DUMMY_SP span.
-/// This clones the expression and is commonly used when creating error
-/// contexts.
+/// Wraps a clone of an expression in a `ParenExpr` with `DUMMY_SP`.
 ///
 /// # Example
 /// ```ignore
@@ -45,9 +42,6 @@ pub fn wrap_in_paren_ref(expr: &Expr) -> Expr {
 }
 
 /// Creates an `ObjectLit` from a vector of `PropOrSpread`.
-///
-/// # Arguments
-/// * `props` - The properties to include in the object literal
 ///
 /// # Example
 /// ```ignore
@@ -63,9 +57,6 @@ pub fn create_object_lit(props: Vec<PropOrSpread>) -> ObjectLit {
 
 /// Creates an `ArrayLit` from a vector of `ExprOrSpread`.
 ///
-/// # Arguments
-/// * `elems` - The elements to include in the array literal
-///
 /// # Example
 /// ```ignore
 /// let array_lit = create_array_lit(vec![create_expr_or_spread(value)]);
@@ -79,9 +70,6 @@ pub fn create_array_lit(elems: Vec<Option<ExprOrSpread>>) -> ArrayLit {
 }
 
 /// Creates an `Expr::Object` from a vector of `PropOrSpread`.
-///
-/// # Arguments
-/// * `props` - The properties to include in the object literal
 ///
 /// # Example
 /// ```ignore
@@ -119,10 +107,6 @@ pub fn create_cond_expr(test: Expr, cons: Expr, alt: Expr) -> Expr {
 
 /// Creates a `PropOrSpread` from a key and value.
 ///
-/// # Arguments
-/// * `key` - The key of the property
-/// * `value` - The value of the property
-///
 /// # Example
 /// ```ignore
 /// let prop_or_spread = create_key_value_prop("key", value);
@@ -136,9 +120,6 @@ pub fn create_key_value_prop(key: &str, value: Expr) -> PropOrSpread {
 
 /// Creates a `BindingIdent` from an `Ident`.
 ///
-/// # Arguments
-/// * `ident` - The identifier to create a binding for
-///
 /// # Example
 /// ```ignore
 /// let binding_ident = create_binding_ident(ident);
@@ -150,9 +131,6 @@ pub fn create_binding_ident(ident: Ident) -> BindingIdent {
 
 /// Creates a `Lit::Str` from a string.
 ///
-/// # Arguments
-/// * `value` - The string to create a literal for
-///
 /// # Example
 /// ```ignore
 /// let lit_str = create_string_lit("value");
@@ -163,18 +141,12 @@ pub fn create_string_lit(value: &str) -> Lit {
 }
 
 /// Creates a `Lit::Number` from a number.
-///
-/// # Arguments
-/// * `value` - The number to create a literal for
 #[inline]
 pub fn create_number_lit(value: f64) -> Lit {
   Lit::from(value)
 }
 
 /// Creates a `Lit::BigInt` from a `BigInt`.
-///
-/// # Arguments
-/// * `value` - The big integer to create a literal for
 ///
 /// # Example
 /// ```ignore
@@ -187,9 +159,6 @@ pub fn create_big_int_lit(value: BigInt) -> Lit {
 
 /// Creates a `Lit::Boolean` from a boolean.
 ///
-/// # Arguments
-/// * `value` - The boolean to create a literal for
-///
 /// # Example
 /// ```ignore
 /// let lit_boolean = create_boolean_lit(true);
@@ -201,9 +170,6 @@ pub fn create_boolean_lit(value: bool) -> Lit {
 
 /// Creates a `Lit::Null` from a `Null`.
 ///
-/// # Arguments
-/// * `value` - The null to create a literal for
-///
 /// # Example
 /// ```ignore
 /// let lit_null = create_null_lit();
@@ -214,9 +180,6 @@ pub fn create_null_lit() -> Lit {
 }
 
 /// Creates an `Ident` from a string.
-///
-/// # Arguments
-/// * `name` - The identifier name
 ///
 /// # Example
 /// ```ignore
@@ -239,10 +202,6 @@ pub fn create_nested_object_prop(key: &str, values: Vec<PropOrSpread>) -> PropOr
 
 /// Creates a `KeyValueProp` with an `IdentName` key.
 ///
-/// # Arguments
-/// * `key` - The identifier name
-/// * `value` - The value of the property
-///
 /// # Example
 /// ```ignore
 /// let key_value = create_key_value_prop_ident("props", value);
@@ -254,12 +213,8 @@ pub fn create_key_value_prop_ident(key: &str, value: Expr) -> KeyValueProp {
   }
 }
 
-/// Creates a `PropOrSpread` with an unconditional `PropName::Ident` key.
-///
-/// Unlike `create_key_value_prop`, this bypasses identifier validation,
-/// preserving keys that contain special characters (e.g. `@media …`) as ident
-/// nodes. Use this wherever downstream code calls `.as_ident()` on the
-/// resulting key.
+/// Creates a `PropOrSpread` with an unconditional `PropName::Ident` key, skipping identifier
+/// validation (for keys like `@media …` that callers read back with `.as_ident()`).
 #[inline]
 pub fn create_ident_key_value_prop(key: &str, value: Expr) -> PropOrSpread {
   PropOrSpread::from(Prop::from(KeyValueProp {
@@ -268,17 +223,7 @@ pub fn create_ident_key_value_prop(key: &str, value: Expr) -> PropOrSpread {
   }))
 }
 
-/// Creates a `PropOrSpread` with an unconditional `PropName::Str` key and an
-/// expression value.
-///
-/// Unlike `create_key_value_prop`, this always emits a quoted string key,
-/// preserving keys that would otherwise be rendered as bare identifiers (e.g.
-/// `$$css` or `--custom-prop`). Use this wherever the generated object must keep
-/// string-literal keys regardless of whether they are valid identifiers.
-///
-/// # Arguments
-/// * `key` - The string key
-/// * `value` - The expression value of the property
+/// Creates a `PropOrSpread` with an unconditional `PropName::Str` key (e.g. `$$css`).
 ///
 /// # Example
 /// ```ignore
@@ -297,10 +242,6 @@ pub fn create_str_key_value_prop(key: &str, value: Expr) -> PropOrSpread {
 }
 
 /// Creates a `PropOrSpread` with a string key and string value.
-///
-/// # Arguments
-/// * `key` - The string key
-/// * `value` - The value of the property
 ///
 /// # Example
 /// ```ignore
@@ -328,10 +269,6 @@ pub fn create_string_array_prop(key: &str, value: &[&str]) -> PropOrSpread {
 
 /// Creates a `PropOrSpread` with a boolean key and value.
 ///
-/// # Arguments
-/// * `key` - The boolean key
-/// * `value` - The value of the property
-///
 /// # Example
 /// ```ignore
 /// let prop_or_spread = prop_or_spread_boolean_factory("key", true);
@@ -343,10 +280,7 @@ pub fn create_boolean_prop(key: &str, value: Option<bool>) -> PropOrSpread {
   }
 }
 
-/// Wraps an arbitrary expression in `ExprOrSpread` with no spread.
-/// This is the generic counterpart to the typed `expr_or_spread_*_factory`
-/// helpers and eliminates the common boilerplate `ExprOrSpread { spread: None,
-/// expr: Box::new(e) }`.
+/// Wraps an expression in `ExprOrSpread` with no spread.
 #[inline]
 pub fn create_expr_or_spread(expr: Expr) -> ExprOrSpread {
   ExprOrSpread {
@@ -356,9 +290,6 @@ pub fn create_expr_or_spread(expr: Expr) -> ExprOrSpread {
 }
 
 /// Creates an `ExprOrSpread` with a string value.
-///
-/// # Arguments
-/// * `value` - The string value
 ///
 /// # Example
 /// ```ignore
@@ -382,9 +313,6 @@ pub fn create_array(values: &[Expr]) -> ArrayLit {
 
 /// Creates an `ArrayLit` with a spread.
 ///
-/// # Arguments
-/// * `values` - The values to include in the array literal
-///
 /// # Example
 /// ```ignore
 /// let array_lit = _create_spreaded_array(vec![expr1, expr2, expr3]);
@@ -395,10 +323,6 @@ pub fn create_spreaded_array(values: &[Expr]) -> ArrayLit {
 }
 
 /// Creates an `ArrayLit` with a spread.
-///
-/// # Arguments
-/// * `values` - The values to include in the array literal
-/// * `spread` - The span of the spread
 ///
 /// # Example
 /// ```ignore
@@ -422,9 +346,6 @@ fn array_fabric(values: &[Expr], spread: Option<Span>) -> ArrayLit {
 
 /// Creates an `IdentName` from a string.
 ///
-/// # Arguments
-/// * `name` - The identifier name
-///
 /// # Example
 /// ```ignore
 /// let ident_name = create_ident_name("props");
@@ -435,9 +356,6 @@ pub fn create_ident_name(name: &str) -> IdentName {
 }
 
 /// Creates a `SpreadElement` for spreading an expression.
-///
-/// # Arguments
-/// * `expr` - The expression to spread
 ///
 /// # Example
 /// ```ignore
@@ -451,11 +369,7 @@ pub fn create_spread_element(expr: Expr) -> SpreadElement {
   }
 }
 
-/// Creates a `PropOrSpread::Spread` for spreading properties in an object
-/// literal.
-///
-/// # Arguments
-/// * `expr` - The expression to spread
+/// Creates a `PropOrSpread::Spread` for an object literal.
 ///
 /// # Example
 /// ```ignore
@@ -466,12 +380,7 @@ pub fn create_spread_prop(expr: Expr) -> PropOrSpread {
   PropOrSpread::Spread(create_spread_element(expr))
 }
 
-/// Creates a `MemberExpr` from an object expression and a member property
-/// (e.g., `obj.prop` or `obj[expr]`).
-///
-/// # Arguments
-/// * `obj` - The object expression being accessed
-/// * `prop` - The member property (ident or computed)
+/// Creates a `MemberExpr` (`obj.prop` or `obj[expr]`).
 ///
 /// # Example
 /// ```ignore
@@ -486,15 +395,8 @@ pub fn create_member_expr(obj: Expr, prop: MemberProp) -> MemberExpr {
   }
 }
 
-/// Builds a `MemberProp` for accessing `obj.<key>`: a bare ident property when
-/// `key` is a valid identifier, otherwise a computed string key `obj["<key>"]`.
-///
-/// The ident-vs-computed decision uses the same canonical rule as
-/// [`convert_string_to_prop_name`], keeping object keys and member accesses
-/// consistent.
-///
-/// # Arguments
-/// * `key` - The property key
+/// A `MemberProp` for `obj.<key>`: an ident when `key` is a valid identifier (same rule as
+/// [`convert_string_to_prop_name`]), else a computed string key.
 ///
 /// # Example
 /// ```ignore
@@ -509,11 +411,7 @@ pub fn create_member_prop_from_key(key: &str) -> MemberProp {
   }
 }
 
-/// Creates a computed `MemberProp` from an expression (e.g., the `[expr]` in
-/// `obj[expr]`).
-///
-/// # Arguments
-/// * `expr` - The computed key expression
+/// Creates a computed `MemberProp` (the `[expr]` in `obj[expr]`).
 ///
 /// # Example
 /// ```ignore
@@ -527,12 +425,7 @@ pub fn create_computed_member_prop(expr: Expr) -> MemberProp {
   })
 }
 
-/// Creates a `CallExpr` with a member expression callee (e.g.,
-/// `obj.method(...args)`).
-///
-/// # Arguments
-/// * `callee_member` - The member expression to call
-/// * `args` - The call arguments
+/// Creates a `CallExpr` with a member callee (`obj.method(...args)`).
 ///
 /// # Example
 /// ```ignore
@@ -544,16 +437,7 @@ pub fn create_member_call_expr(callee_member: MemberExpr, args: Vec<ExprOrSpread
   create_call_expr(Expr::Member(callee_member), args)
 }
 
-/// Creates a `CallExpr` from an arbitrary callee expression (e.g.
-/// `(<callee>)(...args)`).
-///
-/// Use this when the callee is neither a bare identifier name nor a freshly
-/// built member access — for example an arrow function, or an existing `Ident`
-/// value whose span/context must be preserved.
-///
-/// # Arguments
-/// * `callee` - The expression being called
-/// * `args` - The call arguments
+/// Creates a `CallExpr` from an arbitrary callee expression (`(<callee>)(...args)`).
 #[inline]
 pub fn create_call_expr(callee: Expr, args: Vec<ExprOrSpread>) -> CallExpr {
   CallExpr {
@@ -567,10 +451,6 @@ pub fn create_call_expr(callee: Expr, args: Vec<ExprOrSpread>) -> CallExpr {
 
 /// Creates a `CallExpr` with an identifier callee (e.g., `func(...args)`).
 ///
-/// # Arguments
-/// * `callee_ident` - The identifier to call
-/// * `args` - The call arguments
-///
 /// # Example
 /// ```ignore
 /// let call = create_ident_call_expr("merge", vec![arg1]);
@@ -582,9 +462,6 @@ pub fn create_ident_call_expr(callee_ident: &str, args: Vec<ExprOrSpread>) -> Ca
 
 /// Creates an arrow expression `() => expr`.
 ///
-/// # Arguments
-/// * `body_expr` - The expression to return
-///
 /// # Example
 /// ```ignore
 /// let arrow = create_arrow_expression(call_expr);
@@ -595,10 +472,6 @@ pub fn create_arrow_expression(body_expr: Expr) -> Expr {
 }
 
 /// Creates an arrow expression with parameters `(params) => expr`.
-///
-/// # Arguments
-/// * `params` - The arrow function parameters
-/// * `body_expr` - The expression to return
 ///
 /// # Example
 /// ```ignore
@@ -623,9 +496,6 @@ pub fn create_arrow_expression_with_params(params: Vec<Pat>, body_expr: Expr) ->
 
 /// Creates a `JSXAttrOrSpread::SpreadElement` for JSX attributes.
 ///
-/// # Arguments
-/// * `expr` - The expression to spread
-///
 /// # Example
 /// ```ignore
 /// let jsx_spread = create_jsx_spread_attr(props_call);
@@ -636,9 +506,6 @@ pub fn create_jsx_spread_attr(expr: Expr) -> JSXAttrOrSpread {
 }
 
 /// Creates a `JSXAttrOrSpread::JSXAttr` wrapper.
-///
-/// # Arguments
-/// * `attr` - The JSX attribute
 ///
 /// # Example
 /// ```ignore
@@ -651,10 +518,6 @@ pub fn create_jsx_attr_or_spread(attr: JSXAttr) -> JSXAttrOrSpread {
 }
 
 /// Creates a `JSXAttr` from a name and value.
-///
-/// # Arguments
-/// * `name` - The name of the attribute
-/// * `value` - The value of the attribute
 ///
 /// # Example
 /// ```ignore
@@ -670,12 +533,7 @@ pub fn create_jsx_attr(name: &str, value: JSXAttrValue) -> JSXAttr {
   }
 }
 
-/// Creates a `VarDeclarator` with an identifier name and an expression
-/// initializer.
-///
-/// # Arguments
-/// * `ident` - The identifier for the variable name
-/// * `init` - The initializer expression
+/// Creates a `VarDeclarator` with an expression initializer.
 ///
 /// # Example
 /// ```ignore
@@ -693,12 +551,6 @@ pub fn create_var_declarator(ident: Ident, init: Expr) -> VarDeclarator {
 
 /// Creates a `VarDeclarator` initialized to `null`.
 ///
-/// Useful when hoisting a variable declaration ahead of its actual assignment,
-/// e.g. `var x = null;` before the value is set later.
-///
-/// # Arguments
-/// * `ident` - The identifier for the variable name
-///
 /// # Example
 /// ```ignore
 /// let decl = var_declarator_null_init_factory(my_ident);
@@ -710,10 +562,6 @@ pub fn create_null_var_declarator(ident: Ident) -> VarDeclarator {
 
 /// Creates a `VarDeclarator` initialized to a string.
 ///
-/// # Arguments
-/// * `ident` - The identifier for the variable name
-/// * `value` - The string value
-///
 /// # Example
 /// ```ignore
 /// let decl = create_string_var_declarator(my_ident, "value");
@@ -723,12 +571,7 @@ pub fn create_string_var_declarator(ident: Ident, value: &str) -> VarDeclarator 
   create_var_declarator(ident, create_string_expr(value))
 }
 
-/// Creates a namespace import declaration `import * as <local> from
-/// '<source>'` as a `ModuleItem`.
-///
-/// # Arguments
-/// * `local` - The local namespace binding name (e.g. `stylex` or `_stylex`)
-/// * `source` - The module source path (e.g. `@stylexjs/stylex`)
+/// Creates a namespace import `import * as <local> from '<source>'` as a `ModuleItem`.
 ///
 /// # Example
 /// ```ignore
@@ -753,19 +596,7 @@ pub fn create_import_namespace_decl(local: &str, source: &str) -> ModuleItem {
   }))
 }
 
-/// Rebuilds a unary expression as an owned `Expr`, for a caller that holds only
-/// the borrowed node.
-///
-/// # Why a factory rather than an inline `Expr::Unary(unary.clone())`
-///
-/// A `UnaryExpr` owns its operand, so cloning one deep-copies the whole operand
-/// subtree. Naming the clone keeps that cost visible at the call site and keeps
-/// it where it belongs: an evaluator builds this only to report the expression a
-/// refusal happened on, so it is built at the refusal and never on the path
-/// where the fold succeeds.
-///
-/// # Arguments
-/// * `unary` - The unary expression to rebuild
+/// Rebuilds a borrowed unary expression as an owned `Expr` (deep-copies the operand).
 ///
 /// # Example
 /// ```ignore

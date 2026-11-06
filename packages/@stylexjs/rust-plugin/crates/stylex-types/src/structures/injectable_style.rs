@@ -33,26 +33,8 @@ pub struct InjectableConstStyle {
   pub rtl: Option<String>,
   pub priority: Option<f64>,
   pub const_key: String,
-  /// The constant, spelled as JSON.
-  ///
-  /// A constant keeps the kind the author gave it -- a number, a boolean, a
-  /// `null`, an object, a list -- and two readers ask for it again: the
-  /// metadata a build tool reads, and the rule the runtime is handed. This
-  /// crate sits below the value vocabulary, so the kind travels as a spelling
-  /// rather than as a value, and a writer of this field owes it that spelling.
-  ///
-  /// The four values JSON has no word for are spelled the way JavaScript
-  /// spells them: `NaN`, `Infinity`, `-Infinity` and `undefined`.
-  ///
-  /// **The spelling stops here.** Both readers turn it back into a value before
-  /// anything outside the compiler sees it, and both were measured against
-  /// `@stylexjs/babel-plugin@0.19.0` on
-  /// `defineConsts({ a: null, b: 1, c: 'red', d: true, e: 0 })`: the metadata
-  /// carries `[null, 1, "red", true, 0]` and the injected call carries
-  /// `1`, `"red"`, `"true"` and `0` with the null pair dropped. Both are
-  /// byte-identical to the reference, so no reader is handed `"1"` where the
-  /// reference hands it `1`. `index.spec.ts` and the
-  /// `a_null_constant_value_writes_no_pair` snapshot pin the two halves.
+  /// The constant, spelled as JSON (`NaN`, `Infinity`, `-Infinity` and `undefined` as in JS).
+  /// Readers convert it back to a value before output, matching `@stylexjs/babel-plugin@0.19.0`.
   pub const_value: String,
 }
 
@@ -67,7 +49,6 @@ impl Hash for InjectableStyle {
 
 impl From<InjectableStyle> for InjectableStyleBase {
   fn from(style: InjectableStyle) -> Self {
-    // Assuming InjectableStyleBase and InjectableStyle have similar fields
     InjectableStyleBase {
       ltr: style.ltr,
       rtl: style.rtl,
@@ -76,8 +57,7 @@ impl From<InjectableStyle> for InjectableStyleBase {
 }
 
 impl InjectableStyle {
-  /// Creates a new `InjectableStyle` wrapped in `Rc<InjectableStyleKind>` with only
-  /// LTR content.
+  /// Creates an LTR-only `InjectableStyle` wrapped in `Rc<InjectableStyleKind>`.
   ///
   /// # Example
   /// ```ignore
@@ -92,8 +72,7 @@ impl InjectableStyle {
     }))
   }
 
-  /// Creates a new `InjectableStyle` wrapped in `Rc<InjectableStyleKind>` with both
-  /// LTR and RTL content.
+  /// Creates an `InjectableStyle` with LTR and RTL content, wrapped in `Rc<InjectableStyleKind>`.
   ///
   /// # Example
   /// ```ignore
@@ -134,11 +113,7 @@ impl From<InjectableConstStyle> for InjectableStyleConstBase {
   }
 }
 
-/// A rule with nothing in it, for a test that needs one.
-///
-/// No producer uses it: `stylex_define_consts` is the only writer and it fills
-/// every field. `const_value` is `null` and not an empty text because the field
-/// holds JSON, which has a word for "no value" and no word for "".
+/// An empty rule for tests; `const_value` is `null` because the field holds JSON.
 impl Default for InjectableConstStyle {
   fn default() -> Self {
     InjectableConstStyle {

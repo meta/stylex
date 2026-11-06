@@ -49,10 +49,7 @@ fn display_all_variants() {
   assert_eq!(CSSSyntax::Url.to_string(), "<url>");
 }
 
-/// `AsRef<str>` must round-trip through `as_str()` for every variant. This
-/// is the trait callers rely on when they want to pass a `CSSSyntax` to
-/// any API that accepts `impl AsRef<str>` (e.g. when writing CSS without
-/// allocating an intermediate `String`).
+/// `AsRef<str>` returns the same slice as `as_str()` for every variant.
 #[test]
 fn as_ref_returns_canonical_str_for_all_variants() {
   fn take_str_ref(value: impl AsRef<str>) -> String {
@@ -78,7 +75,6 @@ fn as_ref_returns_canonical_str_for_all_variants() {
   for (variant, expected) in cases {
     assert_eq!(<CSSSyntax as AsRef<str>>::as_ref(&variant), expected);
     assert_eq!(take_str_ref(variant), expected);
-    // `AsRef` and `as_str` must agree (zero-alloc invariant).
     assert!(std::ptr::eq(variant.as_ref(), variant.as_str()));
   }
 }

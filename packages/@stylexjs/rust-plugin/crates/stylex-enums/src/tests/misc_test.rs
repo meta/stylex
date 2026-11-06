@@ -1,15 +1,8 @@
 //! `ToNumber` of a folded binary expression.
-//!
-//! One reading for every caller that asks a folded binary for a number, so a
-//! kind added to the enum cannot become a number in one caller and a refusal in
-//! the other. Asked here rather than through a source, because the callers each
-//! hand it a value they folded themselves.
 
 use crate::misc::BinaryExprType;
 
-/// A number answers itself, and a boolean answers the number the language
-/// coerces it to -- which is what a comparison written where a number is asked
-/// for reads as.
+/// A boolean answers the number JS coerces it to.
 #[test]
 fn a_number_and_a_boolean_each_have_a_number() {
   assert_eq!(BinaryExprType::Number(2.5).as_number(), Some(2.5));
@@ -17,9 +10,7 @@ fn a_number_and_a_boolean_each_have_a_number() {
   assert_eq!(BinaryExprType::Boolean(false).as_number(), Some(0.0));
 }
 
-/// A concatenation has a number only through `StringToNumber`, which reads the
-/// text rather than the fold, so it is the caller's to ask for. A fold that
-/// answered nothing has none at all.
+/// Concatenations and empty folds have no number here.
 #[test]
 fn a_string_and_a_refusal_have_none() {
   assert_eq!(

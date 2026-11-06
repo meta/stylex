@@ -1,10 +1,6 @@
-//! A node tree flattened to text, so that a whole parse can be compared in one
-//! assertion and a failure reads as a diff rather than as a struct dump.
+//! A node tree flattened to text for single-assertion comparison.
 //!
-//! This has a twin in `scripts/generate-value-parser-cases.mjs`, which produces
-//! the same text from the JavaScript. The two have to agree character for
-//! character, so keep both deliberately dull: no clever escapes, no reordered
-//! fields, no field omitted because it is usually empty.
+//! Must match `scripts/generate-value-parser-cases.mjs` character for character.
 
 use crate::Node;
 

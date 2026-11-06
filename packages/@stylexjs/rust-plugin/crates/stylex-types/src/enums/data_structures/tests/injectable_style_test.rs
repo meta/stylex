@@ -1,5 +1,4 @@
-//! Tests for InjectableStyleKind → InjectableStyleBaseKind conversion
-//! (From trait implementation).
+//! Tests for `InjectableStyleKind` → `InjectableStyleBaseKind` and the shared readers.
 
 use crate::{
   enums::data_structures::injectable_style::{InjectableStyleBaseKind, InjectableStyleKind},
@@ -44,19 +43,10 @@ fn test_from_const_kind() {
   }
 }
 
-// ── rule_text ───────────────────────────────────────────────────────
+// rule_text
 
-/// `rule_text` picks whichever direction actually carries the rule, and both
-/// kinds answer the same way. The empty-`ltr` case is the one it exists for: a
-/// direction-specific rule is spelled with an empty `ltr` and the text in `rtl`,
-/// so a caller reading `ltr` alone would get nothing back.
-/// The four directional shapes `rule_text` has to answer for, as `(ltr, rtl)`
-/// beside the rule each should produce.
-///
-/// The interesting one is the third: a direction-specific rule is spelled with
-/// an empty `ltr` and the text in `rtl`, so a caller reading `ltr` alone gets
-/// nothing back. The fourth carries nothing either way, which is the empty
-/// string rather than a panic or a `None` the caller would have to handle.
+/// `(ltr, rtl, expected rule_text)`: a directional rule has an empty `ltr`; an all-empty pair
+/// yields `""`.
 const DIRECTIONAL_CASES: [(&str, Option<&str>, &str); 4] = [
   ("color:red", None, "color:red"),
   ("color:red", Some("color:blue"), "color:red"),
@@ -82,9 +72,7 @@ fn const_kind(ltr: &str, rtl: Option<&str>) -> InjectableStyleKind {
   })
 }
 
-/// `rule_text` picks whichever direction actually carries the rule, and both
-/// kinds answer the same way -- which is the property that let the two duplicated
-/// match arms it replaced be one function.
+/// Both kinds answer the same way.
 #[test]
 fn rule_text_prefers_ltr_and_falls_back_to_rtl() {
   for (ltr, rtl, expected) in DIRECTIONAL_CASES {
@@ -101,8 +89,6 @@ fn rule_text_prefers_ltr_and_falls_back_to_rtl() {
   }
 }
 
-/// The two kinds are interchangeable to this reader, which is the property that
-/// let the two duplicated match arms it replaced be one function.
 #[test]
 fn rule_text_does_not_depend_on_the_kind() {
   let regular = InjectableStyleKind::Regular(InjectableStyle {

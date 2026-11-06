@@ -209,8 +209,7 @@ mod init_call_tests {
     Expr::Call(create_call_expr(Expr::Ident(create_ident(name)), vec![]))
   }
 
-  /// The reason this helper exists: a parenthesized initializer names the same
-  /// call the bare one does.
+  /// A parenthesized initializer names the same call the bare one does.
   #[test]
   fn reads_the_call_through_any_number_of_parentheses() {
     for depth in 0..4 {
