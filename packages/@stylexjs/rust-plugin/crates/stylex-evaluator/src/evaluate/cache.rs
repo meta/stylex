@@ -1,6 +1,7 @@
 use super::*;
 use crate::growable_stack;
 use stylex_constants::constants::evaluation_errors::expression_too_deep;
+use swc_core::common::EqIgnoreSpan;
 
 pub(crate) fn evaluate_cached(
   path: &Expr,
@@ -318,6 +319,16 @@ fn memoized_fold<T: Memoized>(
   match existing {
     Some(evaluate_value) => {
       let evaluated_value: &SeenValue = evaluate_value.borrow();
+      if matches!(key.subtree, MemoExpressionKey::SubtreeHash(_))
+        && !evaluated_value
+          .expression
+          .as_deref()
+          .is_some_and(|recorded| recorded.eq_ignore_span(path))
+      {
+        // The hash selects a bucket, never a semantic answer. An actual hash
+        // collision is a conservative live fold, including for refusal entries.
+        return fold(state, traversal_state);
+      }
 
       if evaluated_value.resolved {
         return evaluated_value.value.clone().map(T::from_memo);
@@ -369,6 +380,8 @@ fn memoized_fold<T: Memoized>(
         // containers and callbacks are never cloned into the module memo.
         traversal_state.seen.entry(key).or_insert_with(|| {
           Rc::new(SeenValue {
+            expression: matches!(expression, MemoExpressionKey::SubtreeHash(_))
+              .then(|| Rc::new(path.clone())),
             value: val.as_ref().map(T::to_memo),
             resolved: true,
           })
@@ -381,6 +394,8 @@ fn memoized_fold<T: Memoized>(
         // are written down.
         traversal_state.seen.entry(key).or_insert_with(|| {
           Rc::new(SeenValue {
+            expression: matches!(expression, MemoExpressionKey::SubtreeHash(_))
+              .then(|| Rc::new(path.clone())),
             value: None,
             resolved: false,
           })

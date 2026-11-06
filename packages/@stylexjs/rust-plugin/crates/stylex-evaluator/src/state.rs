@@ -30,11 +30,12 @@ impl EvaluationState {
 
   pub fn static_memo_inventory(&mut self) -> stylex_state::seen_value::StaticMemoInventory {
     if let Some(inventory) = &self.memo_inventory
-      && Rc::ptr_eq(&inventory.0, &self.functions)
+      && Rc::ptr_eq(inventory.owner(), &self.functions)
     {
       return inventory.clone();
     }
-    let inventory = stylex_state::seen_value::StaticMemoInventory(Rc::clone(&self.functions));
+    let inventory = stylex_state::seen_value::StaticMemoInventory::new(Rc::clone(&self.functions))
+      .expect("memo inventory must be a validated static context");
     self.memo_inventory = Some(inventory.clone());
     inventory
   }

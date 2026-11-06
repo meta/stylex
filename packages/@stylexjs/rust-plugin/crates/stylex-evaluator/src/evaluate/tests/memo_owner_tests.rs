@@ -21,6 +21,89 @@ fn math() -> Expr {
   })
 }
 #[test]
+fn memo_hash_bucket_requires_a_matching_subtree_witness() {
+  for missing in [false, true] {
+    let mut traversal = StateManager::default();
+    let path = math();
+    memoized_fold(
+      &path,
+      &mut EvaluationState::default(),
+      &mut traversal,
+      |_, _| Some(EvaluateResultValue::Expr(create_number_expr(3.0))),
+    )
+    .unwrap();
+    let entry = traversal.seen.values_mut().next().unwrap();
+    let entry = std::rc::Rc::make_mut(entry);
+    entry.expression = if missing {
+      None
+    } else {
+      Some(std::rc::Rc::new(object()))
+    };
+    let mut calls = 0;
+    let result = memoized_fold(
+      &path,
+      &mut EvaluationState::default(),
+      &mut traversal,
+      |_, _| {
+        calls += 1;
+        Some(EvaluateResultValue::Expr(create_number_expr(5.0)))
+      },
+    );
+    assert_eq!(
+      calls, 1,
+      "a mismatched/missing hash witness must execute the fold"
+    );
+    assert_eq!(
+      result,
+      Some(EvaluateResultValue::Expr(create_number_expr(5.0)))
+    );
+  }
+}
+
+#[test]
+fn memo_static_inventory_is_validated_and_order_sensitive() {
+  use stylex_state::functions::{FunctionConfig, FunctionConfigType, FunctionType};
+  use stylex_state::seen_value::StaticMemoInventory;
+  use stylex_state::types::FunctionConfigMap;
+  let entry = || {
+    FunctionConfigType::Regular(FunctionConfig {
+      fn_ptr: FunctionType::StylexExprFn(|expr, _| expr),
+      takes_path: false,
+    })
+  };
+  let mut first = FunctionMap::default();
+  let mut entries = FunctionConfigMap::default();
+  entries.insert("a".into(), entry());
+  entries.insert("b".into(), entry());
+  first
+    .identifiers
+    .insert("ns".into(), Box::new(FunctionConfigType::Map(entries)));
+  let mut second = FunctionMap::default();
+  let mut entries = FunctionConfigMap::default();
+  entries.insert("b".into(), entry());
+  entries.insert("a".into(), entry());
+  second
+    .identifiers
+    .insert("ns".into(), Box::new(FunctionConfigType::Map(entries)));
+  let first = StaticMemoInventory::new(std::rc::Rc::new(first)).unwrap();
+  let second = StaticMemoInventory::new(std::rc::Rc::new(second)).unwrap();
+  assert_eq!(
+    first,
+    first.clone(),
+    "every constructible inventory is reflexive"
+  );
+  assert_ne!(
+    first, second,
+    "nested JS-visible own-key ordering is semantic"
+  );
+  let mut dynamic = FunctionMap::default();
+  dynamic
+    .bindings
+    .insert(create_ident("x").to_id(), Box::new(entry()));
+  assert!(StaticMemoInventory::new(std::rc::Rc::new(dynamic)).is_none());
+}
+
+#[test]
 fn memo_owned_key_is_not_written_after_its_initializer_is_rewritten() {
   let mut traversal = StateManager::default();
   let id = create_ident("value");

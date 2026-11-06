@@ -8,10 +8,20 @@ use swc_core::common::Span;
 /// A retained, exact static inventory. Hashing selects a bucket only; equality
 /// confirms the full inventory, including JS-visible nested map ordering.
 #[derive(Clone, Debug)]
-pub struct StaticMemoInventory(pub Rc<FunctionMap>);
+pub struct StaticMemoInventory(Rc<FunctionMap>);
+impl StaticMemoInventory {
+  pub fn new(functions: Rc<FunctionMap>) -> Option<Self> {
+    functions
+      .is_static_memo_context()
+      .then_some(Self(functions))
+  }
+  pub fn owner(&self) -> &Rc<FunctionMap> {
+    &self.0
+  }
+}
 impl PartialEq for StaticMemoInventory {
   fn eq(&self, other: &Self) -> bool {
-    self.0.same_memo_inventory(&other.0)
+    Rc::ptr_eq(&self.0, &other.0) || self.0.same_memo_inventory(&other.0)
   }
 }
 impl Eq for StaticMemoInventory {}
@@ -55,6 +65,9 @@ pub struct SeenKey {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SeenValue {
+  /// Structural confirmation for fallback hashes. Retained logical initializer
+  /// keys already have exact identity and need no duplicate subtree owner.
+  pub expression: Option<Rc<swc_core::ecma::ast::Expr>>,
   pub value: Option<EvaluateResultValue>,
   pub resolved: bool,
 }

@@ -363,9 +363,10 @@ fn a_snapshot_leaves_the_modules_own_output_behind() {
     crate::seen_value::SeenKey {
       subtree: crate::seen_value::MemoExpressionKey::SubtreeHash(7),
       context: crate::seen_value::MemoContext {
-        inventory: crate::seen_value::StaticMemoInventory(Rc::new(
+        inventory: crate::seen_value::StaticMemoInventory::new(Rc::new(
           crate::functions::FunctionMap::default(),
-        )),
+        ))
+        .unwrap(),
         characters: 0,
         entries: 0,
         depth: 0,
@@ -379,6 +380,7 @@ fn a_snapshot_leaves_the_modules_own_output_behind() {
       },
     },
     Rc::new(crate::seen_value::SeenValue {
+      expression: None,
       value: None,
       resolved: true,
     }),
