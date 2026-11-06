@@ -68,3 +68,6 @@ export const POSITION_TRY_INVALID_PROPERTY =
 
 export const VIEW_TRANSITION_CLASS_INVALID_PROPERTY =
   'Invalid property in `viewTransitionClass()` call. It may only contain group, imagePair, old, and new properties';
+
+export const INVALID_CALC_KEY =
+  'Arithmetic on a StyleX variable or constant cannot be used as a style property key.\n\n';

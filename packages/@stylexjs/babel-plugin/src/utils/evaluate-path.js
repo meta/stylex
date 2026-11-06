@@ -29,6 +29,14 @@ import * as t from '@babel/types';
 import StateManager from './state-manager';
 import { utils } from '../shared';
 import * as errMsgs from './evaluation-errors';
+import {
+  type CssTokenEvaluationResult,
+  evaluateCssTokenBinary,
+  evaluateCssTokenCall,
+  evaluateCssTokenConcat,
+  evaluateCssTokenCondition,
+  evaluateCssTokenUnary,
+} from './css-calc';
 import fs from 'node:fs';
 
 // This file contains Babels metainterpreter that can evaluate static code.
@@ -364,6 +372,25 @@ function deopt(path: NodePath<>, state: State, reason: string): void {
   state.deoptReason = reason;
 }
 
+function applyCssTokenEvaluation(
+  result: CssTokenEvaluationResult,
+  path: NodePath<>,
+): mixed {
+  if (result.type === 'deopt') {
+    throw path.buildCodeFrameError(result.reason, SyntaxError);
+  }
+  return result.type === 'value' ? result.value : undefined;
+}
+
+function evaluateCondition(path: NodePath<>, state: State): mixed {
+  const value = evaluateCached(path, state);
+  if (!state.confident) return;
+  const result = evaluateCssTokenCondition(value);
+  return result.type === 'unhandled'
+    ? value
+    : applyCssTokenEvaluation(result, path);
+}
+
 function evaluateImportedFile(
   filePath: string,
   namedExport: string,
@@ -582,7 +609,7 @@ function _evaluate(path: NodePath<>, state: State): any {
   }
 
   if (path.isConditionalExpression()) {
-    const testResult = evaluateCached(path.get('test'), state);
+    const testResult = evaluateCondition(path.get('test'), state);
     if (!state.confident) return;
     if (testResult) {
       return evaluateCached(path.get('consequent'), state);
@@ -836,6 +863,10 @@ function _evaluate(path: NodePath<>, state: State): any {
 
     const arg = evaluateCached(argument, state);
     if (!state.confident) return;
+    const cssTokenResult = evaluateCssTokenUnary(path.node.operator, arg);
+    if (cssTokenResult.type !== 'unhandled') {
+      return applyCssTokenEvaluation(cssTokenResult, path);
+    }
     switch (path.node.operator) {
       case '!':
         return !arg;
@@ -943,73 +974,18 @@ function _evaluate(path: NodePath<>, state: State): any {
   }
 
   if (path.isLogicalExpression()) {
-    // If we are confident that the left side of an && is false, or the left
-    // side of an || is true, we can be confident about the entire expression
-    const stateForLeft = {
-      ...state,
-      deoptPath: null,
-      confident: true,
-    } as const;
-    const leftPath = path.get('left');
-    const left = evaluateCached(leftPath, stateForLeft as $FlowFixMe);
-    const leftConfident: boolean = stateForLeft.confident as $FlowFixMe;
+    const left = evaluateCondition(path.get('left'), state);
+    if (!state.confident) return;
 
-    const stateForRight = { ...state, deoptPath: null, confident: true };
-    const rightPath = path.get('right');
-    const right = evaluateCached(rightPath, stateForRight as $FlowFixMe);
-    const rightConfident: boolean = stateForRight.confident as $FlowFixMe;
-
+    // Evaluate only the branch JavaScript would use. Unused branches must not
+    // contribute failures or poison the shared evaluation cache.
     switch (path.node.operator) {
-      case '||': {
-        // TODO consider having a "truthy type" that doesn't bail on
-        // left uncertainty but can still evaluate to truthy.
-        if (leftConfident && (!!left || rightConfident)) {
-          return left || right;
-        }
-        if (!leftConfident) {
-          deopt(leftPath, state, stateForLeft.deoptReason ?? 'unknown error');
-          return;
-        }
-        if (!rightConfident) {
-          deopt(rightPath, state, stateForRight.deoptReason ?? 'unknown error');
-          return;
-        }
-
-        deopt(path, state, 'unknown error');
-        return;
-      }
-      case '&&': {
-        if (leftConfident && (!left || rightConfident)) {
-          return left && right;
-        }
-        if (!leftConfident) {
-          deopt(leftPath, state, stateForLeft.deoptReason ?? 'unknown error');
-          return;
-        }
-        if (!rightConfident) {
-          deopt(rightPath, state, stateForRight.deoptReason ?? 'unknown error');
-          return;
-        }
-
-        deopt(path, state, 'unknown error');
-        return;
-      }
-      case '??': {
-        if (leftConfident && !!(left ?? rightConfident)) {
-          return left ?? right;
-        }
-        if (!leftConfident) {
-          deopt(leftPath, state, stateForLeft.deoptReason ?? 'unknown error');
-          return;
-        }
-        if (!rightConfident) {
-          deopt(rightPath, state, stateForRight.deoptReason ?? 'unknown error');
-          return;
-        }
-
-        deopt(path, state, 'unknown error');
-        return;
-      }
+      case '||':
+        return left || evaluateCached(path.get('right'), state);
+      case '&&':
+        return left && evaluateCached(path.get('right'), state);
+      case '??':
+        return left ?? evaluateCached(path.get('right'), state);
       default:
         path.node.operator as empty;
     }
@@ -1020,6 +996,15 @@ function _evaluate(path: NodePath<>, state: State): any {
     if (!state.confident) return;
     const right = evaluateCached(path.get('right'), state);
     if (!state.confident) return;
+
+    const cssTokenResult = evaluateCssTokenBinary(
+      path.node.operator,
+      left,
+      right,
+    );
+    if (cssTokenResult.type !== 'unhandled') {
+      return applyCssTokenEvaluation(cssTokenResult, path);
+    }
 
     switch (path.node.operator) {
       case '-':
@@ -1075,6 +1060,7 @@ function _evaluate(path: NodePath<>, state: State): any {
     const callee = path.get('callee');
     let context;
     let func;
+    let globalCalleeName: null | string = null;
 
     // Number(1);
     if (
@@ -1082,6 +1068,7 @@ function _evaluate(path: NodePath<>, state: State): any {
       !path.scope.getBinding(callee.node.name) &&
       isValidCallee(callee.node.name)
     ) {
+      globalCalleeName = callee.node.name;
       func = globalObject[callee.node.name];
     } else if (
       callee.isIdentifier() &&
@@ -1107,6 +1094,7 @@ function _evaluate(path: NodePath<>, state: State): any {
           isValidCallee(object.node.name) &&
           isValidCalleeMethod(object.node.name, property.node.name)
         ) {
+          globalCalleeName = `${object.node.name}.${property.node.name}`;
           context = globalObject[object.node.name];
           // @ts-expect-error property may not exist in context object
           func = context[property.node.name];
@@ -1189,6 +1177,11 @@ function _evaluate(path: NodePath<>, state: State): any {
           );
         if (!state.confident) return;
 
+        const cssTokenResult = evaluateCssTokenCall(globalCalleeName, args);
+        if (cssTokenResult.type !== 'unhandled') {
+          return applyCssTokenEvaluation(cssTokenResult, path);
+        }
+
         if (func.fn) {
           return func.fn.apply(context, args);
         } else {
@@ -1207,35 +1200,26 @@ function evaluateQuasis(
   state: State,
   raw: boolean = false,
 ) {
-  let str = '';
-
-  let i = 0;
+  const parts: Array<mixed> = [];
   const exprs: $ReadOnlyArray<NodePath<>> = path.isTemplateLiteral()
     ? path.get('expressions')
     : path.isTaggedTemplateExpression()
       ? path.get('quasi').get('expressions')
       : [];
 
-  // const exprs: Array<NodePath<t.Node>> = path.isTemplateLiteral()
-  //   ? path.get('expressions')
-  //   : (path as NodePath<t.TaggedTemplateExpression>)
-  //       .get('quasi')
-  //       .get('expressions');
-
-  for (const elem of quasis) {
-    // not confident, evaluated an expression we don't like
-    if (!state.confident) break;
-
-    // add on element
-    str += raw ? elem.value.raw : elem.value.cooked;
-
-    // add on interpolated expression if it's present
-    const expr = exprs[i++];
-    if (expr) str += String(evaluateCached(expr, state));
+  for (let i = 0; i < quasis.length; i++) {
+    const elem = quasis[i];
+    parts.push(raw ? elem.value.raw : elem.value.cooked);
+    const expr = exprs[i];
+    if (expr) {
+      parts.push(evaluateCached(expr, state));
+      if (!state.confident) return;
+    }
   }
 
-  if (!state.confident) return;
-  return str;
+  // Validate the complete template so quotes, URLs and neighboring
+  // interpolations all participate in determining CSS token boundaries.
+  return applyCssTokenEvaluation(evaluateCssTokenConcat(parts), path);
 }
 
 /**

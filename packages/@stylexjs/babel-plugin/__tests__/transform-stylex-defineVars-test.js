@@ -597,6 +597,37 @@ describe('@stylexjs/babel-plugin', () => {
       `);
     });
 
+    test('arithmetic on same-group references compiles to calc()', () => {
+      const { code, metadata } = transform(`
+        import * as stylex from '@stylexjs/stylex';
+        export const layout = stylex.defineVars({
+          gap: '8px',
+          doubleGap: () => layout.gap * 2,
+        });
+      `);
+
+      expect(code).toMatchInlineSnapshot(`
+        "import * as stylex from '@stylexjs/stylex';
+        export const layout = {
+          gap: "var(--x1kbodq4)",
+          doubleGap: "var(--x1gpkec6)",
+          __varGroupHash__: "xrx2rik"
+        };"
+      `);
+      expect(metadata.stylex).toMatchInlineSnapshot(`
+        [
+          [
+            "xrx2rik",
+            {
+              "ltr": ":root, .xrx2rik{--x1kbodq4:8px;--x1gpkec6:calc(var(--x1kbodq4) * 2);}",
+              "rtl": null,
+            },
+            0.1,
+          ],
+        ]
+      `);
+    });
+
     test('same-group references can point to later keys', () => {
       const { code, metadata } = transform(`
         import * as stylex from '@stylexjs/stylex';

@@ -11,6 +11,7 @@ import type { InjectableStyle, StyleXOptions } from './common-types';
 
 import createHash from './hash';
 import expandShorthands from './preprocess-rules/index';
+import { validateStyleKey } from './preprocess-rules/basic-validation';
 import generateLtr from './physical-rtl/generate-ltr';
 import generateRtl from './physical-rtl/generate-rtl';
 import transformValue from './utils/transform-value';
@@ -35,6 +36,7 @@ export default function styleXKeyframes(
   options: StyleXOptions = defaultOptions,
 ): [string, InjectableStyle] {
   const { classNamePrefix = 'x' } = options;
+  Object.keys(frames).forEach(validateStyleKey);
   const expandedObject = objMap(frames, (frame) =>
     Pipe.create(frame)
       .pipe((frame) => expandFrameShorthands(frame, options))

@@ -12,6 +12,7 @@ import type { StyleXOptions, TStyleValue } from '../common-types';
 import applicationOrder from './application-order';
 import legacyExpandShorthands from './legacy-expand-shorthands';
 import propertySpecificity from './property-specificity';
+import { validateStyleKey } from './basic-validation';
 
 const expansions = {
   'application-order': applicationOrder,
@@ -37,6 +38,7 @@ export default function flatMapExpandedShorthands(
 ): $ReadOnlyArray<[string, TStyleValue]> {
   // eslint-disable-next-line prefer-const
   let [key, value] = objEntry;
+  validateStyleKey(key);
   if (key.startsWith('var(') && key.endsWith(')')) {
     key = key.slice(4, -1);
   }

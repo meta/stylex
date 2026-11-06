@@ -12,3 +12,6 @@ export * as properties from './properties';
 export { lastMediaQueryWinsTransform } from './at-queries/media-query-transform.js';
 export { MediaQuery } from './at-queries/media-query.js';
 export type { MediaQueryRule } from './at-queries/media-query.js';
+
+export { isNumericUnit } from './css-types/numeric-units';
+export { hasValidTokenBoundaries } from './interpolation';
