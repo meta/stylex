@@ -63,6 +63,13 @@ const SEGMENT: usize = 16 * 1024 * 1024;
 /// fails there rather than in somebody's build.
 const BYTES_PER_LEVEL: usize = 64 * 1024;
 
+/// Stack allocation overhead, not extra permitted nesting. Stacker's Windows
+/// fiber backend excludes a stack guarantee and guard region (16 KiB on x64),
+/// plus entry frames; CI measured 19,760 bytes unavailable to the callback.
+/// Unix guards sit outside the payload, but entry/unwind frames still consume
+/// part of it. Reserve those bytes outside the logical per-level claim.
+const STACK_ENTRY_RESERVE: usize = if cfg!(windows) { 64 * 1024 } else { 16 * 1024 };
+
 /// The deepest nesting [`grown_for_depth`] will carry.
 ///
 /// The evaluation ceiling is clamped to this same number, so a claim made from
@@ -71,7 +78,8 @@ const BYTES_PER_LEVEL: usize = 64 * 1024;
 /// compiler is prepared to go.
 pub const DEEPEST_CARRIED: usize = MAX_EVALUATION_DEPTH_LIMIT;
 
-/// The largest claim [`grown_for_depth`] will ever make.
+/// The largest logical claim [`grown_for_depth`] will ever make.
+/// The platform allocation adds [`STACK_ENTRY_RESERVE`] outside this bound.
 ///
 /// It is a consequence rather than a setting: [`DEEPEST_CARRIED`] levels at the
 /// cost of a level each. Asserted rather than described, because the numbers it
@@ -119,8 +127,11 @@ pub fn grown_per_level<R>(work: impl FnOnce() -> R) -> R {
 /// claim exists for: outgrowing it is a diagnostic instead of an abort.
 pub fn grown_for_depth<R>(levels: usize, work: impl FnOnce() -> R) -> R {
   let claim = claim_for(levels);
+  let with_reserve = claim.saturating_add(STACK_ENTRY_RESERVE);
 
-  stacker::maybe_grow(claim, claim, work)
+  // Both the existing-stack threshold and a new allocation leave the complete
+  // logical claim available after stack switching and callback entry.
+  stacker::maybe_grow(with_reserve, with_reserve, work)
 }
 
 /// Whether a descent `levels` deep is one [`grown_for_depth`] can be asked for.

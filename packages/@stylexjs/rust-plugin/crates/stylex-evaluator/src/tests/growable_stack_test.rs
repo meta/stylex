@@ -114,6 +114,22 @@ fn the_largest_ceiling_a_project_can_configure_can_be_claimed() {
   }
 }
 
+/// Smaller claims also leave their whole logical payload usable after entry.
+#[test]
+fn platform_stack_reserve_does_not_consume_the_claimed_payload() {
+  for levels in [1, 8, 128] {
+    let room = on_a_thread_of(SMALL_THREAD, move || {
+      grown_for_depth(levels, stacker::remaining_stack)
+    });
+    if let Some(bytes) = room {
+      assert!(
+        bytes >= claim_for(levels),
+        "{levels} levels left only {bytes} usable bytes"
+      );
+    }
+  }
+}
+
 /// Nothing is claimed when the room is already there, which is what keeps a fold
 /// nested inside another fold from claiming twice.
 #[test]
