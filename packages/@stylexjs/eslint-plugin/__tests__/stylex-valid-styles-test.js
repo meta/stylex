@@ -613,6 +613,15 @@ eslintTester.run('stylex-valid-styles', rule.default, {
      })`,
     `import * as stylex from '@stylexjs/stylex';
      stylex.create({
+       default: {
+         scrollTimeline: '--main-scroll block',
+         scrollTimelineAxis: 'inline',
+         scrollTimelineName: '--main-scroll',
+         WebkitAppRegion: 'drag',
+       },
+     })`,
+    `import * as stylex from '@stylexjs/stylex';
+     stylex.create({
        a: {
          interpolateSize: 'numeric-only',
        },
