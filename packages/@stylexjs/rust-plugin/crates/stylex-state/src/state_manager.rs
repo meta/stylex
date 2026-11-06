@@ -845,10 +845,6 @@ pub struct StateManager {
   /// The source file the compiler parsed, when the host makes it available.
   /// Expression spans in the transformed AST resolve exactly against it.
   pub input_source_file: Option<Arc<SourceFile>>,
-  /// Source map for the compiler's input code, mapping positions back to the
-  /// original authored file when earlier tooling (e.g. macro loaders) already
-  /// transformed the code.
-  pub input_source_map: Option<Arc<swc_sourcemap::SourceMap>>,
 
   // Imports
   pub(crate) imports: ImportState,
@@ -1188,7 +1184,6 @@ impl StateManager {
       kept_function_maps: Vec::new(),
       kept_function_map_addresses: FxHashSet::default(),
       input_source_file: None,
-      input_source_map: None,
       imports: ImportState::default(),
       existing_import_sources: vec![],
       bound_names: FxHashSet::default(),
@@ -2306,12 +2301,6 @@ impl StateManager {
       self.initializer_roots = Rc::default();
     }
     self.input_source_file = Some(source_file);
-  }
-
-  /// Provides the source map of the compiler's input code, enabling positions
-  /// to be mapped back to the original authored file.
-  pub fn set_input_source_map(&mut self, source_map: Arc<swc_sourcemap::SourceMap>) {
-    self.input_source_map = Some(source_map);
   }
 
   pub fn get_short_filename(&self) -> String {

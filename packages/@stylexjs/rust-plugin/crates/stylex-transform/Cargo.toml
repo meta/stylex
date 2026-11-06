@@ -48,7 +48,6 @@ swc_core = { workspace = true, features = [
   "ecma_utils",
 ] }
 swc_ecma_parser = { workspace = true, features = ["verify"] }
-swc_sourcemap.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

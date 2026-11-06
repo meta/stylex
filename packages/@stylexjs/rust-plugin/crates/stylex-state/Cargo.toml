@@ -26,7 +26,6 @@ swc_core = { workspace = true, features = [
   "ecma_codegen",
   "ecma_visit",
 ] }
-swc_sourcemap.workspace = true
 
 stylex_ast = { path = "../stylex-ast" }
 stylex_constants = { path = "../stylex-constants" }

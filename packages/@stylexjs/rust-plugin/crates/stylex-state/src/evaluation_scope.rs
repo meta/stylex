@@ -314,7 +314,6 @@ impl StateManager {
     // length, so carrying the file carries the bound unchanged -- and the walk
     // below scales its own bounds from the same number.
     small.input_source_file = self.input_source_file.clone();
-    small.input_source_map = self.input_source_map.clone();
     small.module_source = self.module_source.clone();
 
     // The four safety records, shared rather than copied -- each is already

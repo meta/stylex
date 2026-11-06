@@ -411,10 +411,10 @@ fn a_project_with_no_env_adds_nothing_to_the_function_map() {
   assert!(function_map.member_expressions.is_empty());
 }
 
-/// The parsed source file and its map are handed in by the host, and holding
-/// them is all the state does with them.
+/// The parsed source file is handed in by the host, and holding it is all the
+/// state does with it.
 #[test]
-fn the_host_s_source_file_and_map_are_taken_as_handed_in() {
+fn the_host_s_source_file_is_taken_as_handed_in() {
   use std::sync::Arc;
 
   use swc_core::common::{BytePos, SourceFile};
@@ -428,24 +428,12 @@ fn the_host_s_source_file_and_map_are_taken_as_handed_in() {
     "const a = 1;".into(),
     BytePos(1),
   )));
-  state.set_input_source_map(Arc::new(swc_sourcemap::SourceMap::new(
-    None,
-    Vec::new(),
-    Vec::new(),
-    Vec::new(),
-    None,
-  )));
-
   let Some(source_file) = state.input_source_file.as_ref() else {
     panic!("the source file the host handed in was not kept");
   };
 
   assert_eq!(source_file.src.as_str(), "const a = 1;");
   assert_eq!(source_file.start_pos, BytePos(1));
-  assert!(
-    state.input_source_map.is_some(),
-    "the source map the host handed in was not kept"
-  );
 }
 
 /// An import of a module by path, which is what a theme side effect is written

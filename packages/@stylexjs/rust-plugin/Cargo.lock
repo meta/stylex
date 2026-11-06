@@ -2659,7 +2659,6 @@ dependencies = [
  "stylex_utils",
  "swc_core",
  "swc_malloc",
- "swc_sourcemap",
 ]
 
 [[package]]
@@ -2743,7 +2742,6 @@ dependencies = [
  "swc_core",
  "swc_ecma_parser",
  "swc_malloc",
- "swc_sourcemap",
  "testing",
 ]
 

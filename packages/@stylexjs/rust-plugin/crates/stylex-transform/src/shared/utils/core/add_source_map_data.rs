@@ -6,7 +6,7 @@ use stylex_macros::stylex_panic;
 use stylex_path_resolver::package_json::PackageJsonExtended;
 
 use swc_core::{
-  common::{DUMMY_SP, Spanned},
+  common::DUMMY_SP,
   ecma::ast::{CallExpr, Expr, KeyValueProp},
 };
 
@@ -92,26 +92,12 @@ pub(crate) fn add_source_map_data(
 
     match style_node_paths.remove(&key) {
       Some(style_node_path) => {
-        // Highest fidelity: resolve the key's own span against the compiler's
-        // input and map it through the host-provided input source map back to
-        // the original authored file. Exact even when earlier tooling (e.g.
-        // macro loaders) already rewrote the code.
-        if let Some(original_position) =
-          original_position_from_input_source_map(&style_node_path, state)
-        {
-          insert_compiled_entry(
-            &mut inner_map,
-            &original_position.filename,
-            original_position.line_number,
-            state,
-            package_json_seen,
-            functions,
-          );
-          result.insert(key, Rc::new(inner_map));
-          continue;
-        }
-
-        // Locate the namespace by its key next: keys are static strings that
+        // The label is the compiled file and the line the namespace is written
+        // on in the compiler's input, as the Babel plugin writes it: its
+        // addSourceMapData reads `hub.file.codeMap`, which @babel/core 7 does
+        // not define, so an input source map never moves the label.
+        //
+        // Locate the namespace by its key: keys are static strings that
         // survive value-level code transforms (e.g. macro expansion by an
         // earlier loader), so this finds the original source position even
         // when the compiled values no longer match the file content. Fall
@@ -249,81 +235,6 @@ fn insert_compiled_entry(
       Rc::new(FlatCompiledStylesValue::Bool(true)),
     );
   }
-}
-
-struct OriginalSourcePosition {
-  filename: String,
-  line_number: usize,
-}
-
-/// Resolves a style namespace to its source position in the original authored
-/// file by combining the namespace key's own span — exact in the compiler's
-/// input — with the host-provided input source map, which maps the input back
-/// to the original file when earlier tooling already transformed it.
-///
-/// Returns `None` when either piece is unavailable so callers can fall back
-/// to locating the namespace in the source text.
-fn original_position_from_input_source_map(
-  style_node_path: &KeyValueProp,
-  state: &StateManager,
-) -> Option<OriginalSourcePosition> {
-  let source_file = state.input_source_file.as_ref()?;
-  let input_map = state.input_source_map.as_ref()?;
-
-  let span = style_node_path.key.span();
-  if span.is_dummy() {
-    return None;
-  }
-
-  // The key span comes from the compiler's own parse while this file is the
-  // text the host handed over, and the two can disagree -- a shorter text, or
-  // one whose characters lie differently -- so the position is checked rather
-  // than trusted.
-  //
-  // The end is checked here and the start is not: a position at the very end
-  // of the file names no character, and the text read below still slices for
-  // it, while a position before the file sits on no line of it and the line
-  // read refuses it.
-  let pos = span.lo();
-  if pos >= source_file.end_pos {
-    return None;
-  }
-
-  let line = source_file.lookup_line(pos)?;
-  let line_begin = source_file.line_begin_pos(pos);
-
-  // Source map columns are counted in UTF-16 code units.
-  let line_start_offset = (line_begin - source_file.start_pos).0 as usize;
-  let pos_offset = (pos - source_file.start_pos).0 as usize;
-  let col = source_file
-    .src
-    .get(line_start_offset..pos_offset)?
-    .encode_utf16()
-    .count();
-
-  let token = input_map.lookup_token(line as u32, col as u32)?;
-
-  // `lookup_token` returns the nearest preceding token, which a sparse map
-  // (e.g. statement-level mappings only) can place on an earlier line. Only a
-  // same-line token is trustworthy for a `file:line` annotation; otherwise
-  // fall back to locating the key in the source text.
-  if token.get_dst_line() != line as u32 {
-    return None;
-  }
-
-  let filename = match token.get_source() {
-    // Scheme-qualified sources (e.g. `webpack://app/src/x.ts`) are not
-    // filesystem paths; `create_short_filename` would garble them — fall
-    // back to locating the key in the source text instead.
-    Some(source) if source.contains("://") => return None,
-    Some(source) => source.to_string(),
-    None => state.get_filename().to_string(),
-  };
-
-  Some(OriginalSourcePosition {
-    filename,
-    line_number: token.get_src_line() as usize + 1,
-  })
 }
 
 #[cfg(test)]

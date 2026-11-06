@@ -134,6 +134,11 @@ Transform and output (`stylex-transform`, `stylex-state`, `stylex-css`)
   gives `undefined:`. Upstream wrote `/` everywhere and fell back to the last two
   segments outside the root; its unit tests for those cases were ported to the
   Babel plugin's names.
+- The label is the compiled file and the line it is written on in the input, as
+  the Babel plugin writes it (whose `addSourceMapData` reads `hub.file.codeMap`,
+  which @babel/core 7 does not define). Upstream moved it through a host-provided
+  input source map (`StateManager::set_input_source_map`), which no public entry
+  point set; that path, the setter and their unit tests are removed.
 
 Diagnostics (`stylex-diagnostics`, `stylex-macros`)
 - Errors carry the Babel plugin's message and the span of the node it reports
