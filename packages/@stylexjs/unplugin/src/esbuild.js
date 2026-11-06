@@ -12,6 +12,28 @@ import { createEsbuildPlugin } from 'unplugin';
 
 import { INDEX_CSS_RE, STYLE_CSS_RE, unpluginFactory } from './core';
 
+function isInsideDir(dir, file) {
+  const rel = path.relative(dir, file);
+  return (
+    rel !== '' &&
+    rel !== '..' &&
+    !rel.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(rel)
+  );
+}
+
+function resolveOutputFile(key, workingDir, outDir) {
+  const candidates = [
+    path.resolve(workingDir, key),
+    path.resolve(outDir, key),
+  ].filter((file) => isInsideDir(outDir, file));
+  return (
+    candidates.find((file) => fs.existsSync(file)) ||
+    candidates[candidates.length - 1] ||
+    null
+  );
+}
+
 function attachEsbuildHooks(plugin) {
   return {
     ...plugin,
@@ -23,10 +45,12 @@ function attachEsbuildHooks(plugin) {
             const css = plugin.__stylexCollectCss?.();
             if (!css) return;
             const initial = build.initialOptions;
-            const outDir =
+            const workingDir = initial.absWorkingDir || process.cwd();
+            const outOption =
               initial.outdir ||
               (initial.outfile ? path.dirname(initial.outfile) : null);
-            if (!outDir) return;
+            if (!outOption) return;
+            const outDir = path.resolve(workingDir, outOption);
             let outfile = null;
             const meta = result && result.metafile;
             if (meta && meta.outputs) {
@@ -36,10 +60,7 @@ function attachEsbuildHooks(plugin) {
                 cssOutputs.find((f) => INDEX_CSS_RE.test(f)) ||
                 cssOutputs.find((f) => STYLE_CSS_RE.test(f)) ||
                 cssOutputs[0];
-              if (pick)
-                outfile = path.isAbsolute(pick)
-                  ? pick
-                  : path.join(process.cwd(), pick);
+              if (pick) outfile = resolveOutputFile(pick, workingDir, outDir);
             } else {
               try {
                 const files = fs
@@ -67,7 +88,11 @@ function attachEsbuildHooks(plugin) {
                   'utf8',
                 );
               }
-            } catch {}
+            } catch (error) {
+              console.warn(
+                `[stylex] Could not append StyleX CSS to ${outfile}: ${error.message}`,
+              );
+            }
           } catch {}
         });
       },
