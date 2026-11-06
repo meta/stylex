@@ -1,0 +1,202 @@
+//! Panic and error macros that produce `[StyleX]`-prefixed messages.
+
+use colored::Colorize;
+use std::borrow::Cow;
+
+use crate::stylex_error::StyleXError;
+
+/// Unwraps a `Result` or panics with a `[StyleX]` error, optionally prefixed with `$context`.
+#[macro_export]
+macro_rules! unwrap_or_panic {
+  ($result:expr) => {
+    $result.unwrap_or_else(|error| {
+      $crate::panic_macros::__stylex_panic($crate::panic_macros::stylex_err(format!("{}", error)))
+    })
+  };
+  ($result:expr, $context:expr) => {
+    $result.unwrap_or_else(|error| {
+      $crate::panic_macros::__stylex_panic($crate::panic_macros::stylex_err(format!(
+        "{}: {}",
+        $context, error
+      )))
+    })
+  };
+}
+
+/// Create a simple `StyleXError` with just a message.
+pub fn stylex_err(message: impl Into<Cow<'static, str>>) -> StyleXError {
+  StyleXError {
+    message: message.into(),
+    file: None,
+    key_path: None,
+    line: None,
+    col: None,
+    source_location: None,
+  }
+}
+
+/// Create a `StyleXError` with a message and file context.
+pub fn stylex_err_with_file(
+  message: impl Into<Cow<'static, str>>,
+  file: impl Into<Cow<'static, str>>,
+) -> StyleXError {
+  StyleXError {
+    message: message.into(),
+    file: Some(file.into()),
+    key_path: None,
+    line: None,
+    col: None,
+    source_location: None,
+  }
+}
+
+fn format_source_location(caller: &std::panic::Location<'_>) -> Cow<'static, str> {
+  format!("{}:{}", caller.file(), caller.line()).into()
+}
+
+// Diverging helpers the macros reach through `$crate::` paths; not for direct use.
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[doc(hidden)]
+#[track_caller]
+pub fn __stylex_panic(mut err: StyleXError) -> ! {
+  let caller = std::panic::Location::caller();
+
+  if err.source_location.is_none() {
+    err.source_location = Some(format_source_location(caller));
+  }
+  crate::stylex_error::record_panic_message(err.message.as_ref());
+
+  panic!("{}", err)
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[doc(hidden)]
+#[track_caller]
+pub fn __stylex_unimplemented(mut err: StyleXError) -> ! {
+  let caller = std::panic::Location::caller();
+  if err.source_location.is_none() {
+    err.source_location = Some(format_source_location(caller));
+  }
+  err.message = format!("{} {}", "[UNIMPLEMENTED]".dimmed().magenta(), err.message).into();
+
+  panic!("{}", err)
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[doc(hidden)]
+#[track_caller]
+pub fn __stylex_unreachable(mut err: StyleXError) -> ! {
+  let caller = std::panic::Location::caller();
+  if err.source_location.is_none() {
+    err.source_location = Some(format_source_location(caller));
+  }
+  err.message = format!("{} {}", "[UNREACHABLE]".dimmed().blue(), err.message).into();
+
+  panic!("{}", err)
+}
+
+/// Like `panic!()` but produces `[StyleX] <message>`.
+#[macro_export]
+macro_rules! stylex_panic {
+  () => {
+    $crate::panic_macros::__stylex_panic(
+      $crate::panic_macros::stylex_err("explicit panic")
+    )
+  };
+  ($($arg:tt)+) => {
+    $crate::panic_macros::__stylex_panic(
+      $crate::panic_macros::stylex_err(
+        format!($($arg)+)
+      )
+    )
+  };
+}
+
+#[macro_export]
+macro_rules! stylex_panic_with_file {
+  ($($arg:tt)*) => {
+    $crate::macros::panic_macros::__stylex_panic(
+      $crate::macros::panic_macros::stylex_err_with_file(
+        format!($($arg)*),
+        file!()
+      )
+    )
+  };
+}
+
+/// Like `unimplemented!()` but produces `[StyleX] [UNIMPLEMENTED] <message>`.
+#[macro_export]
+macro_rules! stylex_unimplemented {
+  () => {
+    $crate::panic_macros::__stylex_unimplemented(
+      $crate::panic_macros::stylex_err("not implemented")
+    )
+  };
+  ($($arg:tt)+) => {
+    $crate::panic_macros::__stylex_unimplemented(
+      $crate::panic_macros::stylex_err(
+        format!($($arg)+)
+      )
+    )
+  };
+}
+
+/// Like `unreachable!()` but produces `[StyleX] [UNREACHABLE] <message>`.
+#[macro_export]
+macro_rules! stylex_unreachable {
+  () => {
+    $crate::panic_macros::__stylex_unreachable(
+      $crate::panic_macros::stylex_err("entered unreachable code")
+    )
+  };
+  ($($arg:tt)+) => {
+    $crate::panic_macros::__stylex_unreachable(
+      $crate::panic_macros::stylex_err(
+        format!($($arg)+)
+      )
+    )
+  };
+}
+
+/// Like `anyhow::bail!()`, but returns a `StyleXError` with the `[StyleX]` prefix.
+#[macro_export]
+macro_rules! stylex_bail {
+  ($($arg:tt)*) => {
+    return Err(anyhow::anyhow!(
+      $crate::panic_macros::stylex_err(format!($($arg)*))
+    ))
+  };
+}
+
+/// Like `anyhow::anyhow!()`, but wraps the message in a `StyleXError`.
+#[macro_export]
+macro_rules! stylex_anyhow {
+  ($($arg:tt)*) => {
+    anyhow::anyhow!(
+      $crate::panic_macros::stylex_err(format!($($arg)*))
+    )
+  };
+}
+
+/// Unwraps a `Result` or panics with a `[StyleX]` error, optionally prefixed with a context.
+#[macro_export]
+macro_rules! stylex_unwrap {
+  ($result:expr) => {
+    $result.unwrap_or_else(|error| {
+      $crate::panic_macros::__stylex_panic($crate::panic_macros::stylex_err(format!("{}", error)))
+    })
+  };
+  ($result:expr, $context:expr) => {
+    $result.unwrap_or_else(|error| {
+      $crate::panic_macros::__stylex_panic($crate::panic_macros::stylex_err(format!(
+        "{}: {}",
+        $context, error
+      )))
+    })
+  };
+}
+
+#[cfg(test)]
+#[path = "tests/panic_macros_test.rs"]
+mod tests;

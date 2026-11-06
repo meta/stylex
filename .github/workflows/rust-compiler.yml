@@ -1,0 +1,144 @@
+name: rust-compiler
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'packages/@stylexjs/rust-plugin/**'
+      - 'packages/@stylexjs/babel-plugin/**'
+      - 'packages/@stylexjs/shared/**'
+      - 'packages/style-value-parser/**'
+      - '.github/workflows/rust-compiler.yml'
+  push:
+    branches: ['main', 'feat/stylex-rust-port']
+    paths:
+      - 'packages/@stylexjs/rust-plugin/**'
+      - 'packages/@stylexjs/babel-plugin/**'
+      - 'packages/@stylexjs/shared/**'
+      - 'packages/style-value-parser/**'
+      - '.github/workflows/rust-compiler.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ['22.x', '24.x']
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      CARGO_BUILD_JOBS: '2'
+    steps:
+      # Keep sources byte-identical to the repository (rustfmt checks Unix
+      # newlines) and allow the deepest vendored paths.
+      - name: Configure Git for Windows checkouts
+        if: runner.os == 'Windows'
+        run: |
+          git config --global core.autocrlf false
+          git config --system core.longpaths true
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: yarn
+          cache-dependency-path: yarn.lock
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.96.1'
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/@stylexjs/rust-plugin
+      # Formatting and lint fail fast, before the release build.
+      - name: Rust formatting
+        run:
+          cargo fmt --manifest-path packages/@stylexjs/rust-plugin/Cargo.toml --
+          --check
+      - name: Rust lint
+        run: |
+          cargo clippy --locked --manifest-path packages/@stylexjs/rust-plugin/Cargo.toml --all-targets -- -D warnings
+          cargo clippy --locked --manifest-path packages/@stylexjs/rust-plugin/Cargo.toml --features node --lib -- -D warnings
+      - run: corepack prepare yarn@1.22.22 --activate
+      - run: yarn install --frozen-lockfile --ignore-scripts
+      - name: Build the JavaScript packages the suites import
+        run:
+          npm run build --workspace=style-value-parser
+          --workspace=@stylexjs/shared --workspace=@stylexjs/stylex
+          --workspace=@stylexjs/babel-plugin
+      - name: Build native compiler
+        env:
+          STYLEX_NATIVE_TEST_HOOKS: '1'
+        run: npm run build:native --workspace=@stylexjs/rust-plugin
+      - name: Check the addon for build-machine paths
+        run: node packages/@stylexjs/rust-plugin/scripts/check-binary-paths.cjs
+      - name: Rust dependency license inventory is current
+        if: runner.os == 'Linux' && matrix.node == '24.x'
+        working-directory: packages/@stylexjs/rust-plugin
+        # The build fetched only Linux crates; the inventory covers every target.
+        run: |
+          cargo fetch --locked
+          node scripts/licenses.cjs --check
+      # The unchanged JS suite hardcodes POSIX paths in snapshots and mocks, so
+      # it does not pass on Windows even with the JS compiler; there the native
+      # run is compared test for test against the JS compiler instead.
+      - name: Current Babel reference suite
+        if: runner.os != 'Windows'
+        run: node packages/@stylexjs/rust-plugin/scripts/parity.cjs babel
+      - name:
+          Rust, native API, bundler, and unchanged Babel suites on the native
+          compiler
+        env:
+          STYLEX_PARITY_MODE:
+            ${{ runner.os == 'Windows' && 'compare' || 'rust' }}
+        run: npm run test:native --workspace=@stylexjs/rust-plugin
+
+  node18:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '18.x'
+          cache: yarn
+          cache-dependency-path: yarn.lock
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.96.1'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/@stylexjs/rust-plugin
+      - run: corepack prepare yarn@1.22.22 --activate
+      - run: yarn install --frozen-lockfile --ignore-scripts --ignore-engines
+      - name: Build the JavaScript packages the suites import
+        run:
+          npm run build --workspace=style-value-parser
+          --workspace=@stylexjs/shared --workspace=@stylexjs/stylex
+          --workspace=@stylexjs/babel-plugin
+      - run: npm run build:native --workspace=@stylexjs/rust-plugin
+        env:
+          STYLEX_NATIVE_TEST_HOOKS: '1'
+      - name:
+          Native API, Babel adapter, and bundler plugin on the oldest supported
+          Node
+        run:
+          node --test
+          packages/@stylexjs/rust-plugin/tests/babel_facade_current.cjs
+          packages/@stylexjs/rust-plugin/tests/native_api_current.cjs
+          packages/@stylexjs/rust-plugin/tests/host_boundary_current.cjs
+          packages/@stylexjs/rust-plugin/tests/babel_validation_current.cjs
+          packages/@stylexjs/rust-plugin/tests/creation_data_boundary_current.cjs
+          packages/@stylexjs/rust-plugin/tests/compiled_consumer_current.cjs
+          packages/@stylexjs/rust-plugin/tests/named_env_callee_site_current.cjs
+          packages/@stylexjs/rust-plugin/tests/host_memo_current.cjs
+          packages/@stylexjs/rust-plugin/tests/creation_callback_effects_current.cjs
+          packages/@stylexjs/rust-plugin/tests/theme_projection_current.cjs
+          packages/@stylexjs/rust-plugin/tests/count_refusal_current.cjs
+          packages/@stylexjs/rust-plugin/tests/memo_parameter_identity_current.cjs
