@@ -39,6 +39,13 @@ if (env.SOURCE_DATE_EPOCH == null) {
   env.SOURCE_DATE_EPOCH = /^\d+$/.test(time) ? time : '0';
 }
 
+const filename = `stylex.${process.platform}-${process.arch}.node`;
+// ld64 records the output path as a dylib's install name; Node loads addons by path.
+const linkArgs =
+  process.platform === 'darwin'
+    ? ['--', '-C', `link-arg=-Wl,-install_name,@rpath/${filename}`]
+    : [];
+
 // The addon alone, as a final cdylib: rustc runs the release profile's LTO only
 // for final artifacts, and the package also declares an `rlib` for its Rust API.
 const result = spawnSync(
@@ -56,6 +63,7 @@ const result = spawnSync(
     process.env.STYLEX_NATIVE_TEST_HOOKS === '1' ? 'node,test-hooks' : 'node',
     '--release',
     '--message-format=json',
+    ...linkArgs,
   ],
   {
     cwd: root,
@@ -102,6 +110,5 @@ if (!library)
   throw new Error('Cargo did not produce the StyleX native compiler');
 const nativeDir = path.join(root, 'native');
 fs.mkdirSync(nativeDir, { recursive: true });
-const filename = `stylex.${process.platform}-${process.arch}.node`;
 fs.copyFileSync(library, path.join(nativeDir, filename));
 console.log(`Built ${filename}`);
