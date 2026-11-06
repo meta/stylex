@@ -11,27 +11,27 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@babel/core": "^7.28.4",
-    "@babel/preset-env": "^7.28.3",
-    "@babel/preset-react": "^7.27.1",
-    "@pmmmwh/react-refresh-webpack-plugin": "^0.6.1",
+    "@babel/core": "^8.1.0",
+    "@babel/preset-env": "^8.0.7",
+    "@babel/preset-react": "^8.0.1",
+    "@pmmmwh/react-refresh-webpack-plugin": "^0.6.3",
     "@stylexjs/eslint-plugin": "0.19.1",
     "@stylexjs/unplugin": "0.19.1",
-    "babel-loader": "^10.0.0",
-    "css-loader": "^7.1.2",
+    "babel-loader": "^10.1.1",
+    "css-loader": "^7.1.5",
     "file-loader": "^6.2.0",
-    "html-webpack-plugin": "^5.6.0",
-    "mini-css-extract-plugin": "^2.9.4",
-    "react-refresh": "^0.18.0",
+    "html-webpack-plugin": "^5.6.8",
+    "mini-css-extract-plugin": "^2.10.2",
+    "react-refresh": "^0.19.0",
     "shx": "^0.4.0",
-    "serve": "^14.2.5",
-    "webpack": "^5.101.3",
-    "webpack-cli": "^6.0.1",
-    "webpack-dev-server": "^5.2.6"
+    "serve": "^14.2.6",
+    "webpack": "^5.112.2",
+    "webpack-cli": "^7.3.1",
+    "webpack-dev-server": "^6.1.0"
   },
   "dependencies": {
     "@stylexjs/stylex": "0.19.1",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   }
 }

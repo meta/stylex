@@ -11,23 +11,23 @@
   },
   "dependencies": {
     "@stylexjs/stylex": "0.19.1",
-    "next": "^16.4.1",
-    "react": "^19.0.0-rc-de68d2f4-20241204",
-    "react-dom": "^19.0.0-rc-de68d2f4-20241204"
+    "next": "^16.4.4",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "autoprefixer": "^10.4.20",
+    "autoprefixer": "^10.6.2",
     "@stylexjs/eslint-plugin": "0.19.1",
     "@stylexjs/postcss-plugin": "0.19.1",
     "@types/json-schema": "^7.0.15",
-    "@types/node": "^22.7.6",
-    "@types/react": "^19.2.6",
-    "@types/react-dom": "^19.2.3",
-    "@typescript-eslint/parser": "^8.48.1",
-    "eslint": "^9.39.1",
-    "eslint-config-next": "^16.0.6",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@typescript-eslint/parser": "^8.72.1",
+    "eslint": "^10.14.0",
+    "eslint-config-next": "^16.4.4",
     "shx": "^0.4.0",
-    "typescript": "^5.9.3",
+    "typescript": "^7.0.2",
     "client-only": "0.0.1"
   }
 }
