@@ -834,7 +834,12 @@ test('compiler errors name the file as Babel resolves the filename', () => {
 function themeFixture() {
   const fs = require('node:fs');
   const os = require('node:os');
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stylex-resolve-'));
+  // The real path: the Babel plugin resolves relative imports through
+  // import-meta-resolve, which follows symlinks, and macOS's tmpdir sits behind
+  // one (/var -> /private/var).
+  const root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'stylex-resolve-')),
+  );
   const write = (file, text) => {
     fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
     fs.writeFileSync(path.join(root, file), text);
@@ -904,7 +909,42 @@ test('rewriteAliases preserves import lines, trailing comments and bare-import s
       runEngine('direct', unchanged, filename, options).code,
       unchanged,
     );
+    assert.equal(
+      runEngine('babel', unchanged, filename, options).code,
+      unchanged.trimEnd(),
+    );
   } finally {
+    fixture.remove();
+  }
+});
+
+test('rewriteAliases resolves a relative import through a symlinked directory as Babel does', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const { runEngine } = require('./support/babel_errors.cjs');
+  const fixture = themeFixture();
+  const link = path.join(
+    fs.realpathSync(os.tmpdir()),
+    `stylex-resolve-link-${process.pid}-${path.basename(fixture.root)}`,
+  );
+  fs.symlinkSync(fixture.root, link, 'junction');
+  try {
+    const options = {
+      rewriteAliases: true,
+      aliases: { '~t/*': [path.join(link, 'theme/*')] },
+      unstable_moduleResolution: { type: 'commonJS', rootDir: link },
+    };
+    const filename = path.join(link, 'Comp.js');
+    const source = `${header}import { colors } from './theme/tokens.stylex'; // linked\n`;
+    const importLine = (engine) =>
+      runEngine(engine, source, filename, options)
+        .code.split('\n')
+        .find((line) => line.includes('tokens.stylex'));
+    const oracle = importLine('babel');
+    assert.equal(importLine('direct'), oracle);
+    assert.equal(importLine('facade'), oracle);
+  } finally {
+    fs.rmSync(link, { recursive: true, force: true });
     fixture.remove();
   }
 });
