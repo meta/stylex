@@ -25,34 +25,17 @@ pub(in super::super) fn evaluate(
     // is not even an error -- the value falls to the runtime, `height:
     // var(--x-height)`, which is what the reference implementation emits there.
     //
-    // Reported at the array, like the spread below and for the same reason:
-    // there is no node for a hole to report at.
+    // The hole has no authored node to underline, as in Babel's element path.
     let Some(elem) = elem else {
-      return deopt(&Expr::Array(arr_path.clone()), state, PATH_WITHOUT_NODE);
+      return deopt(
+        &stylex_diagnostics::code_frame::unlocated_hole_fault(),
+        state,
+        &format!("{PATH_WITHOUT_NODE}\n"),
+      );
     };
 
-    // A spread is refused, whatever it spreads, and before the operand is
-    // evaluated at all.
-    //
-    // The reference implementation evaluates each *element path*, so a spread
-    // arrives as a `SpreadElement` node and falls to its terminal
-    // `UNSUPPORTED_EXPRESSION(path.node.type)` arm -- every shape, uniformly,
-    // ahead of any value validation and without ever looking at the operand.
-    // The loop below reads `elem.expr`, which unwraps the spread and evaluates
-    // the operand instead, so the refusal has to be made here for the two to
-    // agree. Made first for the same reason: `[...unknownThing]` is a
-    // `SpreadElement` refusal upstream, not the operand's own.
-    //
-    // Agreeing matters twice over. A spread of a binding or an object was
-    // already refused, but by the value rule and with a different sentence
-    // than an author reads from upstream. A spread of a literal was not
-    // refused at all: `[..."ab"]` folded to `["ab"]` and shipped `color: ab`
-    // where the language spreads two characters, and `[...1]` shipped
-    // `color: 1` where the language throws.
-    //
-    // Reported at the array rather than at the operand, because SWC carries no
-    // expression node for the spread itself and the array is the nearest node
-    // that contains the `...`.
+    // Preserve first-offending-element order in hole-containing source
+    // literals. Hole-free bounded spreads retain the approved native extension.
     if elem.spread.is_some() {
       let value = evaluate_with_functions(&elem.expr, traversal_state, Rc::clone(&state.functions));
       if !value.confident {

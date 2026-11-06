@@ -73,11 +73,15 @@ upstream differed.
 
 Evaluator (`stylex-evaluator`, `stylex-js`)
 - The optional Boa engine is removed. A native evaluator folds what the Babel
-  plugin's evaluator folds, with JavaScript semantics: sparse arrays and holes,
-  `==`/`!=`, spread in array literals and in arguments to pure builtins,
+  plugin's evaluator folds, with JavaScript semantics: host-provided sparse arrays,
+  `==`/`!=`, spread in hole-free array literals and in arguments to pure builtins,
   optional member reads, functions defined in the file and called later, and
   reference equality (distinct fresh allocations are unequal; refused when
-  identity cannot be proven).
+  identity cannot be proven). Source-literal holes refuse at their first offending
+  element, including length/index/binding uses, with Babel's unlocated hole fault.
+  Member calls retain Babel's CallExpression refusal when their receiver hits that
+  fault. Where approved spread or call support reaches an operand hole Babel never
+  reaches, the error may name the hole instead of Babel's spread or call refusal.
 - A read before its declaration is refused in every order; builtin method values,
   arrow-function property reads and optional calls are refused.
 - Work is bounded: allocation, length and recursion budgets refuse with typed

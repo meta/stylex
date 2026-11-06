@@ -9,9 +9,8 @@
 //!
 //! The suite is two-sided, because refusing every array would satisfy the first
 //! half alone. Each refusal is paired with the fold beside it that has to keep
-//! working: a trailing comma is punctuation rather than a slot, and a `length`
-//! written on a literal receiver is still counted from the source -- the one
-//! reading that answers what the language says.
+//! working: a trailing comma is punctuation rather than a slot. Source-literal
+//! holes refuse at every use, including length, matching Babel and the PR.
 
 use super::source_evaluation::*;
 use stylex_constants::constants::evaluation_errors::{PATH_WITHOUT_NODE, SPREAD_ELEMENT};
@@ -91,24 +90,12 @@ fn a_trailing_comma_is_not_a_hole() {
   assert_folds_to_slots("[\"a\", \"b\", \"c\",]", 3);
 }
 
-/// A hole is what stops an array, wherever a resolved spread sits beside it.
-///
-/// A spread the evaluator resolves contributes its operand's own elements and
-/// refuses nothing -- a string spreads by code point, an array by element --
-/// so the hole is the only refusal left in each of these, whichever side of it
-/// the spread was written on. `node` gives `["a","b",null]` for the second row
-/// and `[null,"a","b"]` for the first, the `null`s being how JSON renders a
-/// hole; this compiler refuses the hole rather than answering one, which is
-/// the guard `array_hole_tests` exists for and is unchanged.
-///
-/// Both strings were `SPREAD_ELEMENT` when no spread resolved. The sentence
-/// moves to the hole's because the hole is now what the walk trips on; the
-/// refusal itself does not move.
+/// The first offending element determines the refusal, as in unchanged Babel.
 #[test]
 fn a_hole_refuses_an_array_whatever_spread_sits_beside_it() {
-  assert_deopt_reason_is("[, ...\"ab\"]", PATH_WITHOUT_NODE);
-  assert_deopt_reason_is("[...\"ab\", ,]", PATH_WITHOUT_NODE);
-  assert_deopt_reason_is("[...[1], ,]", PATH_WITHOUT_NODE);
+  assert_hole_refusal("[, ...\"ab\"]");
+  assert_hole_refusal("[...\"ab\", ,]");
+  assert_hole_refusal("[...[1], ,]");
 }
 
 /// And the operand a spread still cannot resolve is still refused as a spread,
@@ -150,8 +137,8 @@ fn a_spread_the_evaluator_cannot_resolve_still_refuses_as_a_spread() {
 /// or wrong value is ever accepted in place of the refusal.
 #[test]
 fn a_hole_after_a_resolved_spread_is_refused_rather_than_modelled() {
-  // The array itself, in the sentence the hole's own refusal carries.
-  assert_deopt_reason_is("[...\"ab\", ,]", PATH_WITHOUT_NODE);
+  // Approved spread evaluation can reach the source hole Babel does not reach.
+  assert_hole_refusal("[...\"ab\", ,]");
 
   // And every read off it. Asserted as refusals rather than by sentence: more
   // than one rule can answer first here -- the hole's, and the spread's where
@@ -183,29 +170,34 @@ fn the_same_spread_without_a_hole_folds_to_what_the_language_iterates() {
   assert_folds_to_string("[...\"ab\"].join(\"-\")", "a-b");
 }
 
-// ==================== `length` still counts the slots ====================
+// ==================== source-literal length refusals ====================
 
-/// The count is read off the source, so it survives the refusal of the array
-/// itself. `[, 1].length` is two in the language, and answering two is the only
-/// reading that is not confidently wrong.
+/// Babel and the PR refuse a source hole before any length can be read.
 #[test]
-fn a_length_written_on_a_holey_literal_counts_the_slots() {
-  assert_folds_to_number("[, 1].length", 2.0);
-  assert_folds_to_number("[1, , 2].length", 3.0);
-  assert_folds_to_number("[,].length", 1.0);
-  assert_folds_to_number("[, , ,].length", 3.0);
-  assert_folds_to_number("[1, 2, ,].length", 3.0);
+fn a_length_written_on_a_holey_literal_refuses() {
+  for source in [
+    "[, 1].length",
+    "[1, , 2].length",
+    "[,].length",
+    "[, , ,].length",
+    "[1, 2, ,].length",
+  ] {
+    assert_hole_refusal(source);
+  }
 }
 
-/// Both spellings of the same property, and a receiver in parentheses, which is
-/// not a different receiver.
+/// Property spelling and parentheses do not bypass source-hole evaluation.
 #[test]
-fn a_holey_literals_length_is_counted_however_it_is_spelled() {
-  assert_folds_to_number("[, 1][\"length\"]", 2.0);
-  assert_folds_to_number("([, 1]).length", 2.0);
-  assert_folds_to_number("(([, 1])).length", 2.0);
-  assert_folds_to_number("([, 1])[\"length\"]", 2.0);
-  assert_folds_to_number("[, 1][`length`]", 2.0);
+fn a_holey_literals_length_refuses_however_it_is_spelled() {
+  for source in [
+    "[, 1][\"length\"]",
+    "([, 1]).length",
+    "(([, 1])).length",
+    "([, 1])[\"length\"]",
+    "[, 1][`length`]",
+  ] {
+    assert_hole_refusal(source);
+  }
 }
 
 /// A key that is not the property, however close it reads. Each of these is a
@@ -223,11 +215,11 @@ fn a_key_that_only_looks_like_the_property_reports_the_hole() {
   }
 }
 
-/// A count is a number, so it composes with the arithmetic the evaluator folds.
+/// Arithmetic cannot bypass a source-hole refusal.
 #[test]
-fn a_holey_literals_length_composes_as_a_number() {
-  assert_folds_to_number("[, 1].length + 1", 3.0);
-  assert_folds_to_number("[, 1].length * [1, , 2].length", 6.0);
+fn a_holey_literals_length_refuses_inside_arithmetic() {
+  assert_hole_refusal("[, 1].length + 1");
+  assert_hole_refusal("[, 1].length * [1, , 2].length");
 }
 
 /// A spread is not countable. Keep the first offending element's diagnostic:
@@ -248,13 +240,10 @@ fn every_other_property_of_a_holey_literal_reports_the_hole() {
   }
 }
 
-/// A count read off a holey literal is still a count, so two of them add. A
-/// holey array reached through a *binding* has no literal at the read and
-/// refuses instead; that shape needs a module and is pinned in
-/// `tests/transform_stylex_create_test/array_style_values.rs`.
+/// Two source-hole lengths still refuse; no partial count is manufactured.
 #[test]
-fn two_counts_off_holey_literals_add() {
-  assert_folds_to_number("[, 1].length + [, 1].length", 4.0);
+fn two_lengths_off_holey_literals_refuse() {
+  assert_hole_refusal("[, 1].length + [, 1].length");
 }
 
 // ==================== helpers ====================
@@ -264,7 +253,7 @@ fn two_counts_off_holey_literals_add() {
 /// portable between the two compilers.
 #[track_caller]
 fn assert_hole_refusal(source: &str) {
-  assert_deopt_reason_is(source, PATH_WITHOUT_NODE);
+  assert_deopt_reason_is(source, &format!("{PATH_WITHOUT_NODE}\n"));
 }
 
 /// The same, for a source deep enough to need the ceiling raised first.
@@ -273,7 +262,7 @@ fn assert_hole_refusal_under_ceiling(source: &str, max_evaluation_depth: usize) 
   assert_deopt_reason_is_in(
     &evaluate_source_with_ceiling(source, max_evaluation_depth),
     source,
-    PATH_WITHOUT_NODE,
+    &format!("{PATH_WITHOUT_NODE}\n"),
   );
 }
 

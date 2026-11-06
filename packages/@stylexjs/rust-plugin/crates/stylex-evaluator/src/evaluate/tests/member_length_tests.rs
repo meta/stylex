@@ -55,17 +55,21 @@ fn a_trailing_comma_is_not_an_element() {
   assert_folds_to_number("[1,].length", 1.0);
 }
 
-/// A hole is a slot, so it counts. This is the case that decides where the
-/// count is read from: a hole has no value, so the array itself refuses and only
-/// the source can say how many slots were written. `[,]` is a single hole with a
-/// trailing comma after it, which the language reads as one slot. What the
-/// refusal says, and every shape around it, is in `tests/array_hole_tests.rs`.
+/// Source-literal holes refuse before the length lookup, matching Babel/PR.
 #[test]
-fn a_hole_is_a_slot_and_counts() {
-  assert_folds_to_number("[, 1].length", 2.0);
-  assert_folds_to_number("[1, , 2].length", 3.0);
-  assert_folds_to_number("[,].length", 1.0);
-  assert_folds_to_number("[, , ,].length", 3.0);
+fn a_hole_refuses_before_its_length_is_read() {
+  for source in [
+    "[, 1].length",
+    "[1, , 2].length",
+    "[,].length",
+    "[, , ,].length",
+  ] {
+    assert_refused_with(
+      &evaluate_source(source),
+      source,
+      "Unexpected error:\nCould not resolve the code being evaluated.\n",
+    );
+  }
 }
 
 /// A receiver that is not written as a literal is counted by its evaluated
@@ -134,8 +138,13 @@ fn an_array_carrying_a_spread_it_cannot_read_refuses_rather_than_being_miscounte
 #[test]
 fn a_parenthesised_receiver_is_counted_as_the_bare_one_is() {
   assert_folds_to_number("([1, 2]).length", 2.0);
-  assert_folds_to_number("([, 1]).length", 2.0);
-  assert_folds_to_number("(([, 1])).length", 2.0);
+  for source in ["([, 1]).length", "(([, 1])).length"] {
+    assert_refused_with(
+      &evaluate_source(source),
+      source,
+      "Unexpected error:\nCould not resolve the code being evaluated.\n",
+    );
+  }
   assert_folds_to_number("([...[1, 2]]).length", 2.0);
   assert_folds_to_number("(([...[1, 2]])).length", 2.0);
   // A string spreads into its code units (approved extension; `node` answers

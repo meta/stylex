@@ -257,7 +257,7 @@ fn parentheses_around_a_function_value_are_not_part_of_it() {
 /// which is what makes a second check here unnecessary.
 #[test]
 fn a_spread_of_an_array_with_a_hole_refuses() {
-  assert_object_refuses("{ ...[, 1] }", PATH_WITHOUT_NODE);
+  assert_object_refuses("{ ...[, 1] }", &format!("{PATH_WITHOUT_NODE}\n"));
 }
 
 /// A string spreads as its characters, one key per UTF-16 code unit -- a lone

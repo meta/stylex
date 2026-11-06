@@ -56,7 +56,16 @@ fn evaluate_inner(
   // it does not use.
   match super::super::engine_fold::try_fold(call, state, traversal_state, fns) {
     Some(Ok(value)) => return Some(value),
-    Some(Err(reason)) => return deopt(&Expr::Call(call.clone()), state, &reason),
+    Some(Err(reason)) => {
+      if matches!(&call.callee, Callee::Expr(callee) if normalize_expr(callee).is_member())
+        && matches!(&state.deopt_path, Some(Expr::Seq(seq)) if seq.span.is_dummy() && seq.exprs.is_empty())
+      {
+        state.deopt_path = Some(Expr::Call(call.clone()));
+        state.deopt_reason = Some(unsupported_expression("CallExpression"));
+        return None;
+      }
+      return deopt(&Expr::Call(call.clone()), state, &reason);
+    },
     None => {},
   }
 

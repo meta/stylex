@@ -130,7 +130,7 @@ fn the_keys_of_a_function_fold_are_its_names() {
 fn an_array_holding_a_hole_refuses() {
   for question in QUESTIONS {
     for receiver in ["[, 'a']", "['a', , 'b']", "[, ,]", "[[, 'a'], 'b']"] {
-      assert_refuses(question, receiver, PATH_WITHOUT_NODE);
+      assert_refuses(question, receiver, &format!("{PATH_WITHOUT_NODE}\n"));
     }
   }
 }
@@ -486,7 +486,7 @@ fn a_hole_beside_a_value_that_resolved_to_nothing_refuses_for_the_hole() {
       "[, (() => 1) + 1, 'a']",
       "[, [(() => 1) + 1][0], 'a']",
     ] {
-      assert_refuses_after_the_memo(question, receiver, PATH_WITHOUT_NODE);
+      assert_refuses_after_the_memo(question, receiver, &format!("{PATH_WITHOUT_NODE}\n"));
     }
   }
 }
