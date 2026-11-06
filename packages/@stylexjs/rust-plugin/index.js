@@ -110,7 +110,9 @@ function transformSync(source, options = {}) {
   const filename = unnamed ? 'unknown.js' : givenFilename;
   // A file without a name compiles as Babel's plugin compiles one: with the
   // empty name the facade passes for it (no import resolution, no file label).
-  const pluginOptions = unnamed ? { ...rest, __sourceFileName: '' } : { ...rest };
+  const pluginOptions = unnamed
+    ? { ...rest, __sourceFileName: '' }
+    : { ...rest };
   // Babel resolves `filename` against the working directory when it loads the
   // options.
   const file =

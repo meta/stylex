@@ -14,9 +14,10 @@ const url = require('node:url');
 const EXTENSIONS = ['.js', '.ts', '.tsx', '.jsx', '.mjs', '.cjs'];
 
 const { isProxy } = require('node:util').types;
-// A handle id starts with its kind: f(unction), s(ymbol), b(igint), a(rray),
-// p(lain object), x (proxy: decided when read) or o(ther object). Classifying
-// never runs user code (no proxy traps, no getters).
+// A handle id starts with a one-letter kind: f for a function, s for a symbol,
+// b for a bigint, a for an array, p for a plain object, x for a proxy (decided
+// when read) and o for any other object. Classifying never runs user code (no
+// proxy traps, no getters).
 function handleKind(value) {
   switch (typeof value) {
     case 'function':
