@@ -403,7 +403,7 @@ fn returns_none_without_an_input_source_file() {
 
 /// The shortening of a path, and the annotation it is written into.
 mod short_filenames {
-  use std::path::{Path, PathBuf};
+  use std::path::PathBuf;
   use std::rc::Rc;
 
   use indexmap::IndexMap;
@@ -421,8 +421,13 @@ mod short_filenames {
   };
 
   use super::super::{
-    create_short_filename, get_package_prefix, get_short_path, insert_compiled_entry, to_posix_path,
+    NodePath, create_short_filename, get_package_prefix, get_short_path, insert_compiled_entry,
   };
+
+  /// A relative path as `path.relative` writes it on this platform.
+  fn platform(path: &str) -> String {
+    path.replace('/', std::path::MAIN_SEPARATOR_STR)
+  }
 
   #[test]
   fn current_debug_file_namer_receives_original_filename_per_namespace() {
@@ -622,53 +627,31 @@ mod short_filenames {
     );
   }
 
-  /// The debug name is written with one separator on every platform.
-  ///
-  /// `to_string_lossy` over a path hands back whichever separator the platform
-  /// stores, so a name built that way read `pkg\components\Button.js` on
-  /// Windows and `pkg/components/Button.js` everywhere else. The name is
-  /// compared byte for byte -- by a snapshot, by a fixture, by a parity row --
-  /// so one that reads two ways passes on one platform and fails on the other.
-  ///
-  /// Built from its parts rather than from a spelling, because no spelling
-  /// reads the same on both: a backslash separates two names on Windows and
-  /// belongs to a single name on POSIX. Assembling the parts is what puts the
-  /// platform's own separator in, and this is the check that takes it back out.
+  /// A name measured from a root is written as `path.relative` writes it on
+  /// the platform the compiler runs on, as the Babel plugin's is: with the
+  /// platform's separator, and normalised.
   #[test]
-  fn writes_a_name_with_one_separator_on_every_platform() {
-    let nested: PathBuf = ["pkg", "components", "Button.js"].iter().collect();
-
-    assert_eq!(to_posix_path(&nested), "pkg/components/Button.js");
-
-    // One part is still one part, and an empty path spells nothing.
-    assert_eq!(to_posix_path(Path::new("Button.js")), "Button.js");
-    assert_eq!(to_posix_path(Path::new("")), "");
-
-    // A root keeps one separator and not two. A path that names a root does
-    // reach here: a project that declares an empty root directory strips
-    // nothing, because a path with no parts is a prefix of every path, and the
-    // whole absolute path is handed over.
-    let rooted: PathBuf = [
-      std::path::MAIN_SEPARATOR_STR,
-      "pkg",
-      "components",
-      "Button.js",
-    ]
-    .iter()
-    .collect();
-
-    assert_eq!(to_posix_path(&rooted), "/pkg/components/Button.js");
-    assert_eq!(
-      rooted.strip_prefix(Path::new("")).map(to_posix_path),
-      Ok("/pkg/components/Button.js".to_owned())
+  fn writes_a_name_measured_from_a_root_as_path_relative_does() {
+    let root: PathBuf = [std::path::MAIN_SEPARATOR_STR, "project"].iter().collect();
+    let file = root.join(
+      ["pkg", "components", "Button.js"]
+        .iter()
+        .collect::<PathBuf>(),
     );
 
-    // Nothing but the separator is rewritten. A `.` part, a doubled separator
-    // and a trailing separator are all names the compilation was given, and a
-    // reader comparing this against the file it names reads them back.
-    let unnormalized: PathBuf = ["a", ".", "b"].iter().collect();
-
-    assert_eq!(to_posix_path(&unnormalized), "a/./b");
+    assert_eq!(
+      NodePath::host().relative("", &root.to_string_lossy(), &file.to_string_lossy()),
+      platform("pkg/components/Button.js")
+    );
+    assert_eq!(
+      NodePath::host().relative("", &root.to_string_lossy(), &root.to_string_lossy()),
+      ""
+    );
+    let unnormalized = root.join(["a", ".", "b"].iter().collect::<PathBuf>());
+    assert_eq!(
+      NodePath::host().relative("", &root.to_string_lossy(), &unnormalized.to_string_lossy()),
+      platform("a/b")
+    );
   }
 
   /// A short path keeps the last two parts of the path it was given, which is
@@ -694,14 +677,14 @@ mod short_filenames {
 
     assert_eq!(
       get_short_path("/project/src/components/Card.tsx", &state),
-      "src/components/Card.tsx"
+      platform("src/components/Card.tsx")
     );
 
-    // A path outside the root cannot be given relative to it, so the last two
-    // parts stand in.
+    // A path outside the root is still given relative to it, as
+    // `path.relative` gives it to the Babel plugin.
     assert_eq!(
       get_short_path("/elsewhere/src/Card.tsx", &state),
-      "src/Card.tsx"
+      platform("../elsewhere/src/Card.tsx")
     );
   }
 
@@ -731,20 +714,20 @@ mod short_filenames {
 
     assert_eq!(
       short_filename_of(&format!("{root}/src/Card.tsx"), &state),
-      "@acme/ui:src/Card.tsx"
+      format!("@acme/ui:{}", platform("src/Card.tsx"))
     );
   }
 
-  /// A package with no name of its own has none to put in front, so the path
-  /// inside it stands alone.
+  /// A package with no name of its own is written as the Babel plugin's
+  /// template literal writes a missing name: `undefined`.
   #[test]
-  fn names_no_package_for_one_that_has_no_name() {
+  fn names_a_package_that_has_no_name_as_babel_does() {
     let root = package_at("stylex_unnamed_package", None);
     let state = StateManager::default();
 
     assert_eq!(
       short_filename_of(&format!("{root}/src/Card.tsx"), &state),
-      "src/Card.tsx"
+      format!("undefined:{}", platform("src/Card.tsx"))
     );
   }
 
@@ -760,7 +743,7 @@ mod short_filenames {
     });
     assert_eq!(
       short_filename_of(&format!("{root}/src/Card.tsx"), &state),
-      "src/Card.tsx"
+      platform("src/Card.tsx")
     );
   }
 
@@ -1322,4 +1305,58 @@ fn the_short_path_keeps_the_last_two_segments_for_either_separator() {
       Some("pkg")
     );
   }
+}
+
+/// The debug name is `path.relative(root, filename)` the way Node computes it
+/// on Windows: a root-relative `/src` takes the working directory's drive,
+/// either separator is read, a drive and its directories are compared without
+/// case, another drive's file is answered whole, and the result is written
+/// with `\`. Run on every platform, since the flavour is only text.
+#[test]
+fn a_debug_name_is_measured_from_its_root_as_node_does_on_windows() {
+  use super::NodePath::Win32;
+  let cwd = r"D:\work";
+  assert_eq!(
+    Win32.relative(cwd, "/src/app/", r"D:\src\app\main.js"),
+    "main.js"
+  );
+  assert_eq!(
+    Win32.relative(cwd, "/src/app", "/src/app/main.js"),
+    "main.js"
+  );
+  assert_eq!(
+    Win32.relative(cwd, r"D:\pkg", r"D:\pkg\js\node_modules\npm-package\Foo.js"),
+    r"js\node_modules\npm-package\Foo.js"
+  );
+  assert_eq!(Win32.relative(cwd, r"d:\PKG", r"D:\pkg\a\b.js"), r"a\b.js");
+  assert_eq!(
+    Win32.relative(cwd, r"D:\app", r"D:\other\b.js"),
+    r"..\other\b.js"
+  );
+  assert_eq!(Win32.relative(cwd, r"C:\app", r"D:\x\y.js"), r"D:\x\y.js");
+  assert_eq!(Win32.relative(cwd, "app", r"D:\work\app\z.js"), "z.js");
+  assert_eq!(
+    Win32.relative(cwd, "D:/app/", r"D:/app/src\a.js"),
+    r"src\a.js"
+  );
+  assert_eq!(
+    Win32.relative(cwd, r"D:\app", r"D:\app\.\x\..\y.js"),
+    "y.js"
+  );
+}
+
+/// The same measure on every other platform, where only `/` separates and
+/// case is significant.
+#[test]
+fn a_debug_name_is_measured_from_its_root_as_node_does_on_posix() {
+  use super::NodePath::Posix;
+  let cwd = "/work";
+  assert_eq!(
+    Posix.relative(cwd, "/src/app/", "/src/app/main.js"),
+    "main.js"
+  );
+  assert_eq!(Posix.relative(cwd, "/app", "/other/b.js"), "../other/b.js");
+  assert_eq!(Posix.relative(cwd, "app", "/work/app/./x/../y.js"), "y.js");
+  assert_eq!(Posix.relative(cwd, "/a", r"/a/b\c.js"), r"b\c.js");
+  assert_eq!(Posix.relative(cwd, "/A", "/a/b.js"), "../a/b.js");
 }

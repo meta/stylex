@@ -346,23 +346,125 @@ fn get_package_prefix(absolute_path: &str) -> Option<String> {
     .map(String::from)
 }
 
-/// A path written with the separator the debug name uses on every platform.
+/// Node's `path.resolve` and `path.relative`, which the Babel plugin builds
+/// the debug name with, in the flavour of the platform the compiler runs on.
 ///
-/// The name is compared byte for byte -- by a snapshot, by a fixture, by a
-/// parity row -- so it cannot be spelled one way on Windows and another
-/// everywhere else. `to_string_lossy` alone keeps the separator the platform
-/// gave it.
-///
-/// The text is rewritten rather than the parts rejoined, because rejoining
-/// answers a root its own separator a second time -- `/a/b` comes back `//a/b`
-/// -- and because a Windows path already holds both spellings, so the one to
-/// take out is the platform's own. On a platform that separates with `/` this
-/// is a copy that changes nothing, which is what keeps it one rule rather than
-/// two.
-fn to_posix_path(path: &Path) -> String {
-  path
-    .to_string_lossy()
-    .replace(std::path::MAIN_SEPARATOR, "/")
+/// The name has to be spelled the way the Babel plugin spells it on the same
+/// machine: relative to a root through the platform's own path rules (a
+/// root-relative `/src` takes the working directory's drive on Windows, and a
+/// drive is compared without case), and written with the platform's
+/// separator. Both flavours are plain text, so each can be tested anywhere.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum NodePath {
+  Posix,
+  Win32,
+}
+
+impl NodePath {
+  pub(crate) fn host() -> Self {
+    if cfg!(windows) {
+      Self::Win32
+    } else {
+      Self::Posix
+    }
+  }
+
+  fn is_separator(self, c: char) -> bool {
+    c == '/' || (self == Self::Win32 && c == '\\')
+  }
+
+  fn separator(self) -> &'static str {
+    match self {
+      Self::Posix => "/",
+      Self::Win32 => "\\",
+    }
+  }
+
+  fn same(self, a: &str, b: &str) -> bool {
+    match self {
+      Self::Posix => a == b,
+      Self::Win32 => a.eq_ignore_ascii_case(b),
+    }
+  }
+
+  /// The root a path starts from (`/`, `D:\`, `D:` or `\`, or nothing) and
+  /// the rest of it.
+  fn split_root(self, path: &str) -> (String, &str) {
+    match self {
+      Self::Posix => match path.strip_prefix('/') {
+        Some(rest) => ("/".to_owned(), rest),
+        None => (String::new(), path),
+      },
+      Self::Win32 => {
+        let bytes = path.as_bytes();
+        if bytes.len() >= 2 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic() {
+          let (drive, rest) = path.split_at(2);
+          match rest.strip_prefix(|c| self.is_separator(c)) {
+            Some(rest) => (format!("{drive}\\"), rest),
+            None => (drive.to_owned(), rest),
+          }
+        } else {
+          match path.strip_prefix(|c| self.is_separator(c)) {
+            Some(rest) => ("\\".to_owned(), rest),
+            None => (String::new(), path),
+          }
+        }
+      },
+    }
+  }
+
+  /// `path.resolve(cwd, path)`, as a root and its normalised segments.
+  fn resolve(self, cwd: &str, path: &str) -> (String, Vec<String>) {
+    let (root, rest) = self.split_root(path);
+    let (cwd_root, cwd_rest) = self.split_root(cwd);
+    let cwd_segments = || cwd_rest.split(|c| self.is_separator(c)).map(String::from);
+    let cwd_drive = cwd_root
+      .get(..2)
+      .filter(|_| cwd_root.len() >= 2)
+      .unwrap_or("");
+    let (root, mut segments): (String, Vec<String>) = match self {
+      Self::Posix if root == "/" => (root, Vec::new()),
+      Self::Posix => (cwd_root, cwd_segments().collect()),
+      // `D:\x`: fully rooted.
+      Self::Win32 if root.len() == 3 => (root, Vec::new()),
+      // `\x`: rooted on the working directory's drive.
+      Self::Win32 if root == "\\" => (format!("{cwd_drive}\\"), Vec::new()),
+      // `D:x`: relative to the working directory when it is on that drive.
+      Self::Win32 if root.len() == 2 && !self.same(&root, cwd_drive) => {
+        (format!("{root}\\"), Vec::new())
+      },
+      Self::Win32 => (cwd_root, cwd_segments().collect()),
+    };
+    segments.extend(rest.split(|c| self.is_separator(c)).map(String::from));
+    let mut normal: Vec<String> = Vec::new();
+    for segment in segments {
+      match segment.as_str() {
+        "" | "." => {},
+        ".." => {
+          normal.pop();
+        },
+        _ => normal.push(segment),
+      }
+    }
+    (root, normal)
+  }
+
+  /// `path.relative(from, to)`, both resolved against `cwd` first.
+  pub(crate) fn relative(self, cwd: &str, from: &str, to: &str) -> String {
+    let (from_root, from) = self.resolve(cwd, from);
+    let (to_root, to) = self.resolve(cwd, to);
+    if !self.same(&from_root, &to_root) {
+      return format!("{to_root}{}", to.join(self.separator()));
+    }
+    let common = from
+      .iter()
+      .zip(&to)
+      .take_while(|(a, b)| self.same(a, b))
+      .count();
+    let mut parts: Vec<&str> = vec![".."; from.len() - common];
+    parts.extend(to[common..].iter().map(String::as_str));
+    parts.join(self.separator())
+  }
 }
 
 fn get_short_path(relative_path: &str, state: &StateManager) -> String {
@@ -372,12 +474,13 @@ fn get_short_path(relative_path: &str, state: &StateManager) -> String {
     ..
   } = &state.options.unstable_module_resolution
   {
-    let relative_path_obj = Path::new(relative_path);
-    let root_dir_path = Path::new(root_dir);
-
-    if let Ok(rel) = relative_path_obj.strip_prefix(root_dir_path) {
-      return to_posix_path(rel);
-    }
+    // `path.relative(rootDir, filename)`, as the Babel plugin writes it.
+    let cwd = state.cwd();
+    let cwd = cwd
+      .as_deref()
+      .map(Path::to_string_lossy)
+      .unwrap_or_default();
+    return NodePath::host().relative(&cwd, root_dir, relative_path);
   }
 
   // Normalize slashes in the path and truncate to last 2 segments. The Babel
@@ -440,10 +543,12 @@ fn create_short_filename(
 
   // If package details exist, use package-relative path
   if let Some((package_name_opt, package_root_path)) = package_details {
-    let package_root = Path::new(&package_root_path);
-    let relative_path = effective_path
-      .strip_prefix(package_root)
-      .map_or(absolute_path.to_string(), to_posix_path);
+    // `path.relative(packageRoot, filename)`, as the Babel plugin writes it.
+    let relative_path = NodePath::host().relative(
+      &cwd_path.to_string_lossy(),
+      &package_root_path,
+      &effective_path.to_string_lossy(),
+    );
 
     // If the file is in the same package as cwd, return just the relative path
     if let Some((cwd_package_name, _)) = cwd_package
@@ -452,13 +557,10 @@ fn create_short_filename(
       return relative_path;
     }
 
-    // Otherwise, return package:relativePath (or just relativePath if no package
-    // name)
-    if let Some(package_name) = package_name_opt {
-      return format!("{}:{}", package_name, relative_path);
-    } else {
-      return relative_path;
-    }
+    // Otherwise, return package:relativePath. A package.json without a name
+    // is written as the Babel plugin's template literal writes it.
+    let package_name = package_name_opt.as_deref().unwrap_or("undefined");
+    return format!("{package_name}:{relative_path}");
   }
 
   // Fallback: construct a path based on package prefix, module type, and file
