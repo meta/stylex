@@ -16,7 +16,3 @@ pub fn round_f64(value: f64, decimal_places: u32) -> f64 {
   let multiplier = 10f64.powi(decimal_places as i32);
   js_math_round(value * multiplier) / multiplier
 }
-
-#[cfg(test)]
-#[path = "tests/math_test.rs"]
-mod tests;

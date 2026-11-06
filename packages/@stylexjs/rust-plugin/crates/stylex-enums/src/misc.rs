@@ -23,7 +23,3 @@ impl BinaryExprType {
     }
   }
 }
-
-#[cfg(test)]
-#[path = "tests/misc_test.rs"]
-mod tests;

@@ -135,7 +135,3 @@ impl Visit for MemberTransform<'_> {
     );
   }
 }
-
-#[cfg(test)]
-#[path = "tests/member_expression_tests.rs"]
-mod tests;

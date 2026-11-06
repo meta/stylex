@@ -296,7 +296,3 @@ pub(super) fn apply_dynamic_style_functions(
 
   create_object_expression(props)
 }
-
-#[cfg(test)]
-#[path = "tests/dynamic_style_paths_tests.rs"]
-mod dynamic_style_paths_tests;

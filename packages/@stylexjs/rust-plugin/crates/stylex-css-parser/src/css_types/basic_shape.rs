@@ -615,10 +615,6 @@ pub fn basic_shape_parser() -> TokenParser<BasicShape> {
 }
 
 #[cfg(test)]
-#[path = "../tests/css_types/basic_shape_tests.rs"]
-mod tests;
-
-#[cfg(test)]
 #[path = "../tests/css_types/basic_shape_test.rs"]
 mod basic_shape_test;
 

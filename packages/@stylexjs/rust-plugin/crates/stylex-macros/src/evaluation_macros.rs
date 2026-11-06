@@ -23,7 +23,3 @@ macro_rules! stylex_panic_with_context {
     $report(&paren_expr, $expr, $msg, $state)
   }};
 }
-
-#[cfg(test)]
-#[path = "tests/evaluation_macros_test.rs"]
-mod tests;

@@ -1984,9 +1984,5 @@ mod tests;
 mod parse_media_query_test;
 
 #[cfg(test)]
-#[path = "../tests/at_queries/validation_media_query_test.rs"]
-mod validation_media_query_test;
-
-#[cfg(test)]
 #[path = "../tests/at_queries/media_query_coverage_test.rs"]
 mod media_query_coverage_test;

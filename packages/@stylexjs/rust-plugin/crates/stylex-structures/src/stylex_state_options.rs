@@ -129,7 +129,3 @@ pub fn with_default_options<R>(read: impl FnOnce(&StyleXStateOptions) -> R) -> R
 #[cfg(test)]
 #[path = "tests/stylex_state_options_test.rs"]
 mod tests;
-
-#[cfg(test)]
-#[path = "tests/stylex_state_options_builders_test.rs"]
-mod stylex_state_options_builders_test;

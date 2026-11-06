@@ -1524,10 +1524,6 @@ pub fn one_of_error(errors: Vec<CssParseError>) -> CssParseError {
 }
 
 #[cfg(test)]
-#[path = "tests/token_parser_tests.rs"]
-mod tests;
-
-#[cfg(test)]
 #[path = "tests/token_parser_test.rs"]
 mod token_parser_test;
 

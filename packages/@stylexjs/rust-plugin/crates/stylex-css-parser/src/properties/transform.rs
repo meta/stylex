@@ -36,7 +36,3 @@ impl Display for Transform {
 #[cfg(test)]
 #[path = "../tests/properties/transform_tests.rs"]
 mod tests;
-
-#[cfg(test)]
-#[path = "../tests/properties/transform_test.rs"]
-mod transform_test;

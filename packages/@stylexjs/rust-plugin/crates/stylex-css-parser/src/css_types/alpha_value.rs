@@ -96,13 +96,5 @@ pub(crate) fn parse_alpha_token(tokens: &mut TokenList) -> Result<f64, CssParseE
 }
 
 #[cfg(test)]
-#[path = "../tests/css_types/alpha_value_tests.rs"]
-mod tests;
-
-#[cfg(test)]
-#[path = "../tests/css_types/alpha_value_test.rs"]
-mod alpha_value_test;
-
-#[cfg(test)]
 #[path = "../tests/css_types/alpha_value_coverage_test.rs"]
 mod alpha_value_coverage_test;

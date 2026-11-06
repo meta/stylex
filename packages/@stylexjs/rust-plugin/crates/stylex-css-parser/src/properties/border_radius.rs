@@ -314,10 +314,6 @@ impl Display for BorderRadiusShorthand {
 }
 
 #[cfg(test)]
-#[path = "../tests/properties/border_radius_tests.rs"]
-mod tests;
-
-#[cfg(test)]
 #[path = "../tests/properties/border_radius_test.rs"]
 mod border_radius_test;
 

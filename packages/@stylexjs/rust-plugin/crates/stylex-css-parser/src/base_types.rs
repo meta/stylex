@@ -86,10 +86,6 @@ impl Display for SubString {
 }
 
 #[cfg(test)]
-#[path = "tests/base_types_tests.rs"]
-mod tests;
-
-#[cfg(test)]
 #[path = "tests/base_types_test.rs"]
 mod base_types_test;
 

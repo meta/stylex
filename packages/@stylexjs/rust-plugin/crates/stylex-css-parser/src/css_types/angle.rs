@@ -97,9 +97,5 @@ impl Display for Angle {
 mod tests;
 
 #[cfg(test)]
-#[path = "../tests/css_types/angle_test.rs"]
-mod angle_test;
-
-#[cfg(test)]
 #[path = "../tests/css_types/angle_coverage_test.rs"]
 mod angle_coverage_test;

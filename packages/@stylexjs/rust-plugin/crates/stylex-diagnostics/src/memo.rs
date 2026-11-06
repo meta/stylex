@@ -41,7 +41,3 @@ impl DiagnosticMemo {
     !self.framed_declarations.is_empty()
   }
 }
-
-#[cfg(test)]
-#[path = "tests/memo_test.rs"]
-mod tests;

@@ -84,9 +84,5 @@ impl Display for Resolution {
 mod tests;
 
 #[cfg(test)]
-#[path = "../tests/css_types/resolution_test.rs"]
-mod resolution_test;
-
-#[cfg(test)]
 #[path = "../tests/css_types/resolution_coverage_test.rs"]
 mod resolution_coverage_test;

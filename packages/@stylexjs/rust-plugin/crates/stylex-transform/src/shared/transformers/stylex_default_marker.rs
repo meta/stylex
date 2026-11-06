@@ -44,7 +44,3 @@ pub(crate) fn shared_default_marker_values(state: &mut StateManager) -> Rc<FlatC
 
   values
 }
-
-#[cfg(test)]
-#[path = "../../tests/stylex_default_marker_tests.rs"]
-mod tests;

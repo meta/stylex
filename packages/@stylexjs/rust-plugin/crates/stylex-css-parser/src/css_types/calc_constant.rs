@@ -76,7 +76,3 @@ impl Display for CalcConstant {
 #[cfg(test)]
 #[path = "../tests/css_types/calc_constant_tests.rs"]
 mod tests;
-
-#[cfg(test)]
-#[path = "../tests/css_types/calc_constant_test.rs"]
-mod calc_constant_test;

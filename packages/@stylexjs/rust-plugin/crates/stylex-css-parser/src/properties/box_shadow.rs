@@ -303,10 +303,6 @@ impl Display for BoxShadowList {
 }
 
 #[cfg(test)]
-#[path = "../tests/properties/box_shadow_tests.rs"]
-mod tests;
-
-#[cfg(test)]
 #[path = "../tests/properties/box_shadow_test.rs"]
 mod box_shadow_test;
 

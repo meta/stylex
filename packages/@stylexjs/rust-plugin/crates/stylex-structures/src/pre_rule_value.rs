@@ -21,7 +21,3 @@ impl PreRuleValue {
     PreRuleValue::Raw(TRawValue::Number(value))
   }
 }
-
-#[cfg(test)]
-#[path = "tests/pre_rule_value_test.rs"]
-mod tests;

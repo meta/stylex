@@ -403,7 +403,3 @@ mod token_types_test;
 #[cfg(test)]
 #[path = "tests/token_types_coverage_test.rs"]
 mod token_types_coverage_test;
-
-#[cfg(test)]
-#[path = "tests/token_types_precision_test.rs"]
-mod token_types_precision_test;

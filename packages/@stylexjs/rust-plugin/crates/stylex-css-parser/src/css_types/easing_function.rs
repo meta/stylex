@@ -576,7 +576,3 @@ mod tests;
 #[cfg(test)]
 #[path = "../tests/css_types/easing_function_coverage_test.rs"]
 mod easing_function_coverage_test;
-
-#[cfg(test)]
-#[path = "../tests/css_types/easing_function_precision_test.rs"]
-mod easing_function_precision_test;

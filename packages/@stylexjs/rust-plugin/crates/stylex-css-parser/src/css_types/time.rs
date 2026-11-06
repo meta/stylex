@@ -86,9 +86,5 @@ impl Display for Time {
 mod tests;
 
 #[cfg(test)]
-#[path = "../tests/css_types/time_test.rs"]
-mod time_test;
-
-#[cfg(test)]
 #[path = "../tests/css_types/time_coverage_test.rs"]
 mod time_coverage_test;

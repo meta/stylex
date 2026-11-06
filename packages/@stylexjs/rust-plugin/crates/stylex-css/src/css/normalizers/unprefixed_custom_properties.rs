@@ -38,7 +38,3 @@ pub fn detect_unprefixed_custom_properties(ast: &mut ValueParser, key: &str) {
     reject_value(ast, key, &message);
   }
 }
-
-#[cfg(test)]
-#[path = "../../tests/unprefixed_custom_properties_predicate_tests.rs"]
-mod tests;

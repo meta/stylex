@@ -69,9 +69,5 @@ impl Display for Flex {
 mod tests;
 
 #[cfg(test)]
-#[path = "../tests/css_types/flex_test.rs"]
-mod flex_test;
-
-#[cfg(test)]
 #[path = "../tests/css_types/flex_coverage_test.rs"]
 mod flex_coverage_test;

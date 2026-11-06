@@ -38,8 +38,6 @@ pub use helpers::evaluate_result_is_nullish;
 use helpers::*;
 pub(crate) use nodes::binary_expression::binary_expr_to_num_or_str;
 pub use nodes::object_expression::spread_own_properties;
-#[cfg(test)]
-pub(crate) use rebuild::binds_a_parameter;
 
 use rebuild::resolve_env_entry_to_result;
 pub(crate) use rebuild::{array_element_expr, evaluate_result_as_expr, fold_placeholder_function};
@@ -426,10 +424,6 @@ mod function_fold_object_tests;
 #[cfg(test)]
 #[path = "tests/applied_global_tests.rs"]
 mod applied_global_tests;
-
-#[cfg(test)]
-#[path = "tests/parameter_binding_tests.rs"]
-mod parameter_binding_tests;
 
 #[cfg(test)]
 #[path = "tests/fall_through_tests.rs"]

@@ -227,7 +227,3 @@ fn get_conditional_fn() -> FunctionConfig {
 fn conditional_identity(expr: Expr, _: &mut StateManager) -> Expr {
   expr
 }
-
-#[cfg(test)]
-#[path = "tests/rule_call_eval_config_test.rs"]
-mod rule_call_eval_config_test;

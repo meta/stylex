@@ -125,11 +125,3 @@ pub fn function_fold_to_object(value: &EvaluateResultValue) -> Option<ObjectLit>
     _ => None,
   }
 }
-
-#[cfg(test)]
-pub(crate) fn binds_a_parameter(value: &EvaluateResultValue) -> bool {
-  match value {
-    EvaluateResultValue::ThemeRef(_) => true,
-    value => evaluate_result_as_expr(value).is_some(),
-  }
-}

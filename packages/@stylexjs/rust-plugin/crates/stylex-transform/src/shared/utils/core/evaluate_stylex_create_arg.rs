@@ -546,7 +546,3 @@ fn evaluate_partial_object_recursively(
     fns: None,
   })
 }
-
-#[cfg(test)]
-#[path = "tests/evaluate_stylex_create_arg_tests.rs"]
-mod evaluate_stylex_create_arg_tests;

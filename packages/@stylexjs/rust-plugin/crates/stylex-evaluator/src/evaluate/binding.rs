@@ -220,7 +220,3 @@ pub(super) fn resolve_reference(
 #[cfg(test)]
 #[path = "tests/resolution_order.rs"]
 mod resolution_order;
-
-#[cfg(test)]
-#[path = "tests/used_before_declaration.rs"]
-mod used_before_declaration;

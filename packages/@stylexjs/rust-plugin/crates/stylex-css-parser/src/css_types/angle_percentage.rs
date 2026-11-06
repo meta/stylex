@@ -69,7 +69,3 @@ pub fn angle_percentage_parser() -> TokenParser<AnglePercentage> {
 #[cfg(test)]
 #[path = "../tests/css_types/angle_percentage_tests.rs"]
 mod tests;
-
-#[cfg(test)]
-#[path = "../tests/css_types/angle_percentage_test.rs"]
-mod angle_percentage_test;

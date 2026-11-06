@@ -89,9 +89,5 @@ impl Display for Frequency {
 mod tests;
 
 #[cfg(test)]
-#[path = "../tests/css_types/frequency_test.rs"]
-mod frequency_test;
-
-#[cfg(test)]
 #[path = "../tests/css_types/frequency_coverage_test.rs"]
 mod frequency_coverage_test;

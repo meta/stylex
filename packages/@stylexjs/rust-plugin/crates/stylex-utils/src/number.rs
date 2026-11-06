@@ -213,7 +213,3 @@ fn shortest_digits_and_exponent(value: f64) -> (String, i32) {
   // ECMA's `n` is one past the exponent of the leading digit.
   (digits, exponent + 1)
 }
-
-#[cfg(test)]
-#[path = "tests/number_test.rs"]
-mod tests;

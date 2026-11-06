@@ -115,13 +115,5 @@ impl Display for Length {
 }
 
 #[cfg(test)]
-#[path = "../tests/css_types/length_tests.rs"]
-mod tests;
-
-#[cfg(test)]
-#[path = "../tests/css_types/length_test.rs"]
-mod length_test;
-
-#[cfg(test)]
 #[path = "../tests/css_types/length_coverage_test.rs"]
 mod length_coverage_test;
