@@ -35,6 +35,7 @@
     "@rollup/plugin-node-resolve": "^15.3.0",
     "@rollup/plugin-replace": "^6.0.1",
     "babel-plugin-syntax-hermes-parser": "^0.36.1",
+    "compiler-conformance": "0.19.1",
     "path-browserify": "^1.0.1",
     "rollup": "^4.59.0",
     "scripts": "0.19.1"

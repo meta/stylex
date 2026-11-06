@@ -1,0 +1,33 @@
+{
+  "css": ":root, .xnsr5hh{--xkoxvr5:red;--x19047mj:white;}\n@media (prefers-color-scheme: dark){:root, .xnsr5hh{--x19047mj:black;}}\n.x19gg9ko.x19gg9ko, .x19gg9ko.x19gg9ko:root{--x19047mj:yellow;--xkoxvr5:blue;}",
+  "errors": [],
+  "js": "/**\n * Copyright (c) Meta Platforms, Inc. and affiliates.\n *\n * This source code is licensed under the MIT license found in the\n * LICENSE file in the root directory of this source tree.\n */\n\nimport * as stylex from '@stylexjs/stylex';\nexport const vars = {\n  fg: \"var(--xkoxvr5)\",\n  bg: \"var(--x19047mj)\",\n  __varGroupHash__: \"xnsr5hh\"\n};\nexport const theme = {\n  xnsr5hh: \"x19gg9ko xnsr5hh\",\n  $$css: true\n};",
+  "metadata": [
+    [
+      "xnsr5hh",
+      {
+        "ltr": ":root, .xnsr5hh{--xkoxvr5:red;--x19047mj:white;}",
+        "rtl": null
+      },
+      0.1
+    ],
+    [
+      "xnsr5hh-1lveb7",
+      {
+        "ltr": "@media (prefers-color-scheme: dark){:root, .xnsr5hh{--x19047mj:black;}}",
+        "rtl": null
+      },
+      0.2
+    ],
+    [
+      "x19gg9ko",
+      {
+        "ltr": ".x19gg9ko, .x19gg9ko:root{--x19047mj:yellow;--xkoxvr5:blue;}",
+        "rtl": null
+      },
+      0.5
+    ]
+  ],
+  "status": "ok",
+  "warnings": []
+}
