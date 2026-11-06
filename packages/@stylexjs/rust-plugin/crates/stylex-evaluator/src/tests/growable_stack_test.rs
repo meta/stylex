@@ -194,7 +194,9 @@ fn a_leaf_nests_one_level() {
 #[test]
 fn a_nested_literal_nests_once_per_level_and_once_for_its_leaf() {
   for levels in [1, 2, 17, 300] {
-    assert_eq!(nesting_of(&parse_expr(&nested_literal(levels))), levels + 1);
+    super::scaffolding::on_a_stack_for(levels + 4, 64 * 1024, || {
+      assert_eq!(nesting_of(&parse_expr(&nested_literal(levels))), levels + 1);
+    });
   }
 }
 
