@@ -115,7 +115,7 @@ describe('@stylexjs/unplugin', () => {
       },
     };
 
-    plugin.generateBundle.call(ctx, {}, bundle);
+    plugin.generateBundle.handler.call(ctx, {}, bundle);
 
     // generateBundle should have injected CSS into the bundle
     const cssAssets = Object.values(bundle).filter(
@@ -186,7 +186,7 @@ describe('@stylexjs/unplugin', () => {
         return null;
       },
     };
-    plugin.generateBundle.call(ctx, {}, {});
+    plugin.generateBundle.handler.call(ctx, {}, {});
 
     // writeBundle should still create fallback CSS
     const tempDir = fs.mkdtempSync(
@@ -201,6 +201,11 @@ describe('@stylexjs/unplugin', () => {
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
+  });
+
+  test('runs generateBundle after Vite emits the CSS asset', () => {
+    const plugin = unplugin.vite({ dev: false });
+    expect(plugin.generateBundle.order).toBe('post');
   });
 
   test('marks StyleX deps as non-optimized in Vite', async () => {
