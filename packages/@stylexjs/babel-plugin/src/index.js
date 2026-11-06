@@ -677,6 +677,20 @@ function compareWidthSortKeys(
     : b.bound.value - a.bound.value;
 }
 
+// A `--<key>` custom-property name, up to the first CSS delimiter. Broader
+// than resolveConstant's ASCII regex, so it matches non-ASCII keys -- but
+// resolveConstant doesn't pre-collapse non-ASCII alias chains, so those
+// resolve only one step there. Escapes are not handled either, so a key that
+// backslash-escapes a delimiter (e.g. `--foo\:bar`) ends at that delimiter
+// and won't match.
+const CUSTOM_PROPERTY_KEY = '--[^\\s,:;)(}{\'"]+';
+// `var(--key)` value usages and `--key:` override declarations, both built
+// from CUSTOM_PROPERTY_KEY. `var(--key)` won't match `var(--key, fallback)`
+// -- those stay overridable, so we leave them. Module scope: neither depends
+// on anything per-call, and `replace` doesn't read or retain `lastIndex`.
+const VAR_USAGE_REGEX = new RegExp(`var\\(${CUSTOM_PROPERTY_KEY}\\)`, 'g');
+const OVERRIDE_KEY_REGEX = new RegExp(`(${CUSTOM_PROPERTY_KEY}):`, 'g');
+
 function processStylexRules(
   rules: Array<Rule>,
   config?:
@@ -814,29 +828,54 @@ function processStylexRules(
     return key;
   };
 
+  const hasConsts = constsMap.size > 0;
+
   const sortedRules: Array<Rule> = nonConstantRules
     .map(([key, { ...styleObj }, priority]): Rule => {
+      if (!hasConsts) {
+        return [key, styleObj, priority];
+      }
+
       const adjustedPriority = adjustConstAtRulePriority(
         styleObj.ltr,
         priority,
       );
       Object.keys(styleObj).forEach((dir) => {
         let original = styleObj[dir];
-        for (const [varRef, constValue] of constsMap.entries()) {
-          if (typeof original !== 'string') continue;
+        if (typeof original !== 'string' || !original.includes('--')) {
+          return;
+        }
+
+        // Pass 1: substitute `var(--key)` usages. One pass is enough --
+        // resolveConstant pre-collapsed the alias chains, so values are terminal.
+        original = original.replace(VAR_USAGE_REGEX, (match) => {
+          const constValue = constsMap.get(match);
+          return constValue == null ? match : String(constValue);
+        });
+
+        // Pass 2 -- rewrite `--key:` override declarations (#1219): a single
+        // `replace` (not cumulative replaceAll) so one declaration's rewrite
+        // can't cascade into another's; each resolves one independent step.
+        original = original.replace(OVERRIDE_KEY_REGEX, (match, cssVar) => {
+          const constValue = constsMap.get(`var(${cssVar})`);
+          if (constValue == null) {
+            return match;
+          }
           const replacement = String(constValue);
-          original = original.replaceAll(varRef, () => replacement);
+          // When the replacement is a variable, we need to replace the key to allow variable overrides
           if (replacement.startsWith('var(') && replacement.endsWith(')')) {
             const inside = replacement.slice(4, -1).trim();
+            // Account for fallback variables
             const commaIdx = inside.indexOf(',');
             const targetName = (
               commaIdx >= 0 ? inside.slice(0, commaIdx) : inside
             ).trim();
-            const constName = varRef.slice(4, -1);
-            original = original.replaceAll(`${constName}:`, `${targetName}:`);
+            return `${targetName}:`;
           }
-          styleObj[dir] = original;
-        }
+          return match;
+        });
+
+        styleObj[dir] = original;
       });
       return [key, styleObj, adjustedPriority];
     })
