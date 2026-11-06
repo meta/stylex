@@ -2059,7 +2059,7 @@ fn verify_output_typed(
         cursor += 1;
     }
     source_jsx::validate_generated_attribute_text(&mut parsed, expected)?;
-    if !source_compare::modules_equivalent(&parsed, expected) {
+    if !source_compare::reparsed_module_equivalent(parsed, expected) {
         bail!("source edits do not reproduce the transformed AST; refusing a lossy or ambiguous emission");
     }
     Ok(())

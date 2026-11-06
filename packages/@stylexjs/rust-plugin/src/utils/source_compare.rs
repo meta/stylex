@@ -7,33 +7,53 @@ use swc_core::common::{util::take::Take, EqIgnoreSpan, SyntaxContext};
 use swc_core::ecma::ast::{Expr, Ident, Module, ModuleItem, Number, SimpleAssignTarget};
 use swc_core::ecma::visit::{Visit, VisitMut, VisitMutWith, VisitWith};
 
+#[cfg(test)]
 pub(crate) fn modules_equivalent(actual: &Module, expected: &Module) -> bool {
-    if actual == expected {
+    module_equivalent(Cow::Borrowed(actual), expected)
+}
+
+/// Postflight owns the module it re-parsed, so that side is normalized in place
+/// rather than copied first.
+pub(crate) fn reparsed_module_equivalent(actual: Module, expected: &Module) -> bool {
+    module_equivalent(Cow::Owned(actual), expected)
+}
+
+fn module_equivalent(actual: Cow<'_, Module>, expected: &Module) -> bool {
+    let borrowed = actual.as_ref();
+    if borrowed == expected {
         // Strict equality includes `Ident.optional`.
-        return actual.eq_ignore_span(expected) && !contains_nan(actual);
+        return borrowed.eq_ignore_span(expected) && !contains_nan(borrowed);
     }
-    if actual.eq_ignore_span(expected) {
-        return !contains_nan(actual) && optional_identifiers_equivalent(actual, expected);
+    if borrowed.eq_ignore_span(expected) {
+        return !contains_nan(borrowed) && optional_identifiers_equivalent(borrowed, expected);
     }
     // Normalize items independently, so one edit does not clone the module.
-    actual.shebang == expected.shebang
-        && actual.body.len() == expected.body.len()
-        && actual
+    if borrowed.shebang != expected.shebang || borrowed.body.len() != expected.body.len() {
+        return false;
+    }
+    match actual {
+        Cow::Borrowed(actual) => actual
             .body
             .iter()
             .zip(&expected.body)
-            .all(|(actual, expected)| items_equivalent(actual, expected))
+            .all(|(actual, expected)| equivalent(Cow::Borrowed(actual), expected)),
+        Cow::Owned(actual) => actual
+            .body
+            .into_iter()
+            .zip(&expected.body)
+            .all(|(actual, expected)| equivalent(Cow::Owned(actual), expected)),
+    }
 }
 
 pub(crate) fn expressions_equivalent(actual: &Expr, expected: &Expr) -> bool {
-    equivalent(actual, expected)
+    equivalent(Cow::Borrowed(actual), expected)
 }
 
 pub(crate) fn items_equivalent(actual: &ModuleItem, expected: &ModuleItem) -> bool {
-    equivalent(actual, expected)
+    equivalent(Cow::Borrowed(actual), expected)
 }
 
-fn equivalent<T>(actual: &T, expected: &T) -> bool
+fn equivalent<T>(mut actual: Cow<'_, T>, expected: &T) -> bool
 where
     T: Clone
         + PartialEq
@@ -43,26 +63,29 @@ where
         + VisitWith<NumericValidity>
         + VisitMutWith<Normalize>,
 {
-    if actual == expected {
-        return actual.eq_ignore_span(expected) && !contains_nan(actual);
+    let borrowed = actual.as_ref();
+    if borrowed == expected {
+        return borrowed.eq_ignore_span(expected) && !contains_nan(borrowed);
     }
-    if actual.eq_ignore_span(expected) {
-        return !contains_nan(actual) && optional_identifiers_equivalent(actual, expected);
+    if borrowed.eq_ignore_span(expected) {
+        return !contains_nan(borrowed) && optional_identifiers_equivalent(borrowed, expected);
     }
-    let normalize_actual = normalization_needed(actual);
+    let normalize_actual = normalization_needed(borrowed);
     let normalize_expected = normalization_needed(expected);
-    if !normalize_actual && !normalize_expected {
+    if !normalize_actual.any() && !normalize_expected.any() {
         return false;
     }
-    let mut actual = Cow::Borrowed(actual);
-    let mut expected = Cow::Borrowed(expected);
-    if normalize_actual {
+    // The comparison below ignores hygiene contexts, which is the same as
+    // clearing them on both sides, so only parentheses need rewriting: in place
+    // on an owned side, on a copy of a borrowed one.
+    if normalize_actual.parens {
         actual.to_mut().visit_mut_with(&mut Normalize);
     }
-    if normalize_expected {
+    let mut expected = Cow::Borrowed(expected);
+    if normalize_expected.parens {
         expected.to_mut().visit_mut_with(&mut Normalize);
     }
-    actual.as_ref().eq_ignore_span(expected.as_ref())
+    SyntaxContext::within_ignored_ctxt(|| actual.as_ref().eq_ignore_span(expected.as_ref()))
         && !contains_nan(actual.as_ref())
         && optional_identifiers_equivalent(actual.as_ref(), expected.as_ref())
 }
@@ -87,13 +110,22 @@ fn contains_nan<T: VisitWith<NumericValidity>>(value: &T) -> bool {
 }
 
 #[derive(Default)]
-struct NormalizationNeeded(bool);
+struct NormalizationNeeded {
+    parens: bool,
+    contexts: bool,
+}
+
+impl NormalizationNeeded {
+    fn any(&self) -> bool {
+        self.parens || self.contexts
+    }
+}
 
 impl Visit for NormalizationNeeded {
     fn visit_expr(&mut self, expression: &Expr) {
-        if !self.0 {
+        if !self.parens {
             if matches!(expression, Expr::Paren(_)) {
-                self.0 = true;
+                self.parens = true;
             } else {
                 expression.visit_children_with(self);
             }
@@ -101,9 +133,9 @@ impl Visit for NormalizationNeeded {
     }
 
     fn visit_simple_assign_target(&mut self, target: &SimpleAssignTarget) {
-        if !self.0 {
+        if !self.parens {
             if matches!(target, SimpleAssignTarget::Paren(_)) {
-                self.0 = true;
+                self.parens = true;
             } else {
                 target.visit_children_with(self);
             }
@@ -111,14 +143,14 @@ impl Visit for NormalizationNeeded {
     }
 
     fn visit_syntax_context(&mut self, context: &SyntaxContext) {
-        self.0 |= *context != SyntaxContext::empty();
+        self.contexts |= *context != SyntaxContext::empty();
     }
 }
 
-fn normalization_needed<T: VisitWith<NormalizationNeeded>>(value: &T) -> bool {
+fn normalization_needed<T: VisitWith<NormalizationNeeded>>(value: &T) -> NormalizationNeeded {
     let mut visitor = NormalizationNeeded::default();
     value.visit_with(&mut visitor);
-    visitor.0
+    visitor
 }
 
 struct Normalize;
@@ -475,6 +507,47 @@ mod tests {
             let mut expected = expression("f(x)", "c.js");
             expected.visit_mut_with(&mut Contexts(context));
             assert!(expressions_equivalent(&actual, &expected));
+        });
+    }
+
+    #[test]
+    fn a_reparsed_module_is_normalized_in_place_and_still_detects_differences() {
+        GLOBALS.set(&Globals::new(), || {
+            let context = SyntaxContext::empty().apply_mark(Mark::new());
+            struct Contexts(SyntaxContext);
+            impl VisitMut for Contexts {
+                fn visit_mut_syntax_context(&mut self, ctxt: &mut SyntaxContext) {
+                    *ctxt = self.0;
+                }
+            }
+            let compiled = |source: &str| {
+                let mut module = module(source, "r.js");
+                module.visit_mut_with(&mut Contexts(context));
+                module
+            };
+            // Parentheses only in the re-parsed output and hygiene contexts only
+            // on the compiled module: the pair postflight compares without
+            // copying either side.
+            let output = "export const a = [({ b: (c + 1) })];";
+            let expected = compiled("export const a = [{ b: c + 1 }];");
+            let snapshot = expected.clone();
+            assert!(reparsed_module_equivalent(
+                module(output, "r.js"),
+                &expected
+            ));
+            assert_eq!(expected, snapshot);
+            for different in [
+                "export const a = [{ b: c + 2 }];",
+                "export const a = [{ b: d + 1 }];",
+                "export const a = [{ e: c + 1 }];",
+                "export const a = [{ b: c - 1 }];",
+                "export const a = [{ b: c + 1 }, 0];",
+            ] {
+                assert!(
+                    !reparsed_module_equivalent(module(output, "r.js"), &compiled(different)),
+                    "{different}"
+                );
+            }
         });
     }
 
