@@ -1,3 +1,4 @@
+// Modified for StyleX: a `#name` expression parses through the private-name parser; see vendor/README.md.
 use either::Either;
 use swc_atoms::atom;
 use swc_common::{ast_node, util::take::Take, BytePos, Span, Spanned};

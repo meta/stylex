@@ -1,3 +1,4 @@
+// Modified for StyleX: `TokenFlags` is exported (`pub use`); see vendor/README.md.
 //! ECMAScript lexer.
 
 use std::{borrow::Cow, char, rc::Rc};

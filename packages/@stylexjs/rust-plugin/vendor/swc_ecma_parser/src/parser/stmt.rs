@@ -1,3 +1,4 @@
+// Modified for StyleX: module-level `for await` is checked against the real async context; see vendor/README.md.
 use swc_atoms::atom;
 use swc_common::{BytePos, Span, Spanned};
 

@@ -114,6 +114,21 @@ fn restore_hunk(actual: &mut Vec<u8>, patched: &[u8], original: &[u8], name: &st
     );
 }
 
+fn modification_notice(name: &str) -> Option<&'static str> {
+    match name {
+        "src/lexer/mod.rs" => Some(
+            "// Modified for StyleX: `TokenFlags` is exported (`pub use`); see vendor/README.md.\n",
+        ),
+        "src/parser/expr.rs" => Some(
+            "// Modified for StyleX: a `#name` expression parses through the private-name parser; see vendor/README.md.\n",
+        ),
+        "src/parser/stmt.rs" => Some(
+            "// Modified for StyleX: module-level `for await` is checked against the real async context; see vendor/README.md.\n",
+        ),
+        _ => None,
+    }
+}
+
 #[test]
 fn sha256_matches_standard_empty_short_and_multiblock_vectors() {
     assert_eq!(
@@ -160,6 +175,14 @@ fn vendored_parser_diff_is_exactly_the_three_approved_public_hunks() {
             "duplicate upstream member"
         );
         let mut actual = std::fs::read(vendor.join(path)).unwrap();
+        // Each patched file opens with the Apache-2.0 §4(b) modification notice.
+        if let Some(notice) = modification_notice(name) {
+            assert!(
+                actual.starts_with(notice.as_bytes()),
+                "patched file must open with its modification notice: {name}"
+            );
+            actual.drain(..notice.len());
+        }
         if name == "src/lexer/mod.rs" {
             let public = b"pub use state::TokenFlags;";
             let original = b"pub(crate) use state::TokenFlags;";
