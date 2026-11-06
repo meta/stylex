@@ -1,13 +1,8 @@
-//! Ported normalizer 7 of 9 in upstream's sequence, which is what that count
-//! names. See `normalize_value.rs` for the order the passes run in here — a
-//! tenth pass that upstream has no equivalent for runs among them.
+//! Ported normalizer 7 of 9 in upstream's order; `normalize_value.rs` has the run order.
 
 use postcss_value_parser::{NodeKind, ValueParser};
 
-/// Gives an empty string a double quote, so `''` and `""` hash alike.
-///
-/// Every other string keeps the quote character the author typed. That is the
-/// whole normalizer: it does not re-quote, re-escape, or unify anything else.
+/// Gives an empty string a double quote, so `''` and `` hash alike; nothing else changes.
 pub fn normalize_quotes(ast: &mut ValueParser, _key: &str) {
   ast.walk(
     |node, _| {

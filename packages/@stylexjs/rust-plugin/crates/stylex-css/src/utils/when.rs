@@ -16,9 +16,7 @@ fn get_default_marker_class_name(options: &dyn WhenMarkerValue) -> String {
   from_proxy(options)
     .or_else(|| from_stylex_style(options))
     .unwrap_or_else(|| {
-      // NOTE: a marker carries no `classNamePrefix`, so a value that reached
-      // here without resolving yields the bare `default-marker`, prefixed
-      // only when the options themselves occupy this slot.
+      // Markers carry no `classNamePrefix`; only options supply one.
       let prefix = match options.class_name_prefix() {
         Some(class_name_prefix) => format!("{}-", class_name_prefix),
         None => String::new(),
@@ -27,29 +25,22 @@ fn get_default_marker_class_name(options: &dyn WhenMarkerValue) -> String {
     })
 }
 
-/// Resolves the second argument of every `when` function, which holds either
-/// a marker class name used verbatim or a value to derive the marker from.
-///
-/// `None` stands for the `options` default parameter these functions declare.
-/// Building the defaults on that branch costs an allocation, but the compiler
-/// always passes its own options, so only callers with nothing to say — the
-/// tests — reach it.
+/// Resolves a `when` function's second argument: a marker class name used verbatim, or a value to
+/// derive it from. `None` means the default options.
 fn resolve_marker(options: Option<&dyn WhenMarkerValue>) -> String {
   match options {
     Some(options) => match options.as_str_value() {
       Some(marker) => marker.to_string(),
       None => get_default_marker_class_name(options),
     },
-    // The closure is what turns the options into the trait object the reader
-    // takes. A bare function name cannot, so it does not read as redundant.
+    // A closure, not a bare fn name, is needed to coerce to the trait object.
     None => with_default_options(|options| get_default_marker_class_name(options)),
   }
 }
 
 /// Validates that a selector opens with ':' or '[', and is not a pseudo element.
 fn validate_pseudo_selector(pseudo: &str) -> Result<(), String> {
-  // The single colon is deliberate: pseudo elements must pass this gate so that
-  // `is_pseudo_element` can reject them with their own message.
+  // Single colon on purpose: pseudo elements get their own message below.
   if !is_pseudo_selector(pseudo) && !pseudo.starts_with('[') {
     return Err("Pseudo selector must start with \":\" or \"[\"".to_string());
   }
@@ -65,7 +56,6 @@ fn validate_pseudo_selector(pseudo: &str) -> Result<(), String> {
       return Err("Attribute selector must end with \"]\"".to_string());
     }
 
-    // Validate proper bracket matching and quote pairing
     if !is_valid_attribute_selector(pseudo) {
       return Err(
         "Attribute selector has invalid format (mismatched brackets or quotes)".to_string(),
@@ -76,7 +66,7 @@ fn validate_pseudo_selector(pseudo: &str) -> Result<(), String> {
   Ok(())
 }
 
-/// Validates that an attribute selector has proper bracket and quote matching
+/// Validates that an attribute selector has proper bracket and quote matching.
 fn is_valid_attribute_selector(selector: &str) -> bool {
   if !selector.starts_with('[') || !selector.ends_with(']') {
     return false;
@@ -112,45 +102,21 @@ fn is_valid_attribute_selector(selector: &str) -> bool {
   bracket_count == 0 && !in_single_quote && !in_double_quote
 }
 
-/// Creates selector that observes if the given pseudo-class is
-/// active on an ancestor with the "defaultMarker"
-///
-/// # Arguments
-/// * `pseudo` - The pseudo selector (e.g., ':hover', ':focus')
-/// * `options` - Either a custom marker string or StyleXStateOptions reference
-///
-/// # Returns
-/// A :where() clause for the ancestor observer
+/// Selector matching when `pseudo` is active on an ancestor with the default marker.
 pub fn ancestor(pseudo: &str, options: Option<&dyn WhenMarkerValue>) -> Result<String, String> {
   validate_pseudo_selector(pseudo)?;
   let default_marker = resolve_marker(options);
   Ok(format!(":where(.{}{} *)", default_marker, pseudo))
 }
 
-/// Creates selector that observes if the given pseudo-class is
-/// active on a descendant with the "defaultMarker"
-///
-/// # Arguments
-/// * `pseudo` - The pseudo selector (e.g., ':hover', ':focus')
-/// * `options` - Either a custom marker string or StyleXStateOptions reference
-///
-/// # Returns
-/// A :has() clause for the descendant observer
+/// Selector matching when `pseudo` is active on a descendant with the default marker.
 pub fn descendant(pseudo: &str, options: Option<&dyn WhenMarkerValue>) -> Result<String, String> {
   validate_pseudo_selector(pseudo)?;
   let default_marker = resolve_marker(options);
   Ok(format!(":where(:has(.{}{}))", default_marker, pseudo))
 }
 
-/// Creates selector that observes if the given pseudo-class is
-/// active on a previous sibling with the "defaultMarker"
-///
-/// # Arguments
-/// * `pseudo` - The pseudo selector (e.g., ':hover', ':focus')
-/// * `options` - Either a custom marker string or StyleXStateOptions reference
-///
-/// # Returns
-/// A :where() clause for the previous sibling observer
+/// Selector matching when `pseudo` is active on a previous sibling with the default marker.
 pub fn sibling_before(
   pseudo: &str,
   options: Option<&dyn WhenMarkerValue>,
@@ -160,15 +126,7 @@ pub fn sibling_before(
   Ok(format!(":where(.{}{} ~ *)", default_marker, pseudo))
 }
 
-/// Creates selector that observes if the given pseudo-class is
-/// active on a next sibling with the "defaultMarker"
-///
-/// # Arguments
-/// * `pseudo` - The pseudo selector (e.g., ':hover', ':focus')
-/// * `options` - Either a custom marker string or StyleXStateOptions reference
-///
-/// # Returns
-/// A :has() clause for the next sibling observer
+/// Selector matching when `pseudo` is active on a next sibling with the default marker.
 pub fn sibling_after(
   pseudo: &str,
   options: Option<&dyn WhenMarkerValue>,
@@ -178,15 +136,7 @@ pub fn sibling_after(
   Ok(format!(":where(:has(~ .{}{}))", default_marker, pseudo))
 }
 
-/// Creates selector that observes if the given pseudo-class is
-/// active on any sibling with the "defaultMarker"
-///
-/// # Arguments
-/// * `pseudo` - The pseudo selector (e.g., ':hover', ':focus')
-/// * `options` - Either a custom marker string or StyleXStateOptions reference
-///
-/// # Returns
-/// A :where() clause for the any sibling observer
+/// Selector matching when `pseudo` is active on any sibling with the default marker.
 pub fn any_sibling(pseudo: &str, options: Option<&dyn WhenMarkerValue>) -> Result<String, String> {
   validate_pseudo_selector(pseudo)?;
   let default_marker = resolve_marker(options);

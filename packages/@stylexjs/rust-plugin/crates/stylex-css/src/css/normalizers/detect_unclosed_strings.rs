@@ -1,20 +1,13 @@
-//! Ported normalizer 2 of 9 in upstream's sequence, which is what that count
-//! names. See `normalize_value.rs` for the order the passes run in here — a
-//! tenth pass that upstream has no equivalent for runs among them.
+//! Ported normalizer 2 of 9 in upstream's order; `normalize_value.rs` has the run order.
 
 use postcss_value_parser::{NodeKind, ValueParser};
 use stylex_constants::constants::messages::LINT_UNCLOSED_STRING;
 
 use stylex_macros::stylex_panic;
 
-/// Rejects a value carrying a string that was never closed.
+/// Rejects a value carrying a string that was never closed, with Babel's bare message.
 ///
-/// The scanner invents the missing closing quote rather than failing, so this
-/// is the only thing standing between an unterminated string and a declaration
-/// that swallows whatever followed it.
-///
-/// The public compatibility diagnostic is the same bare message as Babel;
-/// source/code-frame context is added by the owning host layer.
+/// The scanner invents the missing quote, so this is the only check for an unterminated string.
 pub fn detect_unclosed_strings(ast: &mut ValueParser, _key: &str) {
   let mut unclosed = false;
 

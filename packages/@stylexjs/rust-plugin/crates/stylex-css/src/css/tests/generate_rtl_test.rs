@@ -198,7 +198,6 @@ mod generate_rtl_tests {
   fn float_left_no_rtl() {
     let pair = Pair::new("float", "left");
     let result = generate_rtl(&pair, &default_options());
-    // Physical values have no logical mapping, so no `rtl` rule is emitted.
     assert!(result.is_none());
   }
 
@@ -267,8 +266,7 @@ mod generate_rtl_tests {
   fn background_position_no_logical_no_rtl() {
     let pair = Pair::new("background-position", "center bottom");
     let result = generate_rtl(&pair, &default_options());
-    // No `start`/`end` keyword → no directional flip → no `rtl` rule
-    // (avoids a redundant, higher-specificity duplicate).
+    // No flip, so no redundant higher-specificity duplicate.
     assert!(result.is_none());
   }
 
@@ -345,8 +343,7 @@ mod generate_rtl_tests {
 
   #[test]
   fn non_legacy_inline_property_falls_through_to_none() {
-    // `margin-inline-start` is only mapped under the legacy polyfill; with the
-    // default resolution it is not in `propertyToRTL`, so no `rtl` is emitted.
+    // Only mapped under the legacy polyfill.
     let pair = Pair::new("margin-inline-start", "10px");
     let result = generate_rtl(&pair, &default_options());
     assert!(result.is_none());
@@ -383,7 +380,6 @@ mod generate_rtl_tests {
   fn box_shadow_zero_offset_no_flip() {
     let pair = Pair::new("box-shadow", "0 0 10px #000");
     let result = generate_rtl(&pair, &flipping_options());
-    // 0 stays 0, no actual flip needed
     assert!(result.is_none());
   }
 
@@ -419,7 +415,6 @@ mod generate_rtl_tests {
   fn cursor_no_flip_for_unknown_value() {
     let pair = Pair::new("cursor", "pointer");
     let result = generate_rtl(&pair, &flipping_options());
-    // "pointer" is not in CURSOR_FLIP
     assert!(result.is_none());
   }
 
@@ -438,8 +433,6 @@ mod generate_rtl_tests {
     let result = generate_rtl(&pair, &default_options());
     assert!(result.is_none());
   }
-
-  // ── Additional coverage for remaining branches ──────────────────
 
   #[test]
   fn cursor_e_resize_flips_with_legacy() {
@@ -509,8 +502,7 @@ mod generate_rtl_tests {
   fn background_position_inset_inline_start_no_rtl() {
     let pair = Pair::new("background-position", "inset-inline-start center");
     let result = generate_rtl(&pair, &default_options());
-    // The guard only matches the bare `start`/`end` keywords, so
-    // `inset-inline-*` values produce no `rtl` rule.
+    // The guard only matches bare `start`/`end`.
     assert!(result.is_none());
   }
 
@@ -568,13 +560,9 @@ mod generate_rtl_tests {
     assert!(result.is_none());
   }
 
-  /// The `else { 1 }` branch in `flip_shadow` is taken when `parts[0]`
-  /// is NOT a CSS unit value (e.g. a keyword like "inset" or a color).
-  /// This exercises `index = 1` and flips `parts[1]` instead of `parts[0]`.
+  /// A non-unit first part (e.g. `inset`) makes `flip_shadow` flip `parts[1]`.
   #[test]
   fn box_shadow_keyword_first_part_uses_index_one() {
-    // "inset 3px 2px 4px #000" → parts[0] = "inset" (not a unit)
-    // → index = 1 → flip parts[1] = "3px" → "-3px"
     let pair = Pair::new("box-shadow", "inset 3px 2px 4px #000");
     let result = generate_rtl(&pair, &flipping_options());
     assert!(result.is_some());
@@ -586,16 +574,13 @@ mod generate_rtl_tests {
     );
   }
 
-  /// When a comma-separated shadow segment has a single non-unit token
-  /// (e.g. just a color), `index = 1` but `parts.len() == 1`, so the
-  /// flip is skipped — exercising the `index >= parts.len()` false branch.
+  /// A lone non-unit token (a colour) skips the flip.
   #[test]
   fn box_shadow_single_color_segment_skips_flip() {
     let pair = Pair::new("box-shadow", "3px 3px #000, #fff");
     let result = generate_rtl(&pair, &flipping_options());
     assert!(result.is_some());
     let rtl = result.unwrap();
-    // The second segment "#fff" has only one non-unit token so it is unchanged
     assert!(
       rtl.value.contains("#fff"),
       "expected #fff in: {}",

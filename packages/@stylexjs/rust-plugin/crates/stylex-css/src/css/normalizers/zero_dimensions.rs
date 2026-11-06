@@ -1,6 +1,4 @@
-//! Ported normalizer 5 of 9 in upstream's sequence, which is what that count
-//! names. See `normalize_value.rs` for the order the passes run in here — a
-//! tenth pass that upstream has no equivalent for runs among them.
+//! Ported normalizer 5 of 9 in upstream's order; `normalize_value.rs` has the run order.
 
 use postcss_value_parser::{NodeKind, ValueParser, unit};
 
@@ -9,18 +7,11 @@ const TIMINGS: [&str; 2] = ["ms", "s"];
 const FRACTION: &str = "fr";
 const PERCENTAGE: &str = "%";
 
-/// Canonicalizes a zero written with a unit: every zero angle becomes `0deg`,
-/// every zero duration `0s`, and a zero with any other unit loses its unit
-/// entirely — but only outside a function, where dropping the unit would change
-/// what the function computes.
+/// Canonicalizes a zero with a unit: angles to `0deg`, durations to `0s`, other units dropped
+/// outside functions only.
 ///
-/// The source-offset window is extended at every function (#1750), preserving
-/// units inside later functions as well as the first. URL bodies are skipped
-/// by the numeric rewrite (#1983).
-///
-/// A custom property is exempt outright. Its value has no grammar the compiler
-/// can reason about, so `0px` there may well be read back as text by something
-/// that needs the unit.
+/// The function window extends at every function (#1750); URL bodies are skipped (#1983). Custom
+/// properties are exempt.
 pub fn normalize_zero_dimensions(ast: &mut ValueParser, key: &str) {
   if key.starts_with("--") {
     return;

@@ -3,7 +3,7 @@ use crate::order::constants::legacy_expand_shorthands_order::{
 };
 use stylex_structures::order_pair::OrderPair;
 
-// ── Shorthands::get ─────────────────────────────────────────────────
+// ── Shorthands::get ──
 
 #[test]
 fn shorthands_get_border_expands() {
@@ -189,7 +189,7 @@ fn shorthands_get_margin() {
 fn shorthands_get_margin_horizontal() {
   let func = Shorthands::get("marginHorizontal").unwrap();
   let result = func(Some("10px 20px".into())).unwrap();
-  // margin_start(3) + margin_end(3) = 6
+  // margin_start(3) + margin_end(3)
   assert_eq!(result.len(), 6);
 }
 
@@ -300,7 +300,7 @@ fn shorthands_get_padding_vertical() {
   assert_eq!(result.len(), 2);
 }
 
-// ── listStyle ───────────────────────────────────────────────────────
+// ── listStyle ──
 
 #[test]
 fn shorthands_get_list_style_none() {
@@ -349,7 +349,6 @@ fn shorthands_get_list_style_none_value() {
 fn shorthands_get_list_style_quoted_type() {
   let func = Shorthands::get("listStyle").unwrap();
   let result = func(Some("\"→\"".into())).unwrap();
-  // Quoted string => listStyleType
   assert_eq!(result[0].0, "listStyleType");
 }
 
@@ -357,7 +356,6 @@ fn shorthands_get_list_style_quoted_type() {
 fn shorthands_get_list_style_quoted_type_single_quote() {
   let func = Shorthands::get("listStyle").unwrap();
   let result = func(Some("'→'".into())).unwrap();
-  // Quoted string => listStyleType
   assert_eq!(result[0].0, "listStyleType");
 }
 
@@ -375,7 +373,7 @@ fn shorthands_get_list_style_type_and_position() {
   );
 }
 
-// ── Border sub-types ────────────────────────────────────────────────
+// ── Border sub-types ──
 
 #[test]
 fn shorthands_get_border_horizontal_style() {
@@ -419,7 +417,7 @@ fn shorthands_get_border_vertical_style() {
   assert_eq!(result.len(), 2);
 }
 
-// ── Unknown ─────────────────────────────────────────────────────────
+// ── Unknown ──
 
 #[test]
 fn shorthands_get_unknown_returns_none() {
@@ -436,7 +434,7 @@ fn shorthands_get_special_chars_returns_none() {
   assert!(Shorthands::get("$%^").is_none());
 }
 
-// ── Aliases::get ────────────────────────────────────────────────────
+// ── Aliases::get ──
 
 #[test]
 fn aliases_get_inset_block_start() {
@@ -541,14 +539,7 @@ fn aliases_get_border_block_start_end_properties() {
   assert_eq!(bec[0].0, "borderBottomColor");
 }
 
-/// Each legacy spelling resolves to the logical property, never to itself.
-///
-/// The direction is the whole of what this asserts, so it is worth saying what
-/// the other one produced: an alias resolving to itself put
-/// `border-top-start-radius` in the stylesheet, which is not a CSS property, so
-/// every browser dropped the declaration and the corner silently stayed square.
-/// `Shorthands::border_radius` next door always expanded to the logical four,
-/// which is the inconsistency that gives this test its point.
+/// A self-resolving alias emitted `border-top-start-radius`, which browsers drop.
 #[test]
 fn aliases_get_border_radius_aliases() {
   let ss = Aliases::get("borderTopStartRadius").unwrap()(None).unwrap();
@@ -743,7 +734,7 @@ fn aliases_get_clear_none() {
   assert_eq!(result[0], OrderPair("clear".into(), None));
 }
 
-// ── Unknown ─────────────────────────────────────────────────────────
+// ── Unknown ──
 
 #[test]
 fn aliases_get_unknown_returns_none() {
@@ -755,19 +746,12 @@ fn aliases_get_empty_returns_none() {
   assert!(Aliases::get("").is_none());
 }
 
-// ── containIntrinsicSize: the `auto` fold ───────────────────────────
-//
-// `auto` qualifies the size beside it rather than being one -- `auto 1px` means
-// "1px, remembered" -- so the expansion folds the pair into a single part
-// before deciding which axis gets what. Each expectation below was read off
-// `@stylexjs/babel-plugin@0.19.0`; the two that used to disagree with it are
-// named as such.
+// ── containIntrinsicSize: the `auto` fold ──
+// `auto 1px` means "1px, remembered", so the pair folds into one part before axes are assigned.
+// Expectations from `@stylexjs/babel-plugin@0.19.0`.
 
-/// The axes, as the text each would be spelled with.
 fn intrinsic_size(value: &str) -> (String, String) {
-  // Handled rather than unwrapped, per `guidelines/stack/RUST.md`: every
-  // expectation in this section reads through here, so a failure that names
-  // which half gave way is read once instead of bisected.
+  // Handled rather than unwrapped, per `guidelines/stack/RUST.md`.
   let func = match Shorthands::get("containIntrinsicSize") {
     Some(func) => func,
     None => panic!("containIntrinsicSize has no expansion"),
@@ -801,7 +785,6 @@ fn two_sizes_take_one_axis_each() {
     intrinsic_size("300px 200px"),
     ("300px".to_string(), "200px".to_string())
   );
-  // A third size has no axis left to take.
   assert_eq!(
     intrinsic_size("1px 2px 3px"),
     ("1px".to_string(), "2px".to_string())
@@ -822,9 +805,7 @@ fn auto_joins_the_size_after_it_into_one_part() {
 
 #[test]
 fn a_lone_auto_qualifies_nothing_and_sizes_both_axes() {
-  // The fold used to run over the four-sided view, which repeats a missing
-  // side, so this arrived as four copies of `auto` and each copy joined the one
-  // before it: both axes came out `auto auto`.
+  // The fold once ran over the four-sided view, yielding `auto auto` on both axes.
   assert_eq!(
     intrinsic_size("auto"),
     ("auto".to_string(), "auto".to_string())
@@ -833,9 +814,7 @@ fn a_lone_auto_qualifies_nothing_and_sizes_both_axes() {
 
 #[test]
 fn a_trailing_auto_has_nothing_to_qualify() {
-  // Same cause, seen from the other end: the repeated fourth side gave the
-  // trailing `auto` a size to swallow that the author never wrote, and the
-  // height came out `auto 300px`.
+  // Same cause: the height came out `auto 300px`.
   assert_eq!(
     intrinsic_size("300px auto"),
     ("300px".to_string(), "auto".to_string())
@@ -844,10 +823,8 @@ fn a_trailing_auto_has_nothing_to_qualify() {
 
 #[test]
 fn auto_joins_an_empty_part_too() {
-  // Upstream's guard here asks whether the part is absent, which no part of a
-  // split value is. Skipping an empty one instead lost the axis: an
-  // unterminated comment contributes an empty part, and `auto /*` sized only
-  // the width where upstream sizes both.
+  // Upstream asks whether the part is absent, which no split part is; an empty part
+  // (from `auto /*`) still takes an axis.
   assert_eq!(
     intrinsic_size("auto /*"),
     ("auto ".to_string(), "auto ".to_string())
@@ -856,21 +833,17 @@ fn auto_joins_an_empty_part_too() {
 
 #[test]
 fn a_lone_quote_is_not_a_quoted_list_style_type() {
-  // `/^".*?"$/` needs two characters, and one quote cannot be both of them --
-  // stripping the prefix consumes the only one, so the suffix strip finds
-  // nothing. Asserted directly because it is not observable through the
-  // expansion: an unclassifiable part becomes the type anyway, so a wrong
-  // answer here would emit the same declaration by a different route.
+  // `/^".*?"$/` needs two characters. Not observable through the expansion, which falls back to
+  // type anyway.
   assert!(!is_list_style_type("\""));
   assert!(!is_list_style_type("'"));
   assert!(is_list_style_type("\"\""));
   assert!(is_list_style_type("''"));
-  // Both quote characters are accepted, which is the change this went with.
   assert!(is_list_style_type("'a'"));
   assert!(is_list_style_type("\"a\""));
-  // A line terminator inside the quotes fails upstream's `.`, so it fails here.
+  // A line terminator fails upstream's `.`.
   assert!(!is_list_style_type("\"a\nb\""));
-  // And the identifier alternative is lowercase and hyphens only.
+  // The identifier alternative is lowercase and hyphens only.
   assert!(is_list_style_type("lower-alpha"));
   assert!(!is_list_style_type("Disc"));
   assert!(!is_list_style_type(""));
@@ -888,36 +861,21 @@ fn two_autos_join_each_other() {
   );
 }
 
-// ── Coverage: listStyle with non-type tokens ────────────────────────
+// ── Coverage: listStyle with non-type tokens ──
 
-/// An uppercase identifier like "Disc" is not a valid list-style-type
-/// (lowercase + hyphens only), so it falls into the "remaining" bucket.
+/// `list-style-type` identifiers are lowercase, so `Disc` falls through to image.
 #[test]
 fn shorthands_list_style_uppercase_ident_falls_through() {
   let func = Shorthands::get("listStyle").unwrap();
-  // "Disc" has an uppercase letter → is_list_style_type returns false
   let result = func(Some("Disc".into())).unwrap();
-  // Falls into remaining → assigned to image (the last resort)
   assert_eq!(result[2].0, "listStyleImage");
   assert_eq!(result[2].1, Some("Disc".into()));
 }
 
-// ── Coverage: listStyle error paths ─────────────────────────────────
+// ── Coverage: listStyle error paths ──
 
-/// The rejection text every `list_style` error path below is measured against.
-///
-/// Both spellings are upstream's, and the difference between them is upstream's
-/// too: the `var()`/global site wraps the `JSON.stringify` result in a second
-/// pair of quotes and the other three sites do not. Naming the two shapes here
-/// lets each test say *which* of the two it expects instead of restating a
-/// format string sixteen times.
-///
-/// These deliberately restate the format rather than calling the production
-/// helpers. What is under test is the text itself, measured against upstream's
-/// own output; sharing the formatter with the code that builds the message would
-/// leave a test that passes for any wording at all. The cost is that changing
-/// upstream's wording means editing both, which is the trade a text-parity
-/// assertion is.
+/// Upstream's rejection text. The `var()`/global site double-quotes the JSON value; the other
+/// three do not. Restated rather than shared with production so wording is actually tested.
 fn rejection(json_of_raw_value: &str) -> String {
   format!("invalid \"listStyle\" value of {}", json_of_raw_value)
 }
@@ -926,9 +884,7 @@ fn rejection_with_doubled_quotes(json_of_raw_value: &str) -> String {
   format!("invalid \"listStyle\" value of \"{}\"", json_of_raw_value)
 }
 
-/// The rejection a `listStyle` value earns, or a failure naming what it expanded
-/// to instead. Every case below is a refusal, so a success is the surprise worth
-/// printing rather than an `unwrap_err` panic that names neither.
+/// The rejection for `raw_value`, or a failure naming what it expanded to.
 fn list_style_err(raw_value: &str) -> String {
   let func = match Shorthands::get("listStyle") {
     Some(func) => func,
@@ -944,8 +900,7 @@ fn list_style_err(raw_value: &str) -> String {
   }
 }
 
-/// `var(--x)` cannot be assigned to a sub-property without knowing its value, so
-/// the whole shorthand is refused. This is the site with the extra quotes.
+/// The site with the extra quotes.
 #[test]
 fn shorthands_list_style_var_mixed_with_other() {
   assert_eq!(
@@ -954,8 +909,6 @@ fn shorthands_list_style_var_mixed_with_other() {
   );
 }
 
-/// A global keyword is only legal alone, and reaching it as a second token hits
-/// the same site as `var()` — including its doubled quotes.
 #[test]
 fn shorthands_list_style_global_mixed() {
   assert_eq!(
@@ -968,8 +921,6 @@ fn shorthands_list_style_global_mixed() {
   );
 }
 
-/// Order does not matter to the first site: a leading global keyword is refused
-/// on the same pass, with the same text.
 #[test]
 fn shorthands_list_style_global_first_reads_the_same() {
   assert_eq!(
@@ -978,7 +929,6 @@ fn shorthands_list_style_global_first_reads_the_same() {
   );
 }
 
-/// Every global keyword reaches the first site, not just `inherit`.
 #[test]
 fn shorthands_list_style_every_global_keyword_is_refused_when_mixed() {
   for keyword in ["inherit", "initial", "revert", "unset"] {
@@ -998,9 +948,7 @@ fn shorthands_list_style_duplicate_position() {
   );
 }
 
-/// A third token after a duplicate position never gets read: the position site
-/// throws first, which is why this reports *without* the doubled quotes even
-/// though a global keyword is present.
+/// The position site throws first, so no doubled quotes despite the global keyword.
 #[test]
 fn shorthands_list_style_duplicate_position_wins_over_a_later_global() {
   assert_eq!(
@@ -1014,9 +962,6 @@ fn shorthands_list_style_duplicate_type() {
   assert_eq!(list_style_err("disc square"), rejection("\"disc square\""));
 }
 
-/// A quoted string is a valid `list-style-type`, so two of them collide at the
-/// type site the same way two keywords do — and the quotes inside the value are
-/// what the JSON escaping is for.
 #[test]
 fn shorthands_list_style_duplicate_quoted_type() {
   assert_eq!(
@@ -1027,17 +972,14 @@ fn shorthands_list_style_duplicate_quoted_type() {
 
 #[test]
 fn shorthands_list_style_too_many_nones() {
-  // "none none none" → first none → type, second none → image, third none →
-  // error (duplicate image)
+  // type, image, then a duplicate image.
   assert_eq!(
     list_style_err("none none none"),
     rejection("\"none none none\"")
   );
 }
 
-/// The value is quoted through `JSON.stringify`, so a value carrying characters
-/// JSON escapes reports them escaped rather than raw. A tab is the case a `{:?}`
-/// format would also get right; the C0 control below is the case it would not.
+/// Quoted via `JSON.stringify`; the C0 control is where `{:?}` would differ.
 #[test]
 fn shorthands_list_style_rejection_escapes_the_value_as_json_does() {
   assert_eq!(
@@ -1054,9 +996,7 @@ fn shorthands_list_style_rejection_escapes_a_c0_control_in_the_value() {
   );
 }
 
-/// Non-ASCII passes through unescaped, astral scalars included. Two bare
-/// non-keywords collide at the image site, which is one of the three that
-/// reports without doubled quotes.
+/// Astral scalars included; two non-keywords collide at the image site (no doubled quotes).
 #[test]
 fn shorthands_list_style_rejection_writes_non_ascii_through_raw() {
   assert_eq!(list_style_err("é é"), rejection("\"é é\""));
@@ -1066,8 +1006,6 @@ fn shorthands_list_style_rejection_writes_non_ascii_through_raw() {
   );
 }
 
-/// A long value is quoted whole rather than truncated, and the token count does
-/// not change which site fires.
 #[test]
 fn shorthands_list_style_rejection_quotes_a_long_value_whole() {
   let raw_value = format!("inherit {}", "x ".repeat(500).trim_end());
@@ -1077,20 +1015,10 @@ fn shorthands_list_style_rejection_quotes_a_long_value_whole() {
   );
 }
 
-// ── An empty part reaches every consumer of a part list ─────────────
-//
-// The rule is stated once, in the module documentation of
-// `crates/stylex-css/src/values/parser.rs`: an empty part is present. It
-// occupies its position, counts toward the arity, and is never read as absent.
-// The splitter's own tests pin the parts; these pin what each of the three
-// consumers does with one, because that is where the rule is either kept or
-// quietly broken.
-//
-// None of them is a transcription of upstream. The reference compiler throws
-// `Cannot read properties of undefined (reading 'type')` on every value here, so
-// parity cannot arbitrate the shape and these record the decision instead.
+// ── An empty part reaches every consumer of a part list ──
+// Rule stated in `src/values/parser.rs`. No parity reference: Babel throws
+// `Cannot read properties of undefined (reading 'type')` on these values.
 
-/// The four sides, as the text each would be spelled with.
 fn padding_sides(value: &str) -> Vec<(String, String)> {
   let func = match Shorthands::get("padding") {
     Some(func) => func,
@@ -1108,10 +1036,7 @@ fn padding_sides(value: &str) -> Vec<(String, String)> {
 
 #[test]
 fn the_four_sided_view_gives_an_empty_part_the_side_it_landed_on() {
-  // Two parts, so the second repeats into the fourth: `1px` on the block axis
-  // and the empty part on both inline sides. The empty sides still *exist* as
-  // order pairs -- a declaration whose value is empty is dropped later, when the
-  // rule text is written, not here by pretending the side was never mentioned.
+  // The empty sides still exist as pairs; empty declarations are dropped by the rule writer.
   assert_eq!(
     padding_sides("1px /*"),
     [
@@ -1125,9 +1050,7 @@ fn the_four_sided_view_gives_an_empty_part_the_side_it_landed_on() {
 
 #[test]
 fn an_empty_first_part_does_not_slide_the_remaining_sides_up() {
-  // The failure the rule exists to prevent, stated as a side: reading the empty
-  // part as absent would make `1px` the top rather than the inline end, and
-  // every one of the four class names would change.
+  // Reading the empty part as absent would make `1px` the top.
   assert_eq!(
     padding_sides("/**/ 1px"),
     [
@@ -1141,9 +1064,6 @@ fn an_empty_first_part_does_not_slide_the_remaining_sides_up() {
 
 #[test]
 fn a_value_of_nothing_but_empty_parts_still_expands_to_four_sides() {
-  // Every side empty, and four pairs all the same. The expansion has no opinion
-  // about a value that emits nothing -- that is the rule writer's decision, one
-  // layer down.
   assert_eq!(
     padding_sides("/**//**/"),
     [
@@ -1157,9 +1077,7 @@ fn a_value_of_nothing_but_empty_parts_still_expands_to_four_sides() {
 
 #[test]
 fn more_parts_than_sides_still_reads_the_first_four() {
-  // The fifth part is discarded, and the four before it are unmoved. Included
-  // because an expansion that consumed parts by draining a list rather than by
-  // position would put the fifth somewhere.
+  // The fifth part is discarded by position.
   assert_eq!(
     padding_sides("1px 2px 3px 4px 5px"),
     [
@@ -1169,7 +1087,6 @@ fn more_parts_than_sides_still_reads_the_first_four() {
       ("paddingInlineStart".to_string(), "4px".to_string()),
     ]
   );
-  // And with an empty part among them, the discarded one is still the fifth.
   assert_eq!(
     padding_sides("1px /**/ 3px 4px 5px"),
     [
@@ -1183,15 +1100,11 @@ fn more_parts_than_sides_still_reads_the_first_four() {
 
 #[test]
 fn the_intrinsic_size_fold_joins_an_empty_part_from_a_terminated_comment_too() {
-  // The companion to `auto_joins_an_empty_part_too`, which reaches the empty
-  // part through an *un*terminated comment. Both spellings are the same part
-  // shape and the fold must not tell them apart.
+  // Same part shape as `auto_joins_an_empty_part_too` via a closed comment.
   assert_eq!(
     intrinsic_size("auto /**/"),
     ("auto ".to_string(), "auto ".to_string())
   );
-  // An empty part with no `auto` in front of it is a part of its own, so it
-  // takes the width and `1px` takes the height.
   assert_eq!(
     intrinsic_size("/**/ 1px"),
     (String::new(), "1px".to_string())
@@ -1200,9 +1113,7 @@ fn the_intrinsic_size_fold_joins_an_empty_part_from_a_terminated_comment_too() {
 
 #[test]
 fn the_intrinsic_size_fold_counts_an_empty_part_toward_the_arity() {
-  // Three parts fold to two, and the axis each ends on depends on the empty one
-  // having been counted. A fold that skipped it would size both axes with
-  // `auto 1px`.
+  // A fold that skipped the empty part would size both axes `auto 1px`.
   assert_eq!(
     intrinsic_size("auto 1px /**/"),
     ("auto 1px".to_string(), String::new())
@@ -1211,11 +1122,7 @@ fn the_intrinsic_size_fold_counts_an_empty_part_toward_the_arity() {
 
 #[test]
 fn list_style_lets_an_empty_part_take_the_slot_it_landed_in() {
-  // An empty part is neither a global keyword nor a position, and
-  // `is_list_style_type` needs at least one character -- mirroring the `+` in
-  // upstream's pattern -- so it falls through to the image site. One of them
-  // therefore expands, and a second image beside it is the ordinary duplicate
-  // refusal rather than a special case.
+  // An empty part is not global, position or type (upstream's `+`), so it lands at the image site.
   let func = match Shorthands::get("listStyle") {
     Some(func) => func,
     None => panic!("expected \"listStyle\" to be a known shorthand"),
@@ -1237,9 +1144,6 @@ fn list_style_lets_an_empty_part_take_the_slot_it_landed_in() {
 
 #[test]
 fn list_style_refuses_an_image_beside_an_empty_part() {
-  // The consequence of the rule at this consumer, and the one place an empty
-  // part changes an outcome rather than an emitted value: it occupies the image
-  // slot, so a real image beside it is a second one.
   assert_eq!(
     list_style_err("url(a.png) /**/"),
     rejection("\"url(a.png) /**/\"")

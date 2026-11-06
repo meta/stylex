@@ -1,42 +1,18 @@
-//! The corpus values the normalization pass rewrites and nothing asserted.
+//! Parity-corpus values this pass rewrites that no sibling module asserts.
 //!
-//! The corpus in `crates/stylex-rs-compiler/parity/corpus` holds 193 values
-//! that this pass rewrites. Most already have a case in a sibling module here.
-//! The 68 that did not were reaching the pass through a whole-transform case
-//! alone -- a class name and a rule, from which the text the pass produced can
-//! only be inferred -- and this module is those, grouped by what the rewrite
-//! does. It is the residue of the other modules, not a restatement of them, so
-//! a value asserted next door is deliberately absent.
-//!
-//! **Every expectation is a spelling the parity harness measured**, read from
-//! `entries[].babel.declarations` of a report the harness wrote, never from
-//! judgement. Regenerate with:
+//! Expectations are `entries[].babel.declarations` from a parity-harness report. Regenerate with:
 //!
 //! ```sh
 //! pnpm run --filter=@stylexswc/rs-compiler build
 //! pnpm run --filter=@stylexswc/rs-compiler parity -- --json parity/results/default.json
 //! ```
 //!
-//! Three groups of corpus values in the same gap are absent, and each is
-//! asserted where the rewrite actually happens:
-//!
-//! - Content quoting -- `content: x` becomes `content: "x"` -- belongs to
-//!   `transform_value`, and is asserted in that crate's own suite.
-//! - The logical-value polyfill -- `float: start` becomes `float: left` --
-//!   belongs to `generate_ltr`, and is asserted beside it.
-//! - Five corpus values that are not declarations at all: an assertion
-//!   message, a `join` separator and a JavaScript object key that the
-//!   harvester read out of a Rust test as though it were CSS. A case over one
-//!   of those would state nothing about CSS. Issue 35 covers the harvester.
-//!
-//! One further value is absent: a ten-layer `boxShadow` whose only subject is
-//! that a long comma-separated list is normalized entry by entry, which
-//! `normalizes_every_entry_of_a_long_list` already states over 500 layers.
+//! Content quoting (`transform_value`), the logical-value polyfill (`generate_ltr`), and five
+//! harvested non-CSS strings (issue 35) are asserted elsewhere or not at all.
 
 use super::support::{check, default_options, same};
 
-/// A comma separates without a space after it, in a function argument list and
-/// between the layers of a comma-separated value alike.
+/// In function argument lists and between comma-separated layers alike.
 #[test]
 fn removes_the_space_after_a_comma() {
   check(
@@ -197,7 +173,6 @@ fn removes_the_space_after_a_comma() {
   );
 }
 
-/// A fraction below one loses its leading zero, wherever in the value it sits.
 #[test]
 fn drops_the_zero_before_a_decimal_point() {
   check(
@@ -234,9 +209,7 @@ fn drops_the_zero_before_a_decimal_point() {
   );
 }
 
-/// Any run of whitespace between tokens becomes one space, and a trailing one
-/// goes. A tab and a newline count; the two characters that *spell* one in
-/// the source do not, which the two `margin` cases put side by side.
+/// A tab and newline count; the escaped spellings in the source do not.
 #[test]
 fn collapses_a_run_of_whitespace_to_one_space() {
   check(
@@ -255,7 +228,6 @@ fn collapses_a_run_of_whitespace_to_one_space() {
   );
 }
 
-/// A slash is separated from what it divides.
 #[test]
 fn spaces_a_slash_from_the_tokens_around_it() {
   check(
@@ -275,8 +247,7 @@ fn spaces_a_slash_from_the_tokens_around_it() {
   );
 }
 
-/// A property name is a value in its own right for `transition-property` and
-/// `will-change`, and it is spelled the way CSS spells it.
+/// For `transition-property` and `will-change`.
 #[test]
 fn kebab_cases_a_property_name_written_as_a_value() {
   check(
@@ -288,10 +259,7 @@ fn kebab_cases_a_property_name_written_as_a_value() {
   );
 }
 
-/// An importance annotation loses the space before it. The three cases differ
-/// only in the property and in how the author spaced the `!`, and the pass
-/// reads neither -- they are here because each is a corpus value in its own
-/// right, not because they take different paths.
+/// Each is its own corpus value; the pass reads neither the property nor the `!` spacing.
 #[test]
 fn tightens_the_space_around_an_importance_annotation() {
   check(
@@ -303,17 +271,7 @@ fn tightens_the_space_around_an_importance_annotation() {
   );
 }
 
-/// What none of the groups above describes on its own.
-///
-/// Mostly compositions -- a leading zero *and* a comma, whitespace *and* a
-/// kebab-cased name -- which is the common case in authored CSS, and the
-/// composition is what a stylesheet is hashed from. Five carry a rule the
-/// gap reaches exactly once, so a group of its own would say no more than
-/// the case does: a colon gains spaces (`height`), whitespace inside a
-/// parenthesis goes (`backgroundImage`), a signed zero loses its sign
-/// (`padding`), a redundant zero in front of an integer goes (`width`), an
-/// empty string takes double quotes (`quotes`), and milliseconds shorten to
-/// seconds (`transitionDuration`).
+/// Compositions of the rules above, plus five rules the gap reaches only once.
 #[test]
 fn rewrites_more_than_the_groups_above_describe() {
   check(

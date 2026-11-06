@@ -5,11 +5,7 @@ mod legacy_expand_shorthands_structures_test;
 mod property_specificity_constants_test;
 mod property_specificity_structures_test;
 
-/// Every property the `property-specificity` table refuses to expand.
-///
-/// One source of truth: the per-table tests read it rather than each keeping
-/// its own copy, and the snake_case-is-not-a-property-name test derives its
-/// input from it so the two lists cannot drift apart.
+/// Every property the `property-specificity` table refuses to expand; shared by the tests.
 pub(crate) const REJECTING_SHORTHANDS: [&str; 12] = [
   "all",
   "animation",
@@ -25,8 +21,7 @@ pub(crate) const REJECTING_SHORTHANDS: [&str; 12] = [
   "borderLeft",
 ];
 
-/// The deprecated aliases, each paired with the rejection message of the
-/// shorthand it is an alias *of* -- never its own name.
+/// Deprecated aliases paired with the rejection message of the shorthand they alias.
 pub(crate) const DEPRECATED_BORDER_ALIASES: [(&str, &str); 6] = [
   ("borderHorizontal", "borderInline is not supported"),
   ("borderVertical", "borderBlock is not supported"),

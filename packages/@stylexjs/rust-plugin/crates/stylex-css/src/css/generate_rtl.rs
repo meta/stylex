@@ -11,8 +11,7 @@ use stylex_structures::{
 };
 
 fn logical_to_physical_rtl(input: &str) -> Option<&'static str> {
-  // Only logical keywords (start/end/inline-start/inline-end) flip; physical values
-  // such as `left`/`right` yield `None`, leaving `rtl` unset.
+  // Only logical keywords flip; physical values yield `None`, leaving `rtl` unset.
   LOGICAL_VALUE_TO_RTL.get(input).copied()
 }
 
@@ -30,15 +29,8 @@ fn property_to_rtl<'a>(pair: &'a Pair, options: &StyleXStateOptions) -> Option<P
       value: Cow::Borrowed(value),
     }),
     "background-position" => {
-      // Bail out unless the value carries a bare `start`/`end` keyword.
-      // Directional-neutral values such as `center` or physical values such as
-      // `left top` must not emit a redundant, higher-specificity `rtl` rule.
-      // Once a logical keyword is present, also flip camel-case
-      // `insetInlineStart`/`insetInlineEnd` tokens that appear in the same value.
-      //
-      // NOTE: `split_whitespace()` collapses runs of whitespace and drops empty
-      // tokens. The values reaching here are already single-space normalized, so
-      // this has no observable effect in practice.
+      // Only a bare `start`/`end` warrants an `rtl` rule; then camel-case
+      // `insetInlineStart`/`insetInlineEnd` flip too.
       if !pair
         .value
         .split_whitespace()
@@ -120,8 +112,7 @@ fn flip_shadow(value: &str) -> Option<String> {
   let ast = ValueParser::new(value);
   let mut groups = Vec::new();
   let mut start = 0;
-  // Only top-level dividers separate shadow groups. A comma or slash inside
-  // rgb()/calc()/URL remains authored nested function text.
+  // Only top-level dividers separate shadow groups.
   for (index, node) in ast.nodes.iter().enumerate() {
     if node.kind == NodeKind::Div {
       if start < index {
@@ -137,8 +128,7 @@ fn flip_shadow(value: &str) -> Option<String> {
     .into_iter()
     .map(|definition| {
       let mut parts: Vec<String> = definition.split(' ').map(str::to_owned).collect();
-      // Match postcss-value-parser unit(), including decimals, signs, exponent
-      // notation and unitless numbers. Do not invent a CSS length-unit whitelist.
+      // Match postcss-value-parser `unit()`; no CSS length-unit whitelist.
       let flip_index = if parts.first().is_some_and(|first| unit(first).is_some()) {
         0
       } else {

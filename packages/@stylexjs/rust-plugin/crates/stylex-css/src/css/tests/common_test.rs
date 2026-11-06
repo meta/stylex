@@ -49,8 +49,6 @@ mod inline_style_to_css_string_tests {
   use crate::css::common::inline_style_to_css_string;
   use stylex_structures::pair::PairCow;
 
-  /// The declarations a case is given, each half borrowed the way a caller
-  /// holding a name and a value hands them over.
   fn declarations<'a>(pairs: &[(&'a str, &'a str)]) -> Vec<PairCow<'a>> {
     pairs
       .iter()
@@ -90,12 +88,8 @@ mod inline_style_to_css_string_tests {
     );
   }
 
-  /// A custom property takes the same spelling rule as any other name here,
-  /// which is where an attribute and a stylesheet part company: a stylesheet
-  /// hands `--myColor` back untouched.
-  ///
-  /// Both answers were measured against @stylexjs/babel-plugin@0.19.0 through
-  /// `stylex.attrs({ … })`, which is the one call that reaches this text.
+  /// Unlike a stylesheet, which keeps `--myColor`. Measured against @stylexjs/babel-plugin@0.19.0
+  /// via `stylex.attrs({ … })`.
   #[test]
   fn kebab_cases_a_custom_property_written_in_camel_case() {
     assert_eq!(
@@ -103,16 +97,13 @@ mod inline_style_to_css_string_tests {
       "--my-color:red"
     );
 
-    // Every capital takes its own hyphen, so a run of them is not the single
-    // hyphen a stylesheet would write.
+    // Every capital takes its own hyphen.
     assert_eq!(
       inline_style_to_css_string(&declarations(&[("--ABCDef", "x")])),
       "---a-b-c-def:x"
     );
   }
 
-  /// A value spelled where the call was made is kept as it stands, so a half
-  /// the caller had to build reaches the text without being copied again.
   #[test]
   fn formats_an_owned_value() {
     let pairs = vec![PairCow {
@@ -181,7 +172,6 @@ mod build_nested_css_rule_tests {
       &mut [],
       &mut [],
     );
-    // Should have extra class for specificity bump
     assert!(result.contains(".x1234.x1234:where(.dark)"));
   }
 
@@ -258,12 +248,8 @@ mod get_priority_tests {
     assert!(p > 0.0);
   }
 
-  /// The `contains(':')` guard in `get_compound_pseudo_priority` skips the scan
-  /// for a key that holds no colon, which is only sound while every alternation
-  /// of `PSEUDO_PART_REGEX` opens with one. An alternation added later that does
-  /// not -- an attribute selector, say -- would make the guard answer `None` for
-  /// keys it matches, and the generated CSS would reorder with nothing else
-  /// failing.
+  /// The `contains(':')` guard in `get_compound_pseudo_priority` is sound only while every
+  /// `PSEUDO_PART_REGEX` alternation starts with a colon.
   #[test]
   fn every_pseudo_part_the_regex_matches_carries_a_colon() {
     for key in [
@@ -282,8 +268,6 @@ mod get_priority_tests {
     }
   }
 
-  /// The other half of the premise: a key the guard refuses holds nothing the
-  /// scan would have found.
   #[test]
   fn a_key_without_a_colon_matches_no_pseudo_part() {
     for key in ["color", "paddingBottom", "--custom-prop", "margin-top"] {
@@ -297,7 +281,7 @@ mod compound_pseudo_priority_tests {
   use crate::css::common::get_compound_pseudo_priority;
   use stylex_regex::regex::PSEUDO_PART_REGEX;
 
-  /// The answer without the colon-run shortcut: every key is scanned.
+  /// The answer without the colon-run shortcut.
   fn scanned(key: &str) -> Option<f64> {
     let parts: Vec<&str> = PSEUDO_PART_REGEX
       .find_iter(key)
@@ -310,7 +294,6 @@ mod compound_pseudo_priority_tests {
     Some(f64::NAN)
   }
 
-  /// The shortcut declines only keys the scan declines too.
   #[test]
   fn the_colon_run_shortcut_declines_only_what_the_scan_declines() {
     let pieces = [
@@ -362,9 +345,7 @@ mod normalize_css_property_value_tests {
   use crate::css::tests::support::{default_options, panic_message, rem_enabled_options};
   use std::panic::{AssertUnwindSafe, catch_unwind};
 
-  /// The keyword shortcut answers what the full parse, check and print does,
-  /// for every property the passes treat specially and with each option that
-  /// changes a pass.
+  /// For every specially treated property and each option that changes a pass.
   #[test]
   fn a_plain_keyword_normalizes_as_the_full_pipeline_does() {
     use crate::css::common::is_plain_keyword;
@@ -416,7 +397,6 @@ mod normalize_css_property_value_tests {
     .iter()
     .map(|word| word.to_string())
     .collect();
-    // Every keyword of up to three characters the class allows.
     let alphabet: Vec<char> = ('a'..='z').chain(['-']).collect();
     for first in 'a'..='z' {
       words.push(first.to_string());
@@ -469,8 +449,6 @@ mod normalize_css_property_value_tests {
     assert_eq!(result, "red");
   }
 
-  /// A six-digit hex colour keeps all six digits. No normalizer understands
-  /// hex, so the author's spelling reaches the hash as written.
   #[test]
   fn normalizes_hex_color() {
     let opts = default_options();
@@ -596,14 +574,11 @@ mod normalize_css_property_value_tests {
         "future-fn(foo /* a,   b */ * 2)",
       ),
       ("future-fn(foo/2 * @)", "future-fn(foo / 2 * @)"),
-      // An escaped quote does not end the string, so the `,` and the run of
-      // spaces after it stay untouched even though commas are normalized
-      // outside of strings.
+      // An escaped quote does not end the string, so the `,` spacing is untouched.
       (
         r#"future-fn("a\",   b" * 2)"#,
         r#"future-fn("a\",   b" * 2)"#,
       ),
-      // A trailing backslash-escaped backslash still closes the string.
       (r#"future-fn("a\\" * 2)"#, r#"future-fn("a\\" * 2)"#),
       ("foo * bar", "foo * bar"),
       ("[foo]", "[foo]"),
@@ -620,9 +595,6 @@ mod normalize_css_property_value_tests {
 
   // --- Color functions ---
 
-  /// A colour function takes the one path every value takes. Its arguments are
-  /// normalized like any others: the leading zero goes, and the space after a
-  /// comma goes with it.
   #[test]
   fn normalizes_a_space_separated_color_function() {
     let opts = default_options();
@@ -774,7 +746,6 @@ mod normalize_css_property_value_tests {
   fn normalizes_rgb_color_value() {
     let opts = default_options();
     let result = normalize_css_property_value("color", "rgb(255, 0, 0)", &opts);
-    // SWC preserves rgb() function form
     assert_eq!(result, "rgb(255,0,0)");
   }
 
@@ -785,10 +756,7 @@ mod normalize_css_property_value_tests {
     assert!(result.contains("0") || result.contains("rgba"));
   }
 
-  // --- Relative color syntax ---
-  // Relative color syntax used to need a route of its own, because SWC's CSS
-  // parser cannot parse it. Nothing parses CSS to normalize a value now, so
-  // `from` is an ordinary word. See issue #1041.
+  // --- Relative color syntax (issue #1041) ---
 
   #[test]
   fn normalizes_a_relative_rgb_color() {
@@ -797,9 +765,7 @@ mod normalize_css_property_value_tests {
     assert_eq!(result, "rgb(from red r g b)");
   }
 
-  /// Relative colour syntax needs no route of its own: the value parser has no
-  /// opinion about which function names exist, so `from` is an ordinary word
-  /// and the alpha argument loses its leading zero like any other number.
+  /// `from` is an ordinary word to the value parser.
   #[test]
   fn normalizes_a_relative_rgba_color() {
     let opts = default_options();
@@ -850,7 +816,6 @@ mod normalize_css_property_value_tests {
   #[test]
   fn non_relative_rgb_still_parsed_by_swc() {
     let opts = default_options();
-    // Without the `from` keyword, regular rgb() keeps going through SWC.
     let result = normalize_css_property_value("color", "rgb(255, 0, 0)", &opts);
     assert_eq!(result, "rgb(255,0,0)");
   }
@@ -934,8 +899,7 @@ mod normalize_css_property_value_tests {
     assert!(result.is_err());
   }
 
-  /// The compatibility core emits Babel's bare unclosed-function sentence;
-  /// source/code-frame context belongs to the host, not a stand-in CSS rule.
+  /// Babel's bare message; source context belongs to the host.
   #[test]
   fn unclosed_function_in_custom_property_uses_babel_message() {
     let opts = default_options();
@@ -956,9 +920,7 @@ mod normalize_css_property_value_tests {
     assert_eq!(result, "@");
   }
 
-  /// A value SWC cannot parse is preserved only when it is structurally inert.
-  /// `}` / `;` / `{` would close the rule the compiler is generating, so such a
-  /// value must still be rejected instead of being spliced into the stylesheet.
+  /// `}` / `;` / `{` would close the generated rule.
   #[test]
   fn rule_breaking_unparsable_values_are_rejected() {
     let opts = default_options();
@@ -977,9 +939,7 @@ mod normalize_css_property_value_tests {
     }
   }
 
-  /// An unclosed `/*` comments out every rule emitted after this declaration,
-  /// so it is as rule-breaking as a stray `}`. The "preserve unknown syntax"
-  /// fallback emits the value verbatim, which made this reachable.
+  /// An unclosed `/*` would comment out every later rule.
   #[test]
   fn unclosed_comment_is_rejected() {
     let opts = default_options();
@@ -993,7 +953,6 @@ mod normalize_css_property_value_tests {
     }
   }
 
-  /// A closed comment is inert and must still be accepted.
   #[test]
   fn closed_comment_is_accepted() {
     let opts = default_options();
@@ -1008,10 +967,6 @@ mod normalize_css_property_value_tests {
     );
   }
 
-  /// Relative colour syntax is guarded like everything else. Every accepted
-  /// value now reaches the stylesheet as the author's own bytes, so a stray `}`
-  /// in one would splice an arbitrary rule into the sheet whatever the value
-  /// happens to be made of.
   #[test]
   fn rule_breaking_relative_color_values_are_rejected() {
     let opts = default_options();
@@ -1027,16 +982,13 @@ mod normalize_css_property_value_tests {
       assert!(result.is_err(), "expected `{value}` to be rejected");
     }
 
-    // The well-formed relative-colour value is still passed through.
     assert_eq!(
       normalize_css_property_value("color", "rgb(from red r g b)", &opts),
       "rgb(from red r g b)"
     );
   }
 
-  /// A property name no CSS identifier grammar accepts does not change what
-  /// happens to its value: nothing escapes the name, so the value is spelled
-  /// back out as written.
+  /// Nothing escapes the name, so the value is spelled back out as written.
   #[test]
   fn numeric_custom_property_name_leaves_the_value_alone() {
     let opts = default_options();
@@ -1045,7 +997,7 @@ mod normalize_css_property_value_tests {
   }
 }
 
-// ── generate_css_rule tests ──────────────────────────────────────────
+// ── generate_css_rule tests ──
 
 #[cfg(test)]
 mod generate_css_rule_tests {
@@ -1205,7 +1157,6 @@ mod generate_css_rule_tests {
       &mut [],
       &opts,
     );
-    // margin-start should generate LTR → margin-left, RTL → margin-right
     assert!(result.ltr.contains("margin-left"));
     assert!(result.rtl.is_some());
     let rtl = result.rtl.unwrap();
@@ -1239,12 +1190,11 @@ mod generate_css_rule_tests {
       &mut [],
       &default_options(),
     );
-    // Should contain doubled class for specificity
     assert!(result.ltr.contains(".xwh.xwh"));
   }
 }
 
-// ── get_priority additional tests ────────────────────────────────────
+// ── get_priority additional tests ──
 
 #[cfg(test)]
 mod get_priority_extended_tests {
@@ -1252,9 +1202,8 @@ mod get_priority_extended_tests {
 
   #[test]
   fn compound_pseudo_hover_after() {
-    // :hover::after is a compound pseudo that should be handled
     let p = get_priority(":hover::after");
-    // Should be sum of :hover (130.0) + ::after (5000.0)
+    // :hover (130.0) + ::after (5000.0)
     assert!(p > 5000.0);
   }
 
@@ -1308,7 +1257,7 @@ mod get_priority_extended_tests {
 
   #[test]
   fn pseudo_class_with_parens_no_compound() {
-    // :nth-child(2) has parens, so get_compound_pseudo_priority returns None
+    // Parens, so get_compound_pseudo_priority returns None.
     let p = get_priority(":nth-child(2)");
     assert_eq!(p, 60.0);
   }
@@ -1360,15 +1309,13 @@ mod get_priority_extended_tests {
 
   #[test]
   fn ancestor_selector_priority() {
-    // :where(.cls123:hover *)
     let p = get_priority(":where(.cls123:hover *)");
-    // Should be 10.0 + (:hover priority / 100.0)
+    // 10.0 + (:hover priority / 100.0)
     assert!(p > 10.0 && p < 15.0);
   }
 
   #[test]
   fn descendant_selector_priority() {
-    // :where(:has(.cls123:focus))
     let p = get_priority(":where(:has(.cls123:focus))");
     assert!(p > 15.0 && p < 20.0);
   }
@@ -1392,7 +1339,7 @@ mod get_priority_extended_tests {
   }
 }
 
-// ── convert_css_function_to_camel_case coverage ──────────────────────
+// ── convert_css_function_to_camel_case coverage ──
 
 #[cfg(test)]
 mod convert_css_function_camel_case_tests {
@@ -1437,7 +1384,6 @@ mod convert_css_function_camel_case_tests {
 
   #[test]
   fn no_function_returns_as_is() {
-    // No parentheses → restore_function_names returns as-is
     let r = normalize_css_property_value("color", "red", &default_options());
     assert_eq!(r, "red");
   }
@@ -1448,8 +1394,6 @@ mod convert_css_function_camel_case_tests {
     assert_eq!(r, "rotate(45deg)");
   }
 
-  /// A dashed function name is a custom function, which SWC neither lowercases
-  /// nor reports as a plain identifier — so it carries its own case through.
   #[test]
   fn dashed_function_name_keeps_its_case() {
     let r = normalize_css_property_value("color", "--Foo(1px)", &default_options());
@@ -1457,7 +1401,7 @@ mod convert_css_function_camel_case_tests {
   }
 }
 
-// ── normalize_css_property_value: CSS variable property path ──────────
+// ── normalize_css_property_value: CSS variable property path ──
 
 #[cfg(test)]
 mod normalize_css_variable_property_tests {
@@ -1466,7 +1410,7 @@ mod normalize_css_variable_property_tests {
 
   #[test]
   fn css_variable_uses_color_for_parsing() {
-    // When property starts with "--", parsing uses "color" as the property
+    // A `--` property parses its value as `color`.
     let r = normalize_css_property_value("--xCustom", "10px", &default_options());
     assert_eq!(r, "10px");
   }
@@ -1484,7 +1428,7 @@ mod normalize_css_variable_property_tests {
   }
 }
 
-// ── normalize_css_property_value error paths ─────────────────────────
+// ── normalize_css_property_value error paths ──
 
 #[cfg(test)]
 mod normalize_css_property_value_error_tests {
@@ -1551,8 +1495,6 @@ mod normalize_css_property_value_error_tests {
     assert_eq!(r, r#""Helvetica Neue",sans-serif"#);
   }
 
-  /// The quote character the author chose is the quote character that reaches
-  /// the hash. Nothing rewrites a single quote into a double one.
   #[test]
   fn normalizes_closed_single_quoted_string() {
     let r = normalize_css_property_value(
@@ -1594,7 +1536,6 @@ mod normalize_css_property_value_error_tests {
 
   #[test]
   fn css_variable_property_uses_color_for_parsing() {
-    // --foo is a CSS variable, so it uses "color" as the parsing property
     let r = normalize_css_property_value("--xSomething", "10px", &default_options());
     assert_eq!(r, "10px");
   }
@@ -1606,7 +1547,7 @@ mod normalize_css_property_value_error_tests {
   }
 }
 
-// ── build_nested_css_rule additional tests ────────────────────────────
+// ── build_nested_css_rule additional tests ──
 
 #[cfg(test)]
 mod build_nested_css_rule_extended_tests {
@@ -1626,7 +1567,6 @@ mod build_nested_css_rule_extended_tests {
     );
     assert!(result.contains("@media"));
     assert!(result.contains("@supports"));
-    // Should be nested
     assert!(result.contains(".xm.xm.xm"));
   }
 
@@ -1674,8 +1614,7 @@ mod build_nested_css_rule_extended_tests {
 
   #[test]
   fn builds_rule_with_pseudo_classes_before_pseudo_element() {
-    // Pseudo-elements (::before, ::after, etc.) must come after pseudo-classes
-    // in the selector. e.g. `.class:hover::after` not `.class::after:hover`.
+    // Pseudo-elements come after pseudo-classes: `.class:hover::after`.
     let result = build_nested_css_rule(
       "xpe",
       "color:red".into(),
@@ -1697,12 +1636,11 @@ mod build_nested_css_rule_extended_tests {
     );
     assert!(result.contains(":where(.theme)"));
     assert!(result.contains("@media"));
-    // where should trigger extra specificity class
     assert!(result.contains(".xwa.xwa"));
   }
 }
 
-// ── Coverage: colon-prefixed property ───────────────────────────────
+// ── Coverage: colon-prefixed property ──
 
 #[cfg(test)]
 mod colon_prefixed_property_tests {
@@ -1710,13 +1648,7 @@ mod colon_prefixed_property_tests {
   use crate::css::tests::support::{default_options, panic_message};
   use std::panic::{AssertUnwindSafe, catch_unwind};
 
-  /// A pseudo-selector key spells its rejection as a selector wrapping the
-  /// value rather than as a declaration inside `* { ... }`, which is the only
-  /// thing the key's shape still decides.
-  ///
-  /// The value carries braces, so it is rejected whatever the key: nothing
-  /// unwraps a nested rule here, and a value reaching the stylesheet with a
-  /// brace in it would close the rule the compiler is generating.
+  /// The key's shape only decides the rejection's spelling; a braced value is always rejected.
   #[test]
   fn rejects_a_braced_value_under_a_pseudo_key() {
     let result = catch_unwind(AssertUnwindSafe(|| {

@@ -1529,29 +1529,13 @@ mod coverage_tests {
   }
 }
 
-/// Where a nested expansion sits inside the one that spreads it.
-///
-/// The pairs a shorthand expands to are emitted in this order, and a style
-/// object's key order is that order: a shorthand emits its own class and a
-/// `null` for every longhand it subsumes, so the whole expansion is written down
-/// verbatim. Five shorthands here spread another shorthand's expansion into the
-/// middle of their own list, and each of those five had the spread appended
-/// instead — the same keys, in the wrong places, which is invisible to any test
-/// that only reads the CSS.
-///
-/// Each expectation below is the order the official compiler emits, read from a
-/// run over the same declaration rather than reasoned about. The remaining
-/// hundred-odd shorthands already agreed and are covered by the corpus.
+/// Where a nested expansion sits inside the shorthand that spreads it; expectations are the
+/// official compiler's emitted order.
 #[cfg(test)]
 mod nested_expansion_position_tests {
   use super::Shorthands;
 
   /// The property names a shorthand expands to, in emission order.
-  ///
-  /// The `Ok`/`Err` split goes through [`Shorthands::infallible`] rather than a
-  /// second copy of it here. That is the one place this crate decides what a
-  /// shorthand returning `Err` means, it already has its own test, and `all` --
-  /// which really does return `Err` -- reaches it, so the arm is not a formality.
   fn expansion_of(name: &str) -> Vec<String> {
     let Some(expand) = Shorthands::get(name) else {
       panic!("{name} is not a shorthand");
@@ -1563,20 +1547,13 @@ mod nested_expansion_position_tests {
       .collect()
   }
 
-  /// A name that is not a shorthand fails loudly rather than reading as one that
-  /// expands to nothing.
-  ///
-  /// The guard above is the only thing standing between a typo in an expectation
-  /// and a test that passes by comparing two empty lists.
   #[test]
   #[should_panic(expected = "notAShorthand is not a shorthand")]
   fn expansion_of_refuses_a_name_that_is_not_a_shorthand() {
     let _ = expansion_of("notAShorthand");
   }
 
-  /// `all` is a registered shorthand that refuses its own expansion, which is
-  /// what makes the `Err` side of `infallible` reachable from here rather than a
-  /// shape of the shared function-pointer type.
+  /// `all` returns `Err`, reaching the `infallible` guard.
   #[test]
   #[should_panic(expected = "infallible shorthand returned Err")]
   fn expansion_of_a_shorthand_that_refuses_reaches_the_infallible_guard() {
@@ -1599,8 +1576,7 @@ mod nested_expansion_position_tests {
         "animationFillMode",
         "animationPlayState",
         "animationRange",
-        // End before start, which is the order upstream spells `animationRange`
-        // in and this compiler already matched.
+        // End before start, as upstream spells `animationRange`.
         "animationRangeEnd",
         "animationRangeStart",
         "animationTimeline",
@@ -1669,9 +1645,7 @@ mod nested_expansion_position_tests {
     );
   }
 
-  /// The one whose two spreads were simply the wrong way round. `scrollPadding`
-  /// next door spells the same pair block-then-inline and always did, which is
-  /// what makes this a transposition rather than a rule.
+  /// `scrollPadding` spells the same pair block-then-inline.
   #[test]
   fn scroll_margin_spreads_block_before_inline() {
     assert_eq!(
@@ -1690,7 +1664,6 @@ mod nested_expansion_position_tests {
     );
   }
 
-  /// The pair that says the transposition above is not the house style.
   #[test]
   fn scroll_padding_spreads_block_before_inline_too() {
     assert_eq!(

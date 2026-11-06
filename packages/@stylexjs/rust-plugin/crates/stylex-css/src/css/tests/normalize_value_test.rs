@@ -1,33 +1,9 @@
-//! The value normalization pipeline, asserted against the reference compiler's
-//! own bytes.
+//! Value normalization asserted against the reference compiler's own output.
 //!
-//! **Every expectation in this module was produced by running the case through
-//! the reference compiler's normalizers, not by reading this compiler and
-//! writing down what it ought to say.** That is the only kind of expectation
-//! worth having here: a class name is a hash of this text, so an expectation a
-//! human believed rather than observed is just the divergence written down
-//! twice.
-//!
-//! The seam is the whole pipeline — value in, declaration text out. The nine
-//! normalizers are deliberately *not* asserted one by one. Their contract is
-//! the string the fold produces; pinning them individually would re-create the
-//! implementation coupling this effort exists to remove, and would fight the
-//! next maintainer who diffs them against a new reference-compiler release.
-//!
-//! **The entry point is [`normalize_value`], not the compiler's own
-//! `normalize_css_property_value`, and that is the point.** The latter adds
-//! three guards the reference compiler has no counterpart for — the unclosed
-//! comment, the nesting budget, the declaration-terminating token — so entering
-//! through it would measure this compiler's additions rather than the
-//! normalizers. Those guards are asserted in
-//! `value_normalization_parity_test.rs`, which does enter there. Two cases
-//! below would be rejected outright on that path, and their being normalized
-//! here is the contract this module exists to state.
-//!
-//! Where the reference compiler does something that reads as a defect —
-//! `ABC` gaining a leading dash, an importance annotation mid-value crashing —
-//! the defect is asserted, not corrected. Hash parity outranks local
-//! correctness at this seam, and each such case says so where it sits.
+//! Enters through [`normalize_value`], not `normalize_css_property_value`, so the compiler's extra
+//! guards (unclosed comment, nesting budget, terminators) are excluded; those are covered in
+//! `value_normalization_parity_test.rs`. Reference-compiler defects are reproduced, not corrected:
+//! hash parity outranks local correctness.
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
@@ -42,16 +18,13 @@ use crate::css::{
   tests::support::{default_options, panic_message, rem_enabled_options},
 };
 
-/// One case: the authored value, the property it is declared for, and the
-/// declaration text the reference compiler produces.
+/// (value, property, reference-compiler declaration text).
 type Case = (&'static str, &'static str, &'static str);
 
-/// Runs a case table under the compiler's defaults.
 fn check(cases: &[Case]) {
   check_with(cases, &default_options());
 }
 
-/// Runs a case table under `options`.
 fn check_with(cases: &[Case], options: &StyleXStateOptions) {
   for (value, key, expected) in cases {
     let actual = normalize_value(value, key, options);
@@ -60,12 +33,7 @@ fn check_with(cases: &[Case], options: &StyleXStateOptions) {
   }
 }
 
-/// Asserts that `value` is rejected for `key` with a message containing
-/// `expected`.
-///
-/// Asserted on the message rather than on the bare fact of a panic: `is_err()`
-/// alone passes on any panic at all, including one from an unrelated bug, so a
-/// test written that way keeps passing after the guard it watches is gone.
+/// Asserts `value` is rejected for `key` with a message containing `expected`.
 fn rejects(value: &str, key: &str, expected: &str) {
   let options = default_options();
   let result = catch_unwind(AssertUnwindSafe(|| normalize_value(value, key, &options)));
@@ -77,14 +45,8 @@ fn rejects(value: &str, key: &str, expected: &str) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// What no normalizer touches
-// ---------------------------------------------------------------------------
+// ── What no normalizer touches ──
 
-/// The heart of the parity contract. No normalizer understands hex colours,
-/// letter case, quote characters or exponent notation, so none of them can
-/// alter those — and a value made only of things nobody has an opinion about
-/// comes back byte for byte.
 #[test]
 fn leaves_spellings_no_normalizer_has_an_opinion_about_alone() {
   check(&[
@@ -132,8 +94,7 @@ fn leaves_spellings_no_normalizer_has_an_opinion_about_alone() {
   ]);
 }
 
-/// Letter case is never folded, including in units — which is why the
-/// unit-sensitive normalizers below all miss their upper-case spellings.
+/// Which is why the unit-sensitive normalizers miss upper-case spellings.
 #[test]
 fn never_folds_letter_case_in_a_unit() {
   check(&[
@@ -145,13 +106,8 @@ fn never_folds_letter_case_in_a_unit() {
   ]);
 }
 
-// ---------------------------------------------------------------------------
-// Whitespace and separators
-// ---------------------------------------------------------------------------
+// ── Whitespace and separators ──
 
-/// Runs of whitespace collapse to one space *in place*. Nothing moves to a
-/// different position in the value, which is what distinguishes this from
-/// re-serializing through a formatter.
 #[test]
 fn collapses_whitespace_without_moving_it() {
   check(&[
@@ -166,8 +122,7 @@ fn collapses_whitespace_without_moving_it() {
   ]);
 }
 
-/// A comma loses the space on both sides; every other separator gains one on
-/// both sides, whether or not the author wrote any.
+/// A comma loses surrounding spaces; every other separator gains one on both sides.
 #[test]
 fn spaces_separators_by_which_separator_it_is() {
   check(&[
@@ -183,8 +138,6 @@ fn spaces_separators_by_which_separator_it_is() {
   ]);
 }
 
-/// Whitespace just inside a function's parentheses is removed outright rather
-/// than collapsed.
 #[test]
 fn strips_padding_inside_function_parentheses() {
   check(&[
@@ -199,12 +152,8 @@ fn strips_padding_inside_function_parentheses() {
   ]);
 }
 
-// ---------------------------------------------------------------------------
-// The importance annotation
-// ---------------------------------------------------------------------------
+// ── The importance annotation ──
 
-/// The space before `!important` is removed — the one structural edit the
-/// whitespace normalizer makes.
 #[test]
 fn removes_the_space_before_an_importance_annotation() {
   check(&[
@@ -221,8 +170,7 @@ fn removes_the_space_before_an_importance_annotation() {
   ]);
 }
 
-/// No preceding space means nothing to remove, and the annotation is matched
-/// case-sensitively.
+/// The annotation is matched case-sensitively.
 #[test]
 fn leaves_an_annotation_with_nothing_to_remove_before_it() {
   check(&[
@@ -232,29 +180,18 @@ fn leaves_an_annotation_with_nothing_to_remove_before_it() {
   ]);
 }
 
-/// The index the reference implementation tests belongs to the annotation's own
-/// sibling list, but the list it removes from is always the top-level one. An
-/// annotation written inside a function therefore removes an unrelated
-/// top-level node — here the space between `a` and `b`, which is why they come
-/// back joined.
-///
-/// This is a defect in the reference compiler and it is reproduced, not
-/// corrected: correcting
-/// it would spell the value differently from the reference compiler and name a
-/// different class.
+/// Matches Babel's defect: the index is from the annotation's sibling list but removal is from the
+/// top-level list, so `a b` comes back joined.
 #[test]
 fn removes_an_unrelated_node_for_an_annotation_written_inside_a_function() {
   check(&[
     ("a b calc(x !important)", "color", "ab calc(x !important)"),
     ("a  b calc(x !important)", "color", "ab calc(x !important)"),
     ("calc(x !important)", "color", "calc(x !important)"),
-    // Index 0 has nothing before it, so there is nothing to remove.
     ("a b calc(!important)", "color", "a b calc(!important)"),
-    // The node at that index is a separator rather than a space, so the removal
-    // is skipped rather than taking the separator with it.
+    // A separator at that index: the removal is skipped.
     ("a, b calc(x !important)", "color", "a,b calc(x !important)"),
-    // Two annotations, two attempts: the first finds a space and removes it,
-    // the second lands on a word and gives up.
+    // The first annotation removes a space; the second lands on a word and gives up.
     (
       "a b c calc(x !important y !important)",
       "color",
@@ -268,9 +205,6 @@ fn removes_an_unrelated_node_for_an_annotation_written_inside_a_function() {
   ]);
 }
 
-/// The overrun applies to a function carrying the annotation just as it does to
-/// the annotation itself: what matters is whether anything follows at the top
-/// level, not where the annotation was written.
 #[test]
 fn rejects_an_annotation_inside_a_function_that_is_not_the_last_token() {
   for value in ["a b calc(x !important) d", "calc(x !important) a b"] {
@@ -278,13 +212,8 @@ fn rejects_an_annotation_inside_a_function_that_is_not_the_last_token() {
   }
 }
 
-/// Removing a node shortens the list the walk is iterating without shortening
-/// the walk, so any iteration still to come reads past the end. Only an
-/// annotation in the last position escapes it.
-///
-/// Reproduced as a rejection with a local message. Nothing depends on the
-/// wording of a JavaScript runtime error, but everything depends on the value
-/// not compiling to something the reference compiler would refuse.
+/// Babel removes from the list it is walking and reads past the end; reproduced as a rejection
+/// with a local message.
 #[test]
 fn rejects_an_importance_annotation_that_is_not_last() {
   for value in [
@@ -298,12 +227,9 @@ fn rejects_an_importance_annotation_that_is_not_last() {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Timings
-// ---------------------------------------------------------------------------
+// ── Timings ──
 
-/// Ten milliseconds or more is restated in seconds. Below ten it is left alone,
-/// since the conversion would spell it longer than what it replaced.
+/// Below ten the conversion would spell it longer.
 #[test]
 fn converts_milliseconds_to_seconds_from_ten_up() {
   check(&[
@@ -321,8 +247,7 @@ fn converts_milliseconds_to_seconds_from_ten_up() {
   ]);
 }
 
-/// A negative duration is below the threshold and so is never converted, and a
-/// unit that merely starts with `ms` is not `ms`.
+/// A negative duration is never converted; a unit merely starting with `ms` is not `ms`.
 #[test]
 fn converts_only_an_exact_millisecond_unit_at_or_above_the_threshold() {
   check(&[
@@ -333,22 +258,15 @@ fn converts_only_an_exact_millisecond_unit_at_or_above_the_threshold() {
   ]);
 }
 
-/// The order of the fold is behaviour, not arrangement: timings runs before the
-/// leading zero specifically so a converted duration is then stripped.
-///
-/// `100ms` becomes `0.1s` and then `.1s`. Run the two the other way round and
-/// it stays `0.1s` — a different class name, and nothing anywhere reports it.
+/// Timings runs before the leading-zero pass, so `100ms` → `0.1s` → `.1s`.
 #[test]
 fn strips_the_leading_zero_off_a_converted_duration() {
   check(&[("100ms", "transitionDuration", ".1s")]);
 }
 
-// ---------------------------------------------------------------------------
-// Zero dimensions
-// ---------------------------------------------------------------------------
+// ── Zero dimensions ──
 
-/// Zero angles collapse to `0deg`, zero durations to `0s`, and a zero with any
-/// other unit loses its unit entirely.
+/// Angles become `0deg`, durations `0s`, any other unit is dropped.
 #[test]
 fn canonicalizes_a_zero_written_with_a_unit() {
   check(&[
@@ -367,9 +285,7 @@ fn canonicalizes_a_zero_written_with_a_unit() {
   ]);
 }
 
-/// Only a number spelled exactly `0` qualifies. `0.0` and `-0` are the same
-/// quantity spelled differently and are left to the leading-zero normalizer,
-/// which reaches a different answer.
+/// `0.0` and `-0` are left to the leading-zero normalizer.
 #[test]
 fn reads_the_zero_off_the_spelling_not_the_quantity() {
   check(&[
@@ -384,9 +300,7 @@ fn reads_the_zero_off_the_spelling_not_the_quantity() {
   ]);
 }
 
-/// Current-main #1750 extends the source-offset window for every function, so
-/// a later function retains its zero unit too. This expectation is from Babel
-/// 2d42d72, not the vendored public compiler's older 0.19.1 oracle.
+/// Current-main #1750; expectation from Babel 2d42d72, not the vendored 0.19.1 oracle.
 #[test]
 fn keeps_a_unit_on_a_zero_inside_every_function() {
   check(&[
@@ -407,10 +321,7 @@ fn keeps_a_unit_on_a_zero_inside_every_function() {
   ]);
 }
 
-/// A custom property is exempt outright: its value has no grammar the compiler
-/// can reason about, and something reading it back as text may well need the
-/// unit. The exemption is on the property name, so a vendor-prefixed real
-/// property is not covered by it.
+/// The exemption is on the property name, so a vendor-prefixed real property is not exempt.
 #[test]
 fn exempts_a_custom_property_from_zero_canonicalization() {
   check(&[
@@ -421,13 +332,9 @@ fn exempts_a_custom_property_from_zero_canonicalization() {
   ]);
 }
 
-// ---------------------------------------------------------------------------
-// Leading zero
-// ---------------------------------------------------------------------------
+// ── Leading zero ──
 
-/// A number below one loses the zero in front of its decimal point, and is
-/// re-spelled through JavaScript's number-to-string rules rather than copied —
-/// which is why `0.50` comes back `.5` and `1.00` comes back untouched.
+/// Re-spelled through JavaScript number-to-string rules: `0.50` → `.5`, `1.00` untouched.
 #[test]
 fn strips_the_zero_in_front_of_a_decimal_point() {
   check(&[
@@ -446,8 +353,7 @@ fn strips_the_zero_in_front_of_a_decimal_point() {
   ]);
 }
 
-/// A negative number is not below zero *and* at or above it, so it keeps its
-/// zero — the asymmetry is the reference compiler's and is reproduced.
+/// The negative-number asymmetry is the reference compiler's.
 #[test]
 fn leaves_a_negative_decimal_and_anything_from_one_up_alone() {
   check(&[
@@ -461,18 +367,8 @@ fn leaves_a_negative_decimal_and_anything_from_one_up_alone() {
   ]);
 }
 
-/// A word can read back as a number and still split into no dimension, and
-/// this normalizer's unit-less branch is that word.
-///
-/// It selects on `parse_js_float`, which skips leading JavaScript whitespace;
-/// `unit` does not, and the value scanner does not treat U+00A0 as a space, so
-/// the character reaches the word intact. Re-spelling then drops it — and
-/// with it the unit, since the split that would have recovered the unit is the
-/// one that just failed: `\u{a0}0.5px` comes back as `.5`, not `.5px`.
-///
-/// That is the reference compiler's behaviour, ternary and all, and it is the
-/// reason this normalizer cannot share the word-and-unit walk the others do:
-/// that walk skips the word this one rewrites.
+/// `parse_js_float` skips leading JS whitespace but the scanner keeps U+00A0 in the word, so
+/// `\u{a0}0.5px` comes back as `.5` (reference behaviour).
 #[test]
 fn re_spells_a_number_the_unit_split_cannot_read() {
   check(&[
@@ -481,17 +377,10 @@ fn re_spells_a_number_the_unit_split_cannot_read() {
   ]);
 }
 
-// ---------------------------------------------------------------------------
-// Numeric spelling: the silent-divergence surface
-// ---------------------------------------------------------------------------
+// ── Numeric spelling: the silent-divergence surface ──
 
-/// Exponent notation is not something any normalizer understands, so a value
-/// that keeps its spelling keeps its exponent — but one that falls below one
-/// gets re-spelled, and then JavaScript's rules decide whether the result is
-/// written out or kept in exponent form.
-///
-/// This is the highest silent-divergence risk in the pipeline: a float spelled
-/// one digit differently is a different class name and nothing reports it.
+/// Re-spelled numbers follow JavaScript's exponent rules; a one-digit difference changes the
+/// class name silently.
 #[test]
 fn spells_a_re_spelled_number_the_way_javascript_does() {
   check(&[
@@ -506,19 +395,13 @@ fn spells_a_re_spelled_number_the_way_javascript_does() {
   ]);
 }
 
-/// An incomplete exponent is not an exponent: the number stops before it, and
-/// what is left becomes the unit.
+/// The number stops before an incomplete exponent; the rest becomes the unit.
 #[test]
 fn stops_a_number_before_an_incomplete_exponent() {
   check(&[("1e", "width", "1e"), ("1e+", "width", "1e+")]);
 }
 
-/// Boundary conditions a float can reach: past the largest representable
-/// double, past the smallest integer that survives one, and the literals that
-/// are not finite numbers at all.
-///
-/// Every one of these is left alone. `1e400` parses to infinity, which is not
-/// below one; `Infinity` and `NaN` are words with no leading number.
+/// `1e400` parses to infinity, not below one; `Infinity` and `NaN` are words.
 #[test]
 fn leaves_values_at_and_past_the_edge_of_a_double_alone() {
   let huge = format!("1{}px", "0".repeat(400));
@@ -539,12 +422,9 @@ fn leaves_values_at_and_past_the_edge_of_a_double_alone() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Quotes
-// ---------------------------------------------------------------------------
+// ── Quotes ──
 
-/// An empty string gets a double quote so `''` and `""` hash alike. Every other
-/// string keeps the quote character the author typed.
+/// So `''` and `""` hash alike.
 #[test]
 fn double_quotes_an_empty_string_and_nothing_else() {
   check(&[
@@ -557,12 +437,9 @@ fn double_quotes_an_empty_string_and_nothing_else() {
   ]);
 }
 
-// ---------------------------------------------------------------------------
-// Camel-cased values
-// ---------------------------------------------------------------------------
+// ── Camel-cased values ──
 
-/// The two properties whose value is itself a property name get that name
-/// rewritten into its CSS spelling.
+/// The two properties whose value is itself a property name.
 #[test]
 fn dashifies_a_property_name_used_as_a_value() {
   check(&[
@@ -578,9 +455,6 @@ fn dashifies_a_property_name_used_as_a_value() {
   ]);
 }
 
-/// Only those two properties, and only their top-level word tokens: a name
-/// written inside a function keeps its case, and so does one declared for any
-/// other property.
 #[test]
 fn dashifies_nothing_outside_those_two_properties_top_level() {
   check(&[
@@ -590,8 +464,7 @@ fn dashifies_nothing_outside_those_two_properties_top_level() {
   ]);
 }
 
-/// A custom property named in one of these keeps its case — `--fooBar` and
-/// `--foobar` are different properties.
+/// `--fooBar` and `--foobar` are different properties.
 #[test]
 fn leaves_a_custom_property_name_cased_as_written() {
   check(&[
@@ -600,13 +473,8 @@ fn leaves_a_custom_property_name_cased_as_written() {
   ]);
 }
 
-/// A vendor-prefixed name written in camel case dashifies by the same rule as
-/// any other, which spells the Microsoft prefix without its leading dash — and
-/// gives a value in all capitals one it never had.
-///
-/// Both are defects in the reference compiler and both are reproduced.
-/// Correcting either would
-/// name a different class than the reference compiler for the same source.
+/// Matches Babel's defects: the Microsoft prefix loses its leading dash, and an all-caps value
+/// gains one.
 #[test]
 fn dashifies_by_the_rule_even_where_the_rule_is_wrong() {
   check(&[
@@ -619,11 +487,9 @@ fn dashifies_by_the_rule_even_where_the_rule_is_wrong() {
   ]);
 }
 
-// ---------------------------------------------------------------------------
-// Font size to rem
-// ---------------------------------------------------------------------------
+// ── Font size to rem ──
 
-/// Only with the option on, only for `fontSize`, and only for the `px` unit.
+/// Only with the option on, only for `fontSize`, and only for `px`.
 #[test]
 fn restates_a_pixel_font_size_in_rem_when_asked() {
   check_with(
@@ -643,12 +509,7 @@ fn restates_a_pixel_font_size_in_rem_when_asked() {
   check(&[("16px", "fontSize", "16px")]);
 }
 
-/// The conversion is appended after the leading-zero normalizer rather than
-/// slotted in before it, so the number it produces keeps a leading zero the
-/// same number would have lost anywhere else in the value.
-///
-/// `8px` is `0.5rem`, not `.5rem`. That is the order of the fold showing
-/// through, and it is what the reference compiler emits.
+/// Conversion runs after the leading-zero pass, so `8px` is `0.5rem`, as Babel emits.
 #[test]
 fn leaves_the_leading_zero_on_a_converted_font_size() {
   check_with(
@@ -660,20 +521,15 @@ fn leaves_the_leading_zero_on_a_converted_font_size() {
   );
 }
 
-/// A zero font size has already lost its unit by the time the conversion runs,
-/// so there is no `px` left for it to find.
+/// The zero has already lost its `px` before the conversion runs.
 #[test]
 fn converts_nothing_for_a_zero_font_size() {
   check_with(&[("0px", "fontSize", "0")], &rem_enabled_options());
 }
 
-// ---------------------------------------------------------------------------
-// Strings, escapes and non-ASCII content
-// ---------------------------------------------------------------------------
+// ── Strings, escapes and non-ASCII content ──
 
-/// An escape sequence inside a string is the author's spelling and stays that
-/// way. Resolving `\2014 A` to the character it names produces different bytes
-/// and therefore a different class name.
+/// Resolving `\2014 A` would change the bytes and the class name.
 #[test]
 fn keeps_an_escape_sequence_as_the_author_spelled_it() {
   check(&[
@@ -693,8 +549,6 @@ fn keeps_an_escape_sequence_as_the_author_spelled_it() {
   ]);
 }
 
-/// An escaped quote stays inside its own string rather than ending it, so the
-/// declaration cannot carry a stray delimiter out into the rule around it.
 #[test]
 fn keeps_an_escaped_quote_inside_its_string() {
   check(&[
@@ -709,9 +563,7 @@ fn keeps_an_escaped_quote_inside_its_string() {
   ]);
 }
 
-/// Non-ASCII content passes through whether or not it is quoted, whether it is
-/// inside or outside the basic multilingual plane, and whether or not it is
-/// full-width.
+/// Quoted or not, inside or outside the BMP, and full-width.
 #[test]
 fn passes_non_ascii_content_through_untouched() {
   check(&[
@@ -724,9 +576,7 @@ fn passes_non_ascii_content_through_untouched() {
   ]);
 }
 
-/// A non-breaking space is not whitespace to the scanner, so it is part of the
-/// word rather than a separator — it neither collapses nor gets trimmed, and a
-/// value made of nothing else is a value with a token in it.
+/// It neither collapses nor gets trimmed.
 #[test]
 fn treats_a_non_breaking_space_as_part_of_a_word() {
   check(&[
@@ -735,12 +585,8 @@ fn treats_a_non_breaking_space_as_part_of_a_word() {
   ]);
 }
 
-// ---------------------------------------------------------------------------
-// URLs
-// ---------------------------------------------------------------------------
+// ── URLs ──
 
-/// A `url()` body is one opaque token, so characters that look like CSS syntax
-/// inside it are not read as syntax.
 #[test]
 fn leaves_a_url_body_opaque() {
   check(&[
@@ -758,13 +604,9 @@ fn leaves_a_url_body_opaque() {
   ]);
 }
 
-// ---------------------------------------------------------------------------
-// Comments
-// ---------------------------------------------------------------------------
+// ── Comments ──
 
-/// A comment survives as itself. The one exception is `/*/`, where the scan
-/// finds its terminator inside the opening delimiter; that is a documented
-/// non-round-trip of the scanner and correcting it would change class names.
+/// `/*/` finds its terminator inside the opening delimiter; a known scanner non-round-trip.
 #[test]
 fn keeps_a_comment_and_reproduces_the_one_shape_that_does_not_round_trip() {
   check(&[
@@ -777,12 +619,9 @@ fn keeps_a_comment_and_reproduces_the_one_shape_that_does_not_round_trip() {
   ]);
 }
 
-// ---------------------------------------------------------------------------
-// Malformed input
-// ---------------------------------------------------------------------------
+// ── Malformed input ──
 
-/// An unclosed function is rejected, and the report quotes the rule it came
-/// from so the author can find the declaration.
+/// The report quotes the rule it came from.
 #[test]
 fn rejects_an_unclosed_function() {
   for value in [
@@ -796,8 +635,7 @@ fn rejects_an_unclosed_function() {
   }
 }
 
-/// Current Babel core emits the same bare diagnostic for a property, custom
-/// property and pseudo selector. The outer host supplies source context.
+/// Current Babel core emits the same bare diagnostic; the outer host supplies context.
 #[test]
 fn unclosed_function_report_matches_babel_for_every_key_kind() {
   let options = default_options();
@@ -813,9 +651,7 @@ fn unclosed_function_report_matches_babel_for_every_key_kind() {
   }
 }
 
-/// An unclosed string is rejected. The scanner invents the closing quote rather
-/// than failing, so this is the only thing between an unterminated string and a
-/// declaration that swallows whatever followed it.
+/// The scanner invents a closing quote rather than failing, so this is the only guard.
 #[test]
 fn rejects_an_unclosed_string() {
   for value in ["\"unterminated", "'unterminated", "a \"b", "\""] {
@@ -823,16 +659,12 @@ fn rejects_an_unclosed_string() {
   }
 }
 
-/// An unclosed function is looked for before an unclosed string, so a value
-/// carrying both is reported as the function.
 #[test]
 fn reports_an_unclosed_function_ahead_of_an_unclosed_string() {
   rejects("calc(\"a", "width", LINT_UNCLOSED_FUNCTION);
 }
 
-/// A value that scans to no tokens at all fails, because there is no first node
-/// to read. Empty, whitespace-only, and every whitespace character the scanner
-/// recognizes.
+/// Empty, whitespace-only, and every whitespace character the scanner recognizes.
 #[test]
 fn rejects_a_value_with_no_tokens() {
   for value in ["", " ", "\t", "\n", "\r", "   \t\n  ", "\u{c}"] {
@@ -840,15 +672,8 @@ fn rejects_a_value_with_no_tokens() {
   }
 }
 
-/// Stray delimiters, unbalanced brackets and token sequences that are not valid
-/// CSS are not rejected here. The scanner never fails, so they normalize to
-/// something — and the guard that refuses a value able to break out of its own
-/// rule is a separate, deliberate local addition that sits at the compiler's
-/// entry point rather than in this fold.
-///
-/// Asserted so that the division of labour is written down: if a value like the
-/// last two below ever reaches a stylesheet, the missing guard is the defect,
-/// not this pipeline.
+/// The structural guard lives at the compiler entry point, not in this fold, so these normalize
+/// to something here.
 #[test]
 fn normalizes_rather_than_rejects_a_malformed_token_sequence() {
   check(&[
@@ -862,18 +687,9 @@ fn normalizes_rather_than_rejects_a_malformed_token_sequence() {
   ]);
 }
 
-// ---------------------------------------------------------------------------
-// Custom property references
-// ---------------------------------------------------------------------------
+// ── Custom property references ──
 
-/// A custom property reference normalizes like any other function: the fold
-/// has no opinion about its name, only about the whitespace around its
-/// arguments.
-///
-/// A name missing its leading double hyphen is rejected outright, by a local
-/// pass with no reference-compiler equivalent — asserted in
-/// `unprefixed_custom_properties_test`, not here, because a rejection has no
-/// spelling for a case table to compare.
+/// Unprefixed names are rejected locally; see `unprefixed_custom_properties_test`.
 #[test]
 fn normalizes_a_custom_property_reference_like_any_other_function() {
   check(&[
@@ -894,12 +710,9 @@ fn normalizes_a_custom_property_reference_like_any_other_function() {
   ]);
 }
 
-// ---------------------------------------------------------------------------
-// Structural extremes
-// ---------------------------------------------------------------------------
+// ── Structural extremes ──
 
-/// A unicode range is recognized as one token, so it is not mistaken for a word
-/// followed by a signed number and cut in half.
+/// Not split into a word followed by a signed number.
 #[test]
 fn keeps_a_unicode_range_whole() {
   check(&[
@@ -909,11 +722,7 @@ fn keeps_a_unicode_range_whole() {
   ]);
 }
 
-/// Nesting as deep as the compiler admits normalizes without incident.
-///
-/// The fold recurses once per level and has no limit of its own; the limit is
-/// the one the compiler applies before normalization is entered, so this pins
-/// the depth that limit permits rather than a number of its own choosing.
+/// The fold has no limit of its own; this pins the depth the compiler's guard permits.
 #[test]
 fn normalizes_a_value_nested_as_deeply_as_the_compiler_admits() {
   let depth = MAX_VALUE_NESTING_DEPTH;
@@ -922,9 +731,6 @@ fn normalizes_a_value_nested_as_deeply_as_the_compiler_admits() {
   assert_eq!(normalize_value(&value, "width", &default_options()), value);
 }
 
-/// A value made of very many sibling tokens is a different shape of extreme
-/// from a deeply nested one — it costs list length rather than stack — and is
-/// normalized in one pass.
 #[test]
 fn normalizes_a_value_made_of_very_many_tokens() {
   let value = vec!["0px"; 5_000].join("   ");
@@ -936,8 +742,6 @@ fn normalizes_a_value_made_of_very_many_tokens() {
   );
 }
 
-/// A single token of substantial length is passed through without being
-/// re-spelled or truncated.
 #[test]
 fn normalizes_a_single_very_long_token() {
   let value = format!("\"{}\"", "a".repeat(100_000));
@@ -948,16 +752,9 @@ fn normalizes_a_single_very_long_token() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// The reported divergences
-// ---------------------------------------------------------------------------
+// ── The reported divergences ──
 
-/// The six values whose spelling this effort exists to correct, asserted at
-/// this seam as the declaration text the reference compiler produces.
-///
-/// The class name is what the report is really about, and it is pinned
-/// separately where the transform can see it — but a class name is a hash of
-/// this text, so an agreement here is the precondition for one there.
+/// The six reported divergences; class-name parity is pinned at the transform.
 #[test]
 fn spells_the_reported_divergences_the_way_the_reference_compiler_does() {
   check(&[
@@ -990,15 +787,9 @@ fn spells_the_reported_divergences_the_way_the_reference_compiler_does() {
   ]);
 }
 
-// ---------------------------------------------------------------------------
-// The fold as a whole
-// ---------------------------------------------------------------------------
+// ── The fold as a whole ──
 
-/// Normalizing an already-normalized value changes nothing further.
-///
-/// Not a property the reference compiler states, but one every case in this
-/// module happens to have, and a cheap way to catch a normalizer that rewrites
-/// on every pass rather than settling.
+/// Not a reference-compiler property, but true of every case here.
 #[test]
 fn settles_after_one_pass() {
   let options = default_options();
@@ -1013,10 +804,7 @@ fn settles_after_one_pass() {
   }
 }
 
-/// A cross-section of the module's cases, reused by [`settles_after_one_pass`].
-/// Deliberately excludes the shapes that are documented not to round-trip —
-/// `/*/`, and the importance annotation, whose output is no longer a value the
-/// scanner reads back the same way.
+/// Sample for [`settles_after_one_pass`]; excludes `/*/` and `!important`, which don't round-trip.
 const ACCEPTED_SAMPLE: &[Case] = &[
   ("#FfF", "color", "#FfF"),
   ("rgba(0, 0, 0, 0.5)", "color", "rgba(0,0,0,.5)"),

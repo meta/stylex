@@ -1,7 +1,6 @@
 use crate::utils::pseudo::{is_pseudo_class, is_pseudo_element, is_pseudo_selector};
 
-/// The single classification the three predicates spell out between them: a
-/// key is no pseudo at all, a pseudo class, or a pseudo element.
+/// A key's kind: not a pseudo, a pseudo class, or a pseudo element.
 #[derive(Clone, Copy, Debug)]
 enum Kind {
   NotPseudo,
@@ -9,8 +8,7 @@ enum Kind {
   Element,
 }
 
-/// Asserts all three predicates agree on a key's kind, so each test pins a
-/// classification rather than one predicate's half of it.
+/// Asserts all three predicates agree on a key's kind.
 fn assert_kind(key: &str, expected: Kind) {
   let (selector, element, class) = match expected {
     Kind::NotPseudo => (false, false, false),
@@ -40,8 +38,6 @@ fn a_double_colon_prefix_is_a_pseudo_element() {
   }
 }
 
-/// The prefix is the whole test, so a segment that is nothing but the prefix
-/// still lands on the element side rather than falling between the two.
 #[test]
 fn a_bare_double_colon_reads_as_a_pseudo_element() {
   assert_kind("::", Kind::Element);

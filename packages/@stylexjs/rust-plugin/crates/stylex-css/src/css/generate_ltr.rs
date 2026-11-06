@@ -39,13 +39,7 @@ fn logical_to_physical_ltr(input: &str) -> Option<&str> {
 fn property_to_ltr(pair: &Pair) -> PairCow<'_> {
   match pair.key.as_str() {
     "background-position" => {
-      // Always returns a pair. Only the logical keywords flip to physical values;
-      // when none are present, borrow the original value instead of allocating
-      // a redundant owned copy (the common case, e.g. `center`).
-      //
-      // NOTE: `split_whitespace()` collapses runs of whitespace and drops empty
-      // tokens. The values reaching here are already single-space normalized, so
-      // this has no observable effect in practice.
+      // Only logical keywords flip; otherwise borrow the original value.
       if !pair.value.split_whitespace().any(|word| {
         matches!(
           word,

@@ -34,8 +34,7 @@ const THUMB_VARIANTS: [&str; 3] = [
   "::-ms-thumb",
 ];
 
-/// Wraps a CSS declaration string in nested at-rules and pseudo selectors,
-/// producing a complete CSS rule string.
+/// Wraps a CSS declaration in nested at-rules and pseudo selectors, producing a complete rule.
 pub fn build_nested_css_rule(
   class_name: &str,
   decls: String,
@@ -133,17 +132,11 @@ fn push_selector(
     result.push_str(class_name);
   }
 
-  // Pseudo-elements (::before, ::after, etc.) must come after pseudo-classes
-  // in the selector. e.g. `.class:hover::before` not `.class::before:hover`.
-  // Classification is `is_pseudo_element`, so entries must already be
-  // normalized to the modern double-colon form; a legacy `:before` would be
-  // mis-sorted into the pseudo-class group.
-  // Pseudo-classes first (pseudo-elements are excluded, which also drops
-  // `::thumb`)...
+  // Pseudo-classes before pseudo-elements (`.c:hover::before`); entries must already use the
+  // double-colon form. The expanded `::thumb` is skipped in both loops.
   for pseudo in pseudos.iter().filter(|pseudo| !is_pseudo_element(pseudo)) {
     result.push_str(pseudo);
   }
-  // ...then pseudo-elements, still skipping the expanded `::thumb`.
   for pseudo in pseudos
     .iter()
     .filter(|pseudo| is_pseudo_element(pseudo) && pseudo.as_str() != "::thumb")
@@ -152,8 +145,7 @@ fn push_selector(
   }
 }
 
-/// Generates a complete `InjectableStyle` (LTR + optional RTL rule + priority)
-/// from a CSS class name, property key, values, pseudos, at-rules and options.
+/// Generates an `InjectableStyle` (LTR, optional RTL, priority) for one class and property.
 pub fn generate_css_rule(
   class_name: &str,
   key: &str,
@@ -216,21 +208,12 @@ pub fn generate_css_rule(
 
 /// Calculates priority for compound pseudo selectors (e.g. `:hover::after`).
 pub(crate) fn get_compound_pseudo_priority(key: &str) -> Option<f64> {
-  // Both alternations in `PSEUDO_PART_REGEX` open with a colon, so a key
-  // without one cannot hold a pseudo part and the scan below can only come
-  // back empty. Asked first because the overwhelming majority of keys reaching
-  // here are plain property names -- `color`, `paddingBottom` -- and running a
-  // backtracking regex over each of them to learn nothing made this the
-  // single hottest leaf in a sampled profile of a large module.
+  // Cheap exit before the regex: most keys are plain property names (a measured hot spot).
   if !key.contains(':') {
     return None;
   }
 
-  // Every part the pattern matches starts in a run of colons of its own: a
-  // part ends in a letter or a parenthesis, so it cannot end inside a run for
-  // another to start there. A key with a single run of colons -- `:hover`,
-  // `::before` -- therefore holds at most one part, which the check below
-  // declines anyway.
+  // Each matched part starts its own colon run, so a single run holds at most one part.
   let colon_runs = key
     .as_bytes()
     .windows(2)
@@ -247,8 +230,7 @@ pub(crate) fn get_compound_pseudo_priority(key: &str) -> Option<f64> {
     .map(|m| m.as_str())
     .collect();
 
-  // Only handle chains of simple pseudo-classes and pseudo-elements.
-  // Opt out if there's zero/one part or any functional pseudo-class.
+  // Only chains of two or more simple pseudo-classes/elements; no functional pseudo-classes.
   if parts.len() <= 1 || parts.iter().any(|p| p.contains('(')) {
     return None;
   }
@@ -298,38 +280,33 @@ fn get_pseudo_element_priority(key: &str) -> Option<f64> {
 fn get_pseudo_class_priority(key: &str) -> Option<f64> {
   let pseudo_base = |p: &str| -> f64 { **PSEUDO_CLASS_PRIORITIES.get(p).unwrap_or(&&40.0) / 100.0 };
 
-  // Every relational selector pattern is anchored at `^:where\(`, so a key
-  // that does not open that way -- every plain property -- skips all five.
+  // Every relational selector pattern is anchored at `^:where\(`.
   if key.starts_with(":where(") {
-    // Check ancestor selector
     if let Ok(Some(captures)) = ANCESTOR_SELECTOR.captures(key)
       && let Some(pseudo) = captures.get(1)
     {
       return Some(10.0 + pseudo_base(pseudo.as_str()));
     }
 
-    // Check descendant selector
     if let Ok(Some(captures)) = DESCENDANT_SELECTOR.captures(key)
       && let Some(pseudo) = captures.get(1)
     {
       return Some(15.0 + pseudo_base(pseudo.as_str()));
     }
 
-    // Check any sibling selector (must come before individual sibling selectors)
+    // Must come before the individual sibling selectors.
     if let Ok(Some(captures)) = ANY_SIBLING_SELECTOR.captures(key)
       && let (Some(pseudo1), Some(pseudo2)) = (captures.get(1), captures.get(2))
     {
       return Some(20.0 + pseudo_base(pseudo1.as_str()).max(pseudo_base(pseudo2.as_str())));
     }
 
-    // Check sibling before selector
     if let Ok(Some(captures)) = SIBLING_BEFORE_SELECTOR.captures(key)
       && let Some(pseudo) = captures.get(1)
     {
       return Some(30.0 + pseudo_base(pseudo.as_str()));
     }
 
-    // Check sibling after selector
     if let Ok(Some(captures)) = SIBLING_AFTER_SELECTOR.captures(key)
       && let Some(pseudo) = captures.get(1)
     {
@@ -337,11 +314,7 @@ fn get_pseudo_class_priority(key: &str) -> Option<f64> {
     }
   }
 
-  // This function prices pseudo classes only; pseudo elements are priced by
-  // `get_pseudo_element_priority`. The bare colon this replaced also matched
-  // `::before`, which was unreachable because `get_priority` probes elements
-  // first — so the narrowing changes no output, and it holds whether or not
-  // that ordering survives.
+  // Pseudo classes only; pseudo elements are priced by `get_pseudo_element_priority`.
   if is_pseudo_class(key) {
     let prop: &str = key.split('(').next().unwrap_or(key);
 
@@ -352,9 +325,7 @@ fn get_pseudo_class_priority(key: &str) -> Option<f64> {
 }
 
 fn get_default_priority(key: &str) -> Option<f64> {
-  // The four sets folded into one map, each key answering the priority of the
-  // first set that holds it -- the order the four probes ran in -- so a key is
-  // hashed once rather than once per set.
+  // The four sets folded into one map; the first set holding a key wins, as the probes did.
   static DEFAULT_PRIORITIES: LazyLock<HashMap<&'static str, f64>> = LazyLock::new(|| {
     let mut priorities = HashMap::new();
     for (set, priority) in [
@@ -373,8 +344,7 @@ fn get_default_priority(key: &str) -> Option<f64> {
   DEFAULT_PRIORITIES.get(key).copied()
 }
 
-/// Returns the CSS priority for a given key (property name, at-rule, or
-/// pseudo).
+/// Returns the CSS priority for a key (property name, at-rule, or pseudo).
 pub fn get_priority(key: &str) -> f64 {
   if let Some(at_rule_priority) = get_at_rule_priority(key) {
     return at_rule_priority;
@@ -411,28 +381,16 @@ fn is_escaped(value: &[u8], index: usize) -> bool {
   backslash_count % 2 == 1
 }
 
-/// A byte that may appear in a CSS identifier.
-///
-/// Every byte of a multi-byte character counts, since an identifier may contain
-/// any non-ASCII character and this scan never splits one.
+/// A byte that may appear in a CSS identifier (any byte of a non-ASCII character counts).
 fn is_ident_byte(byte: u8) -> bool {
   byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_') || byte >= 0x80
 }
 
-/// Whether the `(` at `open_paren_index` opens a `url()` call whose body the
-/// value parser will take whole.
+/// Whether the `(` at `open_paren_index` opens a `url()` call whose body the value parser takes
+/// whole.
 ///
-/// The name has to be exactly `url`: a longer identifier merely ending in those
-/// three letters is an ordinary function whose arguments are ordinary CSS.
-///
-/// **Matched case-sensitively, which is not a typo.** CSS function names are
-/// case-insensitive and every other part of this compiler treats them that way,
-/// but the value parser compares this one name literally — so to the parser,
-/// `URL(a}b)` is an ordinary function and the `}` inside it is an ordinary
-/// token that reaches the declaration intact. If this scan disagreed and
-/// stepped over that body, the guard would wave through a value that closes the
-/// rule it is generating. The scan has to answer the question the parser will
-/// actually be asked, not the question CSS would ask.
+/// Case-sensitive on purpose: the value parser matches `url` literally, so `URL(a}b)` is an
+/// ordinary function and this scan must agree.
 fn is_url_call(value: &[u8], open_paren_index: usize) -> bool {
   let Some(name_start) = open_paren_index.checked_sub(3) else {
     return false;
@@ -448,25 +406,11 @@ fn is_url_call(value: &[u8], open_paren_index: usize) -> bool {
   }
 }
 
-/// Where [`scan_value_structure`] resumes after the unquoted `url()` body
-/// opened at `open_paren_index`, or `None` when the body is quoted.
+/// Where [`scan_value_structure`] resumes after the unquoted `url()` body opened at
+/// `open_paren_index`, or `None` when the body is quoted.
 ///
-/// An unquoted url body is taken whole — it runs to the first unescaped `)` and
-/// may contain a `;`, a brace or a `/*` without any of them meaning what they
-/// mean elsewhere. The value parser reads it that way and a browser reads it
-/// that way, so this scan has to as well: otherwise a data URL is rejected for
-/// a rule terminator no CSS parser will ever see.
-///
-/// A body with no closing paren swallows the rest of the value, which is what
-/// the value parser does with it too, so the resume point is the end. That
-/// matters for more than tidiness: a value like `url(a;b` has no rule-breaking
-/// `;` in it, only an unfinished url, and the unclosed function is a diagnostic
-/// the value passes own. Stopping short here would report the same input as a
-/// rule terminator instead, which is the second diagnostic that moving those
-/// checks out of this scan was meant to prevent.
-///
-/// A quoted body is an ordinary string and is left to the string scanning that
-/// already handles one.
+/// An unquoted body runs to the first unescaped `)`, or to the end if unclosed, as the value
+/// parser reads it.
 fn url_body_end(value: &[u8], open_paren_index: usize) -> Option<usize> {
   let mut cursor = open_paren_index + 1;
 
@@ -489,64 +433,28 @@ fn url_body_end(value: &[u8], open_paren_index: usize) -> Option<usize> {
   Some(value.len())
 }
 
-/// Structural facts about a raw CSS property value, all gathered in one pass.
+/// Structural facts about a raw CSS property value, gathered in one pass.
 ///
-/// Both checks share the same string/comment tokenizer, so scanning once keeps
-/// them from drifting apart and does the work of several passes over every
-/// declaration the compiler sees.
-///
-/// Unfinished constructs are conspicuously absent: an unclosed function and an
-/// unclosed string are the first two value passes, which read the token list
-/// rather than the raw bytes. Detecting either here as well would give the same
-/// input two different diagnostics depending on which check ran first.
+/// Unclosed functions and strings are deliberately left to the value passes.
 #[derive(Debug, Default, PartialEq, Eq)]
 struct ValueStructure {
   /// A `/*` was never matched by a `*/`.
   has_unclosed_comment: bool,
-  /// A `{` or `}`, or a `;` with a declaration behind it, occurs outside of
-  /// strings and comments. Emitting such a value verbatim would terminate the
-  /// rule the compiler is generating and splice arbitrary CSS into the
-  /// stylesheet.
-  ///
-  /// A `;` at the end of the value does not count, however many of them there
-  /// are and whatever whitespace trails them: that closes this declaration and
-  /// opens nothing, which is what a browser makes of it too. Stray trailing
-  /// semicolons are common enough in hand-written style objects that rejecting
-  /// them would fail programs the reference compiler accepts, over a character
-  /// that cannot do any harm.
-  ///
-  /// Nor does an *escaped* one, for the same reason a quoted one does not:
-  /// `\;`, `\{` and `\}` are part of the identifier they sit in, so they close
-  /// nothing and splice nothing. The reference compiler emits `A\;B` for
-  /// `fontFamily`, and refusing it here failed a program that compiles there —
-  /// over the one reading of those bytes the guard's own sentence excludes,
-  /// since an escape is neither a string nor a comment.
+  /// A `{`, `}`, or a `;` with a declaration behind it, outside strings and comments; it would
+  /// splice CSS into the stylesheet. Trailing `;`s and escaped `\;`/`\{`/`\}` don't count.
   has_rule_breaking_token: bool,
-  /// The deepest the value nests functions, counted outside strings and
-  /// comments. Parsing and normalizing recurse once per level, so this is what
-  /// decides whether a value is safe to normalize at all. See
+  /// The deepest the value nests functions, outside strings and comments; see
   /// [`MAX_VALUE_NESTING_DEPTH`].
   max_nesting_depth: usize,
 }
 
-/// How deeply a value may nest functions before it is rejected.
-///
-/// The number and the reasoning behind it are
-/// [`stylex_utils::nesting::MAX_NESTING_DEPTH`], shared with the media query
-/// guard in `stylex-css-parser` because both enforce one decision about this
-/// compiler's stack. What is local to values is where the depth comes from: the
-/// scan below steps over comments and `url()` bodies before it counts a
-/// parenthesis.
+/// How deeply a value may nest functions before it is rejected; shared via
+/// [`stylex_utils::nesting::MAX_NESTING_DEPTH`].
 pub(crate) const MAX_VALUE_NESTING_DEPTH: usize = stylex_utils::nesting::MAX_NESTING_DEPTH;
 
 /// Whether `css_property_value` nests deeper than the compiler's budget.
 ///
-/// Asked by the two places that would otherwise abort on the same value, so
-/// that both read one answer: normalization, which turns a `true` here into the
-/// diagnostic authors see, and the shorthand splitter, which runs *earlier* and
-/// so cannot leave the question to normalization. Reading the depth twice from
-/// the same scan is what keeps the splitter from bailing out on a value
-/// normalization would have accepted, or from handing on one it will not.
+/// Shared by normalization and the shorthand splitter so both read one answer.
 pub(crate) fn nests_too_deeply(css_property_value: &str) -> bool {
   scan_value_structure(css_property_value).max_nesting_depth > MAX_VALUE_NESTING_DEPTH
 }
@@ -558,15 +466,13 @@ fn scan_value_structure(css_property_value: &str) -> ValueStructure {
   let mut is_comment = false;
   let mut paren_depth: usize = 0;
   let mut index = 0;
-  // A `;` has been seen and nothing has followed it yet that a second
-  // declaration could start with.
+  // A `;` has been seen and no content that could start a declaration has followed yet.
   let mut open_semicolon = false;
 
   while index < value.len() {
     let byte = value[index];
 
-    // Read before the byte is classified, so that a comment opener or a quote
-    // after a `;` counts as content the same way a letter does.
+    // Read before classification, so a comment opener or quote after `;` counts as content.
     if open_semicolon && !byte.is_ascii_whitespace() && byte != b';' {
       structure.has_rule_breaking_token = true;
       open_semicolon = false;
@@ -590,10 +496,7 @@ fn scan_value_structure(css_property_value: &str) -> ValueStructure {
         continue;
       }
 
-      // Stepped over whole, so nothing inside it is read as a string, a comment
-      // or a rule terminator. The nesting it contributes is still counted — one
-      // level, matching the parser, which reads the body as text rather than
-      // descending into the parentheses it happens to contain.
+      // Stepped over whole; counts as one nesting level, matching the parser.
       if byte == b'('
         && is_url_call(value, index)
         && let Some(resume_at) = url_body_end(value, index)
@@ -631,8 +534,7 @@ fn scan_value_structure(css_property_value: &str) -> ValueStructure {
     index += 1;
   }
 
-  // A comment left open swallows every rule emitted after this declaration, so
-  // it is as rule-breaking as a stray `}`.
+  // An open comment swallows every later rule, so it is as rule-breaking as a stray `}`.
   structure.has_unclosed_comment = is_comment && quote.is_none();
 
   structure
@@ -643,12 +545,7 @@ const CSS_RULE_WRAPPER_LEN: usize = 8;
 
 /// Builds the rule text a diagnostic quotes back at the author.
 ///
-/// Nothing parses it. It exists so a rejection names the declaration it came
-/// from rather than a bare value, which is what this compiler's messages have
-/// always carried.
-///
-/// Pseudo-selectors (`:hover`) are already rule-shaped and are emitted as
-/// `<selector> <value>`; every other property is wrapped in a `* { … }` block.
+/// Pseudo selectors are emitted as `<selector> <value>`; others are wrapped in `* { … }`.
 fn build_css_rule(property: &str, css_property_value: &str, is_pseudo: bool) -> String {
   if is_pseudo {
     let mut rule = String::with_capacity(property.len() + css_property_value.len() + 1);
@@ -668,13 +565,7 @@ fn build_css_rule(property: &str, css_property_value: &str, is_pseudo: bool) -> 
   }
 }
 
-/// Builds the rule text a rejection quotes back at the author, naming the
-/// property they actually wrote.
-///
-/// The single colon in [`is_pseudo_selector`] is deliberate: it only decides
-/// how the text is spelled — a selector wrapping its value, or a declaration
-/// inside `* { ... }`. Both kinds of pseudo are selectors, so narrowing this to
-/// `::` would print every pseudo class as a declaration.
+/// Builds the rule text a rejection quotes back, naming the property the author wrote.
 fn build_reported_css_rule(css_property: &str, css_property_value: &str) -> String {
   build_css_rule(
     css_property,
@@ -685,8 +576,7 @@ fn build_reported_css_rule(css_property: &str, css_property_value: &str) -> Stri
 
 /// Builds the rule text an unclosed-function report quotes back at the author.
 ///
-/// Reported against the author's actual property name; `--x` has no grammar of
-/// its own, so `color` stands in for it.
+/// `--x` has no grammar of its own, so `color` stands in for it.
 pub(crate) fn build_error_css_rule(css_property: &str, css_property_value: &str) -> String {
   let error_property = match css_property.starts_with("--") {
     true => "color",
@@ -700,57 +590,24 @@ pub(crate) fn build_error_css_rule(css_property: &str, css_property_value: &str)
   )
 }
 
-/// Rewrites a declaration value into the canonical text the class name is
-/// hashed from.
+/// Rewrites a declaration value into the canonical text the class name is hashed from.
 ///
-/// Three structural guards stand around [`normalize_value_guarded`], and they
-/// are the only things here that are not normalization. All three reject a
-/// value that could not be spelled into the generated stylesheet whatever it
-/// normalized to: one that never closed a comment, one nested deeper than the
-/// compiler's recursion budget, and one that would terminate its own rule. The
-/// unclosed function, the unclosed string and the unprefixed custom property
-/// are *not* among them — they are passes of [`normalize_value_guarded`], and
-/// reporting them from here as well would give the same input two different
-/// diagnostics depending on which check happened to be spelled first.
-///
-/// Two of the three fire here and the third does not, which is the ordering
-/// this function exists to state. The comment and the nesting guards read the
-/// raw bytes and must run before the value is parsed at all — parsing recurses
-/// once per level, and past the budget it aborts the process rather than
-/// failing. The declaration-terminating token has no such constraint, so it is
-/// handed to [`normalize_value_guarded`] to fire *after* the two rejections the
-/// reference compiler also makes: a value that is both unclosed and
-/// rule-breaking then stops both compilers with the same complaint, and an
-/// author whose build was refused reads the same sentence whichever compiler
-/// refused it.
-///
-/// Everything else is [`normalize_value_guarded`], for every value, with no
-/// second path. A value using syntax the compiler has never heard of takes
-/// exactly the same route as `color: red`, which is what makes the absence of
-/// an opinion about hex spelling, letter case, quote characters and whitespace
-/// positions observable in the output.
+/// Rejects an unclosed comment, nesting past the budget, or a rule-terminating token, around
+/// [`normalize_value_guarded`]. The depth guard fires before parsing; the other two are deferred
+/// until after the shared unclosed-function/string rejections, matching upstream's diagnostics.
 pub fn normalize_css_property_value(
   css_property: &str,
   css_property_value: &str,
   options: &StyleXStateOptions,
 ) -> String {
-  // A lowercase ASCII keyword -- `purple`, `solid`, `border-box` -- parses to
-  // one word node that no check or pass touches: it holds no space, divider,
-  // function, string, comment, number, dimension, `!important`, rule-breaking
-  // token or custom property, and is already in the case
-  // `convert_camel_cased_values` writes. Printing it back gives the text it was
-  // parsed from, so the text is answered without the round trip.
+  // Fast path: a lowercase ASCII keyword is unchanged by every check and pass.
   if is_plain_keyword(css_property_value) {
     return css_property_value.to_owned();
   }
 
   let structure = scan_value_structure(css_property_value);
 
-  // The one guard that cannot wait for a pass. Parsing and normalizing each
-  // recurse once per nesting level, and past the budget the process *aborts*
-  // rather than panicking — a stack overflow is not unwindable, so the
-  // `catch_unwind` around compilation never sees it and no diagnostic is ever
-  // produced. There is nothing to defer to, so it speaks first.
+  // Must fire before parsing: past the budget, parsing overflows the stack and aborts.
   if structure.max_nesting_depth > MAX_VALUE_NESTING_DEPTH {
     stylex_panic!(
       "{} (limit {}, found {}), css rule: {}",
@@ -761,21 +618,8 @@ pub fn normalize_css_property_value(
     );
   }
 
-  // Both of the others are handed to the fold, to fire *after* the two
-  // rejections the reference compiler also makes. See the header for why the
-  // token waits; the unclosed comment waits for the same reason and used not to.
-  //
-  // An unclosed comment does not overrun the stack — `postcss_value_parser`
-  // reads it as a comment node carrying `unclosed: true`, which is what
-  // `an_unterminated_comment_contributes_an_empty_part` relies on — so it has no
-  // more claim to preempt those two than the token does. Speaking first meant
-  // `calc(1px /*` was refused here for the comment where the reference compiler
-  // refuses it for the unclosed function: the same accept-or-refuse decision,
-  // reported as a different fault.
-  //
-  // A stray `{`, `}` or `;` splices arbitrary CSS into the stylesheet: the value
-  // reaches the output verbatim, so `height: "1px solid } color: red"` would
-  // escape its own declaration.
+  // The comment and token guards are deferred until after the shared rejections, so e.g.
+  // `calc(1px /*` reports the unclosed function as upstream does.
   let deferred_refusal = if structure.has_unclosed_comment {
     Some(Cow::Borrowed(LINT_UNCLOSED_COMMENT))
   } else if structure.has_rule_breaking_token {
@@ -796,8 +640,7 @@ pub fn normalize_css_property_value(
   )
 }
 
-/// A non-empty run of lowercase ASCII letters and hyphens that opens with a
-/// letter. See [`normalize_css_property_value`].
+/// A non-empty run of lowercase ASCII letters and hyphens that opens with a letter.
 pub(crate) fn is_plain_keyword(value: &str) -> bool {
   value.as_bytes().first().is_some_and(u8::is_ascii_lowercase)
     && value
@@ -817,19 +660,10 @@ pub fn get_number_suffix(key: &str) -> &'static str {
   }
 }
 
-/// Serializes a list of key-value pairs into an inline CSS style string.
+/// Serializes key-value pairs into an inline style string (`property:value` joined with `;`).
 ///
-/// Each pair is formatted as `property:value` and joined with `;`.
-///
-/// Every name takes the spelling a `style` attribute gives it, which is
-/// [`kebab_case`] and not the stylesheet spelling. The runtime writes this
-/// attribute with a rule of its own, and a custom property is the name where
-/// the two part company: `--myColor` stays as it is in a stylesheet and
-/// becomes `--my-color` here.
-///
-/// Taken by borrowed halves, because a caller that already holds the name and
-/// the text writes them straight in, and one that had to spell a value -- a
-/// number, say -- keeps the only owned half it made.
+/// Names are [`kebab_case`]d as a `style` attribute spells them, so `--myColor` becomes
+/// `--my-color`.
 pub fn inline_style_to_css_string(pairs: &[PairCow<'_>]) -> String {
   let capacity = pairs
     .iter()

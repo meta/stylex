@@ -8,24 +8,15 @@ use stylex_utils::string::json_stringify;
 
 /// Whether `part` is spellable as a `list-style-type`.
 ///
-/// Upstream asks this with `listStyleTypeRegex` in
-/// `shared/preprocess-rules/legacy-expand-shorthands.js`, which is
-/// `/^([a-z-]+|".*?"|'.*?')$/`, and the three alternatives are reproduced one by
-/// one rather than collapsed. Both quote
-/// characters are accepted because a part arrives with the character the author
-/// typed: the splitter echoes a string rather than re-quoting it, so a
-/// single-quoted family name is single-quoted here.
+/// Mirrors upstream's `listStyleTypeRegex` `/^([a-z-]+|".*?"|'.*?')$/`
+/// (`shared/preprocess-rules/legacy-expand-shorthands.js`); parts keep their authored quote.
 pub(crate) fn is_list_style_type(part: &str) -> bool {
   is_quoted_with(part, '"') || is_quoted_with(part, '\'') || is_lowercase_ident(part)
 }
 
 /// One alternative of that pattern: `quote`, any run of `.`, then `quote`.
 ///
-/// `.` in a JavaScript regular expression matches anything *except* a line
-/// terminator, so a quoted part with a newline inside it fails upstream's test
-/// and has to fail this one. The four characters JavaScript counts as line
-/// terminators are spelled out here; `char::is_control` would also exclude a
-/// tab, which upstream accepts.
+/// JS `.` excludes the four line terminators (but not tab), so those reject here too.
 fn is_quoted_with(part: &str, quote: char) -> bool {
   let Some(inner) = part
     .strip_prefix(quote)
@@ -45,11 +36,7 @@ fn is_lowercase_ident(part: &str) -> bool {
       .all(|character| character.is_ascii_lowercase() || character == '-')
 }
 
-/// The text upstream emits when a `listStyle` value cannot be disambiguated.
-///
-/// Upstream builds this by interpolating `JSON.stringify(rawValue)`, so the
-/// value arrives quoted and JSON-escaped rather than printed raw. Three of the
-/// four rejection sites spell it exactly this way.
+/// The text upstream emits when a `listStyle` value cannot be disambiguated (JSON-quoted).
 fn list_style_rejection(raw_value_str: &str) -> String {
   format!(
     "invalid \"listStyle\" value of {}",
@@ -59,20 +46,8 @@ fn list_style_rejection(raw_value_str: &str) -> String {
 
 /// [`list_style_rejection`] with the value wrapped in a second pair of quotes.
 ///
-/// Upstream is not self-consistent here: the first of its four throws wraps the
-/// already-quoted `JSON.stringify` result in another pair of literal quotes
-/// (`legacy-expand-shorthands.js:301`) and the other three do not, so a
-/// `var(--x)` rejection reads `value of ""none var(--x)""` where a duplicate
-/// `listStylePosition` reads `value of "inside outside"`.
-///
-/// Reproduced rather than normalised, deliberately. These messages reach an
-/// author through `propertyValidationMode`, and an author comparing the two
-/// compilers on the same input should read the same sentence from both — the
-/// asymmetry is upstream's to fix, and matching it keeps the divergence list
-/// free of an entry nobody asked for. Pinned by
-/// `shorthands_list_style_var_mixed_with_other` and
-/// `shorthands_list_style_global_mixed`, against text measured from the
-/// installed 0.19.0 plugin rather than read off the source.
+/// Matches upstream's inconsistent first throw (`legacy-expand-shorthands.js:301`), which
+/// double-quotes the `JSON.stringify` result.
 fn list_style_rejection_with_doubled_quotes(raw_value_str: &str) -> String {
   format!(
     "invalid \"listStyle\" value of \"{}\"",
@@ -84,8 +59,7 @@ fn list_style_rejection_with_doubled_quotes(raw_value_str: &str) -> String {
 pub struct Shorthands;
 
 impl Shorthands {
-  /// All shorthand expansion functions return `Ok(…)` unconditionally;
-  /// the `Err` variant exists only for the shared function-pointer type.
+  /// Expansion functions always return `Ok`; `Err` exists only for the shared function type.
   #[cfg_attr(coverage_nightly, coverage(off))]
   fn infallible(result: Result<Vec<OrderPair>, String>) -> Vec<OrderPair> {
     match result {
@@ -213,37 +187,19 @@ impl Shorthands {
   }
 
   fn contain_intrinsic_size(raw_value: Option<TRawValue>) -> Result<Vec<OrderPair>, String> {
-    // The parts themselves, not the four-sided view. This expansion folds over
-    // them rather than destructuring them, and the four-sided view repeats a
-    // missing side: `auto` arrived as four copies of itself, and the fold below
-    // joined each copy to the one before it, emitting `auto auto` for both axes.
+    // The parts, not the four-sided view, which repeats a missing side.
     let parts = value_parts(raw_value.as_ref());
 
     let mut coll: Vec<TRawValue> = Vec::with_capacity(parts.len());
 
-    // `auto` is a qualifier here rather than a size: `contain-intrinsic-size:
-    // auto 1px` means "1px, remembered", so the two belong to one axis and the
-    // fold joins them into one part.
+    // `auto` qualifies the following size, so the fold joins `auto 1px` into one axis.
     for part in parts {
       let follows_auto = coll
         .last()
         .is_some_and(|last_element| last_element.as_css_text() == "auto");
 
-      // Joined whatever the part says, the empty part included, which is the
-      // rule `crate::values::parser` states for every consumer of a part list:
-      // an empty part is present. Upstream's guard here asks whether the part is
-      // *absent*, which no part of a split value is here -- and skipping an
-      // empty one instead loses the axis: an unterminated comment contributes an
-      // empty part, so `auto /*` sized only the width where upstream sizes both.
-      //
-      // Absent is reachable upstream and not here for a reason worth naming, so
-      // that nobody restores the guard by reading `splitValue` alone: upstream's
-      // returns `$ReadOnlyArray<number | string | null>`, and the `null` comes
-      // from its two early arms -- `str == null` returning `[str]`, and the
-      // `Array.isArray(str)` passthrough it keeps only for Flow. `TRawValue`
-      // (`stylex_structures::raw_value`) has no array variant and a null value
-      // never reaches this far, so neither arm has a counterpart here and the
-      // guard has nothing left to guard.
+      // An empty part is joined too (`auto /*` sizes both axes, as upstream does); see
+      // `crate::values::parser`.
       if follows_auto {
         let combined = format!("auto {}", part.as_css_text());
 
@@ -257,9 +213,7 @@ impl Shorthands {
 
     let mut folded = coll.into_iter();
     let width = folded.next().unwrap_or_default();
-    // A value of one part sizes both axes with it, which is also why this reads
-    // the fold's output rather than indexing it: a single part leaves nothing at
-    // index one.
+    // A single part sizes both axes.
     let height = folded.next().unwrap_or_else(|| width.clone());
 
     Ok(vec![
@@ -404,13 +358,11 @@ impl Shorthands {
 
     let parts: Vec<String> = split_value_parts(raw_value_str.as_ref());
 
-    // Global values that must be the only value
     let list_style_global_values = ["inherit", "initial", "revert", "unset"];
 
-    // Position values (unambiguous)
     let list_style_position_values = ["inside", "outside"];
 
-    // Handle global keywords - must be the only value
+    // Global keywords must be the only value.
     if parts.len() == 1 && list_style_global_values.contains(&parts[0].as_str()) {
       let global_value = Some(TRawValue::String(parts[0].clone()));
       return Ok(vec![
@@ -426,50 +378,37 @@ impl Shorthands {
     let mut remaining_parts: Vec<String> = Vec::new();
 
     // First pass: assign values that can only belong to one property.
-    //
-    // The parts are consumed rather than borrowed. `parts` is dead after this
-    // loop, and the borrow forced a `String` clone at each of the three places a
-    // part is kept -- the global-keyword return above has already finished with
-    // it, so there is nothing left that needs the original.
     for part in parts {
-      // Check for global keywords mixed with other values (invalid)
-      // and use of `var()` which can't be disambiguated
+      // Global keywords mixed with other values, or `var()`, can't be disambiguated.
       if list_style_global_values.contains(&part.as_str()) || part.contains("var(--") {
         return Err(list_style_rejection_with_doubled_quotes(&raw_value_str));
       }
-      // Check if it's a position value (unambiguous)
+      // A position value (unambiguous).
       else if list_style_position_values.contains(&part.as_str()) {
         if position.is_some() {
           return Err(list_style_rejection(&raw_value_str));
         }
         position = Some(TRawValue::String(part));
       }
-      // Check if it's a type value that's not 'none' (unambiguous)
-      // Type values are: keywords (letters and hyphens) or quoted strings
+      // A type value other than 'none': a keyword or quoted string.
       else if part != "none" && is_list_style_type(&part) {
         if list_type.is_some() {
           return Err(list_style_rejection(&raw_value_str));
         }
         list_type = Some(TRawValue::String(part));
       }
-      // Keep ambiguous values for second pass. An empty part arrives here: it is
-      // neither a global keyword nor a position, and `is_list_style_type`
-      // requires at least one character, mirroring the `+` in upstream's
-      // pattern. It then takes the slot it lands in, which is the rule
-      // `crate::values::parser` states -- so `list-style: 'url(a.png) /*'`
-      // refuses for two images rather than quietly discarding one of them.
+      // Ambiguous: keep for the second pass. An empty part lands here and takes its slot.
       else {
         remaining_parts.push(part);
       }
     }
 
-    // Second pass: handle remaining parts (including 'none' and image values)
+    // Second pass: 'none' fills an empty type slot; anything else is the image.
     for part in remaining_parts {
-      // If 'none' and type is not yet assigned, assign to type
       if part == "none" && list_type.is_none() {
         list_type = Some(TRawValue::String(part));
       }
-      // Otherwise assign to image
+      // Otherwise assign to image.
       else {
         if image.is_some() {
           return Err(list_style_rejection(&raw_value_str));
@@ -652,15 +591,8 @@ impl Aliases {
   fn border_block_end_color(val: Option<TRawValue>) -> Result<Vec<OrderPair>, String> {
     Ok(vec![OrderPair("borderBottomColor".into(), val)])
   }
-  /// The four legacy radius spellings, each resolving to the logical property.
-  ///
-  /// The direction is the one [`Shorthands::border_radius`] above already takes,
-  /// and the one the reference compiler takes
-  /// (`shared/preprocess-rules/legacy-expand-shorthands.js`, 0.19.0). It was
-  /// ported the other way from `packages/shared/lib`, a prebuilt artifact of a
-  /// release from before the mapping was flipped upstream — which left each
-  /// alias resolving to itself and emitting `border-top-start-radius`, a
-  /// property CSS does not have and every browser drops.
+  /// The four legacy radius spellings, each resolving to the logical property, as upstream does
+  /// (`shared/preprocess-rules/legacy-expand-shorthands.js`, 0.19.0).
   fn border_top_start_radius(val: Option<TRawValue>) -> Result<Vec<OrderPair>, String> {
     Ok(vec![OrderPair("borderStartStartRadius".into(), val)])
   }

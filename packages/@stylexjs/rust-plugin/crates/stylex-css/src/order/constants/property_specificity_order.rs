@@ -61,8 +61,7 @@ impl Shorthands {
   }
   // @Deprecated
   fn border_left(_raw_value: Option<TRawValue>) -> Result<Vec<OrderPair>, String> {
-    // Upstream joins these three with a space (`.join(' ')`); concatenating
-    // them bare runs the sentences together.
+    // Matches upstream's `.join(' ')`.
     Err(
       [
         "`borderLeft` is not supported.",
@@ -73,10 +72,7 @@ impl Shorthands {
     )
   }
 
-  // Keyed by the property name an author writes, never by the Rust identifier
-  // that implements it. A key that spells the identifier instead matches
-  // nothing, and the shorthand then reaches the stylesheet -- the specificity
-  // hole this table exists to close.
+  // Keyed by the CSS-in-JS property name an author writes, not the Rust identifier.
   pub fn get(name: &str) -> Option<ExpansionFn> {
     match name {
       "all" => Some(Shorthands::all),

@@ -123,8 +123,7 @@ fn split_value_with_mixed_units() {
   assert_eq!(left, "2em");
 }
 
-/// A number is handed back untouched: each expanded property appends its own
-/// unit suffix, which parsing it as CSS text would lose.
+/// Each expanded property appends its own unit suffix.
 #[test]
 fn split_value_returns_a_number_unchanged() {
   let (top, right, bottom, left) = split_value(Some(&TRawValue::Number(10.0)));

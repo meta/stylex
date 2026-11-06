@@ -127,7 +127,6 @@ mod generate_ltr_tests {
   fn legacy_no_polyfill_passthrough() {
     let pair = Pair::new("margin-start", "10px");
     let result = generate_ltr(&pair, &legacy_options());
-    // Without polyfill enabled, returns the pair as-is
     assert_eq!(result.key, "margin-start");
     assert_eq!(result.value, "10px");
   }
@@ -189,11 +188,7 @@ mod generate_ltr_tests {
   }
 
   // ── Corpus values the parity harness measured ─────────────────
-  //
-  // Four logical values the corpus holds that were asserted only through a
-  // whole-transform case, where the rewrite can only be inferred from a class
-  // name. Each expectation is what `@stylexjs/babel-plugin` emits for the same
-  // declaration, read from a harness report.
+  // Expectations are `@stylexjs/babel-plugin` output from a harness report.
 
   #[test]
   fn clear_inline_start_becomes_left() {
@@ -209,8 +204,6 @@ mod generate_ltr_tests {
     assert_eq!(result.value, "right");
   }
 
-  /// A logical keyword in the *second* position of a two-keyword value, which
-  /// the `insetInlineStart center` cases above put in the first.
   #[test]
   fn background_position_maps_a_trailing_start() {
     let pair = Pair::new("background-position", "top start");

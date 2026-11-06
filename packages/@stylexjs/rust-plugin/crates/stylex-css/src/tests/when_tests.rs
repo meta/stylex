@@ -64,10 +64,7 @@ fn test_validate_pseudo_selector_invalid_attribute_nested_bracket() {
   assert!(result.unwrap_err().contains("invalid format"));
 }
 
-/// `[a][b]` has two sequential bracket pairs.  The first `]` brings
-/// `bracket_count` to 0, then the second `[` increments it back to 1
-/// — exercising the `bracket_count <= 1` (false) branch of the
-/// `if bracket_count > 1` guard.
+/// `[a][b]`: covers the `bracket_count <= 1` branch of the nesting guard.
 #[test]
 fn test_validate_pseudo_selector_sequential_attribute_selectors() {
   let result = validate_pseudo_selector("[a][b]");
@@ -370,14 +367,12 @@ fn from_stylex_style_with_custom_options_returns_none() {
 
 #[test]
 fn default_marker_with_prefix_x() {
-  // Default prefix is "x", so marker should be "x-default-marker"
   let result = ancestor(":hover", None).unwrap();
   assert!(result.contains("x-default-marker"));
 }
 
 #[test]
 fn default_marker_none_options_uses_fallback() {
-  // When no options, the fallback "x-default-marker" is used
   let result = descendant(":hover", None).unwrap();
   assert!(result.contains("x-default-marker"));
 }
@@ -482,9 +477,7 @@ fn any_sibling_with_last_child() {
 
 // --- custom marker resolution ---
 
-/// Stands in for the evaluated values the compiler passes as the second
-/// argument, so this crate can exercise the resolution chain without naming
-/// the evaluator's types.
+/// Stands in for the evaluated values the compiler passes as the second argument.
 #[derive(Default)]
 struct TestMarker {
   str_value: Option<String>,
@@ -589,8 +582,7 @@ fn ancestor_with_stylex_style_marker() {
   assert_eq!(result, ":where(.x7y81dc[data-open] *)");
 }
 
-/// A marker carries no `classNamePrefix`, so one that resolves to none of the
-/// known shapes falls back to an unprefixed `default-marker`.
+/// Markers carry no `classNamePrefix`, so the fallback is unprefixed.
 #[test]
 fn ancestor_with_unresolvable_marker_falls_back_unprefixed() {
   let marker = TestMarker::default();
@@ -598,8 +590,6 @@ fn ancestor_with_unresolvable_marker_falls_back_unprefixed() {
   assert_eq!(result, ":where(.default-marker:hover *)");
 }
 
-/// A string marker wins over every other shape, as the type test that
-/// selects it runs first.
 #[test]
 fn string_marker_takes_precedence_over_other_shapes() {
   let marker = TestMarker {
@@ -611,7 +601,6 @@ fn string_marker_takes_precedence_over_other_shapes() {
   assert_eq!(result, ":where(.literal:hover *)");
 }
 
-/// The proxy shape is tried before the compiled-object shape.
 #[test]
 fn proxy_marker_takes_precedence_over_stylex_style() {
   let marker = TestMarker {

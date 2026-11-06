@@ -1,12 +1,6 @@
-//! Where a shorthand value is cut, and what each part is spelled with.
+//! Shorthand value splitting: where a value is cut and how each part is spelled.
 //!
-//! Source: crates/stylex-css/src/values/parser.rs
-//!
-//! Every expectation in this file was read off `@stylexjs/babel-plugin@0.19.0`
-//! rather than reasoned about. The two compilers hash a class name from the
-//! declaration text a part becomes, so a part spelled differently here is a
-//! different class name there — which makes a guessed expectation worse than no
-//! expectation at all. The fuzz that produced the list is
+//! Expectations are from `@stylexjs/babel-plugin@0.19.0`, via
 //! `crates/stylex-rs-compiler/parity/fuzz-shorthand-split.ts`.
 
 use super::split_value_parts;
@@ -16,7 +10,7 @@ fn parts(value: &str) -> Vec<String> {
   split_value_parts(value)
 }
 
-// ── Arity: how many parts a value has ───────────────────────────────
+// ── Arity: how many parts a value has ──
 
 #[test]
 fn whitespace_separates_parts() {
@@ -31,9 +25,7 @@ fn whitespace_separates_parts() {
 
 #[test]
 fn any_run_of_whitespace_separates_one_pair_of_parts() {
-  // The run's length and its characters are structure, not content: a part
-  // never carries the whitespace that ended it, so all four of these are the
-  // same two parts.
+  // A part never carries the whitespace that ended it.
   assert_eq!(parts("1px 2px"), ["1px", "2px"]);
   assert_eq!(parts("1px  2px"), ["1px", "2px"]);
   assert_eq!(parts("1px\n2px"), ["1px", "2px"]);
@@ -55,14 +47,11 @@ fn adjacent_functions_are_separate_parts_without_a_separator() {
   );
 }
 
-// ── Separators end a part, and contribute nothing to it ─────────────
+// ── Separators end a part, and contribute nothing to it ──
 
 #[test]
 fn a_top_level_separator_ends_a_part_and_is_not_one() {
-  // The defect this closes: each of these used to emit the separator itself as
-  // a part, so a shorthand expanded into a declaration whose value was `/` or
-  // `:` surrounded by spaces. A browser drops such a declaration, which lost
-  // the shorthand half its sides.
+  // These used to emit the separator itself as a part.
   assert_eq!(parts("10px/1.5"), ["10px", "1.5"]);
   assert_eq!(parts("10px / 1.5"), ["10px", "1.5"]);
   assert_eq!(parts("a:b"), ["a", "b"]);
@@ -74,10 +63,7 @@ fn a_top_level_separator_ends_a_part_and_is_not_one() {
 
 #[test]
 fn a_semicolon_is_not_a_separator() {
-  // `;` is an ordinary word character to the scanner, so it stays attached to
-  // whatever it touches. A value carrying one is refused later, by the guard in
-  // front of normalization that stops a declaration terminating its own rule --
-  // this function has no opinion about it.
+  // `;` is a word character to the scanner; the terminator guard refuses it later.
   assert_eq!(parts("1px;2px"), ["1px;2px"]);
   assert_eq!(
     parts("color: red; margin: 0"),
@@ -87,32 +73,25 @@ fn a_semicolon_is_not_a_separator() {
 
 #[test]
 fn an_operator_does_not_end_a_part() {
-  // These read as arithmetic but the scanner does not evaluate anything: the
-  // whole run is one word, and cutting it would tear a value upstream keeps
-  // whole.
+  // The scanner does not evaluate arithmetic; the run is one word.
   assert_eq!(parts("1px*2"), ["1px*2"]);
   assert_eq!(parts("1px+2"), ["1px+2"]);
   assert_eq!(parts("1px-2"), ["1px-2"]);
   assert_eq!(parts("1px--2"), ["1px--2"]);
 }
 
-// ── Inside a function, a separator is a character ───────────────────
+// ── Inside a function, a separator is a character ──
 
 #[test]
 fn a_slash_inside_a_function_is_not_a_separator() {
-  // The reason the cut is made on node kinds rather than on characters: the
-  // same `/` ends a part at the top level and is arithmetic here, and no
-  // character test can tell the two apart.
+  // Cut on node kinds: the same `/` is a separator at top level and arithmetic here.
   assert_eq!(parts("calc(100% / 3)"), ["calc(100% / 3)"]);
   assert_eq!(parts("calc(100%/3)"), ["calc(100%/3)"]);
 }
 
 #[test]
 fn authored_spacing_inside_a_function_is_echoed() {
-  // Each of these is one part whose text is the author's own bytes. Re-spacing
-  // by rule diverged in both directions at once -- it inserted spaces around an
-  // unspaced operator and removed them from around a spaced slash -- and each
-  // was a different class name.
+  // The author's bytes; re-spacing by rule used to change the class name.
   assert_eq!(parts("calc(1.50px*2)"), ["calc(1.50px*2)"]);
   assert_eq!(parts("calc(1px + 2px)"), ["calc(1px + 2px)"]);
   assert_eq!(parts("calc(1px  +  2px)"), ["calc(1px  +  2px)"]);
@@ -122,11 +101,7 @@ fn authored_spacing_inside_a_function_is_echoed() {
 
 #[test]
 fn a_comma_inside_a_function_loses_the_space_around_it() {
-  // The one place spacing is *not* echoed, and it is not an exception invented
-  // here: a comma inside a function is a separator node, which carries the
-  // whitespace on either side of it rather than letting that whitespace stand
-  // as its own node, and printing the node prints only the comma. Upstream
-  // reaches the same text the same way.
+  // A comma inside a function is a separator node that prints only the comma, as upstream.
   assert_eq!(parts("min(1px , 2px)"), ["min(1px,2px)"]);
   assert_eq!(parts("min(1px,2px)"), ["min(1px,2px)"]);
   assert_eq!(parts("rgb(255, 0, 0)"), ["rgb(255,0,0)"]);
@@ -139,8 +114,7 @@ fn a_comma_inside_a_function_loses_the_space_around_it() {
 
 #[test]
 fn padding_just_inside_a_function_is_dropped() {
-  // A function node carries the whitespace at each end of its argument list on
-  // itself, and printing the node does not print it back.
+  // A function node carries its argument-list end whitespace and does not print it.
   assert_eq!(parts("calc( 1px + 2px )"), ["calc(1px + 2px)"]);
   assert_eq!(parts("url(  a.png  )"), ["url(a.png)"]);
 }
@@ -154,19 +128,16 @@ fn a_nested_function_is_still_one_part() {
 
 #[test]
 fn an_unquoted_url_is_a_part_like_any_other() {
-  // It used to abort the compiler: the token walk this replaced panicked on an
-  // unquoted url rather than emitting it. Upstream compiles it.
+  // The old token walk panicked on an unquoted url; upstream compiles it.
   assert_eq!(parts("url(a.png)"), ["url(a.png)"]);
   assert_eq!(parts("url('a.png')"), ["url('a.png')"]);
 }
 
-// ── The importance annotation ───────────────────────────────────────
+// ── The importance annotation ──
 
 #[test]
 fn a_trailing_importance_annotation_moves_onto_every_part() {
-  // Written once and meant of the whole shorthand. Left as a part of its own it
-  // became the value of the next longhand in line, which is how
-  // `padding: '1px !important'` came to emit `padding-inline-end: important`.
+  // Left as its own part it used to become `padding-inline-end: important`.
   assert_eq!(parts("1px !important"), ["1px !important"]);
   assert_eq!(
     parts("1px 2px !important"),
@@ -189,8 +160,6 @@ fn the_annotation_is_recognised_whatever_its_case() {
 
 #[test]
 fn an_annotation_with_nothing_to_qualify_stays_as_it_is() {
-  // Nothing to move it onto. Dropping it instead would discard what the author
-  // wrote, and there is no part it could join.
   assert_eq!(parts("!important"), ["!important"]);
 }
 
@@ -201,20 +170,16 @@ fn an_annotation_touching_its_value_is_already_one_part() {
 
 #[test]
 fn a_space_after_the_bang_is_not_an_annotation() {
-  // `!` and `important` are two words here, so neither the fold nor anything
-  // else joins them. Upstream reads it the same way and emits the same three
-  // parts -- this is not a value either compiler makes sense of.
+  // Two words; upstream emits the same three parts.
   assert_eq!(parts("1px ! important"), ["1px", "!", "important"]);
   assert_eq!(parts("!"), ["!"]);
 }
 
-// ── Echoed characters: escapes, quotes, digits, hex ─────────────────
+// ── Echoed characters: escapes, quotes, digits, hex ──
 
 #[test]
 fn an_escape_stays_an_escape() {
-  // Resolving these was a double divergence: `A\42 C` came back as the single
-  // part `ABC` -- the escape resolved *and* the space it consumed swallowed --
-  // where upstream reads two parts and keeps the backslash.
+  // Upstream keeps the backslash and reads two parts.
   assert_eq!(parts(r#"A\42 C"#), [r#"A\42"#, "C"]);
   assert_eq!(parts(r#"\31 23"#), [r#"\31"#, "23"]);
   assert_eq!(parts(r#"a\ b"#), [r#"a\ b"#]);
@@ -222,8 +187,7 @@ fn an_escape_stays_an_escape() {
 
 #[test]
 fn an_escaped_unit_stays_escaped() {
-  // The remainder ticket 11 left open. The unit used to be read off the token
-  // and printed as what it escapes to, so `1\70x` became `1px`.
+  // Ticket 11: the unit used to be printed unescaped (`1px`).
   assert_eq!(parts(r#"1\70x"#), [r#"1\70x"#]);
   assert_eq!(parts(r#"1.50\70x"#), [r#"1.50\70x"#]);
 }
@@ -246,9 +210,7 @@ fn a_string_keeps_the_quote_character_it_was_written_with() {
 
 #[test]
 fn a_hex_colour_keeps_its_spelling() {
-  // The token walk this replaced read `#007bff` as an identifier and serialized
-  // the leading digit as an escape, emitting `#\30 07bff` -- not the colour the
-  // author wrote, and not a colour at all.
+  // The old token walk emitted `#\30 07bff`.
   assert_eq!(parts("#007bff"), ["#007bff"]);
   assert_eq!(parts("#fff"), ["#fff"]);
   assert_eq!(parts("#007bff #fff"), ["#007bff", "#fff"]);
@@ -272,10 +234,7 @@ fn a_number_keeps_the_digits_it_was_typed_with() {
 
 #[test]
 fn a_number_at_the_edges_of_double_precision_is_still_only_echoed() {
-  // Nothing here is read as a number, so the questions precision would raise
-  // never come up: a value too large for a double, one too small to be
-  // distinguished from zero, and seventeen significant digits all come back
-  // unchanged.
+  // Not read as numbers, so precision never applies.
   assert_eq!(parts("1e400px"), ["1e400px"]);
   assert_eq!(parts("5e-324px"), ["5e-324px"]);
   assert_eq!(
@@ -294,13 +253,11 @@ fn a_number_that_is_not_one_is_a_word_like_any_other() {
   assert_eq!(parts("1epx"), ["1epx"]);
 }
 
-// ── Malformed input is scanned, never rejected ──────────────────────
+// ── Malformed input is scanned, never rejected ──
 
 #[test]
 fn an_unclosed_function_is_closed_in_the_output() {
-  // The scanner records that the parenthesis was missing and spells one anyway.
-  // Whether the value is then refused is normalization's decision, not this
-  // function's -- there is no input here that produces no answer.
+  // The scanner supplies the missing paren; refusal is normalization's decision.
   assert_eq!(parts("calc(1px"), ["calc(1px)"]);
   assert_eq!(parts("min("), ["min()"]);
 }
@@ -313,9 +270,7 @@ fn an_unclosed_string_is_closed_in_the_output() {
 
 #[test]
 fn an_unbalanced_bracket_or_paren_is_a_word() {
-  // Only a parenthesis opens a function. A square or curly bracket is an
-  // ordinary character, so a bracketed run is one word and a stray closer is a
-  // word of its own.
+  // Only `(` opens a function; brackets are ordinary characters.
   assert_eq!(parts("[a]"), ["[a]"]);
   assert_eq!(parts("[header-start]"), ["[header-start]"]);
   assert_eq!(parts("[foo"), ["[foo"]);
@@ -329,16 +284,12 @@ fn an_unbalanced_bracket_or_paren_is_a_word() {
 
 #[test]
 fn a_curly_block_is_cut_by_the_colon_inside_it() {
-  // Nothing here treats `{ ... }` as a block, so the `:` is a top-level
-  // separator and the braces stay attached to the words beside it.
   assert_eq!(parts("{color: red}"), ["{color", "red}"]);
 }
 
 #[test]
 fn a_comment_contributes_the_text_between_its_delimiters() {
-  // Not the comment, and not nothing: a comment node's value is its inner text,
-  // and printing it prints that. It is a strange part to hand a longhand, and
-  // it is the part upstream hands one.
+  // A comment node prints its inner text, the part upstream hands a longhand.
   assert_eq!(parts("/* hello */"), [" hello "]);
   assert_eq!(parts("/*c*/"), ["c"]);
   assert_eq!(
@@ -350,8 +301,7 @@ fn a_comment_contributes_the_text_between_its_delimiters() {
 
 #[test]
 fn an_unterminated_comment_contributes_an_empty_part() {
-  // `/*/` is the one input the scanner does not round-trip: it looks for the
-  // terminator from the opening slash and finds it inside the `/*/` itself.
+  // `/*/` does not round-trip: the terminator is found inside the opener.
   assert_eq!(parts("/*"), [""]);
   assert_eq!(parts("/*/"), [""]);
 }
@@ -380,13 +330,12 @@ fn an_at_keyword_is_a_word() {
 
 #[test]
 fn a_unicode_range_is_one_part() {
-  // Recognised as its own token shape so that the `+` in it is not read as a
-  // word followed by a signed number.
+  // A unicode range is its own token, so `+` is not a signed number.
   assert_eq!(parts("U+0-7F"), ["U+0-7F"]);
   assert_eq!(parts("u+26"), ["u+26"]);
 }
 
-// ── Non-ASCII input ────────────────────────────────────────────────
+// ── Non-ASCII input ──
 
 #[test]
 fn a_non_ascii_word_survives_byte_for_byte() {
@@ -400,12 +349,8 @@ fn a_non_ascii_word_survives_byte_for_byte() {
 
 #[test]
 fn the_trim_is_javascripts_and_not_rusts() {
-  // Two characters separate the two trims, and both are visible here. A
-  // byte-order mark is not Unicode whitespace but JavaScript trims it, so
-  // `str::trim` would leave it welded to the first part; `U+0085` is Unicode
-  // whitespace and JavaScript does not trim it, so `str::trim` would remove one
-  // upstream keeps. Neither is whitespace to the scanner, so whichever survives
-  // ends up inside a word -- and inside a class name.
+  // JS `trim` removes a BOM but not U+0085, the reverse of `str::trim`; whichever survives would
+  // end up in a word.
   assert_eq!(parts("\u{feff}1px"), ["1px"]);
   assert_eq!(parts("\u{85}1px"), ["\u{85}1px"]);
   assert_eq!(parts(" 1px"), ["1px"]);
@@ -413,14 +358,12 @@ fn the_trim_is_javascripts_and_not_rusts() {
   assert_eq!(parts("1px\n"), ["1px"]);
 }
 
-// ── Depth ──────────────────────────────────────────────────────────
+// ── Depth ──
 
 #[test]
 fn a_value_nested_past_the_budget_is_handed_on_whole() {
-  // Not split, and not refused here. Scanning this builds a tree whose
-  // destructor recurses once per level and aborts the process, so the split is
-  // declined; normalization then rejects the value with the nesting-depth
-  // diagnostic, which is where that message is documented to come from.
+  // Dropping the deep tree would recurse and abort, so the split is declined; normalization
+  // rejects it with the nesting-depth diagnostic.
   let depth = MAX_VALUE_NESTING_DEPTH + 1;
   let nested = format!("{}{}", "calc(".repeat(depth), ")".repeat(depth));
 
@@ -429,9 +372,7 @@ fn a_value_nested_past_the_budget_is_handed_on_whole() {
 
 #[test]
 fn a_value_nested_far_past_the_budget_still_returns_rather_than_aborting() {
-  // The shape that used to kill the process. It is here as a regression test
-  // for the abort, which no `#[should_panic]` can express: a stack overflow is
-  // not a panic, so a test that reached it would take the whole run down.
+  // Regression for a stack-overflow abort, which `#[should_panic]` cannot express.
   let depth = 200_000;
   let nested = "calc(".repeat(depth);
 
@@ -440,8 +381,7 @@ fn a_value_nested_far_past_the_budget_still_returns_rather_than_aborting() {
 
 #[test]
 fn a_value_nested_up_to_the_budget_is_still_split() {
-  // The guard declines at one past the budget, so the last accepted depth has
-  // to still be split -- otherwise it would be a refusal dressed as a split.
+  // The last accepted depth must still be split.
   let nested = format!(
     "{}{}",
     "calc(".repeat(MAX_VALUE_NESTING_DEPTH),
@@ -455,7 +395,7 @@ fn a_value_nested_up_to_the_budget_is_still_split() {
   assert_eq!(result[1], nested);
 }
 
-// ── Values a longhand keeps whole ──────────────────────────────────
+// ── Values a longhand keeps whole ──
 
 #[test]
 fn a_keyword_is_a_single_part() {
@@ -476,20 +416,13 @@ fn a_keyword_is_a_single_part() {
   assert_eq!(parts("var(--x)"), ["var(--x)"]);
 }
 
-// ── An empty part is a part ─────────────────────────────────────────
-//
-// The rule is stated in the module documentation of
-// `crates/stylex-css/src/values/parser.rs`; these pin it. There is no reference
-// answer for any of them: the reference compiler throws
-// `Cannot read properties of undefined (reading 'type')` on a value whose parts
-// include an empty one, so the shape is this compiler's decision and these are
-// assertions about that decision rather than transcriptions of upstream's.
+// ── An empty part is a part ──
+// No reference answer: Babel throws `Cannot read properties of undefined (reading 'type')`
+// on these, so this pins our rule from `src/values/parser.rs`.
 
 #[test]
 fn a_terminated_comment_with_nothing_in_it_contributes_an_empty_part() {
-  // The other way to reach an empty part, and a different scan from the
-  // unterminated one: the comment closes, so the parts after it survive and the
-  // empty one is not necessarily last.
+  // A closed comment: later parts survive and the empty one need not be last.
   assert_eq!(parts("/**/"), [""]);
   assert_eq!(parts("1px /**/"), ["1px", ""]);
   assert_eq!(parts("/**/ 1px"), ["", "1px"]);
@@ -498,9 +431,7 @@ fn a_terminated_comment_with_nothing_in_it_contributes_an_empty_part() {
 
 #[test]
 fn an_empty_part_holds_its_position_rather_than_collapsing() {
-  // The whole of the rule, as arity: five parts stay five, and the two empty
-  // ones are at the indices the author put them at. A splitter that dropped
-  // them would hand the third side's value to the second side.
+  // Empty parts keep their indices, so sides do not shift.
   assert_eq!(parts("/**/ 1px /**/ 2px /**/"), ["", "1px", "", "2px", ""]);
   assert_eq!(parts("/**//**/"), ["", ""]);
   assert_eq!(parts("/**/ /**/ /**/").len(), 3);
@@ -508,8 +439,7 @@ fn an_empty_part_holds_its_position_rather_than_collapsing() {
 
 #[test]
 fn an_unterminated_comment_swallows_the_rest_and_is_still_one_empty_part() {
-  // The asymmetry between the two ways to reach an empty part: this one can
-  // only ever be the last, because everything after the opener is inside it.
+  // An unterminated comment can only be the last part.
   assert_eq!(parts("1px /*"), ["1px", ""]);
   assert_eq!(parts("1px /* 2px"), ["1px", " 2px"]);
   assert_eq!(parts("/* 1px 2px 3px"), [" 1px 2px 3px"]);
@@ -517,9 +447,7 @@ fn an_unterminated_comment_swallows_the_rest_and_is_still_one_empty_part() {
 
 #[test]
 fn a_trailing_importance_annotation_lands_on_an_empty_part_too() {
-  // An empty part is qualified like any other, which reads oddly and is what
-  // the reference compiler does: normalization spells the result `!important`,
-  // and the class name hashed from it agrees.
+  // Matches the reference: normalization spells it `!important`.
   assert_eq!(
     parts("1px /**/ !important"),
     ["1px !important", " !important"]
@@ -532,18 +460,14 @@ fn a_trailing_importance_annotation_lands_on_an_empty_part_too() {
 
 #[test]
 fn an_importance_annotation_alone_after_an_empty_part_still_qualifies_it() {
-  // Two parts, so the fold runs: the guard that leaves a lone annotation alone
-  // asks about the part count and not about whether the part it would move onto
-  // has any text.
+  // The fold checks the part count, not whether the target part has text.
   assert_eq!(parts("/**/ !important"), [" !important"]);
-  // One part, so there is nothing to qualify and the annotation stays as it was.
   assert_eq!(parts("!important"), ["!important"]);
 }
 
 #[test]
 fn an_empty_part_is_not_reached_by_a_quoted_empty_string() {
-  // The near miss worth pinning: a value that *looks* empty is not. An empty
-  // string is two characters the author wrote and a part carries both.
+  // An empty string is two authored characters, not an empty part.
   assert_eq!(parts(r#""""#), [r#""""#]);
   assert_eq!(parts("''"), ["''"]);
   assert_eq!(parts(r#"1px """#), ["1px", r#""""#]);
@@ -551,25 +475,14 @@ fn an_empty_part_is_not_reached_by_a_quoted_empty_string() {
 
 #[test]
 fn a_separator_standing_alone_is_a_part_and_not_an_empty_one() {
-  // A `;` between two fragments ends the part before it; a `;` with whitespace
-  // on both sides is a part of its own, spelled with the character it was
-  // written as.
   assert_eq!(parts("1px ;"), ["1px", ";"]);
   assert_eq!(parts("; 1px"), [";", "1px"]);
   assert_eq!(parts("1px;2px"), ["1px;2px"]);
 }
 
-// ── The reference compiler's own cases ──────────────────────────────
+// ── The reference compiler's own cases ──
 
-/// Every case from the reference compiler's `splitValue` suite, in its order.
-///
-/// Ported verbatim rather than paraphrased. The cases above were written to
-/// exercise this compiler's own decisions, which means they were chosen by
-/// someone who already knew where the seams are; these were chosen by whoever
-/// wrote the function, and two of them reach shapes nothing above does — a
-/// `div` inside a function, and an anonymous parenthesised group. That is
-/// exactly the node-kind logic this module cuts on, so they are the cases most
-/// worth having.
+/// The reference compiler's `splitValue` suite, ported verbatim and in order.
 ///
 /// Source: `shared/utils/__tests__/split-css-value-test.js`.
 #[test]
@@ -583,14 +496,11 @@ fn the_reference_compilers_own_split_cases() {
   // simple comma-separated lengths
   assert_eq!(parts("0px, 1rem, 2%, 3em"), ["0px", "1rem", "2%", "3em"]);
 
-  // "Does not lists within functions" -- a function is one part however many
-  // separators sit inside it, and the `/` in the second is the `div` node kind
-  // that ends a part at the top level and does not here.
+  // "Does not lists within functions"
   assert_eq!(parts("rgb(255 200 0)"), ["rgb(255 200 0)"]);
   assert_eq!(parts("rgb(255 200 / 0.5)"), ["rgb(255 200/0.5)"]);
 
-  // "Does not lists within calc" -- the second reaches an anonymous
-  // parenthesised group, which is a node kind of its own rather than a function.
+  // "Does not lists within calc": the second is an anonymous parenthesised group.
   assert_eq!(
     parts("calc((100% - 50px) * 0.5)"),
     ["calc((100% - 50px) * 0.5)"]

@@ -69,10 +69,7 @@ fn alias_has_priority_for_inset_block_start() {
 
 #[test]
 fn every_rejecting_shorthand_is_reachable_by_its_authored_name() {
-  // `border` agreed with the table by accident — it is spelled the same either
-  // way. The rest were unreachable, so a `borderTop: "none"` reached the
-  // stylesheet as `border-top:none` and defeated the specificity model this
-  // table exists to enforce.
+  // Unreachable keys once let `borderTop: "none"` reach the stylesheet.
   for name in REJECTING_SHORTHANDS {
     let func = PropertySpecificityOrder::get_expansion_fn(name)
       .unwrap_or_else(|| panic!("'{name}' should have an expansion fn"));
@@ -91,10 +88,7 @@ fn every_rejecting_shorthand_is_reachable_by_its_authored_name() {
 
 #[test]
 fn a_snake_case_spelling_is_not_a_property_name() {
-  // The keys are authored property names, never the Rust identifiers that
-  // implement them. Derived from the same list the table is checked against,
-  // so the two cannot drift: a single-word name snake_cases to itself and is
-  // skipped, since it is a real property either way.
+  // Keys are authored names, not Rust identifiers; single-word names are skipped.
   for name in REJECTING_SHORTHANDS {
     let snake = snake_case(name);
 

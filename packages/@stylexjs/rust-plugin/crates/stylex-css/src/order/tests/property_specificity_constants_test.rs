@@ -6,8 +6,7 @@ use stylex_structures::order_pair::OrderPair;
 
 #[test]
 fn shorthands_get_rejects_every_name_it_registers() {
-  // Both value arms: the rejection is about the property name, so a registered
-  // name must refuse whether or not a value came with it.
+  // The rejection is about the name, so it applies with or without a value.
   for name in REJECTING_SHORTHANDS {
     let func = Shorthands::get(name).unwrap_or_else(|| panic!("'{name}' should be registered"));
 
@@ -432,8 +431,7 @@ fn aliases_all_called_with_some_value() {
 
 #[test]
 fn aliases_deprecated_delegate_to_the_shorthand_they_alias() {
-  // Each of these is an alias *of* another shorthand, so it must answer with
-  // that shorthand's rejection rather than with its own name.
+  // An alias answers with its target shorthand's rejection.
   for (alias_name, expected_prefix) in DEPRECATED_BORDER_ALIASES {
     let func = Aliases::get(alias_name)
       .unwrap_or_else(|| panic!("alias '{alias_name}' should be registered"));
@@ -452,14 +450,8 @@ fn aliases_deprecated_delegate_to_the_shorthand_they_alias() {
 
 #[test]
 fn every_rejection_message_matches_upstream_exactly() {
-  // Nine of these had never been reachable before the table was re-keyed, so
-  // nothing had ever read them: all nine were missing upstream's trailing
-  // period, and `borderLeft` ran its three sentences together because it
-  // concatenated where upstream joins with a space. The harness compares
-  // outcomes and not messages, so only this test holds the text.
-  //
-  // Source: `@stylexjs/babel-plugin@0.19.0`,
-  // `src/shared/preprocess-rules/property-specificity.js`.
+  // Only this test checks message text; the harness compares outcomes. Source:
+  // `@stylexjs/babel-plugin@0.19.0`, `src/shared/preprocess-rules/property-specificity.js`.
   let expected = [
     ("all", "all is not supported"),
     ("animation", "animation is not supported"),

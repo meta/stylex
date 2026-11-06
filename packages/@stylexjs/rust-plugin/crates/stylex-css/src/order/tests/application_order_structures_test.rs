@@ -98,7 +98,6 @@ fn get_expansion_fn_special_chars_returns_none() {
 
 #[test]
 fn alias_found_before_shorthand_for_border_horizontal_width() {
-  // borderHorizontalWidth is an Alias, not a Shorthand
   let func = ApplicationOrder::get_expansion_fn("borderHorizontalWidth").unwrap();
   let result = func(None).unwrap();
   assert!(!result.is_empty());

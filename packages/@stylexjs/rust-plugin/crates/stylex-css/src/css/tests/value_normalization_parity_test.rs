@@ -1,12 +1,8 @@
-//! Value-normalization coverage asserted at the public entry point.
+//! Value-normalization coverage at the public entry point.
 //!
-//! Every expectation here is a spelling the parity harness in
-//! `crates/stylex-rs-compiler/parity` confirms `@stylexjs/babel-plugin`
-//! produces — never judgement. Regenerate with the two runs below; the second
-//! is what the cases under
-//! [`rem_enabled_options`](super::support::rem_enabled_options) come from,
-//! since the harness defaults the font-size option off and a default run cannot
-//! verdict them at all:
+//! Expectations are `@stylexjs/babel-plugin` spellings from the parity harness in
+//! `crates/stylex-rs-compiler/parity`. The second run below covers the
+//! [`rem_enabled_options`](super::support::rem_enabled_options) cases:
 //!
 //! ```sh
 //! pnpm run --filter=@stylexswc/rs-compiler build
@@ -14,15 +10,6 @@
 //! pnpm run --filter=@stylexswc/rs-compiler parity -- --font-size-px-to-rem \
 //!   --json parity/results/font-size-px-to-rem.json
 //! ```
-//!
-//! The `Case` machinery and the shared `check` runner live in `support`,
-//! alongside the same pieces used by `spacing_repair_parity_test`.
-//!
-//! Read `entries[].babel.declarations` for the reference spelling and
-//! `entries[].rust.declarations` for this compiler's. Overlap with the older
-//! `normalize_css_property_value_tests` module in `common_test.rs` is
-//! deliberate: those assertions predate the harness, so they say what this
-//! compiler does without saying whether anything else agrees.
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
@@ -35,8 +22,7 @@ use crate::css::common::{MAX_VALUE_NESTING_DEPTH, normalize_css_property_value};
 
 // ── Timings ──────────────────────────────────────────────────────────
 
-/// Milliseconds shorten to seconds, except below the threshold where the
-/// shorter spelling would not actually be shorter.
+/// Except below the threshold, where seconds would not be shorter.
 #[test]
 fn converts_milliseconds_to_seconds() {
   check(
@@ -50,7 +36,6 @@ fn converts_milliseconds_to_seconds() {
   );
 }
 
-/// Under ten milliseconds the conversion is skipped.
 #[test]
 fn keeps_milliseconds_below_the_conversion_threshold() {
   check(
@@ -61,8 +46,7 @@ fn keeps_milliseconds_below_the_conversion_threshold() {
 
 // ── Zero dimensions ──────────────────────────────────────────────────
 
-/// A zero length loses its unit; a zero fraction, percentage or angle keeps
-/// one, because dropping it would change what the value means.
+/// A zero length loses its unit; a zero fraction, percentage or angle keeps it.
 #[test]
 fn normalizes_zero_dimensions_by_unit_kind() {
   check(
@@ -92,8 +76,6 @@ fn leaves_non_zero_dimensions_alone() {
   );
 }
 
-/// A zero inside a function argument is left as the author wrote it — the
-/// surrounding expression, not the property, decides what the unit means.
 #[test]
 fn leaves_zeros_inside_functions_alone() {
   check(
@@ -106,9 +88,7 @@ fn leaves_zeros_inside_functions_alone() {
   );
 }
 
-/// A zero angle inside a function does get its unit rewritten. The window the
-/// zero-dimension normalizer opens for function arguments is what decides this,
-/// and it is the reference compiler's window, quirks included.
+/// Follows the reference compiler's function-argument window, quirks included.
 #[test]
 fn rewrites_a_zero_angle_inside_a_transform_function() {
   check(
@@ -119,8 +99,6 @@ fn rewrites_a_zero_angle_inside_a_transform_function() {
 
 // ── Custom properties ────────────────────────────────────────────────
 
-/// A custom property's value has no CSS grammar, so none of the value
-/// normalizations apply to it.
 #[test]
 fn exempts_custom_properties_from_value_normalization() {
   check(
@@ -148,9 +126,6 @@ fn strips_the_leading_zero_from_a_decimal() {
 
 // ── Quotes ───────────────────────────────────────────────────────────
 
-/// The quote character the author chose is the quote character that reaches the
-/// hash. No normalizer understands quote characters, so none of them can swap
-/// one for the other.
 #[test]
 fn keeps_the_authored_quote_character() {
   check(
@@ -164,7 +139,6 @@ fn keeps_the_authored_quote_character() {
   );
 }
 
-/// The same holds where a value is *made* of quoted strings.
 #[test]
 fn keeps_the_authored_quote_character_in_grid_template_areas() {
   check(
@@ -180,8 +154,6 @@ fn keeps_the_authored_quote_character_in_grid_template_areas() {
 
 // ── Camel-case value conversion ──────────────────────────────────────
 
-/// Only the properties whose values name other properties get their values
-/// hyphenated.
 #[test]
 fn hyphenates_camel_case_values_for_the_properties_that_take_property_names() {
   check(
@@ -233,8 +205,6 @@ fn normalizes_adjacent_custom_property_references() {
   );
 }
 
-/// References the author wrote flush against each other stay flush. Nothing
-/// inserts a separator that the author did not write.
 #[test]
 fn keeps_flush_references_flush() {
   check(
@@ -245,9 +215,7 @@ fn keeps_flush_references_flush() {
 
 // ── Colour and math functions ────────────────────────────────────────
 
-/// A colour function takes the same path every other value takes, so its
-/// arguments lose their leading zeros like any other number. There is no
-/// list of function names anywhere that routes them around anything.
+/// Colour functions take the same path as every other value.
 #[test]
 fn strips_leading_zeros_inside_colour_functions() {
   check(
@@ -282,8 +250,6 @@ fn strips_leading_zeros_inside_colour_functions() {
   );
 }
 
-/// The same goes for spacing: a space after a comma is removed inside a colour
-/// or math function exactly as it is anywhere else.
 #[test]
 fn removes_spacing_after_commas_inside_functions() {
   check(
@@ -308,8 +274,6 @@ fn removes_spacing_after_commas_inside_functions() {
   );
 }
 
-/// A value already spelled the way the normalizers would spell it is left
-/// alone, which is what makes a second pass over it a no-op.
 #[test]
 fn keeps_an_already_tight_function_value() {
   check(
@@ -335,7 +299,6 @@ fn converts_font_size_pixels_to_rem_when_enabled() {
   );
 }
 
-/// The conversion applies only to `fontSize`, and only to pixel lengths.
 #[test]
 fn converts_nothing_else_when_font_size_conversion_is_enabled() {
   check(
@@ -348,9 +311,7 @@ fn converts_nothing_else_when_font_size_conversion_is_enabled() {
   );
 }
 
-/// A converted value below one rem keeps its leading zero: the conversion runs
-/// last, after the leading-zero normalizer has already had its turn, so the
-/// number it produces is never revisited.
+/// The conversion runs after the leading-zero pass, so its output keeps the zero.
 #[test]
 fn keeps_the_leading_zero_on_a_sub_rem_font_size() {
   check(&[same("fontSize", "8px", "0.5rem")], &rem_enabled_options());
@@ -363,9 +324,7 @@ fn leaves_font_size_alone_when_the_option_is_off() {
 
 // ── Vendor prefixes ──────────────────────────────────────────────────
 
-/// A vendor prefix is an ordinary part of a keyword or function name and is
-/// carried through untouched — including when camel-case conversion has to
-/// produce one.
+/// Including when camel-case conversion produces one.
 #[test]
 fn carries_vendor_prefixes_through_unchanged() {
   check(
@@ -378,8 +337,6 @@ fn carries_vendor_prefixes_through_unchanged() {
   );
 }
 
-/// A hex colour inside a vendor-prefixed function keeps all six digits and its
-/// letter case, like any other hex colour.
 #[test]
 fn keeps_a_hex_colour_inside_a_vendor_prefixed_function() {
   check(
@@ -394,7 +351,6 @@ fn keeps_a_hex_colour_inside_a_vendor_prefixed_function() {
 
 // ── Unicode and escapes ──────────────────────────────────────────────
 
-/// An escape outside a string keeps its source spelling.
 #[test]
 fn preserves_an_escape_outside_a_string() {
   check(
@@ -407,9 +363,7 @@ fn preserves_an_escape_outside_a_string() {
   );
 }
 
-/// An escape inside a string keeps the author's spelling rather than being
-/// resolved to the character it names. It used to be resolved, which put
-/// different bytes into the hash than the reference compiler used.
+/// It used to be resolved, changing the hashed bytes.
 #[test]
 fn keeps_an_escape_inside_a_string_unresolved() {
   check(
@@ -429,8 +383,6 @@ fn keeps_an_escape_inside_a_string_unresolved() {
   );
 }
 
-/// Non-ASCII text that needs no escape survives byte for byte, inside a string
-/// and as a bare identifier.
 #[test]
 fn preserves_non_ascii_content() {
   check(
@@ -452,9 +404,7 @@ fn preserves_non_ascii_content() {
 
 // ── Malformed input ──────────────────────────────────────────────────
 
-/// A value SWC cannot parse is emitted verbatim as long as it cannot break out
-/// of the rule being generated — which is why an unclosed bracket and a
-/// nonsense operator sequence are both accepted rather than rejected.
+/// Unparsable values are emitted verbatim when they cannot break out of the rule.
 #[test]
 fn passes_inert_unparsable_values_through() {
   check(
@@ -466,14 +416,7 @@ fn passes_inert_unparsable_values_through() {
   );
 }
 
-/// A semicolon at the end of a value opens nothing, so it survives into the
-/// declaration exactly as written — however many of them there are, and
-/// whatever whitespace trails them. The reference compiler emits the same
-/// bytes, so the harness verdict for all three is `identical`.
-///
-/// Stray trailing semicolons are common in hand-written style objects — the
-/// project's own large fixture carries more than twenty — and none of them can
-/// splice a second declaration into the stylesheet.
+/// Harness verdict `identical`; a trailing `;` cannot splice a second declaration.
 #[test]
 fn keeps_a_trailing_semicolon() {
   check(
@@ -486,14 +429,7 @@ fn keeps_a_trailing_semicolon() {
   );
 }
 
-/// A semicolon with a declaration behind it is the shape the guard exists for:
-/// emitted verbatim, `color: 'red; margin: 10px'` would close its own
-/// declaration and add one the author never asked this rule for.
-///
-/// The harness verdict is `acceptance divergent` — the reference compiler emits
-/// both declarations. Before the pipeline swap this compiler emitted only the
-/// first and dropped the rest with no diagnostic, which is the behaviour this
-/// replaces.
+/// Harness verdict `acceptance divergent`: the reference compiler emits both declarations.
 #[test]
 fn rejects_a_semicolon_that_starts_a_second_declaration() {
   let options = default_options();
@@ -512,12 +448,7 @@ fn rejects_a_semicolon_that_starts_a_second_declaration() {
   }
 }
 
-/// An opening brace could open a block inside the generated stylesheet, so it
-/// is rejected here. The harness verdict is `acceptance divergent`: the
-/// reference compiler emits `color:red {`. This is a local guard rather than a
-/// spelling difference, so it is asserted on the message rather than through
-/// the case table — a bare "it panicked" would pass on any panic at all,
-/// including one from a future bug elsewhere in the pipeline.
+/// Harness verdict `acceptance divergent`: the reference compiler emits `color:red {`.
 #[test]
 fn rejects_a_value_carrying_an_opening_brace() {
   let options = default_options();
@@ -536,11 +467,7 @@ fn rejects_a_value_carrying_an_opening_brace() {
 
 // ── Which of two true complaints an author is handed ─────────────────
 
-/// The complaint `property: value` is refused with.
-///
-/// Every case below refuses, and what each one asserts is *which* sentence came
-/// back — so a helper that only caught the panic would pass on all of them
-/// whatever the order became.
+/// The message `property: value` is refused with.
 fn refusal_of(property: &str, value: &str) -> String {
   let options = default_options();
   let result = catch_unwind(AssertUnwindSafe(|| {
@@ -550,12 +477,7 @@ fn refusal_of(property: &str, value: &str) -> String {
   panic_message(result)
 }
 
-/// Asserts that `property: value` is refused with a message containing
-/// `expected` and not one containing `instead_of`.
-///
-/// Both halves matter here: the point of the ordering is that one true
-/// complaint is handed over rather than another, and an assertion that only
-/// checked the winner would pass on a message carrying both.
+/// Asserts the refusal contains `expected` and not `instead_of`.
 fn refuses_with(property: &str, value: &str, expected: &str, instead_of: &str) {
   let message = refusal_of(property, value);
 
@@ -569,13 +491,8 @@ fn refuses_with(property: &str, value: &str, expected: &str, instead_of: &str) {
   );
 }
 
-/// A value that is both rule-breaking and unclosed is refused for being
-/// unclosed, because that is the complaint the reference compiler writes.
-///
-/// The build stops either way and no emitted value depends on which sentence
-/// fires, so the whole of what this buys is the sentence an author whose build
-/// was refused reads: the same one from both compilers. The harness verdict for
-/// all of these moves from `both reject (diverged)` to `both reject`.
+/// Unclosed wins over rule-breaking, matching the reference compiler's message
+/// (verdict `both reject`).
 #[test]
 fn hands_over_the_complaint_the_reference_compiler_also_writes() {
   for value in [
@@ -603,22 +520,11 @@ fn hands_over_the_complaint_the_reference_compiler_also_writes() {
   }
 }
 
-/// A value whose *only* fault is the token still reads the token complaint,
-/// which is the half of the reorder that must not have been traded away.
-///
-/// Every `;`, `{` and `}` below is bare. An escaped one is not a fault at all
-/// and is accepted — `an_escaped_terminator_is_not_a_terminator` holds those.
-///
-/// The rule text the message quotes is asserted too: it is built from the raw
-/// value before anything parses it, and moving where the guard fires must not
-/// have moved what it quotes.
+/// Escaped terminators are accepted (`an_escaped_terminator_is_not_a_terminator`); the quoted
+/// rule text is asserted too.
 #[test]
 fn still_refuses_a_value_whose_only_fault_is_the_token() {
-  // Spelled out rather than looped over a table of pairs: the parity corpus is
-  // harvested from these sources by recognizing a property literal next to a
-  // value literal, and a pair inside a table is a shape the scan does not read
-  // — so a table here would keep these values out of the corpus that measures
-  // them.
+  // Not a table: the parity corpus only harvests a property literal next to a value literal.
   let token = LINT_RULE_BREAKING_TOKEN;
   refuses_with("color", "red; margin: 10px", token, LINT_UNCLOSED_FUNCTION);
   refuses_with(
@@ -643,31 +549,10 @@ fn still_refuses_a_value_whose_only_fault_is_the_token() {
   );
 }
 
-/// An escaped terminator is not a terminator, and is not refused.
-///
-/// The guard exists because emitting a value verbatim must not close the rule
-/// being generated and splice arbitrary CSS after it. A backslash in front of
-/// the character is the one reading of those bytes where that cannot happen:
-/// `\;`, `\{` and `\}` are part of the identifier they sit in, so the browser
-/// reads them as text and the rule stays open exactly as long as it should.
-/// The guard's own sentence says "outside of a string or comment", and an
-/// escape is neither — the exclusion was simply missing from the scan, where
-/// the quote arms beside it already had it.
-///
-/// Measured against the reference compiler rather than reasoned about: it emits
-/// `font-family:A\;B`, `font-family:a\{b`, `font-family:a\}b` and
-/// `color:red\;blue` for these four, each on its own class. Refusing them here
-/// failed four programs that compile there.
-///
-/// This is *not* a claim that the guard is too strict in general. The reference
-/// compiler emits a **bare** `;` too — `font-family:A;B` really does come back
-/// from it, spliced rule and all — and this compiler still refuses that, which
-/// `still_refuses_a_value_whose_only_fault_is_the_token` holds. The divergence
-/// closed here is only over the characters that cannot break anything.
+/// `\;`, `\{` and `\}` are identifier text; the reference compiler emits all four. A bare `;` is
+/// still refused (`still_refuses_a_value_whose_only_fault_is_the_token`).
 #[test]
 fn an_escaped_terminator_is_not_a_terminator() {
-  // Raw strings: the backslash is the whole of what these cases are about, and
-  // a `"A\\;B"` would leave a reader counting them.
   check(
     &[
       unchanged("fontFamily", r"A\;B"),
@@ -679,25 +564,14 @@ fn an_escaped_terminator_is_not_a_terminator() {
   );
 }
 
-/// The token still outranks the unprefixed custom property, which is this
-/// compiler's own rejection and has no second opinion to agree with.
-///
-/// The reference compiler accepts `var(x)`, so nothing is gained by letting it
-/// speak first and a curated row that reads `declaration-terminating token`
-/// would stop reading it.
+/// The reference compiler accepts `var(x)`, so the token is reported first.
 #[test]
 fn keeps_the_token_ahead_of_a_rejection_the_reference_compiler_does_not_make() {
   refuses_with("color", "var(x);a", LINT_RULE_BREAKING_TOKEN, "Unprefixed");
 }
 
-/// The two guards that read the raw bytes still speak before the token, and
-/// they have to: both exist because the value cannot safely be parsed at all.
-///
-/// A value nested past the recursion budget takes the process down without a
-/// diagnostic rather than panicking, so that one cannot wait for a pass that runs
-/// on a parsed value. The unclosed comment *can*, and now does — see
-/// `hands_an_unclosed_comment_to_the_rejections_the_reference_makes_too`. It is
-/// still ahead of the token, which is what the first case below says.
+/// Nesting past the budget would overflow the stack, so that guard must run first; the unclosed
+/// comment also still precedes the token.
 #[test]
 fn keeps_the_guards_that_run_before_parsing_ahead_of_the_token() {
   refuses_with(
@@ -719,21 +593,8 @@ fn keeps_the_guards_that_run_before_parsing_ahead_of_the_token() {
   );
 }
 
-/// An unclosed comment waits for the two rejections the reference compiler also
-/// makes, the same way the token does.
-///
-/// It used to speak first, on the grounds that it "runs before parsing". That is
-/// true of the nesting guard, whose alternative is an abort — but not of this
-/// one: `postcss_value_parser` reads an unterminated comment as a comment node
-/// carrying `unclosed: true`, which is what
-/// `an_unterminated_comment_contributes_an_empty_part` relies on. So it had no
-/// more claim to preempt them than the token did.
-///
-/// The cost of speaking first was a value refused for the wrong fault.
-/// `calc(1px /*` carries an unclosed function *and* an unclosed comment; the
-/// reference compiler names the function, and this compiler named the comment.
-/// Same accept-or-refuse decision, different sentence — which is the whole thing
-/// the reorder that moved the token was for.
+/// `postcss_value_parser` reads an unterminated comment as a node, so the comment check defers;
+/// for `calc(1px /*` the reference compiler names the function.
 #[test]
 fn hands_an_unclosed_comment_to_the_rejections_the_reference_makes_too() {
   refuses_with(
@@ -743,8 +604,6 @@ fn hands_an_unclosed_comment_to_the_rejections_the_reference_makes_too() {
     LINT_UNCLOSED_COMMENT,
   );
 
-  // A comment with no unclosed function or string beside it still reads the
-  // comment: the rejections it now defers to simply have nothing to say.
   refuses_with(
     "color",
     "red /* x",
@@ -753,8 +612,6 @@ fn hands_an_unclosed_comment_to_the_rejections_the_reference_makes_too() {
   );
 }
 
-/// A token inside a string or a comment was never a fault, and moving the guard
-/// did not make it one — the scan that answers the question is the same one.
 #[test]
 fn still_accepts_a_token_that_cannot_escape_its_declaration() {
   check(
@@ -769,8 +626,6 @@ fn still_accepts_a_token_that_cannot_escape_its_declaration() {
   );
 }
 
-/// Non-ASCII and escaped text around the two faults changes neither which
-/// complaint fires nor the bytes it quotes back.
 #[test]
 fn orders_the_guards_the_same_way_around_unicode_and_escapes() {
   refuses_with(
@@ -793,15 +648,8 @@ fn orders_the_guards_the_same_way_around_unicode_and_escapes() {
   );
 }
 
-/// The four arrangements the totality sweep found that do not settle after a
-/// second normalization pass, pinned at the spelling of the *first* pass —
-/// which is the only one a declaration ever gets.
-///
-/// The sweep can say that these move; it cannot say whether where they move
-/// from is right. That is this table's job, and the harness answers it:
-/// `identical` for all four, so the reference compiler carries the same
-/// trailing characters and the same acquired space. Their non-settling is
-/// pinned separately in `totality_test`.
+/// First-pass spellings of the arrangements `totality_test` finds do not settle; harness verdict
+/// `identical`.
 #[test]
 fn spells_the_arrangements_that_do_not_settle_the_way_the_reference_does() {
   check(
@@ -817,23 +665,9 @@ fn spells_the_arrangements_that_do_not_settle_the_way_the_reference_does() {
 
 // ── Numbers at the edges of a double ─────────────────────────────────
 
-/// Two passes re-spell a number through a float parse and a JavaScript-shaped
-/// printer, so the ends of a double's range are where the two compilers would
-/// part company silently — a wrong digit in a class name looks like nothing at
-/// all.
-///
-/// Every spelling below is the harness's, and the interesting ones are the
-/// four where the value is *not* returned as written: a magnitude too small
-/// for a double reads back as a zero and keeps its unit, a negative zero reads
-/// back as a positive one and keeps its unit too, a trailing decimal point
-/// reads as a zero and loses it, and a fraction longer than a double's
-/// precision comes back rounded to seventeen significant digits. A magnitude
-/// too *large* is left alone, because nothing in the passes has an opinion
-/// about it.
-///
-/// Note what separates the two zeros that keep their unit from the one that
-/// loses it: the rule reads the authored spelling, not the quantity, so only a
-/// value that *reads* as zero has its unit dropped.
+/// The float parse and JS-shaped printer: tiny magnitudes and `-0` read back as zero and keep
+/// their unit, a trailing `.` loses it, long fractions round to 17 significant digits. The zero
+/// rule reads the authored spelling, not the quantity.
 #[test]
 fn spells_numbers_at_the_edges_of_a_double_the_way_the_reference_does() {
   check(
@@ -860,17 +694,7 @@ fn spells_numbers_at_the_edges_of_a_double_the_way_the_reference_does() {
 
 // ── Multi-byte characters at a slicing boundary ──────────────────────
 
-/// The passes index by byte, so a multi-byte character sitting where one of
-/// them cuts is where a boundary panic would live. `totality_test` sweeps those
-/// positions for crashes; this pins what comes out of the ones that matter.
-///
-/// A combining mark is a code point of its own and must not be separated from
-/// the character it modifies. A right-to-left mark and a byte-order mark are
-/// invisible, so a pass that dropped one would change the hash with nothing to
-/// show for it in the rendered CSS. A non-breaking space is a word character
-/// here rather than a separator, so it must not collapse the way a space does.
-/// An astral-plane code point is four bytes, straight after an escape and
-/// between a number and its unit.
+/// `totality_test` sweeps these positions for crashes; this pins the output.
 #[test]
 fn spells_multi_byte_characters_at_a_slicing_boundary_the_way_the_reference_does() {
   check(
@@ -889,7 +713,6 @@ fn spells_multi_byte_characters_at_a_slicing_boundary_the_way_the_reference_does
 
 // ── Robustness ───────────────────────────────────────────────────────
 
-/// Builds a value nesting `calc()` `depth` levels deep.
 fn nested_calc(depth: usize) -> String {
   let mut value = String::from("1px");
   for _ in 0..depth {
@@ -898,9 +721,7 @@ fn nested_calc(depth: usize) -> String {
   value
 }
 
-/// Nesting far past anything a person writes by hand must not lose a level.
-/// Generated, so the parity harness carries no verdict for it; the checked-in
-/// `edge-deeply-nested-calc` case covers the depth a human would write.
+/// Generated, so no harness verdict; `edge-deeply-nested-calc` covers human-written depth.
 #[test]
 fn survives_function_nesting_up_to_the_limit() {
   let depth = MAX_VALUE_NESTING_DEPTH;
@@ -911,13 +732,7 @@ fn survives_function_nesting_up_to_the_limit() {
   assert!(result.starts_with("calc("));
 }
 
-/// One level past the limit is rejected with a diagnostic naming both depths.
-///
-/// The limit exists because every stage of the pipeline recurses once per
-/// nesting level: without it a deep enough value exhausts the stack, and a
-/// stack overflow aborts the process rather than panicking, so nothing catches
-/// it and no diagnostic is produced. Rejecting early is what keeps the failure
-/// reportable.
+/// Without the limit a deep value overflows the stack, which aborts with no diagnostic.
 #[test]
 fn rejects_function_nesting_past_the_limit() {
   let options = default_options();
@@ -934,8 +749,7 @@ fn rejects_function_nesting_past_the_limit() {
     "expected the rejection to state both depths, got: {message}"
   );
 
-  // The guard reads the value rather than parsing it, so it holds at any depth
-  // — including ones that used to take the process down with them.
+  // The guard reads the value without parsing, so it holds at any depth.
   let far_past = nested_calc(5_000);
   let result = catch_unwind(AssertUnwindSafe(|| {
     normalize_css_property_value("width", &far_past, &options)
@@ -947,10 +761,6 @@ fn rejects_function_nesting_past_the_limit() {
   );
 }
 
-/// The limit is a property of the compiler, not of the value. There is one path
-/// left for a value to take, so a colour function is guarded exactly as a
-/// `calc()` is — which is what this pins now that the branch it was written
-/// against is gone.
 #[test]
 fn rejects_deep_nesting_on_a_colour_function() {
   let options = default_options();
@@ -969,8 +779,6 @@ fn rejects_deep_nesting_on_a_colour_function() {
   );
 }
 
-/// A long comma-separated list is normalized entry by entry, with no truncation
-/// at any list length.
 #[test]
 fn normalizes_every_entry_of_a_long_list() {
   let entries = 500;
