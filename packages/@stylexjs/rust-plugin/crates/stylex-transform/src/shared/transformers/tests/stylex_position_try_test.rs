@@ -26,7 +26,10 @@ mod stylex_position_try {
   #[test]
   fn writes_each_declaration_once() {
     let (name, style) = compile("{ top: '10px', marginTop: '4px' }");
-    assert_eq!(style.ltr, format!("@position-try {name} {{margin-top:4px;top:10px;}}"));
+    assert_eq!(
+      style.ltr,
+      format!("@position-try {name} {{margin-top:4px;top:10px;}}")
+    );
   }
 
   #[test]
@@ -43,7 +46,10 @@ mod stylex_position_try {
     state.options.enable_logical_styles_polyfill = true;
     let (name, style) = compile_with_state("{ insetInlineStart: 8 }", &mut state);
     assert_eq!(style.ltr, format!("@position-try {name} {{left:8px;}}"));
-    assert_eq!(style.rtl, Some(format!("@position-try {name} {{right:8px;}}")));
+    assert_eq!(
+      style.rtl,
+      Some(format!("@position-try {name} {{right:8px;}}"))
+    );
   }
 
   #[test]
@@ -56,6 +62,9 @@ mod stylex_position_try {
   #[test]
   fn sorts_the_declarations_by_resolved_property_name() {
     let (name, style) = compile("{ top: '1px', bottom: '2px', left: '3px' }");
-    assert_eq!(style.ltr, format!("@position-try {name} {{bottom:2px;left:3px;top:1px;}}"));
+    assert_eq!(
+      style.ltr,
+      format!("@position-try {name} {{bottom:2px;left:3px;top:1px;}}")
+    );
   }
 }

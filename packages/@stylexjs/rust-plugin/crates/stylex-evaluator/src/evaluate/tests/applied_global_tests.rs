@@ -76,7 +76,7 @@ fn a_number_conversion_that_answers_not_a_number_folds() {
         // Spelled, because `NaN` has no numeric literal and the emitter would
         // otherwise write `0 / 0`.
         assert_eq!(number.raw.as_deref(), Some("NaN"), "wrong spelling");
-      }
+      },
       other => panic!("expected `{}` to fold to a number, got {:?}", source, other),
     }
   }

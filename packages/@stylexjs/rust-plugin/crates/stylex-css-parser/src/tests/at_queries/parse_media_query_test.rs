@@ -2686,10 +2686,7 @@ mod style_value_parser_at_queries {
           other => panic!("Expected NEVER media keyword, got {other:?}"),
         }
 
-        assert_eq!(
-          parsed.to_string(),
-          "@media not all"
-        );
+        assert_eq!(parsed.to_string(), "@media not all");
       }
 
       #[test]

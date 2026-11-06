@@ -276,10 +276,7 @@ fn shallow_namespace_data_preserves_an_invalid_opaque_leaf() {
     HostValue::Object(vec![("opacity".into(), date.clone())]),
   );
   let mut options = StyleXOptions::default();
-  options.core.host_environment = Some(HostEnvironment {
-    host,
-    env: None,
-  });
+  options.core.host_environment = Some(HostEnvironment { host, env: None });
   let state = StateManager::new(options);
   let value = EvaluateResultValue::Host(HostedValue {
     value: HostValue::Ref(reference("namespace", HostKind::PlainObject)),

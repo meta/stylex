@@ -67,12 +67,12 @@ pub(crate) fn add_source_map_data(
             style_node_paths.entry(key_string).or_insert(key_value);
           }
         }
-      }
+      },
       _ => stylex_panic!("{}", EXPECTED_OBJECT_EXPRESSION),
     },
     _ => {
       stylex_panic!("{}", illegal_argument_length("add_source_map_data", 1));
-    }
+    },
   };
 
   // Everything a namespace lookup needs that belongs to the *call*, built once.
@@ -140,7 +140,7 @@ pub(crate) fn add_source_map_data(
                 package_json_seen,
                 functions,
               );
-            }
+            },
             None => {
               if log::log_enabled!(log::Level::Debug) {
                 debug!(
@@ -156,7 +156,7 @@ pub(crate) fn add_source_map_data(
                   *NEXTJS_HYDRATION_WARNING
                 );
               };
-            }
+            },
           },
           Err(e) => {
             if log::log_enabled!(log::Level::Debug) {
@@ -173,7 +173,7 @@ pub(crate) fn add_source_map_data(
                 state.get_filename()
               );
             };
-          }
+          },
         }
 
         if !inner_map.contains_key(&COMPILED_KEY.to_owned()) {
@@ -184,11 +184,11 @@ pub(crate) fn add_source_map_data(
         }
 
         result.insert(key, Rc::new(inner_map));
-      }
+      },
       _ => {
         // Fallback in case no sourcemap data is found
         result.insert(key, Rc::new(inner_map));
-      }
+      },
     };
   }
 
@@ -227,7 +227,7 @@ fn insert_compiled_entry(
         let short = create_short_filename(filename, state, package_json_seen);
         state.insert_cached_short_filename(filename.to_owned(), short.clone());
         short
-      }
+      },
     };
     create_string_expr(&short)
   };

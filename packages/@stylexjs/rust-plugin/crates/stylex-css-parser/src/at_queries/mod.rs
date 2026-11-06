@@ -6,8 +6,8 @@ Includes support for complex media query parsing, validation, and transformation
 */
 
 pub mod media_query;
-mod media_types;
 pub mod media_query_transform;
+mod media_types;
 pub mod messages;
 
 pub use media_query::{MediaQuery, MediaQueryRule, validate_media_query};

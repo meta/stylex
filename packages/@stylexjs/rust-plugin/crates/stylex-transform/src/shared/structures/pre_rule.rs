@@ -209,7 +209,7 @@ impl PreRule for StylesPreRule {
           && self.value == other.value
           && self.pseudos == other.pseudos
           && self.at_rules == other.at_rules
-      }
+      },
       _ => false,
     }
   }

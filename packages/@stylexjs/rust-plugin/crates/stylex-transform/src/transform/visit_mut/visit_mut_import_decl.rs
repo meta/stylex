@@ -35,13 +35,13 @@ where
                 .state
                 .atom_imports
                 .insert(import_specifier.local.to_id(), "*".to_string());
-            }
+            },
             ImportSpecifier::Default(import_specifier) => {
               self
                 .state
                 .atom_imports
                 .insert(import_specifier.local.to_id(), "*".to_string());
-            }
+            },
             ImportSpecifier::Named(import_specifier) => {
               if import_specifier.is_type_only {
                 continue;
@@ -56,7 +56,7 @@ where
                 .state
                 .atom_imports
                 .insert(import_specifier.local.to_id(), imported_name);
-            }
+            },
           }
         }
 
@@ -81,7 +81,7 @@ where
                 .state
                 .insert_stylex_import(ImportSources::Regular(local_name));
             }
-          }
+          },
           ImportSpecifier::Namespace(import_specifier) => {
             if is_import_source && !has_named_import_source {
               let local_name = import_specifier.local.sym.to_string();
@@ -95,7 +95,7 @@ where
                 .state
                 .insert_stylex_import(ImportSources::Regular(local_name));
             }
-          }
+          },
           ImportSpecifier::Named(import_specifier) => {
             if import_specifier.is_type_only {
               continue;
@@ -116,7 +116,7 @@ where
                     &local_name,
                     import_specifier,
                   );
-                }
+                },
                 None => {
                   let imported_name = import_specifier.local.sym.to_string();
 
@@ -126,10 +126,10 @@ where
                     &local_name,
                     import_specifier,
                   );
-                }
+                },
               }
             }
-          }
+          },
         };
       }
     }

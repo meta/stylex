@@ -72,7 +72,7 @@ pub(in super::super) fn evaluate(
           );
         }
         return super::super::callback_failure::invocation_failure(error, state);
-      }
+      },
     };
   }
   if matches!(arg, EvaluateResultValue::Host(_)) {

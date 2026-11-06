@@ -1,5 +1,4 @@
 use super::*;
-use swc_core::ecma::ast::MemberExpr;
 use stylex_state::evaluate_result_value::HostedValue;
 use stylex_state::state_manager::evaluation_scope::{
   CallbackPublication, publish_effects, unreplayable_effects,
@@ -7,6 +6,7 @@ use stylex_state::state_manager::evaluation_scope::{
 use stylex_structures::stylex_env::{
   HostCallbackFailure, HostEnv, HostError, HostResult, HostValue,
 };
+use swc_core::ecma::ast::MemberExpr;
 
 pub(super) fn host_result(value: HostValue, receiver: Option<HostValue>) -> EvaluateResultValue {
   match value {

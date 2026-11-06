@@ -32,9 +32,15 @@ fn evaluate_inner(
     && !traversal_state.declares_binding(object)
     && !fns.bindings.contains_key(&object.to_id())
     && !fns.identifiers.contains_key(&object.sym)
-    && !fns.member_expressions.contains_key(&ImportSources::Regular(object.sym.to_string()))
+    && !fns
+      .member_expressions
+      .contains_key(&ImportSources::Regular(object.sym.to_string()))
   {
-    return deopt(&Expr::Call(call.clone()), state, &unsupported_expression("CallExpression"));
+    return deopt(
+      &Expr::Call(call.clone()),
+      state,
+      &unsupported_expression("CallExpression"),
+    );
   }
 
   // A method call whose every leaf resolves to a value the bridge can carry is
@@ -51,7 +57,7 @@ fn evaluate_inner(
   match super::super::engine_fold::try_fold(call, state, traversal_state, fns) {
     Some(Ok(value)) => return Some(value),
     Some(Err(reason)) => return deopt(&Expr::Call(call.clone()), state, &reason),
-    None => {}
+    None => {},
   }
 
   if !state.confident {
@@ -91,13 +97,13 @@ fn evaluate_inner(
             Ok(value) => Some(value),
             Err(error) => super::super::callback_failure::invocation_failure(error, state),
           }
-        }
+        },
         EvaluateResultValue::Host(function) => {
           match super::super::host_dispatch::call(&function, &args, traversal_state) {
             Ok(value) => Some(value),
             Err(error) => deopt(path, state, &error.message),
           }
-        }
+        },
         _ => deopt(path, state, &unsupported_expression("CallExpression")),
       };
     }
@@ -139,9 +145,9 @@ fn evaluate_inner(
                 Err(error) => {
                   deopt(path, state, &error.message);
                   None
-                }
+                },
               };
-            }
+            },
             Some(EvaluateResultValue::FunctionConfig(fc)) => func = Some(Box::new(fc)),
             // The name resolved to one of the author's own arrows, so the call
             // on it is *applied* here rather than handed back as the function
@@ -154,10 +160,10 @@ fn evaluate_inner(
             // one rule answers every position.
             Some(EvaluateResultValue::Callback(cb)) => {
               return apply_own_arrow(&cb, call, path, state, traversal_state, fns);
-            }
+            },
             _ => {
               return deopt(path, state, NON_CONSTANT);
-            }
+            },
           }
         } else {
           return deopt(path, state, NON_CONSTANT);
@@ -169,7 +175,7 @@ fn evaluate_inner(
       match member_callee(member, call, path, state, traversal_state, fns)? {
         MemberCallee::Function(config) => func = Some(config),
         MemberCallee::Value(value) => return Some(value),
-        MemberCallee::Unnamed => {}
+        MemberCallee::Unnamed => {},
       }
     }
   }
@@ -186,7 +192,7 @@ fn evaluate_inner(
             fns,
           );
           return Some(EvaluateResultValue::Expr(func_result));
-        }
+        },
         FunctionType::StylexExprFn(func) => {
           let Some(first_arg) = args.first() else {
             deopt_unsupported!(
@@ -200,7 +206,7 @@ fn evaluate_inner(
           let func_result = (func)((**first_arg).clone(), traversal_state);
 
           return Some(EvaluateResultValue::Expr(func_result));
-        }
+        },
         // Every remaining function kind takes evaluated arguments rather
         // than raw paths, so reaching one here means the call cannot be
         // folded in this position rather than that the evaluator broke.
@@ -233,7 +239,7 @@ fn evaluate_inner(
           let func_result = (func)(fn_args, traversal_state, fns);
 
           return Some(EvaluateResultValue::Expr(func_result));
-        }
+        },
         FunctionType::StylexExprFn(func) => {
           let args = evaluate_func_call_args(call, state, traversal_state, fns)?;
           let Some(first_arg) = args.first().and_then(|arg| arg.as_expr().cloned()) else {
@@ -248,7 +254,7 @@ fn evaluate_inner(
           let func_result = (func)(first_arg, traversal_state);
 
           return Some(EvaluateResultValue::Expr(func_result));
-        }
+        },
         FunctionType::StylexWhenFn(func) => {
           let mut args = evaluate_func_call_args(call, state, traversal_state, fns)?.into_iter();
           let Some(pseudo) = args.next() else {
@@ -261,7 +267,7 @@ fn evaluate_inner(
           };
           let func_result = (func)(pseudo, args.next(), traversal_state);
           return Some(EvaluateResultValue::Expr(func_result));
-        }
+        },
         FunctionType::StylexTypeFn(func) => {
           let args = evaluate_func_call_args(call, state, traversal_state, fns)?;
           let mut fn_args = IndexMap::default();
@@ -285,19 +291,19 @@ fn evaluate_inner(
                 };
                 fn_args.insert(key, ValueWithDefault::String(text));
               }
-            }
+            },
             Expr::Lit(lit) => {
               let Some(text) = super::super::text_boundary::literal_text(lit) else {
                 return deopt(path, state, EXPRESSION_IS_NOT_A_STRING);
               };
               fn_args.insert("default".to_string(), ValueWithDefault::String(text));
-            }
-            _ => {}
+            },
+            _ => {},
           }
 
           let func_result = (func)(ValueWithDefault::Map(fn_args));
           return Some(EvaluateResultValue::Expr(func_result));
-        }
+        },
         FunctionType::ValueMapper(mapper) => {
           let value = mapper();
           let args = evaluate_func_call_args(call, state, traversal_state, fns)?;
@@ -311,10 +317,10 @@ fn evaluate_inner(
                 Ok(value) => Some(value),
                 Err(error) => deopt(path, state, &error.message),
               }
-            }
+            },
             _ => deopt(path, state, NON_CONSTANT),
           };
-        }
+        },
         FunctionType::Callback(arrow_fn) => {
           let evaluation_result = evaluate_cached(&arrow_fn, state, traversal_state, fns);
 
@@ -323,13 +329,13 @@ fn evaluate_inner(
           };
 
           return apply_own_arrow(&cb, call, path, state, traversal_state, fns);
-        }
+        },
         FunctionType::DefaultMarker(default_marker) => {
           return Some(EvaluateResultValue::FunctionConfig(FunctionConfig {
             fn_ptr: FunctionType::DefaultMarker(Arc::clone(&default_marker)),
             takes_path: false,
           }));
-        }
+        },
         FunctionType::EnvFunction(env_fn) => {
           let args = evaluate_func_call_args(call, state, traversal_state, fns)?;
           let mut env_args = Vec::with_capacity(args.len());
@@ -342,7 +348,7 @@ fn evaluate_inner(
           }
           let result = env_fn.call(env_args);
           return Some(EvaluateResultValue::Expr(result));
-        }
+        },
         _ => deopt_unsupported!(deopt, path, state, NON_CONSTANT),
       }
     }
@@ -613,7 +619,7 @@ fn member_callee(
             fn_ptr: FunctionType::Callback(key_value.value.clone()),
             takes_path: false,
           })))
-        }
+        },
         // A method call on a receiver whose kind carries no methods this
         // evaluator folds — a `null`, an `undefined`, a name that resolved to
         // something with no prototype here. The primitives whose prototypes do
@@ -634,7 +640,7 @@ fn member_callee(
             fn_ptr: FunctionType::StylexTypeFn(sxfns(prop_name)),
             takes_path: false,
           })))
-        }
+        },
         FunctionType::DefaultMarker(default_marker) => match default_marker.get(&prop_name) {
           Some(expr_fn) => Some(MemberCallee::Function(Box::new(FunctionConfig {
             fn_ptr: FunctionType::StylexWhenFn(*expr_fn),
@@ -652,7 +658,7 @@ fn member_callee(
           Err(error) => {
             deopt(path, state, &error.message);
             return None;
-          }
+          },
         };
         let EvaluateResultValue::Host(function) = function else {
           deopt(path, state, NON_CONSTANT);
@@ -664,9 +670,9 @@ fn member_callee(
           Err(error) => {
             deopt(path, state, &error.message);
             None
-          }
+          },
         }
-      }
+      },
       EvaluateResultValue::EnvObject(env_map) => {
         let Some(env_val) = env_map.get(&prop_name) else {
           deopt_unsupported!(
@@ -696,7 +702,7 @@ fn member_callee(
             Err(error) => {
               deopt(path, state, &error.message);
               None
-            }
+            },
           };
         }
         match env_val.as_function() {
@@ -708,7 +714,7 @@ fn member_callee(
             env_val, &env_map,
           ))),
         }
-      }
+      },
       // A receiver the evaluator carries in a representation with no methods of
       // its own — an entries map, a callback, a theme ref.
       _ => deopt_unsupported!(deopt, path, state, UNEXPECTED_MEMBER_LOOKUP),

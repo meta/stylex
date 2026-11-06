@@ -1,4 +1,4 @@
-#[path="evaluation_scope.rs"]
+#[path = "evaluation_scope.rs"]
 pub mod evaluation_scope;
 pub use evaluation_scope::EvaluationHeap;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -90,16 +90,38 @@ use stylex_types::structures::meta_data::MetaData;
 // Arc<T> would add atomic-RMW on every clone with no benefit.
 const TRANSFORMED_VARS_FILE_EXTENSION: &str = ".transformed";
 
-fn babel_uid_hint(hint:&str)->String {
-  let normalized=hint.chars().map(|character| {
-    if Ident::is_valid_continue(character)||matches!(character,'\u{200c}'|'\u{200d}') {character}else{'-'}
-  }).collect::<String>();
-  let mut value=String::new();let mut capitalize=false;
-  for character in normalized.chars().skip_while(|c|*c=='-'||c.is_ascii_digit()) {
-    if character=='-'||character.is_whitespace() {capitalize=true;continue;}
-    if capitalize {value.extend(character.to_uppercase());capitalize=false;}else{value.push(character);}
+fn babel_uid_hint(hint: &str) -> String {
+  let normalized = hint
+    .chars()
+    .map(|character| {
+      if Ident::is_valid_continue(character) || matches!(character, '\u{200c}' | '\u{200d}') {
+        character
+      } else {
+        '-'
+      }
+    })
+    .collect::<String>();
+  let mut value = String::new();
+  let mut capitalize = false;
+  for character in normalized
+    .chars()
+    .skip_while(|c| *c == '-' || c.is_ascii_digit())
+  {
+    if character == '-' || character.is_whitespace() {
+      capitalize = true;
+      continue;
+    }
+    if capitalize {
+      value.extend(character.to_uppercase());
+      capitalize = false;
+    } else {
+      value.push(character);
+    }
   }
-  value.trim_start_matches('_').trim_end_matches(|c:char|c.is_ascii_digit()).to_owned()
+  value
+    .trim_start_matches('_')
+    .trim_end_matches(|c: char| c.is_ascii_digit())
+    .to_owned()
 }
 
 type AtomHashSet = FxHashSet<Atom>;
@@ -493,7 +515,9 @@ impl CallExpressionState {
       return false;
     }
     #[cfg(test)]
-    self.member_hash_queries.set(self.member_hash_queries.get() + 1);
+    self
+      .member_hash_queries
+      .set(self.member_hash_queries.get() + 1);
     self
       .callee_members
       .get(&stable_hash_unspanned_member(member))
@@ -505,9 +529,7 @@ impl CallExpressionState {
   }
 
   fn replace_call_expression(&mut self, call: &CallExpr, call_key: u128, ast: &Expr) {
-    if let Some(removed) = self
-      .all_call_expressions
-      .remove(&(call_key, call.span))
+    if let Some(removed) = self.all_call_expressions.remove(&(call_key, call.span))
       && let Some(removed) = Self::callee_member(&removed)
     {
       self.release_member(removed);
@@ -817,7 +839,7 @@ struct DeclarationInitializer {
 
 #[derive(Clone, Debug)]
 pub struct StateManager {
-  evaluation_heap:Rc<std::cell::RefCell<EvaluationHeap>>,
+  evaluation_heap: Rc<std::cell::RefCell<EvaluationHeap>>,
   pub(crate) plugin_pass: PluginPass,
 
   /// The source file the compiler parsed, when the host makes it available.
@@ -1161,7 +1183,7 @@ impl StateManager {
 
     Self {
       plugin_pass: PluginPass::default(),
-      evaluation_heap:Rc::default(),
+      evaluation_heap: Rc::default(),
       kept_function_maps: Vec::new(),
       kept_function_map_addresses: FxHashSet::default(),
       input_source_file: None,
@@ -1352,16 +1374,17 @@ impl StateManager {
 
   /// Takes the unsupported-declaration faults collected once by discovery.
   /// These records never provide a value or override a parameter overlay.
-  pub fn adopt_opaque_declaration_faults(
-    &mut self,
-    faults: FxHashMap<Id, OpaqueDeclarationFault>,
-  ) {
+  pub fn adopt_opaque_declaration_faults(&mut self, faults: FxHashMap<Id, OpaqueDeclarationFault>) {
     self.declarations_state.opaque_faults = faults;
   }
 
   /// The source node an unsupported binding resolves to, not a name lookup.
   pub fn opaque_declaration_fault(&self, ident: &Ident) -> Option<OpaqueDeclarationFault> {
-    self.declarations_state.opaque_faults.get(&ident.to_id()).copied()
+    self
+      .declarations_state
+      .opaque_faults
+      .get(&ident.to_id())
+      .copied()
   }
 
   /// Takes the binding sets the `Discover` pre-scan collected.
@@ -1688,7 +1711,10 @@ impl StateManager {
 
   pub fn retained_initializer_site(&self, expression: &Expr) -> Option<usize> {
     let address = expression as *const Expr as usize;
-    self.initializer_roots.contains_key(&address).then_some(address)
+    self
+      .initializer_roots
+      .contains_key(&address)
+      .then_some(address)
   }
 
   pub fn evaluation_input_revision(&self) -> u64 {
@@ -1820,16 +1846,26 @@ impl StateManager {
   /// generated declaration sits beside the author's own, and the two would
   /// print as one name.
   pub fn next_hoisted_ident(&mut self, stem: &str) -> Ident {
-    let stem=babel_uid_hint(stem);
+    let stem = babel_uid_hint(stem);
     loop {
       let count = self.hoisted_ident_counts.entry(stem.clone()).or_default();
       let index = *count;
       *count += 1;
-      let suffix=if index>=11 {Some(index-1)}else if index>=9 {Some(index-9)}else if index>=1 {Some(index+1)}else{None};
-      let mut name=format!("_{stem}");
-      if let Some(suffix)=suffix {name.push_str(&suffix.to_string());}
+      let suffix = if index >= 11 {
+        Some(index - 1)
+      } else if index >= 9 {
+        Some(index - 9)
+      } else if index >= 1 {
+        Some(index + 1)
+      } else {
+        None
+      };
+      let mut name = format!("_{stem}");
+      if let Some(suffix) = suffix {
+        name.push_str(&suffix.to_string());
+      }
       if self.bound_names.insert(name.clone()) {
-        return Ident::new_no_ctxt(name.into(),DUMMY_SP);
+        return Ident::new_no_ctxt(name.into(), DUMMY_SP);
       }
     }
   }
@@ -1884,7 +1920,10 @@ impl StateManager {
     let key = stable_hash_unspanned(expr);
     let bucket = self.jsx_spread_attr_exprs_map.entry(key).or_default();
 
-    if !bucket.iter().any(|(seen, _)| seen.span() == expr.span() && seen.eq_ignore_span(expr)) {
+    if !bucket
+      .iter()
+      .any(|(seen, _)| seen.span() == expr.span() && seen.eq_ignore_span(expr))
+    {
       bucket.push((expr.clone(), Vec::new()));
     }
   }
@@ -2012,7 +2051,7 @@ impl StateManager {
     self.imports.insert_stylex_api_import(kind, sym);
   }
 
-  pub fn record_authored_import_span(&mut self,span:Span) {
+  pub fn record_authored_import_span(&mut self, span: Span) {
     self.imports.authored_import_order.push(span);
   }
 
@@ -2187,12 +2226,12 @@ impl StateManager {
   pub fn import_as(&self, import: &str) -> Option<&str> {
     for import_source in &self.options.import_sources {
       match import_source {
-        ImportSources::Regular(_) => {}
+        ImportSources::Regular(_) => {},
         ImportSources::Named(named) => {
           if named.from.eq(import) {
             return Some(named.r#as.as_str());
           }
-        }
+        },
       }
     }
 
@@ -2308,7 +2347,7 @@ impl StateManager {
       CheckModuleResolution::Haste { .. } => {
         let filename = FileName::Real(filename.into());
         extract_filename_with_ext_from_path(&filename).map(|s| s.to_string())
-      }
+      },
       // `custom`: the host's `getCanonicalFilePath` names the file, as the
       // Babel plugin asks it; a throw there aborts the transform.
       CheckModuleResolution::Custom { .. } => match self
@@ -2324,7 +2363,7 @@ impl StateManager {
       },
       CheckModuleResolution::CommonJs { .. } | CheckModuleResolution::CrossFileParsing { .. } => {
         Some(self.common_js_canonical_name(filename, package_json_seen))
-      }
+      },
       // The Babel plugin hashes no file name without a module resolution.
       CheckModuleResolution::Unconfigured => None,
     }
@@ -2474,14 +2513,14 @@ impl StateManager {
             NativeResolution::NeedsHost => return ask_host(resolver),
           }
         },
-        _ => {}
+        _ => {},
       }
     }
 
     match &self.options.unstable_module_resolution {
       CheckModuleResolution::Unconfigured | CheckModuleResolution::Custom { .. } => {
         ImportPathResolution::Unresolved
-      }
+      },
       // `experimental_crossFileParsing` resolves its imports as `commonJS` does
       // and references the theme file's variables rather than re-reading it:
       // the Babel plugin's own cross-file read rejects every parsed file (it
@@ -2515,7 +2554,7 @@ impl StateManager {
           Err(err) => {
             debug!("Could not resolve import path {}: {}", import_path, err);
             return ImportPathResolution::Unresolved;
-          }
+          },
         };
 
         debug!("Resolved import path: {}", resolved_file_path);
@@ -2526,7 +2565,7 @@ impl StateManager {
         ImportPathResolution::Resolved {
           path: resolved_file_path,
         }
-      }
+      },
       CheckModuleResolution::Haste { .. } => ImportPathResolution::Resolved {
         path: add_file_extension(import_path, source_file_path),
       },
@@ -2568,15 +2607,12 @@ impl StateManager {
     call: &CallExpr,
     call_key: impl FnOnce() -> u128,
   ) -> Option<usize> {
-    earliest_confirmed(
-      self.top_level_call_index.candidates(call_key),
-      |position| {
-        // A parenthesis is not a different expression, so the recorded call is
-        // read through it.
-        matches!(self.top_level_expressions.get(position).map(|tpe| normalize_expr(&tpe.1)),
+    earliest_confirmed(self.top_level_call_index.candidates(call_key), |position| {
+      // A parenthesis is not a different expression, so the recorded call is
+      // read through it.
+      matches!(self.top_level_expressions.get(position).map(|tpe| normalize_expr(&tpe.1)),
           Some(Expr::Call(recorded)) if recorded.eq_ignore_span(call))
-      },
-    )
+    })
   }
 
   /// The recorded top-level expression bound to `name`, if it reads as `expr`
@@ -2826,7 +2862,11 @@ impl StateManager {
     )
   }
 
-  fn find_style_var_name(&self, call: &CallExpr, call_key: impl FnOnce() -> u128) -> Option<String> {
+  fn find_style_var_name(
+    &self,
+    call: &CallExpr,
+    call_key: impl FnOnce() -> u128,
+  ) -> Option<String> {
     let found = self
       .style_var_call_index
       .candidates(call_key)
@@ -2989,37 +3029,71 @@ impl StateManager {
     if let Some(idents) = self.injection.inject_import_inserted.as_ref() {
       return idents.var.clone();
     }
-    let runtime=self.options.runtime_injection.clone().unwrap_or(RuntimeInjectionState::Boolean(true));
-    let (source,name)=match runtime {
-      RuntimeInjectionState::Boolean(_)=>(DEFAULT_INJECT_PATH.to_owned(),None),
-      RuntimeInjectionState::Regular(source)=>(source,None),
-      RuntimeInjectionState::Named(NamedImportSource{from,r#as})=>(from,Some(r#as)),
+    let runtime = self
+      .options
+      .runtime_injection
+      .clone()
+      .unwrap_or(RuntimeInjectionState::Boolean(true));
+    let (source, name) = match runtime {
+      RuntimeInjectionState::Boolean(_) => (DEFAULT_INJECT_PATH.to_owned(), None),
+      RuntimeInjectionState::Regular(source) => (source, None),
+      RuntimeInjectionState::Named(NamedImportSource { from, r#as }) => (from, Some(r#as)),
     };
-    let module_ident=self.next_hoisted_ident("inject");
-    let var_ident=self.next_hoisted_ident(name.as_deref().unwrap_or("inject"));
-    let idents=InjectImportIdents{module:module_ident,var:var_ident};
-    self.injection.inject_import_inserted=Some(idents.clone());
-    let InjectImportIdents{module:module_ident,var:var_ident}=idents;
-    let import=match &name {
-      Some(name)=>add_inject_named_import_expression(&module_ident,name,&source),
-      None=>add_inject_default_import_expression(&module_ident,Some(&source)),
+    let module_ident = self.next_hoisted_ident("inject");
+    let var_ident = self.next_hoisted_ident(name.as_deref().unwrap_or("inject"));
+    let idents = InjectImportIdents {
+      module: module_ident,
+      var: var_ident,
     };
-    let alias=add_inject_var_decl_expression(&var_ident,&module_ident);
+    self.injection.inject_import_inserted = Some(idents.clone());
+    let InjectImportIdents {
+      module: module_ident,
+      var: var_ident,
+    } = idents;
+    let import = match &name {
+      Some(name) => add_inject_named_import_expression(&module_ident, name, &source),
+      None => add_inject_default_import_expression(&module_ident, Some(&source)),
+    };
+    let alias = add_inject_var_decl_expression(&var_ident, &module_ident);
     // Babel's module-import helper reuses only the first value import, and
     // merges a new specifier rather than reusing an existing local binding.
-    let compatible=self.top_imports.iter().find(|import|!import.type_only)
-      .filter(|import|import.src.value.as_str()==Some(source.as_str())
-        && !import.specifiers.iter().any(|specifier|matches!(specifier,ImportSpecifier::Namespace(_))))
-      .map(|import|(import.span,import.specifiers.iter().any(|specifier|matches!(specifier,ImportSpecifier::Default(_)))));
-    if let Some((span,has_default))=compatible {
-      let alias_span=if name.is_none()&&has_default {
-        self.imports.authored_import_order.last().copied().or_else(||self.top_imports.last().map(|import|import.span)).unwrap_or(span)
-      }else{span};
-      self.queue_insertion(InsertionSlot::AugmentImport(span),import);
-      self.queue_insertion(InsertionSlot::AfterStatement(alias_span),alias);
-    }else{
-      self.queue_insertion(InsertionSlot::BeforeImports,import);
-      self.queue_insertion(InsertionSlot::BeforeImports,alias);
+    let compatible = self
+      .top_imports
+      .iter()
+      .find(|import| !import.type_only)
+      .filter(|import| {
+        import.src.value.as_str() == Some(source.as_str())
+          && !import
+            .specifiers
+            .iter()
+            .any(|specifier| matches!(specifier, ImportSpecifier::Namespace(_)))
+      })
+      .map(|import| {
+        (
+          import.span,
+          import
+            .specifiers
+            .iter()
+            .any(|specifier| matches!(specifier, ImportSpecifier::Default(_))),
+        )
+      });
+    if let Some((span, has_default)) = compatible {
+      let alias_span = if name.is_none() && has_default {
+        self
+          .imports
+          .authored_import_order
+          .last()
+          .copied()
+          .or_else(|| self.top_imports.last().map(|import| import.span))
+          .unwrap_or(span)
+      } else {
+        span
+      };
+      self.queue_insertion(InsertionSlot::AugmentImport(span), import);
+      self.queue_insertion(InsertionSlot::AfterStatement(alias_span), alias);
+    } else {
+      self.queue_insertion(InsertionSlot::BeforeImports, import);
+      self.queue_insertion(InsertionSlot::BeforeImports, alias);
     }
     var_ident
   }
@@ -3136,12 +3210,12 @@ impl StateManager {
     self.options.treeshake_compensation
   }
 
-  pub fn is_module_root_binding(&self,id:&Id)->bool {
+  pub fn is_module_root_binding(&self, id: &Id) -> bool {
     self.module_root_bindings.contains(id)
   }
 
-  pub fn adopt_module_root_bindings(&mut self,ids:FxHashSet<Id>) {
-    self.module_root_bindings=ids;
+  pub fn adopt_module_root_bindings(&mut self, ids: FxHashSet<Id>) {
+    self.module_root_bindings = ids;
   }
 
   pub fn replace_statement_anchor(&mut self, span: Option<Span>) -> Option<Span> {
@@ -3297,7 +3371,7 @@ pub fn flush_pending_insertions(
         if runtime_injection {
           before_imports.push(item);
         }
-      }
+      },
       InsertionSlot::ThemeImports => theme_imports.push(item),
       InsertionSlot::ThemeImportAt(span) => before_statements.entry(span).or_default().push(item),
       InsertionSlot::AfterImports => after_imports.push(item),
@@ -3308,7 +3382,7 @@ pub fn flush_pending_insertions(
         if runtime_injection {
           before_decl.entry(hash).or_default().push(item);
         }
-      }
+      },
     }
   }
 
@@ -3335,19 +3409,38 @@ pub fn flush_pending_insertions(
     original.len() + before_statements.values().map(Vec::len).sum::<usize>() + themes.len(),
   );
   for mut item in original {
-    let original_span=item.span();
-    if let Some(augmentations)=augmented_imports.remove(&original_span) {
-      let Some(target)=item.as_mut_module_decl().and_then(|decl|decl.as_mut_import()) else {
+    let original_span = item.span();
+    if let Some(augmentations) = augmented_imports.remove(&original_span) {
+      let Some(target) = item
+        .as_mut_module_decl()
+        .and_then(|decl| decl.as_mut_import())
+      else {
         stylex_panic!("An import augmentation does not name an authored import.");
       };
       for augmentation in augmentations {
-        let ModuleItem::ModuleDecl(ModuleDecl::Import(mut source))=augmentation else{stylex_panic!("Invalid import augmentation.");};
-        if target.src.value!=source.src.value {stylex_panic!("An import augmentation names a different source.");}
-        if let Some(ImportSpecifier::Default(default))=source.specifiers.first().cloned() {
-          if target.specifiers.iter().any(|specifier|matches!(specifier,ImportSpecifier::Default(_))) {
-            source.specifiers[0]=ImportSpecifier::Named(ImportNamedSpecifier{span:DUMMY_SP,local:default.local,imported:Some(ModuleExportName::Ident(Ident::new_no_ctxt("default".into(),DUMMY_SP))),is_type_only:false});
+        let ModuleItem::ModuleDecl(ModuleDecl::Import(mut source)) = augmentation else {
+          stylex_panic!("Invalid import augmentation.");
+        };
+        if target.src.value != source.src.value {
+          stylex_panic!("An import augmentation names a different source.");
+        }
+        if let Some(ImportSpecifier::Default(default)) = source.specifiers.first().cloned() {
+          if target
+            .specifiers
+            .iter()
+            .any(|specifier| matches!(specifier, ImportSpecifier::Default(_)))
+          {
+            source.specifiers[0] = ImportSpecifier::Named(ImportNamedSpecifier {
+              span: DUMMY_SP,
+              local: default.local,
+              imported: Some(ModuleExportName::Ident(Ident::new_no_ctxt(
+                "default".into(),
+                DUMMY_SP,
+              ))),
+              is_type_only: false,
+            });
           } else {
-            target.specifiers.insert(0,source.specifiers.remove(0));
+            target.specifiers.insert(0, source.specifiers.remove(0));
           }
         }
         target.specifiers.extend(source.specifiers);
@@ -3374,9 +3467,12 @@ pub fn flush_pending_insertions(
       original_with_insertions.push(bare);
     }
     original_with_insertions.push(item);
-    if let Some(items)=after_statements.remove(&original_span) {original_with_insertions.extend(items);}
+    if let Some(items) = after_statements.remove(&original_span) {
+      original_with_insertions.extend(items);
+    }
   }
-  if !before_statements.is_empty() || !after_statements.is_empty() || !augmented_imports.is_empty() {
+  if !before_statements.is_empty() || !after_statements.is_empty() || !augmented_imports.is_empty()
+  {
     stylex_panic!("A generated insertion does not name an original program statement.");
   }
   unmatched_themes.extend(themes.into_values());
@@ -3575,7 +3671,7 @@ impl RegisteredObjects<'_> {
       Some(metadata) => {
         self.placed.extend(metadata);
         true
-      }
+      },
       None => false,
     }
   }
@@ -3602,12 +3698,12 @@ impl Visit for RegisteredObjects<'_> {
       // different keys.
       Expr::Lit(Lit::Str(_)) => {
         self.place_metadata_of(expr);
-      }
+      },
       Expr::Object(_) => {
         if !self.place_metadata_of(expr) {
           expr.visit_children_with(self);
         }
-      }
+      },
       _ => expr.visit_children_with(self),
     }
   }
@@ -3694,13 +3790,20 @@ pub fn add_import_expression(path: &str) -> ModuleItem {
   }))
 }
 
-fn add_inject_named_import_expression(ident: &Ident, imported_name: &str, source: &str) -> ModuleItem {
+fn add_inject_named_import_expression(
+  ident: &Ident,
+  imported_name: &str,
+  source: &str,
+) -> ModuleItem {
   ModuleItem::ModuleDecl(ModuleDecl::Import(ImportDecl {
     span: DUMMY_SP,
     specifiers: vec![ImportSpecifier::Named(ImportNamedSpecifier {
       span: DUMMY_SP,
       local: ident.clone(),
-      imported: Some(ModuleExportName::Ident(Ident::new_no_ctxt(imported_name.into(),DUMMY_SP))),
+      imported: Some(ModuleExportName::Ident(Ident::new_no_ctxt(
+        imported_name.into(),
+        DUMMY_SP,
+      ))),
       is_type_only: false,
     })],
     src: Box::new(Str {
@@ -3945,7 +4048,12 @@ fn package_may_resolve(specifier: &str, source_file_path: &str) -> bool {
       nearest_manifest_read = true;
       let names_it = serde_json::from_str::<serde_json::Value>(&text)
         .ok()
-        .and_then(|value| value.get("name").and_then(|v| v.as_str()).map(|v| v == name))
+        .and_then(|value| {
+          value
+            .get("name")
+            .and_then(|v| v.as_str())
+            .map(|v| v == name)
+        })
         .unwrap_or(false);
       if names_it {
         return true;
@@ -4081,10 +4189,19 @@ mod native_resolution_tests {
   #[test]
   fn relative_and_alias_imports_resolve_natively_in_babels_candidate_order() {
     let root = fixture("order");
-    assert_eq!(resolve(&root, "./theme/tokens.stylex"), "/src/theme/tokens.stylex.js");
+    assert_eq!(
+      resolve(&root, "./theme/tokens.stylex"),
+      "/src/theme/tokens.stylex.js"
+    );
     // `.js` written, `.ts` on disk: the extension is swapped like the Babel plugin does.
-    assert_eq!(resolve(&root, "./theme/colors.stylex.js"), "/src/theme/colors.stylex.ts");
-    assert_eq!(resolve(&root, "@/theme/tokens.stylex"), "/src/theme/tokens.stylex.js");
+    assert_eq!(
+      resolve(&root, "./theme/colors.stylex.js"),
+      "/src/theme/colors.stylex.ts"
+    );
+    assert_eq!(
+      resolve(&root, "@/theme/tokens.stylex"),
+      "/src/theme/tokens.stylex.js"
+    );
     // A miss is the host's to confirm: `moduleResolve` answers it in Babel.
     assert_eq!(resolve(&root, "./theme/missing.stylex"), "host");
     assert_eq!(resolve(&root, "@/theme/missing.stylex"), "host");

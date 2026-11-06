@@ -74,10 +74,10 @@ mod state_manager {
           Some(binding) => format!("var:{}", binding.id.sym),
           None => "var:pattern".to_string(),
         }
-      }
+      },
       ModuleItem::ModuleDecl(ModuleDecl::Import(import)) => {
         format!("import:{}", import.src.value.as_str().unwrap_or(""))
-      }
+      },
       _ => "other".to_string(),
     }
   }

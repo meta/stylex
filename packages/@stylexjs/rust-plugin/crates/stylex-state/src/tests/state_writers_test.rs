@@ -1095,7 +1095,10 @@ mod unmatchable_object_literals {
   }
 
   fn namespace(with_marker: bool) -> Expr {
-    let mut props = vec![create_key_value_prop("kWkggS", create_string_expr("x1e2nbdu"))];
+    let mut props = vec![create_key_value_prop(
+      "kWkggS",
+      create_string_expr("x1e2nbdu"),
+    )];
     if with_marker {
       props.push(create_key_value_prop("$$css", Expr::Lit(true.into())));
     }
@@ -1122,7 +1125,10 @@ mod unmatchable_object_literals {
   fn an_object_that_could_be_compiled_styles_is_recorded() {
     assert_eq!(recorded(create_object_expression(vec![])), (1, 1));
     assert_eq!(
-      recorded(create_object_expression(vec![create_key_value_prop("root", namespace(true))])),
+      recorded(create_object_expression(vec![create_key_value_prop(
+        "root",
+        namespace(true)
+      )])),
       (1, 1)
     );
     assert_eq!(

@@ -557,9 +557,26 @@ fn creation_current_review_diagnostics_match_babel_message_and_exact_range() {
     // Compare native to the ordinary-read canonical value, not false parity.
     let optional=format!("{import}const obj={{color:'red'}}; export const styles=stylex.create({{root:{{color:obj?.color}}}});");
     let canonical=format!("{import}const obj={{color:'red'}}; export const styles=stylex.create({{root:{{color:obj.color}}}});");
-    let optional=with_callback(Rc::new(fixture_host),||utils::transform_source(&optional,"/tmp/creation-current/optional.js",&options(json!({})))).unwrap_or_else(|error|panic!("{error:#}"));
-    let canonical=with_callback(Rc::new(fixture_host),||utils::transform_source(&canonical,"/tmp/creation-current/optional.js",&options(json!({})))).unwrap_or_else(|error|panic!("{error:#}"));
-    assert_eq!(optional.metadata_stylex,canonical.metadata_stylex,"optional read must retain the canonical value");
+    let optional = with_callback(Rc::new(fixture_host), || {
+        utils::transform_source(
+            &optional,
+            "/tmp/creation-current/optional.js",
+            &options(json!({})),
+        )
+    })
+    .unwrap_or_else(|error| panic!("{error:#}"));
+    let canonical = with_callback(Rc::new(fixture_host), || {
+        utils::transform_source(
+            &canonical,
+            "/tmp/creation-current/optional.js",
+            &options(json!({})),
+        )
+    })
+    .unwrap_or_else(|error| panic!("{error:#}"));
+    assert_eq!(
+        optional.metadata_stylex, canonical.metadata_stylex,
+        "optional read must retain the canonical value"
+    );
 
     let cases = [
         "let color='red'; color='blue'; export const styles=stylex.create({root:{color}});",

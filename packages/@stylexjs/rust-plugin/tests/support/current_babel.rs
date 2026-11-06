@@ -1,10 +1,10 @@
 //! Differential checks through the single production Rust engine and live Babel.
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::{
-  io::Write,
-  process::{Command, Stdio},
+    io::Write,
+    process::{Command, Stdio},
 };
-use stylex_swc_plugin::{StyleXTransformOptions, TransformOutput, transform_source};
+use stylex_swc_plugin::{transform_source, StyleXTransformOptions, TransformOutput};
 
 const ORACLE: &str = r#"
 const fs=require('node:fs');
@@ -20,85 +20,85 @@ process.stdout.write(JSON.stringify({expectedCode:expected.code,actualCode:actua
 "#;
 
 pub fn assert_babel(source: &str, filename: &str, options: Value, actual: &TransformOutput) {
-  let request = json!({"source":source,"filename":filename,"options":options,"nativeCode":actual.code,"metadata":actual.metadata_stylex});
-  let mut child = Command::new("node")
-    .arg("-e")
-    .arg(ORACLE)
-    .current_dir(env!("CARGO_MANIFEST_DIR"))
-    .stdin(Stdio::piped())
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped())
-    .spawn()
-    .expect("live Babel oracle");
-  child
-    .stdin
-    .take()
-    .unwrap()
-    .write_all(serde_json::to_string(&request).unwrap().as_bytes())
-    .unwrap();
-  let result = child.wait_with_output().unwrap();
-  assert!(
-    result.status.success(),
-    "Babel oracle failed for {source}: {}",
-    String::from_utf8_lossy(&result.stderr)
-  );
-  let expected: Value = serde_json::from_slice(&result.stdout).unwrap();
-  assert_eq!(
-    expected["actualCode"], expected["expectedCode"],
-    "raw Babel-generated output for {source}"
-  );
-  // Both sides pass through JavaScript's JSON number boundary; serde_json
-  // distinguishes 3000.0 from 3000 even though both are the same JS number.
-  assert_eq!(
-    expected["actualMetadata"], expected["metadata"],
-    "ordered metadata for {source}"
-  );
+    let request = json!({"source":source,"filename":filename,"options":options,"nativeCode":actual.code,"metadata":actual.metadata_stylex});
+    let mut child = Command::new("node")
+        .arg("-e")
+        .arg(ORACLE)
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("live Babel oracle");
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(serde_json::to_string(&request).unwrap().as_bytes())
+        .unwrap();
+    let result = child.wait_with_output().unwrap();
+    assert!(
+        result.status.success(),
+        "Babel oracle failed for {source}: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let expected: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(
+        expected["actualCode"], expected["expectedCode"],
+        "raw Babel-generated output for {source}"
+    );
+    // Both sides pass through JavaScript's JSON number boundary; serde_json
+    // distinguishes 3000.0 from 3000 even though both are the same JS number.
+    assert_eq!(
+        expected["actualMetadata"], expected["metadata"],
+        "ordered metadata for {source}"
+    );
 }
 
 pub fn assert_authored(expected_source: &str, filename: &str, actual: &TransformOutput) {
-  // Used only for explicit lexical-safety divergences: current Babel compiles
-  // shadowed StyleX/atoms names, while the native engine preserves the binding.
-  let request = json!({"source":expected_source,"expectedSource":expected_source,"filename":filename,"nativeCode":actual.code,"preserveAuthored":true,"metadata":actual.metadata_stylex});
-  let mut child = Command::new("node")
-    .arg("-e")
-    .arg(ORACLE)
-    .current_dir(env!("CARGO_MANIFEST_DIR"))
-    .stdin(Stdio::piped())
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped())
-    .spawn()
-    .expect("Babel syntax oracle");
-  child
-    .stdin
-    .take()
-    .unwrap()
-    .write_all(serde_json::to_string(&request).unwrap().as_bytes())
-    .unwrap();
-  let result = child.wait_with_output().unwrap();
-  assert!(
-    result.status.success(),
-    "Babel syntax oracle failed: {}",
-    String::from_utf8_lossy(&result.stderr)
-  );
-  let expected: Value = serde_json::from_slice(&result.stdout).unwrap();
-  assert_eq!(
-    expected["actualCode"], expected["expectedCode"],
-    "lexically safe authored output"
-  );
+    // Used only for explicit lexical-safety divergences: current Babel compiles
+    // shadowed StyleX/atoms names, while the native engine preserves the binding.
+    let request = json!({"source":expected_source,"expectedSource":expected_source,"filename":filename,"nativeCode":actual.code,"preserveAuthored":true,"metadata":actual.metadata_stylex});
+    let mut child = Command::new("node")
+        .arg("-e")
+        .arg(ORACLE)
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("Babel syntax oracle");
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(serde_json::to_string(&request).unwrap().as_bytes())
+        .unwrap();
+    let result = child.wait_with_output().unwrap();
+    assert!(
+        result.status.success(),
+        "Babel syntax oracle failed: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let expected: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(
+        expected["actualCode"], expected["expectedCode"],
+        "lexically safe authored output"
+    );
 }
 
 pub fn transform(
-  source: &str,
-  filename: &str,
-  options: &StyleXTransformOptions,
+    source: &str,
+    filename: &str,
+    options: &StyleXTransformOptions,
 ) -> TransformOutput {
-  let actual =
-    transform_source(source, filename, options).expect("single production core transform");
-  assert_babel(
-    source,
-    filename,
-    serde_json::to_value(options).unwrap(),
-    &actual,
-  );
-  actual
+    let actual =
+        transform_source(source, filename, options).expect("single production core transform");
+    assert_babel(
+        source,
+        filename,
+        serde_json::to_value(options).unwrap(),
+        &actual,
+    );
+    actual
 }

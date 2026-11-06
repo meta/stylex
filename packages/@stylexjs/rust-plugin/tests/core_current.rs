@@ -1,15 +1,15 @@
 //! Whole-transform differential contracts against current-main Babel.
 //! The vendored engine is the only compiler under test. Ordered output fields,
 //! rule tuples, CSS strings and diagnostics are compared without rewriting.
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::{
     io::Write,
     path::PathBuf,
     process::{Command, Stdio},
 };
 use stylex_swc_plugin::{
-    ProcessStylexRulesConfig, RuleEntry, RuleFields, StyleXTransformOptions,
-    process_stylex_rules_checked, transform_source,
+    process_stylex_rules_checked, transform_source, ProcessStylexRulesConfig, RuleEntry,
+    RuleFields, StyleXTransformOptions,
 };
 
 const ORACLE: &str = r#"
@@ -565,9 +565,9 @@ fn current_defaults_hashes_and_key_order() {
 
 #[test]
 fn full_application_cancellation_and_alias_table() {
-    let table =
-        oracle(&[json!({"op":"expansions","resolution":"application-order"})]).remove(0)["value"]
-            .clone();
+    let table = oracle(&[json!({"op":"expansions","resolution":"application-order"})]).remove(0)
+        ["value"]
+        .clone();
     let mut cases = Vec::new();
     for (key, pairs) in table.as_object().unwrap() {
         if let Some(pairs) = pairs.as_array() {

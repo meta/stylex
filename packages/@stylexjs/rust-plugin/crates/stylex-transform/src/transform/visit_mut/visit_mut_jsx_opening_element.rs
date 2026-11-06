@@ -47,7 +47,7 @@ where
       None => {
         jsx_opening_element.visit_mut_children_with(self);
         return;
-      }
+      },
     };
 
     // Only transform lowercase JSX element names (HTML elements, not React
@@ -78,7 +78,7 @@ where
         JSXAttrOrSpread::JSXAttr(jsx_attr) => match &jsx_attr.name {
           JSXAttrName::Ident(name) if name.sym.as_str() == sx_prop_name.as_str() => {
             Some((idx, jsx_attr.value.as_ref()))
-          }
+          },
           _ => None,
         },
         JSXAttrOrSpread::SpreadElement(_) => None,
@@ -414,7 +414,7 @@ fn find_sx_prop(props: &[PropOrSpread], sx_prop_name: &str) -> Option<(usize, Ex
         .then(|| key_value.value.as_ref().clone()),
       Prop::Shorthand(ident) => {
         (ident.sym.as_str() == sx_prop_name).then(|| Expr::Ident(ident.clone()))
-      }
+      },
       _ => None,
     }?;
 
@@ -440,7 +440,7 @@ fn is_jsx_runtime_call(call: &CallExpr) -> bool {
         let name = name.strip_prefix('_').unwrap_or(name);
 
         RUNTIME_JSX_CALL_NAMES.contains(&name)
-      }
+      },
       Expr::Member(member) => {
         if let (Expr::Ident(obj), MemberProp::Ident(prop)) =
           (normalize_expr(&member.obj), &member.prop)
@@ -449,7 +449,7 @@ fn is_jsx_runtime_call(call: &CallExpr) -> bool {
         } else {
           false
         }
-      }
+      },
       _ => false,
     },
     _ => false,

@@ -805,7 +805,11 @@ fn unclosed_function_report_matches_babel_for_every_key_kind() {
     let message = panic_message(catch_unwind(AssertUnwindSafe(|| {
       normalize_value("calc(1px", key, &options)
     })));
-    assert_eq!(message.trim_start_matches("[StyleX] "), LINT_UNCLOSED_FUNCTION, "{key}");
+    assert_eq!(
+      message.trim_start_matches("[StyleX] "),
+      LINT_UNCLOSED_FUNCTION,
+      "{key}"
+    );
   }
 }
 

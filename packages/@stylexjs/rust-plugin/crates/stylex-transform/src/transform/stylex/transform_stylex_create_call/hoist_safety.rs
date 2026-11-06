@@ -76,7 +76,7 @@ impl HoistProof<'_> {
         if !self.owned.contains(&id) && !self.state.is_module_root_binding(&id) {
           self.safe = false;
         }
-      }
+      },
       TsEntityName::TsQualifiedName(name) => self.type_name(&name.left),
     }
   }

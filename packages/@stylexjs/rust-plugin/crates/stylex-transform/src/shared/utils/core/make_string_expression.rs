@@ -62,7 +62,7 @@ pub(crate) fn make_string_expression(
             result
               .as_ref()
               .map(|result| ResolvedArg::StyleObject(result.clone()))
-          }
+          },
         })
         .collect::<Vec<ResolvedArg>>();
 

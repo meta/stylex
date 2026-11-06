@@ -196,7 +196,11 @@ fn one_style_registered_twice_is_recorded_once() {
 fn the_metadata_is_the_reported_rules_deduplicated_in_first_report_order() {
   let mut state = state_with(None);
   let red = regular_style("x1e2nbdu", ".x1e2nbdu{color:red}", None);
-  let blue = regular_style("xju2f9n", ".xju2f9n{color:blue}", Some(".xju2f9n{color:navy}"));
+  let blue = regular_style(
+    "xju2f9n",
+    ".xju2f9n{color:blue}",
+    Some(".xju2f9n{color:navy}"),
+  );
   let mut both = red.clone();
   both.extend(blue.clone());
 
@@ -1451,11 +1455,11 @@ mod finding_the_object_a_statement_holds {
 /// earlier, differently bound declarator already holds.
 mod style_var_registration_order {
   use super::*;
-  use swc_core::common::{BytePos, Span, SyntaxContext};
-  use swc_core::ecma::ast::{BindingIdent, Ident, Pat, VarDeclarator};
   use stylex_enums::top_level_expression::TopLevelExpressionKind;
   use stylex_structures::top_level_expression::TopLevelExpression;
   use stylex_utils::hash::stable_hash_unspanned_call;
+  use swc_core::common::{BytePos, Span, SyntaxContext};
+  use swc_core::ecma::ast::{BindingIdent, Ident, Pat, VarDeclarator};
 
   fn create_call(lo: u32) -> CallExpr {
     CallExpr {
@@ -1555,7 +1559,10 @@ mod style_var_registration_order {
   /// The order the transform used before: the style variable recorded with
   /// the call, then the rules registered.
   fn original_sequence(state: &mut StateManager, call: &CallExpr, styles: &InjectableStylesMap) {
-    state.insert_style_var("styles".to_string(), declarator("styles", 1, Expr::Call(call.clone())));
+    state.insert_style_var(
+      "styles".to_string(),
+      declarator("styles", 1, Expr::Call(call.clone())),
+    );
     state.register_styles(call, styles, &compiled(), None);
   }
 
@@ -1642,7 +1649,10 @@ mod style_var_registration_order {
   fn an_unrewritten_style_variable_for_the_same_call_is_reported() {
     let call = create_call(10);
     let mut state = discovered(&call, "styles", false);
-    state.insert_style_var("styles".to_string(), declarator("styles", 2, Expr::Call(call.clone())));
+    state.insert_style_var(
+      "styles".to_string(),
+      declarator("styles", 2, Expr::Call(call.clone())),
+    );
     state.register_styles(&call, &IndexMap::new(), &compiled(), None);
 
     let key = stable_hash_unspanned_call(&call);
@@ -1650,7 +1660,10 @@ mod style_var_registration_order {
       state.style_var_for_call_keyed(&call, || key).as_deref(),
       Some("styles")
     );
-    assert_eq!(state.style_var_for_call_keyed(&create_call(40), || key), Some("styles".into()));
+    assert_eq!(
+      state.style_var_for_call_keyed(&create_call(40), || key),
+      Some("styles".into())
+    );
 
     state.register_styles(
       &call,
@@ -1669,7 +1682,10 @@ mod style_var_registration_order {
   fn a_call_with_no_rules_keeps_the_call_as_its_style_variable() {
     let call = create_call(10);
     let mut state = discovered(&call, "styles", false);
-    state.insert_style_var("styles".to_string(), declarator("styles", 1, Expr::Call(call.clone())));
+    state.insert_style_var(
+      "styles".to_string(),
+      declarator("styles", 1, Expr::Call(call.clone())),
+    );
     state.register_styles(&call, &IndexMap::new(), &compiled(), None);
 
     assert_eq!(

@@ -64,7 +64,7 @@ fn property_to_rtl<'a>(pair: &'a Pair, options: &StyleXStateOptions) -> Option<P
         key: Cow::Borrowed(pair.key.as_str()),
         value: Cow::Owned(new_val),
       })
-    }
+    },
     "cursor" => {
       if !options.enable_legacy_value_flipping {
         return None;
@@ -74,7 +74,7 @@ fn property_to_rtl<'a>(pair: &'a Pair, options: &StyleXStateOptions) -> Option<P
         key: Cow::Borrowed(pair.key.as_str()),
         value: Cow::Borrowed(val),
       })
-    }
+    },
     _ => shadows_flip(pair.key.as_str(), pair.value.as_str(), options),
   }
 }
@@ -111,7 +111,7 @@ fn shadows_flip<'a>(key: &'a str, val: &str, options: &StyleXStateOptions) -> Op
         key: Cow::Borrowed(key),
         value: Cow::Owned(rtl_val),
       })
-    }
+    },
     _ => None,
   }
 }

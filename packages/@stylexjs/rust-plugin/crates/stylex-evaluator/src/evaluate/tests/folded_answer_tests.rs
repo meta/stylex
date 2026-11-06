@@ -110,7 +110,7 @@ fn properties_of(value: EvaluateResultValue, source: &str) -> Vec<(String, Expr)
       },
       PropOrSpread::Spread(_) => {
         panic!("expected `{}` to fold to an object with no spread", source)
-      }
+      },
     })
     .collect()
 }

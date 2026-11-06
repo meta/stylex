@@ -369,9 +369,13 @@ where
           )
         };
 
-      self
-        .state
-        .register_styles_keyed(call, &injected_styles, &result_ast, fallback_ast_hash, &call_key);
+      self.state.register_styles_keyed(
+        call,
+        &injected_styles,
+        &result_ast,
+        fallback_ast_hash,
+        &call_key,
+      );
 
       if let Some((var_name, mut declarator)) = style_var {
         declarator.init = Some(Box::new(result_ast.clone()));

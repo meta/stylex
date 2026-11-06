@@ -370,7 +370,7 @@ where
       match normalize_expr(callee) {
         Expr::Ident(ident) if self.state.is_stylex_binding_for_current_cycle(ident) => {
           return Some((ident.to_id(), ident.sym.to_string()));
-        }
+        },
         Expr::Member(member) => {
           if let (Expr::Ident(obj_ident), MemberProp::Ident(prop_ident)) =
             (normalize_expr(&member.obj), &member.prop)
@@ -378,8 +378,8 @@ where
           {
             return Some((obj_ident.to_id(), prop_ident.sym.to_string()));
           }
-        }
-        _ => {}
+        },
+        _ => {},
       }
     }
 
@@ -423,18 +423,19 @@ where
     call_key: impl FnOnce() -> u128,
     with_init: bool,
   ) -> (Option<String>, Option<VarDeclarator>) {
-    let parent_var_decl = self
-      .state
-      .find_call_declaration_keyed(call, call_key)
-      .map(|declarator| match with_init {
-        true => declarator.clone(),
-        false => VarDeclarator {
-          span: declarator.span,
-          name: declarator.name.clone(),
-          init: None,
-          definite: declarator.definite,
-        },
-      });
+    let parent_var_decl =
+      self
+        .state
+        .find_call_declaration_keyed(call, call_key)
+        .map(|declarator| match with_init {
+          true => declarator.clone(),
+          false => VarDeclarator {
+            span: declarator.span,
+            name: declarator.name.clone(),
+            init: None,
+            definite: declarator.definite,
+          },
+        });
     let var_name = parent_var_decl
       .as_ref()
       .and_then(|declarator| declarator.name.as_ident())

@@ -431,7 +431,7 @@ mod short_filenames {
     impl stylex_structures::import_resolver::DebugFileNamer for Namer {
       fn debug_file_name(&self, path: &str) -> Result<String, String> {
         self.0.borrow_mut().push(path.to_owned());
-        Ok(format!("custom:label{}",self.0.borrow().len()))
+        Ok(format!("custom:label{}", self.0.borrow().len()))
       }
     }
     let calls = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
@@ -449,7 +449,10 @@ mod short_filenames {
         &stylex_state::functions::FunctionMap::default(),
       );
     }
-    assert_eq!(&*calls.borrow(), &["/absolute/package/Foo.tsx","/absolute/package/Foo.tsx"]);
+    assert_eq!(
+      &*calls.borrow(),
+      &["/absolute/package/Foo.tsx", "/absolute/package/Foo.tsx"]
+    );
     assert!(
       matches!(values[COMPILED_KEY].as_ref(),FlatCompiledStylesValue::String(name) if name=="custom:label2:4")
     );
@@ -773,7 +776,7 @@ mod short_filenames {
     match std::fs::create_dir_all(root.join("src"))
       .and_then(|()| std::fs::write(root.join("package.json"), manifest))
     {
-      Ok(()) => {}
+      Ok(()) => {},
       Err(error) => panic!("the fixture package could not be written: {error}"),
     }
 

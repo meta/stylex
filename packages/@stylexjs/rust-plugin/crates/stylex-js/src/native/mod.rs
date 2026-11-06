@@ -155,7 +155,7 @@ impl Budget {
           observed: limit.saturating_sub(self.fuel.get()).saturating_add(n),
         });
         return None;
-      }
+      },
     }
     Some(())
   }
@@ -173,7 +173,7 @@ impl Budget {
           observed: limit.saturating_sub(self.output.get()).saturating_add(n),
         });
         return None;
-      }
+      },
     }
     Some(())
   }
@@ -710,7 +710,7 @@ fn check_array_result_entries(value: &Value, mut entries: usize) -> Option<usize
           return refuse_quota(QuotaKind::ArrayEntries, limit, entries);
         }
         values.as_slice()
-      }
+      },
       Value::Object(values) | Value::NullObject(values) => {
         entries = entries.saturating_add(values.len());
         if entries > limit {
@@ -725,7 +725,7 @@ fn check_array_result_entries(value: &Value, mut entries: usize) -> Option<usize
           }
         }
         continue;
-      }
+      },
       _ => continue,
     };
     charge_work(1)?;
@@ -763,7 +763,7 @@ pub fn enforce_result_limits(value: &Value) -> Option<()> {
         for value in values.iter().rev() {
           work.push((value, depth + 1));
         }
-      }
+      },
       Value::Object(values) | Value::NullObject(values) => {
         if depth >= result_depth_limit() {
           return refuse_result_depth();
@@ -776,8 +776,8 @@ pub fn enforce_result_limits(value: &Value) -> Option<()> {
           chars = chars.checked_add(key.encode_utf16().count())?;
           work.push((value, depth + 1));
         }
-      }
-      _ => {}
+      },
+      _ => {},
     }
     if chars > char_limit {
       return refuse_quota(QuotaKind::Characters, char_limit, chars);

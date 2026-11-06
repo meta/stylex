@@ -28,9 +28,7 @@
 
 use super::source_evaluation::*;
 use std::rc::Rc;
-use stylex_constants::constants::evaluation_errors::{
-  UNDEFINED_CONST, unsupported_expression,
-};
+use stylex_constants::constants::evaluation_errors::{UNDEFINED_CONST, unsupported_expression};
 use stylex_state::{
   functions::{FunctionConfig, FunctionConfigType, FunctionMap, FunctionType},
   theme_ref::ThemeRef,
@@ -123,7 +121,10 @@ fn an_if_inside_a_block_body_is_refused_with_the_body() {
   for (receiver, body) in [
     ("[\"a\"]", "x => { if (x) { return \"y\"; } return \"n\"; }"),
     ("[\"\"]", "x => { if (x) { return \"y\"; } return \"n\"; }"),
-    ("[\"\"]", "x => { if (x) { return \"y\"; } else { return \"n\"; } }"),
+    (
+      "[\"\"]",
+      "x => { if (x) { return \"y\"; } else { return \"n\"; } }",
+    ),
   ] {
     assert_arrow_refuses(body);
     assert_deopts(&format!("{}.map({}).join(\"\")", receiver, body));
@@ -363,10 +364,7 @@ fn a_parameter_pattern_nested_in_anything_refuses() {
   assert_folds_with_ceiling("[\"a\"].map(x => x).join(\"\")", ceiling);
 
   for (arrow, source) in [
-    (
-      "([[[b]]]) => b",
-      "[[\"a\"]].map(([[[b]]]) => b).join(\"\")",
-    ),
+    ("([[[b]]]) => b", "[[\"a\"]].map(([[[b]]]) => b).join(\"\")"),
     (
       "({ a: { b: { c: { d } } } }) => d",
       "[{ a: 1 }].map(({ a: { b: { c: { d } } } }) => d).join(\"\")",

@@ -314,8 +314,24 @@ mod compound_pseudo_priority_tests {
   #[test]
   fn the_colon_run_shortcut_declines_only_what_the_scan_declines() {
     let pieces = [
-      "", ":", "::", ":::", "a", "hover", "-x", "(", ")", "(:a)", "(b)", ":not(", "[", "]", " ",
-      "before", "focus-visible", "nth-child(2)",
+      "",
+      ":",
+      "::",
+      ":::",
+      "a",
+      "hover",
+      "-x",
+      "(",
+      ")",
+      "(:a)",
+      "(b)",
+      ":not(",
+      "[",
+      "]",
+      " ",
+      "before",
+      "focus-visible",
+      "nth-child(2)",
     ];
     let mut keys = Vec::new();
     for a in pieces {
@@ -355,11 +371,47 @@ mod normalize_css_property_value_tests {
     use crate::css::normalize_value::normalize_value;
 
     let mut words: Vec<String> = [
-      "red", "purple", "transparent", "solid", "border-box", "flex", "inline-flex", "top",
-      "underline", "none", "auto", "inherit", "initial", "unset", "revert", "currentcolor",
-      "e", "ms", "s", "px", "em", "infinity", "nan", "important", "var", "url", "calc", "a-",
-      "a--b", "x-", "margin-top", "opacity", "transform", "will-change", "ease-in-out",
-      "step-start", "space-between", "nowrap", "pre-wrap", "break-word", "sticky",
+      "red",
+      "purple",
+      "transparent",
+      "solid",
+      "border-box",
+      "flex",
+      "inline-flex",
+      "top",
+      "underline",
+      "none",
+      "auto",
+      "inherit",
+      "initial",
+      "unset",
+      "revert",
+      "currentcolor",
+      "e",
+      "ms",
+      "s",
+      "px",
+      "em",
+      "infinity",
+      "nan",
+      "important",
+      "var",
+      "url",
+      "calc",
+      "a-",
+      "a--b",
+      "x-",
+      "margin-top",
+      "opacity",
+      "transform",
+      "will-change",
+      "ease-in-out",
+      "step-start",
+      "space-between",
+      "nowrap",
+      "pre-wrap",
+      "break-word",
+      "sticky",
     ]
     .iter()
     .map(|word| word.to_string())
@@ -377,8 +429,16 @@ mod normalize_css_property_value_tests {
     }
 
     let keys = [
-      "color", "transitionProperty", "willChange", "fontSize", "transitionDuration",
-      "animationName", "content", "margin", "width", "--custom",
+      "color",
+      "transitionProperty",
+      "willChange",
+      "fontSize",
+      "transitionDuration",
+      "animationName",
+      "content",
+      "margin",
+      "width",
+      "--custom",
     ];
     for opts in [default_options(), rem_enabled_options()] {
       for word in &words {
@@ -393,7 +453,9 @@ mod normalize_css_property_value_tests {
       }
     }
 
-    for not_plain in ["", "-a", "--a", "A", "aB", "1px", "a b", "a,b", "a(b)", "'a'", "a!", "a_b", "é"] {
+    for not_plain in [
+      "", "-a", "--a", "A", "aB", "1px", "a b", "a,b", "a(b)", "'a'", "a!", "a_b", "é",
+    ] {
       assert!(!is_plain_keyword(not_plain), "{not_plain}");
     }
   }
@@ -881,7 +943,10 @@ mod normalize_css_property_value_tests {
       normalize_css_property_value("--my-var", "var(--token", &opts)
     }));
     let message = panic_message(result);
-    assert_eq!(message.trim_start_matches("[StyleX] "), "Rule contains an unclosed function");
+    assert_eq!(
+      message.trim_start_matches("[StyleX] "),
+      "Rule contains an unclosed function"
+    );
   }
 
   #[test]

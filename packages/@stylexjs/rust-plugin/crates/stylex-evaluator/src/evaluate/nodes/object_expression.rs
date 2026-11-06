@@ -1,7 +1,10 @@
 use super::super::*;
 use stylex_macros::deopt_unsupported;
 use stylex_utils::number::to_js_string;
-use swc_core::{common::Spanned, ecma::ast::{Invalid, ObjectLit}};
+use swc_core::{
+  common::Spanned,
+  ecma::ast::{Invalid, ObjectLit},
+};
 
 /// The own enumerable properties a spread operand contributes, mirroring
 /// `Object.assign({}, value)` — which is literally what the reference

@@ -44,23 +44,23 @@ pub(super) fn evaluate(
                 out.push(36);
                 j += 2;
                 continue;
-              }
+              },
               Some(38) => {
                 out.extend_from_slice(matched);
                 j += 2;
                 continue;
-              }
+              },
               Some(96) => {
                 out.extend_from_slice(&input[..i]);
                 j += 2;
                 continue;
-              }
+              },
               Some(39) => {
                 out.extend_from_slice(&input[i + needle.len()..]);
                 j += 2;
                 continue;
-              }
-              _ => {}
+              },
+              _ => {},
             }
           }
           out.push(text[j]);

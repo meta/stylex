@@ -276,7 +276,7 @@ fn or_refuse_initializer<'a>(
     None => match init_expr {
       Some(init_expr) => {
         build_code_frame_error_and_panic_at(init_expr, &non_static_value(fn_name), state)
-      }
+      },
       None => stylex_panic!("{}", non_static_value(fn_name)),
     },
   }
@@ -313,7 +313,7 @@ pub(crate) fn reported_at<T>(reported: Span, check: impl FnOnce() -> T) -> T {
         stylex_macros::stylex_error::report_panic_at(reported.lo.0, reported.hi.0);
       }
       std::panic::resume_unwind(payload)
-    }
+    },
   }
 }
 
@@ -487,7 +487,7 @@ pub(crate) fn validate_stylex_create_theme_indent(
   let (init_expr, init) = theme_init_call_of(var_decl, call, state);
 
   match state.find_top_level_expr(call) {
-    Some(_) => {}
+    Some(_) => {},
     None => build_code_frame_error_and_panic(
       init_expr,
       &call_expr(),
@@ -613,7 +613,7 @@ pub(crate) fn find_and_validate_stylex_define_marker(
       };
 
       build_code_frame_error_and_panic_at(&fault_expr(), &error_message, state)
-    }
+    },
   };
 
   // Read out before the refusal below, which needs the state mutably.
@@ -923,7 +923,7 @@ pub(crate) fn validate_namespace(
       Expr::Lit(lit) => reject_unless_style_value_literal(lit, state),
       Expr::Array(array) => {
         reject_unless_style_value_array(array, ILLEGAL_PROP_ARRAY_VALUE, state);
-      }
+      },
       Expr::Object(object) => {
         let key = convert_key_value_to_str(namespace);
 
@@ -946,8 +946,8 @@ pub(crate) fn validate_namespace(
             validate_conditional_styles(conditional_style, &[], state);
           }
         }
-      }
-      _ => {}
+      },
+      _ => {},
     }
   }
 }
@@ -1001,7 +1001,7 @@ pub(crate) fn validate_conditional_styles(
     Expr::Lit(lit) => reject_unless_style_value_literal(lit, state),
     Expr::Array(array) => {
       reject_unless_style_value_array(array, ILLEGAL_PROP_VALUE, state);
-    }
+    },
     Expr::Object(object) => {
       let nested_key_values = get_key_values_from_object(object);
 
@@ -1011,8 +1011,8 @@ pub(crate) fn validate_conditional_styles(
       for nested_key_value in nested_key_values.iter() {
         validate_conditional_styles(nested_key_value, &extended_conditions, state);
       }
-    }
-    Expr::Ident(_) => {}
+    },
+    Expr::Ident(_) => {},
     _ => build_code_frame_error_and_panic_at(&inner_value, ILLEGAL_PROP_VALUE, state),
   }
 }
@@ -1025,16 +1025,16 @@ pub(crate) fn assert_valid_keyframes(obj: &EvaluateResultValue, state: &mut Stat
 
         for key_value in key_values.iter() {
           match key_value.value.as_ref() {
-            Expr::Object(_) => {}
+            Expr::Object(_) => {},
             _ => {
               build_code_frame_error_and_panic_at(&expr, NON_OBJECT_KEYFRAME, state);
-            }
+            },
           }
         }
-      }
+      },
       _ => {
         build_code_frame_error_and_panic_at(&expr, &non_style_object(STYLEX_KEYFRAMES), state);
-      }
+      },
     },
     _ => stylex_panic!("{}", non_static_value(STYLEX_KEYFRAMES)),
   }

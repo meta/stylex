@@ -426,11 +426,22 @@ fn current_babel_first_that_works_nullish_fallbacks() {
 fn current_native_generic_computed_prototype_key_is_an_own_property() {
   // JavaScript Object.keys includes a computed own __proto__ key. This is
   // deliberately separate from StyleX's namespace-assignment compatibility.
-  let source="import * as stylex from '@stylexjs/stylex';export const styles=stylex.create({root:{content:Object.keys({['__proto__']:1,regular:2}).join(',')}});";
-  let output=native(source,"/tmp/current-public-core/object-keys.js",json!({"debug":false,"dev":false,"enableDebugDataProp":false,"enableDevClassNames":false,"treeshakeCompensation":false}));
-  let rules=output["metadata"].as_array().unwrap();
-  assert_eq!(rules.len(),1);
-  assert!(rules[0][1]["ltr"].as_str().unwrap().contains("content:\"__proto__,regular\""),"a computed own key disappeared: {}",rules[0]);
+  let source = "import * as stylex from '@stylexjs/stylex';export const styles=stylex.create({root:{content:Object.keys({['__proto__']:1,regular:2}).join(',')}});";
+  let output = native(
+    source,
+    "/tmp/current-public-core/object-keys.js",
+    json!({"debug":false,"dev":false,"enableDebugDataProp":false,"enableDevClassNames":false,"treeshakeCompensation":false}),
+  );
+  let rules = output["metadata"].as_array().unwrap();
+  assert_eq!(rules.len(), 1);
+  assert!(
+    rules[0][1]["ltr"]
+      .as_str()
+      .unwrap()
+      .contains("content:\"__proto__,regular\""),
+    "a computed own key disappeared: {}",
+    rules[0]
+  );
 }
 
 #[test]

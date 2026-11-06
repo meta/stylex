@@ -98,16 +98,16 @@ pub(super) fn is_safe_to_skip_null_check(expr: &Expr) -> bool {
       | BinaryOp::Exp => true,
       BinaryOp::NullishCoalescing | BinaryOp::LogicalOr => {
         is_safe_to_skip_null_check(&bin_expr.left) || is_safe_to_skip_null_check(&bin_expr.right)
-      }
+      },
       BinaryOp::LogicalAnd => {
         is_safe_to_skip_null_check(&bin_expr.left) && is_safe_to_skip_null_check(&bin_expr.right)
-      }
+      },
       _ => false,
     },
     Expr::Unary(unary_expr) => matches!(unary_expr.op, UnaryOp::Minus | UnaryOp::Plus),
     Expr::Cond(cond_expr) => {
       is_safe_to_skip_null_check(&cond_expr.cons) && is_safe_to_skip_null_check(&cond_expr.alt)
-    }
+    },
     _ => false,
   }
 }
@@ -120,11 +120,11 @@ pub(super) fn has_explicit_nullish_fallback(expr: &Expr) -> bool {
     Expr::Unary(unary) if matches!(unary.op, UnaryOp::Void) => true,
     Expr::Cond(cond) => {
       has_explicit_nullish_fallback(&cond.cons) || has_explicit_nullish_fallback(&cond.alt)
-    }
+    },
     Expr::Bin(bin) => match bin.op {
       BinaryOp::LogicalOr | BinaryOp::NullishCoalescing | BinaryOp::LogicalAnd => {
         has_explicit_nullish_fallback(&bin.left) || has_explicit_nullish_fallback(&bin.right)
-      }
+      },
       _ => false,
     },
     _ => false,

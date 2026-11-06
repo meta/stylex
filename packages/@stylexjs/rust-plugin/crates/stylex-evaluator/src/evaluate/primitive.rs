@@ -17,7 +17,7 @@ fn is_primitive(value: &EvaluateResultValue) -> bool {
     | EvaluateResultValue::Null => true,
     EvaluateResultValue::Host(value) => {
       matches!(&value.value,HostValue::Ref(reference) if matches!(reference.kind,HostKind::Symbol|HostKind::BigInt))
-    }
+    },
     _ => false,
   }
 }
@@ -69,21 +69,21 @@ pub(super) fn primitive(
             if is_primitive(&result) {
               return Ok(result);
             }
-          }
-          Some(_) => {}
+          },
+          Some(_) => {},
           None if method == "toString" && !object.null_prototype => {
             return Ok(EvaluateResultValue::Expr(create_string_expr(
               "[object Object]",
             )));
-          }
-          None => {}
+          },
+          None => {},
         }
       }
       Err(failure("Cannot convert object to primitive value", span))
-    }
+    },
     EvaluateResultValue::Expr(Expr::Object(_)) => {
       primitive(&super::heap_values::share(value.clone()), hint, state, span)
-    }
+    },
     EvaluateResultValue::Vec(_)
     | EvaluateResultValue::SharedArray(_)
     | EvaluateResultValue::NativeArray(_)
@@ -105,7 +105,7 @@ pub(super) fn primitive(
         .to_primitive(reference, hint)
         .map_err(|error| failure(&error.message, span))?;
       Ok(super::host_dispatch::host_result(value, None))
-    }
+    },
     _ => Err(failure(
       "Cannot convert a function to a compile-time primitive.",
       span,
@@ -166,17 +166,17 @@ pub(super) fn string_units(
           None => values.push(super::js_undefined()),
           Some(element) if element.spread.is_none() => {
             values.push(EvaluateResultValue::Expr(*element.expr.clone()))
-          }
+          },
           _ => {
             return Err(failure(
               "Unsupported unevaluated array spread during coercion.",
               span,
             ));
-          }
+          },
         }
       }
       return append(values);
-    }
+    },
     EvaluateResultValue::Vec(values) => return append(values.clone()),
     EvaluateResultValue::SharedArray(values) => return append(values.iter().cloned().collect()),
     EvaluateResultValue::NativeArray(values) => {
@@ -190,8 +190,8 @@ pub(super) fn string_units(
           })
           .collect::<Result<Vec<_>, _>>()?,
       );
-    }
-    _ => {}
+    },
+    _ => {},
   }
   let value = if is_primitive(value) {
     value.clone()
@@ -236,7 +236,7 @@ pub(super) fn string_units(
         HostValue::Utf16(text) => Ok(text.to_vec()),
         _ => Err(failure("Unsupported implicit string conversion.", span)),
       }
-    }
+    },
     _ => Err(failure(
       "Cannot convert value to a compile-time string.",
       span,

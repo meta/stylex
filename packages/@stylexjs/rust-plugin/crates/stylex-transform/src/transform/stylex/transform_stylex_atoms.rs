@@ -187,7 +187,7 @@ where
       let kind = match &style.rtl {
         Some(rtl) => {
           InjectableStyle::with_rtl(style.ltr.clone(), rtl.clone(), Some(style.priority))
-        }
+        },
         None => InjectableStyle::regular(style.ltr.clone(), Some(style.priority)),
       };
 

@@ -173,14 +173,26 @@ fn opaque_pattern_faults_keep_declaration_spans_and_exclude_default_reads() {
 #[test]
 fn opaque_parameter_faults_distinguish_shadowed_binding_ids() {
   GLOBALS.set(&Globals::default(), || {
-    let module = resolved_module("const {value}={value:1};function make(value){return value;}const fn=value=>value;");
+    let module = resolved_module(
+      "const {value}={value:1};function make(value){return value;}const fn=value=>value;",
+    );
     let mut collector = ModuleBindingsCollector::writes_only();
     module.visit_with(&mut collector);
-    let ModuleItem::Stmt(Stmt::Decl(Decl::Fn(function))) = &module.body[1] else { panic!("function") };
-    let Pat::Ident(function_parameter) = &function.function.params[0].pat else { panic!("parameter") };
-    let ModuleItem::Stmt(Stmt::Decl(Decl::Var(variables))) = &module.body[2] else { panic!("arrow declaration") };
-    let Expr::Arrow(arrow) = variables.decls[0].init.as_deref().unwrap() else { panic!("arrow") };
-    let Pat::Ident(arrow_parameter) = &arrow.params[0] else { panic!("parameter") };
+    let ModuleItem::Stmt(Stmt::Decl(Decl::Fn(function))) = &module.body[1] else {
+      panic!("function")
+    };
+    let Pat::Ident(function_parameter) = &function.function.params[0].pat else {
+      panic!("parameter")
+    };
+    let ModuleItem::Stmt(Stmt::Decl(Decl::Var(variables))) = &module.body[2] else {
+      panic!("arrow declaration")
+    };
+    let Expr::Arrow(arrow) = variables.decls[0].init.as_deref().unwrap() else {
+      panic!("arrow")
+    };
+    let Pat::Ident(arrow_parameter) = &arrow.params[0] else {
+      panic!("parameter")
+    };
     let faults = &collector.opaque_declaration_faults;
     assert_eq!(faults.len(), 3);
     assert_ne!(function_parameter.id.to_id(), arrow_parameter.id.to_id());
@@ -189,7 +201,11 @@ fn opaque_parameter_faults_distinguish_shadowed_binding_ids() {
       assert_eq!(fault.kind, super::OpaqueDeclarationKind::Identifier);
       assert_eq!(fault.span, parameter.span);
     }
-    assert!(faults.values().any(|fault| fault.kind == super::OpaqueDeclarationKind::VariableDeclarator));
+    assert!(
+      faults
+        .values()
+        .any(|fault| fault.kind == super::OpaqueDeclarationKind::VariableDeclarator)
+    );
     assert!(!faults.contains_key(&function.ident.to_id()));
   });
 }

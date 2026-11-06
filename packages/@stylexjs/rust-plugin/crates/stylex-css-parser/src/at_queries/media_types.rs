@@ -46,7 +46,7 @@ fn negate(rule: MediaQueryRule) -> MediaQueryRule {
     MediaQueryRule::MediaKeyword(mut value) => {
       value.not = !value.not;
       MediaQueryRule::MediaKeyword(value)
-    }
+    },
     MediaQueryRule::Not(value) => *value.rule,
     MediaQueryRule::And(value) => MediaQueryRule::Or(MediaOrRules::new(
       value.rules.into_iter().map(negate).collect(),
@@ -70,9 +70,9 @@ pub(super) fn resolve(rule: MediaQueryRule) -> MediaQueryRule {
         match resolve(child) {
           MediaQueryRule::Or(value) => {
             rules.extend(value.rules.into_iter().filter(|rule| !never(rule)))
-          }
+          },
           value if !never(&value) => rules.push(value),
-          _ => {}
+          _ => {},
         }
       }
       if rules.iter().any(always) {
@@ -83,7 +83,7 @@ pub(super) fn resolve(rule: MediaQueryRule) -> MediaQueryRule {
         1 => rules.remove(0),
         _ => MediaQueryRule::Or(MediaOrRules::new(rules)),
       }
-    }
+    },
     MediaQueryRule::And(value) => {
       let mut resolved: Vec<_> = value.rules.into_iter().map(resolve).collect();
       if let Some(index) = resolved
@@ -128,10 +128,10 @@ pub(super) fn resolve(rule: MediaQueryRule) -> MediaQueryRule {
         }
         match requirement(&rule) {
           Some("never") => return keyword("all", true),
-          Some("all") => {}
+          Some("all") => {},
           Some(required) if media_type == "all" => media_type = required.to_owned(),
           Some(required) if media_type != required => return keyword("all", true),
-          Some(_) => {}
+          Some(_) => {},
           None => others.push(rule),
         }
       }
@@ -143,18 +143,18 @@ pub(super) fn resolve(rule: MediaQueryRule) -> MediaQueryRule {
         1 => others.remove(0),
         _ => MediaQueryRule::And(MediaAndRules::new(others)),
       }
-    }
+    },
     MediaQueryRule::Not(value) => {
       let inner = resolve(*value.rule);
       match inner {
         MediaQueryRule::MediaKeyword(mut value) => {
           value.not = !value.not;
           resolve(MediaQueryRule::MediaKeyword(value))
-        }
+        },
         MediaQueryRule::And(_) | MediaQueryRule::Or(_) => resolve(negate(inner)),
         value => MediaQueryRule::Not(MediaNotRule::new(value)),
       }
-    }
+    },
     value => value,
   }
 }

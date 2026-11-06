@@ -112,7 +112,10 @@ fn an_object_pattern_is_not_a_parameter_a_fold_binds_in_any_spelling() {
   assert_arrow_refuses("({ a: renamed }) => renamed");
   assert_arrow_refuses("({ ['a']: computed }) => computed");
 
-  assert_mapping_refuses("[{ a: 'x' }, { a: 'y' }]", "parts.map(({ a }) => a).join('-')");
+  assert_mapping_refuses(
+    "[{ a: 'x' }, { a: 'y' }]",
+    "parts.map(({ a }) => a).join('-')",
+  );
   assert_mapping_refuses(
     "[{ a: 'x' }]",
     "parts.map(({ a: renamed }) => renamed).join('-')",

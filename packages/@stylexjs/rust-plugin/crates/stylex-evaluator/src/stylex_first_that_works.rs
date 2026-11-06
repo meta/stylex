@@ -131,14 +131,14 @@ pub(crate) fn fold_fallback_chain(parts: impl IntoIterator<Item = String>) -> St
         next.push_str(&so_far);
         next.push(')');
         next
-      }
+      },
       true if part.starts_with("--") => {
         let mut next = String::with_capacity(part.len() + 5);
         next.push_str(CSS_VAR_PREFIX);
         next.push_str(&part);
         next.push(')');
         next
-      }
+      },
       true => part,
     })
 }
@@ -245,7 +245,7 @@ pub fn stylex_first_that_works(
 
           text
         }))
-      }
+      },
     };
 
     (plan, chain_text)
@@ -263,7 +263,7 @@ pub fn stylex_first_that_works(
         .collect();
 
       create_array_expression(elems)
-    }
+    },
     Fallbacks::Chain(_) => create_string_expr(&chain_text),
     Fallbacks::ChainAndRest(_, rest) => {
       let chain = create_string_expr(&chain_text);
@@ -273,6 +273,6 @@ pub fn stylex_first_that_works(
         .collect();
 
       create_array_expression(elems)
-    }
+    },
   }
 }

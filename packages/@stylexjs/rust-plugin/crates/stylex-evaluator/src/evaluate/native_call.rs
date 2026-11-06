@@ -78,7 +78,7 @@ impl native::Callbacks for Bridge<'_> {
         }
         self.failure = Some(error);
         return None;
-      }
+      },
     };
     self.input(&result)
   }
@@ -109,7 +109,7 @@ impl Bridge<'_> {
         } else {
           Value::Object(entries)
         }
-      }
+      },
       EvaluateResultValue::Null => Value::Undefined,
       EvaluateResultValue::Expr(expr) => return self.expression(expr),
       EvaluateResultValue::Vec(values) => Value::Array(Rc::new(
@@ -130,7 +130,7 @@ impl Bridge<'_> {
     Some(match normalize_expr(expr) {
       Expr::Lit(Lit::Str(s)) => {
         native::string_units(native::wtf_units(s.value.code_points().map(|c| c.to_u32())))
-      }
+      },
       Expr::Lit(Lit::Num(n)) => Value::Number(n.value),
       Expr::Lit(Lit::Bool(b)) => Value::Bool(b.value),
       Expr::Lit(Lit::Null(_)) => Value::Null,
@@ -148,7 +148,7 @@ impl Bridge<'_> {
           UnaryOp::Void => Value::Undefined,
           _ => return None,
         }
-      }
+      },
       Expr::Array(a) => Value::Array(Rc::new(
         a.elems
           .iter()
@@ -179,7 +179,7 @@ impl Bridge<'_> {
           values.insert(key, self.expression(&kv.value)?);
         }
         Value::Object(Rc::new(values))
-      }
+      },
       _ => return None,
     })
   }
@@ -190,7 +190,7 @@ impl Bridge<'_> {
     Some(match value {
       Value::Undefined | Value::Hole => {
         Expr::Ident(Ident::new("undefined".into(), DUMMY_SP, Default::default()))
-      }
+      },
       Value::Null => Expr::Lit(Lit::Null(Null { span: DUMMY_SP })),
       Value::Bool(value) => create_bool_expr(value),
       // Spelled where no literal writes it (`NaN`, the infinities), as the
@@ -211,7 +211,7 @@ impl Bridge<'_> {
           value: encoded.into(),
           raw: None,
         }))
-      }
+      },
       Value::Array(values) => {
         let values = values
           .iter()
@@ -231,7 +231,7 @@ impl Bridge<'_> {
           span: DUMMY_SP,
           elems: values,
         })
-      }
+      },
       Value::Object(values) | Value::NullObject(values) => {
         let props = values
           .iter()
@@ -250,7 +250,7 @@ impl Bridge<'_> {
           span: DUMMY_SP,
           props,
         })
-      }
+      },
       _ => return None,
     })
   }
@@ -308,7 +308,7 @@ pub(super) fn fold(
         && matches!(id.sym.as_ref(), "String" | "Number" | "Array" | "Object") =>
     {
       (None, id.sym.to_string(), None)
-    }
+    },
     Expr::Member(member) => {
       let key = match &member.prop {
         MemberProp::Ident(key) => key.sym.to_string(),
@@ -320,7 +320,7 @@ pub(super) fn fold(
           } else {
             return None;
           }
-        }
+        },
         _ => return None,
       };
       if key == "constructor" {
@@ -353,7 +353,7 @@ pub(super) fn fold(
                   .clone()
                   .unwrap_or_else(|| "Unsupported expression: MemberExpression".into()),
               ));
-            }
+            },
           };
           (None, key, Some(value))
         }
@@ -367,11 +367,11 @@ pub(super) fn fold(
                 .clone()
                 .unwrap_or_else(|| "Unsupported expression: MemberExpression".into()),
             ));
-          }
+          },
         };
         (None, key, Some(value))
       }
-    }
+    },
     _ => return None,
   };
   if let Some(namespace) = namespace.as_deref()
@@ -489,7 +489,7 @@ pub(super) fn fold(
           Err(error) => {
             super::callback_failure::invocation_failure(error, state);
             return None;
-          }
+          },
         };
       }
       if let EvaluateResultValue::Host(hosted) = value {
@@ -556,7 +556,7 @@ pub(super) fn fold(
         }
         super::callback_failure::invocation_failure(error, state);
         return None;
-      }
+      },
     };
   }
 
@@ -609,7 +609,7 @@ pub(super) fn fold(
         let value = match values.first() {
           Some(stylex_structures::stylex_env::HostValue::Ref(reference)) => {
             host.is_array(reference)
-          }
+          },
           _ => Ok(false),
         };
         return Some(
@@ -725,7 +725,7 @@ pub(super) fn fold(
         return Some(Err(reason));
       }
       Some(value)
-    }
+    },
     None => None,
   };
   let named_arguments = call
@@ -762,10 +762,7 @@ pub(super) fn fold(
     && receiver.is_none()
     && method == "Array"
     && let [Value::Number(length)] = args.as_slice()
-    && (!length.is_finite()
-      || *length < 0.0
-      || length.fract() != 0.0
-      || *length > u32::MAX as f64)
+    && (!length.is_finite() || *length < 0.0 || length.fract() != 0.0 || *length > u32::MAX as f64)
   {
     return Some(Err(unfoldable_call("Array")));
   }
@@ -895,7 +892,7 @@ pub(super) fn native_result(value: Value) -> Option<EvaluateResultValue> {
   Some(match value {
     Value::Function(function) => {
       EvaluateResultValue::Callback(function.value.downcast::<EvaluatedFunction>().ok()?)
-    }
+    },
     Value::OpaqueObject(id) => EvaluateResultValue::ThemeRef(carried_group::resolve(id)?),
     Value::Array(values) => EvaluateResultValue::NativeArray(values),
     Value::Object(values) => object_result(values, false)?,
@@ -939,10 +936,10 @@ fn shared_identity(left: &EvaluateResultValue, right: &EvaluateResultValue) -> O
     (EvaluateResultValue::Object(a), EvaluateResultValue::Object(b)) => Some(Rc::ptr_eq(a, b)),
     (EvaluateResultValue::SharedArray(a), EvaluateResultValue::SharedArray(b)) => {
       Some(Rc::ptr_eq(a, b))
-    }
+    },
     (EvaluateResultValue::NativeArray(a), EvaluateResultValue::NativeArray(b)) => {
       Some(Rc::ptr_eq(a, b))
-    }
+    },
     (EvaluateResultValue::Callback(a), EvaluateResultValue::Callback(b)) => Some(Rc::ptr_eq(a, b)),
     _ => None,
   }

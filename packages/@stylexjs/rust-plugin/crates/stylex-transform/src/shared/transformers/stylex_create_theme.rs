@@ -101,7 +101,7 @@ pub(crate) fn stylex_create_theme_from_group(
           Some(s) => s,
           None => stylex_panic!("{}", EXPRESSION_IS_NOT_A_STRING),
         }
-      }
+      },
       ThemeVars::Group(theme_ref) => match theme_ref.get(key.as_str()).as_css_var() {
         Some(v) => v.to_string(),
         None => stylex_panic!("{}", EXPECTED_CSS_VAR),

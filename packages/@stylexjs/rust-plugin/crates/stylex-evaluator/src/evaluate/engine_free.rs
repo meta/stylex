@@ -46,7 +46,7 @@ pub(super) fn refusal_for_a_property_read(prop: &MemberProp) -> Option<Refusal> 
       } else {
         None
       }
-    }
+    },
     _ => None,
   }
 }

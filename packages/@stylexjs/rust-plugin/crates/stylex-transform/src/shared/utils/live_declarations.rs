@@ -72,24 +72,24 @@ pub(crate) fn build_decl_use_graph(module: &Module, state: &mut StateManager) {
         for decl in &var_decl.decls {
           collect_decl_uses(state, decl);
         }
-      }
+      },
       ModuleItem::ModuleDecl(ModuleDecl::ExportDecl(export_decl)) => match &export_decl.decl {
         Decl::Var(var_decl) => {
           for decl in &var_decl.decls {
             collect_decl_uses(state, decl);
           }
-        }
+        },
         other_decl => {
           let mut visitor = CollectIdentsVisitor::default();
           other_decl.visit_with(&mut visitor);
           state.roots.extend(visitor.idents);
-        }
+        },
       },
       _ => {
         let mut visitor = CollectIdentsVisitor::default();
         item.visit_with(&mut visitor);
         state.roots.extend(visitor.idents);
-      }
+      },
     }
   }
 }
@@ -200,7 +200,7 @@ impl VisitMut for MarkStyleVarsVisitor<'_> {
             // Not a recorded spread — keep the original spread element.
             None => vec![create_jsx_spread_attr(*spread.expr.clone())],
           }
-        }
+        },
         JSXAttrOrSpread::JSXAttr(attr) => vec![create_jsx_attr_or_spread(attr.clone())],
       })
       .collect();

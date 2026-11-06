@@ -91,7 +91,7 @@ pub(crate) fn stylex_merge(
     match normalize_expr(&arg.expr) {
       Expr::Array(array) if flatten_array_arguments => {
         args_path.extend(array.elems.iter().flatten())
-      }
+      },
       _ => args_path.push(arg),
     }
   }
@@ -131,7 +131,7 @@ pub(crate) fn stylex_merge(
         if merges {
           resolved_args.push(ResolvedArg::style_object(resolved));
         }
-      }
+      },
       Expr::Cond(CondExpr {
         test,
         cons: consequent,
@@ -153,7 +153,7 @@ pub(crate) fn stylex_merge(
 
           conditional += 1;
         }
-      }
+      },
       Expr::Bin(BinExpr {
         left: left_path,
         op,
@@ -180,11 +180,11 @@ pub(crate) fn stylex_merge(
             conditional += 1;
           }
         }
-      }
+      },
       _ => {
         bail_out_index = Some(current_index);
         bail_out = true;
-      }
+      },
     }
 
     if conditional > 4 {

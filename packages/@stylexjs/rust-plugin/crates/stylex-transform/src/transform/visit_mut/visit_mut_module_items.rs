@@ -72,7 +72,7 @@ where
 
           module_items.extend(side_effect_imports);
         }
-      }
+      },
       TransformationCycle::TransformProducers | TransformationCycle::TransformConsumers => {
         // Hoisted/queued items are merged once after the consumer walk
         // completes via `flush_pending_insertions`; the per-cycle
@@ -87,7 +87,7 @@ where
           item.visit_mut_with(self);
         }
         self.state.replace_statement_anchor(parent_anchor);
-      }
+      },
       TransformationCycle::Finalize => {
         // We need it twice for a clear dead code after declaration transforms
         module_items.visit_mut_children_with(self);
@@ -98,7 +98,7 @@ where
           !matches!(module_item, ModuleItem::Stmt(Stmt::Empty(..)))
             && !matches!(module_item, ModuleItem::ModuleDecl(ModuleDecl::ExportDecl(ExportDecl { decl: Decl::Var(var), .. })) if var.decls.is_empty())
         });
-      }
+      },
     }
   }
 }

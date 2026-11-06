@@ -288,7 +288,11 @@ fn a_shadowing_binding_resolves_to_itself() {
 #[test]
 fn a_walk_that_hits_its_bound_is_terminal() {
   let mut module = state();
-  let length = module.evaluation_snapshot_for(std::iter::empty()).bounds().bindings + 32;
+  let length = module
+    .evaluation_snapshot_for(std::iter::empty())
+    .bounds()
+    .bindings
+    + 32;
 
   for step in 0..length {
     let next = Expr::Ident(ident(&format!("n{}", step + 1)));
@@ -366,7 +370,8 @@ fn a_snapshot_leaves_the_modules_own_output_behind() {
     }),
   );
 
-  let spawned = module.evaluation_snapshot_for(std::iter::empty())
+  let spawned = module
+    .evaluation_snapshot_for(std::iter::empty())
     .spawn()
     .expect("an empty walk cannot truncate");
 
@@ -432,7 +437,8 @@ fn a_snapshot_shares_the_safety_records() {
     declared: [ident("written").to_id()].into_iter().collect(),
   });
 
-  let spawned = module.evaluation_snapshot_for(std::iter::empty())
+  let spawned = module
+    .evaluation_snapshot_for(std::iter::empty())
     .spawn()
     .expect("an empty walk cannot truncate");
 
@@ -440,7 +446,10 @@ fn a_snapshot_shares_the_safety_records() {
     &module.binding_reassignments,
     &spawned.binding_reassignments
   ));
-  assert!(Rc::ptr_eq(&module.declared_bindings, &spawned.declared_bindings));
+  assert!(Rc::ptr_eq(
+    &module.declared_bindings,
+    &spawned.declared_bindings
+  ));
   assert!(spawned.has_binding_reassignment(&ident("written")));
 }
 
@@ -463,11 +472,15 @@ fn a_snapshot_shares_the_promotion_heap() {
     .borrow_mut()
     .record(1, 0, &allocation, reference.clone());
 
-  let spawned = module.evaluation_snapshot_for(std::iter::empty())
+  let spawned = module
+    .evaluation_snapshot_for(std::iter::empty())
     .spawn()
     .expect("an empty walk cannot truncate");
 
-  assert!(Rc::ptr_eq(&module.evaluation_heap(), &spawned.evaluation_heap()));
+  assert!(Rc::ptr_eq(
+    &module.evaluation_heap(),
+    &spawned.evaluation_heap()
+  ));
   assert_eq!(
     spawned
       .evaluation_heap()
@@ -491,7 +504,8 @@ fn a_snapshot_keeps_the_source_and_its_byte_bound() {
 
   module.set_input_source_file(Arc::clone(&source));
 
-  let spawned = module.evaluation_snapshot_for(std::iter::empty())
+  let spawned = module
+    .evaluation_snapshot_for(std::iter::empty())
     .spawn()
     .expect("an empty walk cannot truncate");
 
@@ -512,7 +526,8 @@ fn a_snapshot_keeps_the_options() {
 
   module.options.core.max_evaluation_depth = 7;
 
-  let spawned = module.evaluation_snapshot_for(std::iter::empty())
+  let spawned = module
+    .evaluation_snapshot_for(std::iter::empty())
     .spawn()
     .expect("an empty walk cannot truncate");
 
@@ -529,7 +544,9 @@ fn harvest_takes_what_the_invocation_recorded() {
   let (second, second_style) = rule("x2second", ".x2second{color:blue}");
 
   spawned.other_injected_css_rules.insert(first, first_style);
-  spawned.other_injected_css_rules.insert(second, second_style);
+  spawned
+    .other_injected_css_rules
+    .insert(second, second_style);
   spawned.note_nested_rule_filed();
   spawned.note_nested_rule_filed();
   spawned.queue_theme_import_if_absent(import_item("./tokens.stylex.js"));
@@ -878,7 +895,9 @@ fn an_invocation_against_a_snapshot_reports_only_its_own_output() {
   let (existing, existing_style) = rule("x1existing", ".x{color:red}");
 
   module.push_declaration(declarator(&ident("token"), Some(number(1.0))));
-  module.other_injected_css_rules.insert(existing, existing_style);
+  module
+    .other_injected_css_rules
+    .insert(existing, existing_style);
 
   let snapshot = module.evaluation_snapshot_for([ident("token").to_id()]);
 
@@ -930,8 +949,7 @@ fn a_thousand_unreached_declarations_populate_neither_captured_map() {
   }
 
   assert_eq!(
-    module.declarations_state.class_names.len()
-      + module.declarations_state.function_names.len(),
+    module.declarations_state.class_names.len() + module.declarations_state.function_names.len(),
     2_001,
     "the module itself holds every record"
   );
@@ -958,7 +976,9 @@ fn a_thousand_unreached_declarations_populate_neither_captured_map() {
 
   for index in [0usize, 999] {
     assert!(
-      spawned.declared_as(&ident(&format!("helper{index}"))).is_none(),
+      spawned
+        .declared_as(&ident(&format!("helper{index}")))
+        .is_none(),
       "an unreached helper was carried"
     );
   }
@@ -980,10 +1000,13 @@ fn opaque_fault_snapshots_keep_only_reached_ids_and_original_spans() {
   };
   let mut faults = FxHashMap::default();
   faults.insert(wanted.to_id(), fault);
-  faults.insert(shadowed.to_id(), OpaqueDeclarationFault {
-    kind: OpaqueDeclarationKind::Identifier,
-    span: Span::new(BytePos(71), BytePos(76)),
-  });
+  faults.insert(
+    shadowed.to_id(),
+    OpaqueDeclarationFault {
+      kind: OpaqueDeclarationKind::Identifier,
+      span: Span::new(BytePos(71), BytePos(76)),
+    },
+  );
   for index in 0..1_000 {
     faults.insert(ident(&format!("unrelated{index}")).to_id(), fault);
   }
@@ -992,10 +1015,15 @@ fn opaque_fault_snapshots_keep_only_reached_ids_and_original_spans() {
   let snapshot = module.evaluation_snapshot_for([wanted.to_id()]);
   assert!(!snapshot.is_truncated());
   assert_eq!(snapshot.declaration_records(), 1);
-  let spawned = snapshot.spawn().expect("the reached binding fits the bound");
+  let spawned = snapshot
+    .spawn()
+    .expect("the reached binding fits the bound");
   assert_eq!(spawned.opaque_declaration_fault(&wanted), Some(fault));
   assert_eq!(spawned.opaque_declaration_fault(&shadowed), None);
-  assert_eq!(spawned.opaque_declaration_fault(&ident("unrelated999")), None);
+  assert_eq!(
+    spawned.opaque_declaration_fault(&ident("unrelated999")),
+    None
+  );
 }
 
 #[test]
@@ -1182,7 +1210,11 @@ fn a_filing_is_published_once_and_only_the_unpublished_are_harvested() {
 
   let journal = publication.harvest(&mut local);
 
-  assert_eq!(journal.len(), 1, "the harvest owes exactly the unpublished one");
+  assert_eq!(
+    journal.len(),
+    1,
+    "the harvest owes exactly the unpublished one"
+  );
   assert_eq!(scope.finish().len(), 2);
 }
 
@@ -1296,7 +1328,10 @@ fn an_isolated_job_does_not_reach_the_collector_around_it() {
   outer_local.file_evaluation_rule(before, before_style);
 
   with_isolated_evaluation_effects(|| {
-    assert!(!effects_are_collected(), "the collector leaked into the job");
+    assert!(
+      !effects_are_collected(),
+      "the collector leaked into the job"
+    );
     assert!(!effects_are_published(), "the ledger leaked into the job");
 
     let mut inner_local = state();
@@ -1348,7 +1383,10 @@ fn an_isolated_job_restores_the_scopes_it_took_when_it_unwinds() {
   }));
 
   assert!(unwound.is_err());
-  assert!(effects_are_collected(), "the collector was lost with the job");
+  assert!(
+    effects_are_collected(),
+    "the collector was lost with the job"
+  );
   assert!(effects_are_published(), "the ledger was lost with the job");
 
   let mut local = state();
@@ -1444,13 +1482,21 @@ fn an_effect_queued_by_an_immutable_operation_is_published_before_the_next_write
   }
 
   assert_eq!(local.pending_evaluation_effects(), 1, "nothing was queued");
-  assert_eq!(scope.len(), 1, "a queued effect must not publish on its own");
+  assert_eq!(
+    scope.len(),
+    1,
+    "a queued effect must not publish on its own"
+  );
 
   // The next write flushes it, then publishes itself.
   let (second, second_style) = rule("K2", ".x{color:blue}");
   local.file_evaluation_rule(second, second_style);
 
-  assert_eq!(local.pending_evaluation_effects(), 0, "the queue did not drain");
+  assert_eq!(
+    local.pending_evaluation_effects(),
+    0,
+    "the queue did not drain"
+  );
   assert!(publication.harvest(&mut local).is_empty());
 
   let sequence: Vec<String> = scope
@@ -1512,7 +1558,11 @@ fn a_queued_effect_is_replayed_once_however_often_the_queue_is_flushed() {
     local.replay_queued_evaluation_effects();
   }
 
-  assert_eq!(local.other_injected_css_rules.len(), 1, "a rule was replayed twice");
+  assert_eq!(
+    local.other_injected_css_rules.len(),
+    1,
+    "a rule was replayed twice"
+  );
   assert_eq!(local.nested_rules_filed(), 1, "a filing was counted twice");
 }
 
@@ -1713,7 +1763,11 @@ fn a_queue_flushed_inside_an_isolated_job_stays_inside_it() {
     local.replay_queued_evaluation_effects();
   });
 
-  assert_eq!(local.pending_evaluation_effects(), 0, "the queue did not drain");
+  assert_eq!(
+    local.pending_evaluation_effects(),
+    0,
+    "the queue did not drain"
+  );
   assert_eq!(
     local.other_injected_css_rules.len(),
     2,

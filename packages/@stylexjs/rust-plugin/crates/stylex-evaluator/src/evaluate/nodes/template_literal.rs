@@ -62,7 +62,7 @@ pub(in super::super) fn evaluate_quasis(
             );
           }
           return super::super::callback_failure::invocation_failure(error, state);
-        }
+        },
       };
       let limit = traversal.character_ceiling();
       let observed = output.len().saturating_add(units.len());

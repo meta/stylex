@@ -88,11 +88,11 @@ pub(super) fn global(name: &str, args: &[Value], ctx: &mut Context<'_>) -> Optio
         ctx.budget.allocate(args.len())?;
         Some(array(args.to_vec()))
       }
-    }
+    },
     "Object" => match args.first() {
       Some(v @ Value::Object(_)) | Some(v @ Value::NullObject(_)) | Some(v @ Value::Array(_)) => {
         Some(v.clone())
-      }
+      },
       Some(v) if v.is_string() => None,
       None | Some(Value::Null | Value::Undefined) => Some(object(IndexMap::new())),
       _ => None,
@@ -180,7 +180,7 @@ fn math(name: &str, args: &[Value]) -> Option<Value> {
         let step = 2.0_f64.powi((exp - 10).max(-24));
         ((a / step).round_ties_even() * step).copysign(n)
       }
-    }
+    },
     "imul" => to_int32(n).wrapping_mul(to_int32(num(args, 1)?)) as f64,
     "log" => n.ln(),
     "log10" => n.log10(),
@@ -196,7 +196,7 @@ fn math(name: &str, args: &[Value]) -> Option<Value> {
         let floor = n.floor();
         if n - floor < 0.5 { floor } else { floor + 1.0 }
       }
-    }
+    },
     "sign" => {
       if n == 0.0 || n.is_nan() {
         n
@@ -205,7 +205,7 @@ fn math(name: &str, args: &[Value]) -> Option<Value> {
       } else {
         -1.0
       }
-    }
+    },
     "sin" => n.sin(),
     "sinh" => n.sinh(),
     "sqrt" => n.sqrt(),
@@ -237,7 +237,7 @@ fn math(name: &str, args: &[Value]) -> Option<Value> {
         }
       }
       out
-    }
+    },
     "hypot" => {
       let ns = args
         .iter()
@@ -255,7 +255,7 @@ fn math(name: &str, args: &[Value]) -> Option<Value> {
           scale * ns.iter().map(|n| (n / scale).powi(2)).sum::<f64>().sqrt()
         }
       }
-    }
+    },
     _ => return None,
   };
   Some(Value::Number(result))
@@ -313,7 +313,7 @@ fn number(name: &str, args: &[Value]) -> Option<Value> {
         }
       }
       Some(Value::Number(string_number(&s[..i])))
-    }
+    },
     "parseInt" => {
       let text = v.to_js_string()?;
       let mut s = text.trim_start_matches(js_space);
@@ -339,7 +339,7 @@ fn number(name: &str, args: &[Value]) -> Option<Value> {
         .unwrap_or(s.len());
       let n = super::integer::parse_digits(&s[..end], radix).unwrap_or(f64::NAN);
       Some(Value::Number(if negative { -n } else { n }))
-    }
+    },
     _ => None,
   }
 }
@@ -361,7 +361,7 @@ fn string_static(name: &str, args: &[Value]) -> Option<Value> {
         out.extend(wtf_units(std::iter::once(n as u32)));
       }
       Some(string_units(out))
-    }
+    },
     "raw" => {
       let template = args.first()?;
       let raw = member_value(template, "raw")?;
@@ -382,7 +382,7 @@ fn string_static(name: &str, args: &[Value]) -> Option<Value> {
         }
       }
       Some(string_units(out))
-    }
+    },
     _ => None,
   }
 }
@@ -418,7 +418,7 @@ fn object_static(name: &str, args: &[Value], ctx: &mut Context<'_>) -> Option<Va
         out.push(Value::String("length".into()));
       }
       Some(array(out))
-    }
+    },
     "fromEntries" => {
       let entries = ctx.iterable(&v)?;
       let mut out = IndexMap::new();
@@ -444,7 +444,7 @@ fn object_static(name: &str, args: &[Value], ctx: &mut Context<'_>) -> Option<Va
         out.insert(key, value);
       }
       Some(object(out))
-    }
+    },
     "hasOwn" => {
       if matches!(v, Value::Null | Value::Undefined) {
         return None;
@@ -473,7 +473,7 @@ fn object_static(name: &str, args: &[Value], ctx: &mut Context<'_>) -> Option<Va
       } else {
         Some(array(vec![]))
       }
-    }
+    },
     "isExtensible" if !v.opaque_reference() => Some(Value::Bool(v.is_reference())),
     "isFrozen" | "isSealed" if !v.opaque_reference() => Some(Value::Bool(!v.is_reference())),
     "groupBy" => {
@@ -490,7 +490,7 @@ fn object_static(name: &str, args: &[Value], ctx: &mut Context<'_>) -> Option<Va
       Some(Value::NullObject(std::rc::Rc::new(
         groups.into_iter().map(|(k, v)| (k, array(v))).collect(),
       )))
-    }
+    },
     _ => None,
   }
 }
@@ -503,7 +503,7 @@ fn array_static(name: &str, args: &[Value], ctx: &mut Context<'_>) -> Option<Val
         return ctx.callbacks.is_array(&value).map(Value::Bool);
       }
       Some(Value::Bool(matches!(value, Value::Array(_))))
-    }
+    },
     "of" => Some(array(args.to_vec())),
     "from" => {
       let v = args.first()?;
@@ -536,7 +536,7 @@ fn array_static(name: &str, args: &[Value], ctx: &mut Context<'_>) -> Option<Val
       } else {
         Some(array(items))
       }
-    }
+    },
     _ => None,
   }
 }
@@ -578,7 +578,7 @@ pub(super) fn method(
       } else {
         None
       }
-    }
+    },
     _ => None,
   }
 }
@@ -643,7 +643,7 @@ fn array_method(
           ctx.truthy(&r)?
         };
         match name {
-          "forEach" => {}
+          "forEach" => {},
           "map" => out.push(r),
           "flatMap" => {
             if let Value::Array(a) = r {
@@ -655,17 +655,17 @@ fn array_method(
             } else {
               out.push(r)
             }
-          }
+          },
           "filter" => {
             if truthy {
               out.push(v.clone())
             }
-          }
+          },
           "every" if !truthy => return Some(Value::Bool(false)),
           "some" if truthy => return Some(Value::Bool(true)),
           "find" | "findLast" if truthy => return Some(v.clone()),
           "findIndex" | "findLastIndex" if truthy => return Some(Value::Number(i as f64)),
-          _ => {}
+          _ => {},
         }
         if out.len() > output_limit() {
           return None;
@@ -678,7 +678,7 @@ fn array_method(
         "findIndex" | "findLastIndex" => Value::Number(-1.0),
         _ => array(out),
       })
-    }
+    },
     "reduce" | "reduceRight" => {
       let f = args.first()?;
       let mut indices: Box<dyn Iterator<Item = usize>> = if name == "reduceRight" {
@@ -710,7 +710,7 @@ fn array_method(
         )?;
       }
       Some(result)
-    }
+    },
     "slice" => {
       let start = offset(num(args, 0)?, values.len());
       let end = if args.get(1).is_none_or(|v| matches!(v, Value::Undefined)) {
@@ -719,7 +719,7 @@ fn array_method(
         offset(num(args, 1)?, values.len())
       };
       Some(array(values[start..end.max(start)].to_vec()))
-    }
+    },
     "concat" => {
       let mut out = values.to_vec();
       for v in args {
@@ -733,7 +733,7 @@ fn array_method(
         }
       }
       Some(array(out))
-    }
+    },
     "join" | "toString" => {
       let sep = if name == "toString" || args.first().is_none_or(|v| matches!(v, Value::Undefined))
       {
@@ -754,7 +754,7 @@ fn array_method(
         }
       }
       Some(string_units(out))
-    }
+    },
     "includes" | "indexOf" | "lastIndexOf" => {
       let needle = arg(args, 0);
       let len = values.len();
@@ -823,7 +823,7 @@ fn array_method(
       } else {
         Value::Number(found.map(|i| i as f64).unwrap_or(-1.0))
       })
-    }
+    },
     "at" => {
       let n = integer(num(args, 0)?);
       let i = if n < 0.0 { values.len() as f64 + n } else { n };
@@ -832,7 +832,7 @@ fn array_method(
       } else {
         Value::Undefined
       })
-    }
+    },
     "flat" => {
       let depth = if args
         .first()
@@ -877,7 +877,7 @@ fn array_method(
         out.push(value.clone());
       }
       Some(array(out))
-    }
+    },
     "toSpliced" => {
       let start = offset(num(args, 0)?, values.len());
       let delete = if args.is_empty() {
@@ -897,7 +897,7 @@ fn array_method(
       out.extend_from_slice(extra);
       out.extend(values[start + delete..].iter().map(get_value));
       Some(array(out))
-    }
+    },
     "toSorted" => {
       let comparator = args.first().filter(|v| !matches!(v, Value::Undefined));
       if comparator.is_some_and(|v| !v.is_function()) {
@@ -935,11 +935,11 @@ fn array_method(
           None => {
             failed = true;
             Ordering::Equal
-          }
+          },
         }
       });
       if failed { None } else { Some(array(out)) }
-    }
+    },
     "toReversed" => Some(array(values.iter().rev().map(get_value).collect())),
     "with" => {
       let n = integer(num(args, 0)?);
@@ -950,7 +950,7 @@ fn array_method(
       let mut out: Vec<_> = values.iter().map(get_value).collect();
       out[i as usize] = arg(args, 1);
       Some(array(out))
-    }
+    },
     // Mutators, iteration objects and locale-dependent operations are absent.
     _ => None,
   }
@@ -1056,7 +1056,7 @@ fn string_method(v: &Value, name: &str, args: &[Value]) -> Option<Value> {
         }
       }
       Some(string_units(out))
-    }
+    },
     "charCodeAt" | "codePointAt" | "charAt" | "at" => {
       let n = integer(num(args, 0)?);
       let i = if name == "at" && n < 0.0 {
@@ -1084,10 +1084,10 @@ fn string_method(v: &Value, name: &str, args: &[Value]) -> Option<Value> {
             first as u32
           };
           Value::Number(n as f64)
-        }
+        },
         _ => string_units(vec![first]),
       })
-    }
+    },
     "slice" | "substring" | "substr" => {
       let n = num(args, 0)?;
       let start = if name == "substring" {
@@ -1110,7 +1110,7 @@ fn string_method(v: &Value, name: &str, args: &[Value]) -> Option<Value> {
         (start, end.max(start))
       };
       Some(string_units(s[start..end].to_vec()))
-    }
+    },
     "includes" | "startsWith" | "endsWith" | "indexOf" | "lastIndexOf" => {
       let needle = arg(args, 0).to_units()?;
       let pos = if matches!(name, "endsWith" | "lastIndexOf")
@@ -1132,14 +1132,14 @@ fn string_method(v: &Value, name: &str, args: &[Value]) -> Option<Value> {
           } else {
             None
           }
-        }
+        },
         "endsWith" => {
           if s[..pos].ends_with(&needle) {
             Some(pos.saturating_sub(needle.len()))
           } else {
             None
           }
-        }
+        },
         "lastIndexOf" => {
           let mut found = None;
           for i in (0..=pos).rev() {
@@ -1149,7 +1149,7 @@ fn string_method(v: &Value, name: &str, args: &[Value]) -> Option<Value> {
             }
           }
           found
-        }
+        },
         _ => {
           let mut found = None;
           for i in pos..=len {
@@ -1159,14 +1159,14 @@ fn string_method(v: &Value, name: &str, args: &[Value]) -> Option<Value> {
             }
           }
           found
-        }
+        },
       };
       Some(if matches!(name, "includes" | "startsWith" | "endsWith") {
         Value::Bool(found.is_some())
       } else {
         Value::Number(found.map(|i| i as f64).unwrap_or(-1.0))
       })
-    }
+    },
     "repeat" => {
       let n = integer(num(args, 0)?);
       if n.is_finite() && n >= 0.0 {
@@ -1185,7 +1185,7 @@ fn string_method(v: &Value, name: &str, args: &[Value]) -> Option<Value> {
         return None;
       }
       Some(string_units(s.repeat(count)))
-    }
+    },
     "padStart" | "padEnd" => {
       let requested = integer(num(args, 0)?).max(0.0);
       // Target conversion and a no-op return precede fill-string conversion.
@@ -1219,7 +1219,7 @@ fn string_method(v: &Value, name: &str, args: &[Value]) -> Option<Value> {
       } else {
         [s, extra].concat()
       }))
-    }
+    },
     "split" => {
       let limit = if args.get(1).is_none_or(|v| matches!(v, Value::Undefined)) {
         u32::MAX
@@ -1259,7 +1259,7 @@ fn string_method(v: &Value, name: &str, args: &[Value]) -> Option<Value> {
       }
       out.push(string_units(s[start..].to_vec()));
       Some(array(out))
-    }
+    },
     "isWellFormed" | "toWellFormed" => {
       let mut out = Vec::with_capacity(len);
       let mut i = 0;
@@ -1285,7 +1285,7 @@ fn string_method(v: &Value, name: &str, args: &[Value]) -> Option<Value> {
       } else {
         string_units(out)
       })
-    }
+    },
     "trim" | "trimStart" | "trimEnd" | "trimLeft" | "trimRight" => {
       // All ECMAScript whitespace is BMP; trimming does not alter surrogates.
       let ws = |c: u16| char::from_u32(c as u32).is_some_and(js_space);
@@ -1302,7 +1302,7 @@ fn string_method(v: &Value, name: &str, args: &[Value]) -> Option<Value> {
         }
       }
       Some(string_units(s[start..end].to_vec()))
-    }
+    },
     "toUpperCase" | "toLowerCase" => {
       let mut out = Vec::new();
       let mut run = String::new();
@@ -1321,7 +1321,7 @@ fn string_method(v: &Value, name: &str, args: &[Value]) -> Option<Value> {
           Err(e) => {
             append(&mut run, &mut out);
             out.push(e.unpaired_surrogate());
-          }
+          },
         }
       }
       append(&mut run, &mut out);
@@ -1329,7 +1329,7 @@ fn string_method(v: &Value, name: &str, args: &[Value]) -> Option<Value> {
         return None;
       }
       Some(string_units(out))
-    }
+    },
     _ => None,
   }
 }
@@ -1366,7 +1366,7 @@ fn number_method(n: f64, name: &str, args: &[Value], ctx: &Context<'_>) -> Optio
       }
       out.reverse();
       Some(Value::String(String::from_utf8(out).ok()?))
-    }
+    },
     "toExponential" => {
       let f = if args.first().is_none_or(|v| matches!(v, Value::Undefined)) {
         None
@@ -1382,7 +1382,7 @@ fn number_method(n: f64, name: &str, args: &[Value], ctx: &Context<'_>) -> Optio
         f,
         &ctx.budget,
       )?))
-    }
+    },
     "toPrecision" => {
       if args.first().is_none_or(|v| matches!(v, Value::Undefined)) {
         return Some(Value::String(number_string(n)));
@@ -1396,7 +1396,7 @@ fn number_method(n: f64, name: &str, args: &[Value], ctx: &Context<'_>) -> Optio
         p as usize,
         &ctx.budget,
       )?))
-    }
+    },
     "toFixed" => {
       let digits = integer(num(args, 0)?);
       if !(0.0..=100.0).contains(&digits) {
@@ -1407,7 +1407,7 @@ fn number_method(n: f64, name: &str, args: &[Value], ctx: &Context<'_>) -> Optio
           .format_to_fixed(n, digits as u8)
           .to_owned(),
       ))
-    }
+    },
     _ => None,
   }
 }

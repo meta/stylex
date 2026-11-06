@@ -33,7 +33,7 @@ pub(super) fn quota_reason(
         1,
         limit,
       )
-    }
+    },
     (QuotaKind::DeclaredCharacters { count }, QuotaBoundary::Call(call)) => {
       stylex_constants::constants::evaluation_errors::amplified_length_too_large(
         call,
@@ -42,7 +42,7 @@ pub(super) fn quota_reason(
         1,
         limit,
       )
-    }
+    },
     (QuotaKind::DeclaredArrayEntries, _) => array_length_too_large(limit),
     (QuotaKind::DeclaredCharacters { .. }, _) => folded_string_too_large(limit),
     (QuotaKind::Characters, QuotaBoundary::Binding(name)) => bound_value_too_large(name, limit),
@@ -50,12 +50,12 @@ pub(super) fn quota_reason(
     (QuotaKind::Characters, QuotaBoundary::Call(_)) => folded_string_too_large(limit),
     (QuotaKind::ArrayEntries | QuotaKind::ObjectEntries, QuotaBoundary::Binding(name)) => {
       bound_value_has_too_many_entries(name, limit)
-    }
+    },
     (QuotaKind::ArrayEntries, _) => array_length_too_large(limit),
     (QuotaKind::ObjectEntries, _) => object_size_too_large(limit),
     (QuotaKind::Output | QuotaKind::Fuel, _) => {
       "Static evaluation exceeded its resource limit.".into()
-    }
+    },
   }
 }
 
@@ -445,11 +445,11 @@ pub(super) fn evaluate_func_call_args(
         Ok(None) => {
           deopt(&arg.expr, state, SPREAD_ELEMENT);
           return None;
-        }
+        },
         Err(error) => {
           deopt(&arg.expr, state, &error.message);
           return None;
-        }
+        },
       }
     } else {
       args.push(value);
@@ -548,7 +548,7 @@ impl OperandNumberRefusal {
     match self {
       Self::NoNumberForm(first_refusal) => {
         first_refusal.unwrap_or(String::from(ILLEGAL_PROP_VALUE))
-      }
+      },
       Self::TooLarge => grown_string_too_large(NUMERIC_CONVERSION, character_ceiling as u64),
     }
   }
@@ -626,7 +626,7 @@ impl coercions::StringSink for NumericText {
         self.held.push_str(piece);
 
         Ok(())
-      }
+      },
       None => Err(TooManyCharacters),
     }
   }
@@ -698,7 +698,7 @@ pub(super) fn evaluate_result_to_js_boolean(value: &EvaluateResultValue) -> Opti
         if reference.kind == stylex_structures::stylex_env::HostKind::BigInt =>
       {
         None
-      }
+      },
       _ => Some(true),
     },
     EvaluateResultValue::NativeArray(_)
@@ -789,10 +789,10 @@ fn write_string_of<S: coercions::StringSink>(
       stylex_structures::stylex_env::HostValue::Null => sink.write_piece("null"),
       stylex_structures::stylex_env::HostValue::Bool(value) => {
         sink.write_piece(if *value { "true" } else { "false" })
-      }
+      },
       stylex_structures::stylex_env::HostValue::Number(number) => {
         sink.write_piece(&stylex_js::native::number_string(*number))
-      }
+      },
       stylex_structures::stylex_env::HostValue::Utf16(units) => match String::from_utf16(units) {
         Ok(text) => sink.write_piece(&text),
         Err(_) => Err(coercions::StringRefusal::NoStringForm),
@@ -805,7 +805,7 @@ fn write_string_of<S: coercions::StringSink>(
         return Err(coercions::StringRefusal::NoStringForm);
       };
       sink.write_piece(&text)
-    }
+    },
     EvaluateResultValue::Object(_) => sink.write_piece(coercions::OBJECT_TO_STRING),
     EvaluateResultValue::Expr(expr) => coercions::write_js_string_of(expr, function_form, sink),
 
@@ -819,7 +819,7 @@ fn write_string_of<S: coercions::StringSink>(
           write_string_of(item, function_form, sink)
         }
       })
-    }
+    },
     EvaluateResultValue::Vec(items) => {
       coercions::write_js_join(items, sink, |item, sink| match item {
         // A confidently evaluated element with no value is `undefined`, which
@@ -828,7 +828,7 @@ fn write_string_of<S: coercions::StringSink>(
         EvaluateResultValue::Expr(expr) if coercions::joins_as_empty(expr) => Ok(()),
         item => write_string_of(item, function_form, sink),
       })
-    }
+    },
 
     // A `defineVars` group carries its own `toString`, which answers the var
     // group hash rather than the object default.
@@ -844,7 +844,7 @@ fn write_string_of<S: coercions::StringSink>(
     // day something does hand one over it reads as the object it stands for.
     EvaluateResultValue::Map(_) | EvaluateResultValue::EnvObject(_) => {
       sink.write_piece(coercions::OBJECT_TO_STRING)
-    }
+    },
 
     // A folded *map* of function configs is the namespace object, and an object
     // upstream rather than a function: `import * as stylex` binds an object
@@ -865,7 +865,7 @@ fn write_string_of<S: coercions::StringSink>(
         Some(text) => sink.write_piece(text),
         None => Err(coercions::StringRefusal::NoStringForm),
       }
-    }
+    },
 
     // Refused on the terms given on `evaluate_result_to_js_object`, and reached
     // the same way -- `-[<nothing>][0]` is the source. A `Null` *inside* a list
@@ -986,14 +986,14 @@ impl GrownString {
         self.text.push_str(addition);
 
         Ok(())
-      }
+      },
       None => {
         let reason = grown_string_too_large(self.kind, ceiling as u64);
 
         deopt(&path(), state, &reason);
 
         Err(reason)
-      }
+      },
     }
   }
 

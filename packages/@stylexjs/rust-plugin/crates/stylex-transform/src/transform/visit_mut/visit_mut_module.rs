@@ -183,12 +183,13 @@ impl ModuleBindingsCollector {
 
   fn record_parameter_fault(&mut self, pattern: &Pat) {
     if let Pat::Ident(binding) = pattern {
-      self.opaque_declaration_faults.entry(binding.id.to_id()).or_insert(
-        OpaqueDeclarationFault {
+      self
+        .opaque_declaration_faults
+        .entry(binding.id.to_id())
+        .or_insert(OpaqueDeclarationFault {
           kind: OpaqueDeclarationKind::Identifier,
           span: binding.id.span,
-        },
-      );
+        });
     }
   }
 
@@ -252,7 +253,7 @@ impl ModuleBindingsCollector {
             }
           }
           found
-        }
+        },
       };
       if let Some(parameters) = parameters {
         for (parameter, argument) in parameters.iter().zip(&call.arguments) {
@@ -424,17 +425,17 @@ impl ModuleBindingsCollector {
         Expr::Ident(ident) => {
           self.add_binding_write(ident, kind);
           return;
-        }
+        },
         Expr::Member(inner) => {
           kind = crossed_a_member_hop(kind);
           current = inner.obj.as_ref();
-        }
+        },
         Expr::Paren(paren) => current = paren.expr.as_ref(),
         Expr::OptChain(opt_chain) => match opt_chain.base.as_ref() {
           OptChainBase::Member(inner) => {
             kind = crossed_a_member_hop(kind);
             current = inner.obj.as_ref();
-          }
+          },
           // `f()?.x = 1` writes into a call result, which owns no binding.
           OptChainBase::Call(_) => return,
         },
@@ -463,7 +464,7 @@ impl ModuleBindingsCollector {
     match pattern {
       Pat::Ident(binding_ident) => {
         self.add_binding_write(&binding_ident.id, WriteKind::Reassignment)
-      }
+      },
       Pat::Array(array_pattern) => self.add_array_pattern_writes(array_pattern),
       Pat::Object(object_pattern) => self.add_object_pattern_writes(object_pattern),
       Pat::Rest(rest_pattern) => self.add_pattern_writes(&rest_pattern.arg),
@@ -475,8 +476,8 @@ impl ModuleBindingsCollector {
         if let Some(member_expression) = member_target(expression) {
           self.add_member_root_write(member_expression);
         }
-      }
-      Pat::Invalid(_) => {}
+      },
+      Pat::Invalid(_) => {},
     }
   }
 
@@ -495,7 +496,7 @@ impl ModuleBindingsCollector {
         ObjectPatProp::KeyValue(key_value) => self.add_pattern_writes(&key_value.value),
         ObjectPatProp::Assign(assign) => {
           self.add_binding_write(&assign.key.id, WriteKind::Reassignment)
-        }
+        },
         ObjectPatProp::Rest(rest) => self.add_pattern_writes(&rest.arg),
       }
     }
@@ -509,35 +510,35 @@ impl ModuleBindingsCollector {
     match target {
       SimpleAssignTarget::Ident(ident) => {
         self.add_binding_write(&ident.id, WriteKind::Reassignment)
-      }
+      },
       SimpleAssignTarget::Member(member_expression) => {
         self.add_member_root_write(member_expression)
-      }
+      },
       SimpleAssignTarget::Paren(paren) => {
         self.add_target_root_write(&paren.expr, WriteKind::Reassignment)
-      }
+      },
       SimpleAssignTarget::OptChain(opt_chain) => {
         if let OptChainBase::Member(member_expression) = opt_chain.base.as_ref() {
           self.add_member_root_write(member_expression);
         }
-      }
+      },
       SimpleAssignTarget::TsAs(ts_as) => {
         self.add_target_root_write(&ts_as.expr, WriteKind::Reassignment)
-      }
+      },
       SimpleAssignTarget::TsSatisfies(satisfies) => {
         self.add_target_root_write(&satisfies.expr, WriteKind::Reassignment)
-      }
+      },
       SimpleAssignTarget::TsNonNull(non_null) => {
         self.add_target_root_write(&non_null.expr, WriteKind::Reassignment)
-      }
+      },
       SimpleAssignTarget::TsTypeAssertion(assertion) => {
         self.add_target_root_write(&assertion.expr, WriteKind::Reassignment)
-      }
+      },
       SimpleAssignTarget::TsInstantiation(instantiation) => {
         self.add_target_root_write(&instantiation.expr, WriteKind::Reassignment)
-      }
+      },
       // `super.x = 1` and invalid targets bind no module-level name.
-      SimpleAssignTarget::SuperProp(_) | SimpleAssignTarget::Invalid(_) => {}
+      SimpleAssignTarget::SuperProp(_) | SimpleAssignTarget::Invalid(_) => {},
     }
   }
 
@@ -735,10 +736,13 @@ impl Visit for ModuleBindingsCollector {
 
   fn visit_var_declarator(&mut self, decl: &swc_core::ecma::ast::VarDeclarator) {
     if !matches!(&decl.name, Pat::Ident(_)) {
-      self.record_opaque_pattern(&decl.name, OpaqueDeclarationFault {
-        kind: OpaqueDeclarationKind::VariableDeclarator,
-        span: decl.span,
-      });
+      self.record_opaque_pattern(
+        &decl.name,
+        OpaqueDeclarationFault {
+          kind: OpaqueDeclarationKind::VariableDeclarator,
+          span: decl.span,
+        },
+      );
     }
     if let Pat::Ident(binding) = &decl.name
       && let Some(initializer) = decl
@@ -774,12 +778,12 @@ impl Visit for ModuleBindingsCollector {
       match initializer {
         Expr::Array(_) => {
           self.array_bindings.insert(id);
-        }
+        },
         Expr::Arrow(arrow) => {
           self
             .functions
             .insert(id, arrow.params.iter().map(parameter_id).collect());
-        }
+        },
         Expr::Fn(function) => {
           self.functions.insert(
             id,
@@ -790,8 +794,8 @@ impl Visit for ModuleBindingsCollector {
               .map(|param| parameter_id(&param.pat))
               .collect(),
           );
-        }
-        _ => {}
+        },
+        _ => {},
       }
     }
     decl.visit_children_with(self);
@@ -944,7 +948,7 @@ impl Visit for ModuleBindingsCollector {
       AssignTarget::Pat(pattern) => match pattern {
         AssignTargetPat::Array(array_pattern) => self.add_array_pattern_writes(array_pattern),
         AssignTargetPat::Object(object_pattern) => self.add_object_pattern_writes(object_pattern),
-        AssignTargetPat::Invalid(_) => {}
+        AssignTargetPat::Invalid(_) => {},
       },
     }
 
@@ -1042,34 +1046,34 @@ fn module_root_bindings(module: &Module) -> FxHashSet<Id> {
           variable.name.visit_with(&mut pattern);
           ids.extend(pattern.0);
         }
-      }
+      },
       Decl::Fn(function) => {
         ids.insert(function.ident.to_id());
-      }
+      },
       Decl::Class(class) => {
         ids.insert(class.ident.to_id());
-      }
+      },
       Decl::TsTypeAlias(alias) => {
         ids.insert(alias.id.to_id());
-      }
+      },
       Decl::TsInterface(interface) => {
         ids.insert(interface.id.to_id());
-      }
+      },
       Decl::TsEnum(enumeration) => {
         ids.insert(enumeration.id.to_id());
-      }
+      },
       Decl::TsModule(namespace) => {
         if let TsModuleName::Ident(ident) = &namespace.id {
           ids.insert(ident.to_id());
         }
-      }
+      },
       Decl::Using(using) => {
         for variable in &using.decls {
           let mut pattern = PatternBindings::default();
           variable.name.visit_with(&mut pattern);
           ids.extend(pattern.0);
         }
-      }
+      },
     }
   }
   let mut ids = FxHashSet::default();
@@ -1081,26 +1085,26 @@ fn module_root_bindings(module: &Module) -> FxHashSet<Id> {
         for specifier in &import.specifiers {
           ids.insert(local_binding_of(specifier).to_id());
         }
-      }
+      },
       ModuleItem::ModuleDecl(ModuleDecl::TsImportEquals(import)) => {
         ids.insert(import.id.to_id());
-      }
+      },
       ModuleItem::ModuleDecl(ModuleDecl::ExportDefaultDecl(export)) => match &export.decl {
         DefaultDecl::Class(class) => {
           if let Some(ident) = &class.ident {
             ids.insert(ident.to_id());
           }
-        }
+        },
         DefaultDecl::Fn(function) => {
           if let Some(ident) = &function.ident {
             ids.insert(ident.to_id());
           }
-        }
+        },
         DefaultDecl::TsInterfaceDecl(interface) => {
           ids.insert(interface.id.to_id());
-        }
+        },
       },
-      _ => {}
+      _ => {},
     }
   }
   ids
@@ -1150,7 +1154,7 @@ where
               .collect(),
           };
         }
-      }
+      },
     }
   }
 
@@ -1209,9 +1213,9 @@ where
       ModuleBindingsCollector::writes_only()
     };
     module.visit_with(&mut collector);
-    self.state.adopt_opaque_declaration_faults(std::mem::take(
-      &mut collector.opaque_declaration_faults,
-    ));
+    self
+      .state
+      .adopt_opaque_declaration_faults(std::mem::take(&mut collector.opaque_declaration_faults));
     self
       .state
       .adopt_binding_writes(collector.take_binding_writes());

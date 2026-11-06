@@ -154,8 +154,8 @@ fn the_array_conversion_bounds_an_evaluated_namespace_length() {
     &value,
     &stylex_state::state_manager::StateManager::default(),
   )
-    .expect("pure data boundary")
-    .expect("materializable array");
+  .expect("pure data boundary")
+  .expect("materializable array");
   let Expr::Array(array) = data else {
     panic!("expected array data")
   };

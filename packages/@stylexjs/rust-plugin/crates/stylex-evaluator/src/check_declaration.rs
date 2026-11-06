@@ -46,7 +46,11 @@ pub(crate) fn check_ident_declaration(
     None => {
       if let Some(fault) = traversal_state.opaque_declaration_fault(ident) {
         let declaration = Expr::Invalid(swc_core::ecma::ast::Invalid { span: fault.span });
-        return deopt(&declaration, state, &unsupported_expression(fault.kind.babel_node_kind()));
+        return deopt(
+          &declaration,
+          state,
+          &unsupported_expression(fault.kind.babel_node_kind()),
+        );
       }
       deopt(path, state, UNDEFINED_CONST)
     },
