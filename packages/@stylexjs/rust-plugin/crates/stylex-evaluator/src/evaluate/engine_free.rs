@@ -1,5 +1,4 @@
-//! Non-engine entrypoint. Production folding uses modeled Rust operations;
-//! optional upstream engine builds never participate in the default compiler.
+//! Non-engine entrypoint.
 use super::*;
 use std::borrow::Cow;
 pub(super) type Refusal = Cow<'static, str>;

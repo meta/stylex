@@ -1,20 +1,7 @@
-//! A call that would build more than it was written with.
-//!
-//! `'ab'.repeat(1000)` is three characters of source and two thousand of
-//! result, and inside a callback it is that again once per element. So the
-//! fold works out what a call would come to before it runs one, in the two
-//! units it spends -- characters of string and array entries -- and refuses a
-//! product it cannot bound.
-//!
-//! What each case here asserts is that the arithmetic *admits* the calls a
-//! stylesheet is actually written with. The refusals have their own suite; what
-//! is easy to lose is the other side, where a bound the walk could not read
-//! turns an ordinary declaration into one that falls to the runtime.
+//! Tests amplification bounds for strings, arrays and callback results.
 
 use super::source_evaluation::*;
 
-/// A string amplifier inside a callback is measured against the receiver's own
-/// count, so a small repetition per element still folds.
 #[test]
 fn a_string_amplifier_inside_a_callback_folds() {
   assert_folds_to_string("['a'].map(() => 'ab'.repeat(3)).join('-')", "ababab");
@@ -24,47 +11,31 @@ fn a_string_amplifier_inside_a_callback_folds() {
   );
 }
 
-/// A count written as an expression is worked out rather than refused: the rule
-/// is arithmetic, not syntax, so a product of two literals bounds the call as
-/// well as a literal does.
 #[test]
 fn a_count_written_as_an_expression_is_worked_out() {
   assert_folds_to_string("'ab'.repeat(2 * 2)", "abababab");
   assert_folds_to_string("'ab'.repeat(1 + 1)", "abab");
 }
 
-/// An array amplifier is measured in entries rather than characters.
-///
-/// Both sources name `fill`, which mutates, and this compiler refuses every
-/// mutating array method today -- so what they pin is the refusal, inside a
-/// callback and out. The reference implementation folds them on a receiver
-/// nothing can name afterwards; that half is the A10 follow-up, and the
-/// sources are kept exactly as they will be asserted when it lands.
-/// The refusal happens inside the `map` callback, so it is thrown out of the
-/// callback as the Babel plugin throws it, rather than returned as a deopt.
+/// Mutating array methods deliberately refuse even fresh receivers that Babel folds.
 #[test]
 #[should_panic(expected = "Unsupported expression: CallExpression")]
 fn an_array_amplifier_refuses_in_entries() {
   evaluate_source("['a'].map(() => [1, 2].fill(0)).flat().join('-')");
 }
 
-/// The same refusal for an amplified array filled inside the callback.
 #[test]
 #[should_panic(expected = "Unsupported expression: CallExpression")]
 fn an_amplified_array_fill_refuses_in_entries() {
   evaluate_source("['a'].map(() => Array(3).fill('x').join('')).join('-')");
 }
 
-/// A length declared as a property rather than written as an argument is read
-/// the same way, which is what lets `Array.from({ length: n })` fold.
 #[test]
 fn a_declared_length_bounds_the_call_it_sizes() {
   assert_folds_to_number("Array.from({ length: 3 }).length", 3.0);
   assert_folds_to_string("Array.from({ length: 2 }, () => 'x').join('')", "xx");
 }
 
-/// A number is measured by how wide it is written, so a call sized by one is
-/// bounded by its magnitude rather than by the digits of the source.
 #[test]
 fn a_numeric_element_is_measured_by_what_it_writes() {
   assert_folds_to_string(
@@ -74,8 +45,6 @@ fn a_numeric_element_is_measured_by_what_it_writes() {
   assert_folds_to_string("[10, 200].map((each) => each + '').join('-')", "10-200");
 }
 
-/// The values with a fixed written width -- a boolean, `null`, `undefined` --
-/// are measured by the text the language writes for them.
 #[test]
 fn the_values_with_a_fixed_width_are_measured_as_they_are_written() {
   assert_folds_to_string("[true, false].join('-')", "true-false");

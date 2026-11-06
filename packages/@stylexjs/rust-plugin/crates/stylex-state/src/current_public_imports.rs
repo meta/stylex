@@ -281,7 +281,7 @@ fn current_babel_statement_anchors_keep_atom_and_creation_source_order() {
     statement("atom_use", first),
     statement("create_use", second),
   ];
-  // Producers run before atoms, but insertion placement is authored order.
+
   state.queue_insertion(
     InsertionSlot::BeforeStatement(second),
     statement("create_hoist", DUMMY_SP),

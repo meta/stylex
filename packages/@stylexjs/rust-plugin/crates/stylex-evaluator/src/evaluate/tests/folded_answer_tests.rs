@@ -1,21 +1,4 @@
-//! What the engine answered, read back as a value the evaluator carries.
-//!
-//! The two allocation ceilings are the subject. The engine aliases, so one
-//! string referenced a thousand times costs it one string; this side copies, so
-//! the same answer is a thousand strings and a syntax node each. Nothing on the
-//! way in bounds that, because nothing on the way in wrote it: the source of
-//! `['abcd', 'efgh'].map((s) => s)` names no value at all, and the two strings
-//! are the engine's own. So the counting is here, and it runs as the answer is
-//! read.
-//!
-//! Beside them sit the two readings that need the engine while the answer is
-//! being read: a property whose getter runs, and a value this side writes no
-//! expression for.
-//!
-//! Every case names the number it is about rather than building an answer large
-//! enough to pass the shipped one, and every refusal is paired with the same
-//! shape inside the bound -- a ceiling case that refuses at every size says
-//! nothing about the ceiling.
+//! Tests character and entry limits when folded answers are materialized.
 
 use super::source_evaluation::*;
 use crate::evaluate_result::EvaluateResult;
@@ -26,20 +9,14 @@ use stylex_constants::constants::evaluation_errors::{
 use stylex_state::{evaluate_result_value::EvaluateResultValue, functions::FunctionMap};
 use swc_core::ecma::ast::{Expr, Lit, Prop, PropOrSpread};
 
-/// Evaluates `source` under the character ceiling `limit` and nothing else.
-///
-/// Every case here folds a written-out expression, so no case needs a function
-/// map and one default serves them all.
 fn at_a_character_ceiling(limit: usize, source: &str) -> Box<EvaluateResult> {
   evaluated_at_a_character_ceiling(limit, &FunctionMap::default(), source)
 }
 
-/// The same, under the entry ceiling.
 fn at_an_entry_ceiling(limit: usize, source: &str) -> Box<EvaluateResult> {
   evaluated_at_an_entry_ceiling(limit, &FunctionMap::default(), source)
 }
 
-/// The strings an array answer holds, in order.
 #[track_caller]
 fn strings_of(value: EvaluateResultValue, source: &str) -> Vec<String> {
   let value = stylex_evaluator_data(&value, source);
@@ -62,7 +39,6 @@ fn stylex_evaluator_data(value: &EvaluateResultValue, source: &str) -> Expr {
     .unwrap_or_else(|| panic!("expected `{source}` to carry materializable data, got {value:?}"))
 }
 
-/// The own keys of an object answer, in order.
 #[track_caller]
 fn keys_of(value: EvaluateResultValue, source: &str) -> Vec<String> {
   properties_of(value, source)
@@ -71,11 +47,6 @@ fn keys_of(value: EvaluateResultValue, source: &str) -> Vec<String> {
     .collect()
 }
 
-/// The own keys of an object answer paired with the strings under them.
-///
-/// The pair rather than the keys alone: a key and a value are counted through
-/// one total, so a case about that total has to be able to say which of the two
-/// arrived.
 #[track_caller]
 fn entries_of(value: EvaluateResultValue, source: &str) -> Vec<(String, String)> {
   properties_of(value, source)
@@ -123,11 +94,6 @@ fn string_of(expr: &Expr, source: &str) -> String {
   }
 }
 
-/// A string the engine built is counted on the way back, and the refusal names
-/// the ceiling it passed.
-///
-/// The receiver is written out rather than named, so nothing crosses on the way
-/// in and all eight characters are the answer's own.
 #[test]
 fn a_string_the_answer_carries_is_counted_against_the_ceiling() {
   let source = "'abcdefgh'.toUpperCase()";
@@ -144,12 +110,6 @@ fn a_string_the_answer_carries_is_counted_against_the_ceiling() {
   );
 }
 
-/// Every string of one answer is counted against one running total, rather than
-/// each being measured on its own.
-///
-/// Four characters each and seven allowed: a check per value waves both of them
-/// through, and the total is what refuses the pair. The same pair at eight
-/// folds, which is what says the number being read is the sum.
 #[test]
 fn every_string_of_one_answer_is_counted_against_the_same_total() {
   let source = "['abcd', 'efgh'].map((s) => s)";
@@ -169,12 +129,6 @@ fn every_string_of_one_answer_is_counted_against_the_same_total() {
   );
 }
 
-/// A key is text the answer holds as surely as a value is, so it is counted
-/// against the same ceiling.
-///
-/// The only string here is the key -- the value is a number, which costs no
-/// characters at all -- so a ceiling the key alone passes is what tells this
-/// reading from the one above it.
 #[test]
 fn a_key_of_a_folded_object_is_counted_as_a_string() {
   let source = "Object.fromEntries([['abcdefgh', 1]])";
@@ -194,8 +148,6 @@ fn a_key_of_a_folded_object_is_counted_as_a_string() {
   );
 }
 
-/// A key and a value share that one total, so an object of two short strings is
-/// bounded by their sum rather than by the longer of them.
 #[test]
 fn a_key_and_a_value_share_the_one_total() {
   let source = "Object.fromEntries([['abcd', 'efgh']])";
@@ -215,11 +167,6 @@ fn a_key_and_a_value_share_the_one_total() {
   );
 }
 
-/// An object with more properties than the entry ceiling refuses on its own
-/// count, before a single property of it is read back.
-///
-/// Its own sentence rather than the array's: the two are bounded by the same
-/// number and are different things for an author to shorten.
 #[test]
 fn an_object_past_the_entry_ceiling_refuses_by_its_property_count() {
   let source = "Object.fromEntries([['a', 1], ['b', 2], ['c', 3]])";
@@ -239,23 +186,6 @@ fn an_object_past_the_entry_ceiling_refuses_by_its_property_count() {
   );
 }
 
-/// A reflective static refuses.
-///
-/// `Object.create` and the rest of them hand back an object from the prototype
-/// chain, which is a step from a plain object to `Function`. Neither compiler's
-/// allowlist holds them: the reference implementation's `Object` statics are
-/// `entries`, `fromEntries`, `getOwnPropertyNames`, `getOwnPropertySymbols`,
-/// `groupBy`, `hasOwn`, `is`, `isExtensible`, `isFrozen`, `isSealed`, `keys`
-/// and `values` (`lib/index.js:6233`), so it finds no function for these five
-/// and refuses each with its terminal `Unsupported expression: CallExpression`
-/// (`lib/index.js:6942`; executed). This compiler answers the same sentence;
-/// the static-naming one was the optional engine's.
-///
-/// The read-back throw this case once reached is now asked of the walk out
-/// directly, in `built_answer_tests`: no source builds a getter any more.
-///
-/// Every one of them takes an object first and reads a key second, so one call
-/// shape reaches them all.
 #[test]
 fn a_reflective_static_refuses() {
   for method in [
@@ -278,13 +208,6 @@ fn a_reflective_static_refuses() {
   }
 }
 
-/// A function under a key is carried as the function it is, so the object folds
-/// with the key the source wrote and a function under it -- `node` and the
-/// reference implementation both answer `{ a: [Function] }` (executed). The
-/// refusal was the optional engine's, which could not carry a function back.
-///
-/// Read through the key list and `typeof`, which say the same thing without
-/// asking a function for an expression form it has no reason to have.
 #[test]
 fn a_function_under_a_key_is_carried_as_a_function() {
   let source = "Object.fromEntries([['a', () => 1]])";

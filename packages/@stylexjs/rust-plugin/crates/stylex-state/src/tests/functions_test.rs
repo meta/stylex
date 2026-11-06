@@ -1,10 +1,3 @@
-//! Which function-config shape carries a map.
-//!
-//! A namespace's API surface is registered as one of four shapes, and only one
-//! of them -- the map -- is added to after registration. `as_map_mut` is what
-//! the registration asks, so it must decline the other three rather than making
-//! a map to hand back.
-
 use std::rc::Rc;
 
 use indexmap::IndexMap;
@@ -32,8 +25,6 @@ fn a_map_answers_itself_and_can_be_added_to() {
   assert!(map.is_empty());
   map.insert("when".into(), FunctionConfigType::Regular(regular_config()));
 
-  // The insert reached the config and not a copy of it, which is the whole
-  // reason the accessor hands back a mutable borrow.
   assert_eq!(config.as_map_mut().map(|map| map.len()), Some(1));
 }
 

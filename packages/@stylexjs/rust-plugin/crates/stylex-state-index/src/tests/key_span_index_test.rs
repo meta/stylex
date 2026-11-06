@@ -25,10 +25,7 @@ mod key_span_index {
     parse_into(&Default::default(), FileName::Anon, source)
   }
 
-  /// Parses into a source map the caller owns, so a case can put more than one
-  /// file in it. Every other case here gets a fresh map, whose first byte is
-  /// `BytePos(1)` -- which is the one arrangement where an offset into the file
-  /// and a `BytePos` are interchangeable.
+  /// Parses into the caller's source map, allowing fixtures with nonzero module bases.
   fn parse_into(source_map: &Lrc<SourceMap>, name: FileName, source: &str) -> Module {
     let source_file = source_map.new_source_file(name.into(), source.to_owned());
     let lexer = Lexer::new(
@@ -57,8 +54,6 @@ mod key_span_index {
     distance_from_target: Option<u32>,
   ) -> CandidateRank {
     CandidateRank {
-      // Held constant across these comparisons: the callee field outranks every
-      // other, so a case varying it would be testing only that.
       callee_match: true,
       namespace_value_overlap,
       sibling_overlap,
@@ -66,36 +61,24 @@ mod key_span_index {
     }
   }
 
-  /// A lookup for `key`, spelled out rather than read off a compiled call, so a
-  /// test says which signals it is giving the index.
-  ///
-  /// The sibling keys are shared rather than owned by the query -- they belong to
-  /// the *call*, and production builds them once per call and hands each
-  /// namespace a handle. A case builds its own, since it is testing one lookup.
+  /// Builds a query with explicit ranking signals.
   fn query<'a>(
     key: &'a str,
     siblings: &[&str],
     value_keys: &[&str],
     target_offset: Option<u32>,
   ) -> NamespaceKeyQuery<'a> {
-    // Stated directly: these fixtures parse into a source map of their own,
-    // whose first byte is `BytePos(1)`, so a byte index into the fixture text is
-    // already the offset production would compute against the module's base.
+    // Fresh fixture maps start at BytePos(1), so target text indices are file offsets.
     NamespaceKeyQuery {
       namespace_key: key,
       sibling_keys: std::rc::Rc::new(keys(siblings)),
       namespace_value_keys: keys(value_keys),
       target_offset: target_offset.map(FileOffset::at),
-      // Spelled-out queries name no callee, so every candidate ties on that
-      // field and the cases here stay about the signals they vary. The
-      // callee-aware path is `a_call_to_another_function_does_not_answer_...`.
       callee: None,
     }
   }
 
-  /// The line `source` holds `key` on, 1-based, so a resolved span can be
-  /// asserted as a position an author would recognise rather than as a byte
-  /// offset.
+  /// Returns the 1-based line containing `needle`.
   fn line_of(source: &str, needle: &str) -> usize {
     let offset = match source.find(needle) {
       Some(offset) => offset,
@@ -105,10 +88,7 @@ mod key_span_index {
     source[..offset].matches('\n').count() + 1
   }
 
-  /// The 1-based line of `span` within `source`.
-  ///
-  /// Each fixture is parsed into a source map of its own, whose first byte is
-  /// `BytePos(1)`, so a span's offset into the file is one less than its `lo`.
+  /// Returns the 1-based span line; fixture maps start at BytePos(1).
   fn line_at(source: &str, span: Span) -> usize {
     assert!(!span.is_dummy(), "the lookup resolved no position");
 
@@ -117,8 +97,7 @@ mod key_span_index {
     source[..offset].matches('\n').count() + 1
   }
 
-  /// Every `stylex.create(...)` call in `module`, in source order, so a case can
-  /// name one by position.
+  /// Collects stylex.create calls in source order.
   fn create_calls(module: &Module) -> Vec<CallExpr> {
     module
       .body
@@ -236,14 +215,6 @@ const second = stylex.create({
     let module = parse(source);
     let index = KeySpanIndex::build(&module);
 
-    // The two calls are indistinguishable by keys alone -- above, without a
-    // target position, this same fixture refuses. Pointing the target at one
-    // call's object argument is what tells them apart.
-    // An offset into the file, not a `BytePos`: the query side and the index
-    // side are positioned in different source maps in production, so only
-    // offsets compare. This fixture's module starts at the first byte, so the
-    // two happen to coincide here -- `a_second_file_in_one_source_map_...`
-    // is the case where they do not.
     let second_object_offset = match source.rfind("({") {
       Some(offset) => offset as u32 + 2,
       None => panic!("the fixture no longer holds a call"),
@@ -258,7 +229,6 @@ const second = stylex.create({
 
     assert_eq!(
       line_at(source, span),
-      // The second of the two `root:` lines.
       line_of(source, "root:") + 3,
       "the candidate nearest the compiled call must win a tie the keys cannot break"
     );
@@ -273,8 +243,6 @@ const styles = stylex.create({
 });
 ";
 
-    // Two candidates would tie and refuse; one resolves, and it is the property
-    // a runtime object literal keeps.
     assert_eq!(
       resolved_line(source, "root", &["root"], &["color"]),
       line_of(source, "root: { color: 'blue' }")
@@ -293,10 +261,6 @@ const second = stylex.create({
 });
 ";
 
-    // The first call spells `root` twice and shares two sibling keys with the
-    // query, so it would win on sibling overlap alone. It loses because the
-    // occurrence that survives -- the last one, as at runtime -- has no value
-    // object to overlap with, and value overlap outranks siblings.
     assert_eq!(
       resolved_line(source, "root", &["root"], &["color"]),
       line_of(source, "root: { color: 'red' },\n});\n"),
@@ -304,9 +268,7 @@ const second = stylex.create({
     );
   }
 
-  /// A call at `call_lo` whose object argument carries no position of its own
-  /// and binds `key` at `key_span` -- the shape only a synthesized module has,
-  /// and the one the position fallback exists for.
+  /// Constructs a call with a positionless object argument.
   fn call_with_positionless_object(call_lo: u32, key: &str, key_span: Span) -> Stmt {
     let prop = KeyValueProp {
       key: PropName::Ident(IdentName::new(key.into(), key_span)),
@@ -375,17 +337,12 @@ const styles = stylex.create({
 });
 ";
 
-    // The first call's object holds no namespace key at all, so it contributes
-    // no candidate and cannot tie with, or outrank, the one that does.
     assert_eq!(
       resolved_line(source, "root", &["root"], &["color"]),
       line_of(source, "root: { color: 'red' }")
     );
   }
 
-  /// Every other multi-candidate case here presents its candidates in improving
-  /// order, so a loop that simply kept the last one it looked at would pass all
-  /// of them. This is the half that says the incumbent is kept.
   #[test]
   fn a_later_candidate_that_ranks_lower_does_not_displace_the_best() {
     let source = "\
@@ -403,10 +360,6 @@ const second = stylex.create({
     );
   }
 
-  /// And that a strict improvement *clears* an earlier tie rather than merely
-  /// outranking it, which is `resolve`'s `ambiguous = false` on the improvement
-  /// arm. Without it the two equal candidates below would refuse the lookup and
-  /// the better third one would never be reached.
   #[test]
   fn a_strict_improvement_clears_an_earlier_tie() {
     let source = "\
@@ -423,15 +376,6 @@ const third = stylex.create({
     );
   }
 
-  /// The call half of a span cache key. `cached_span` returns on the key alone --
-  /// no structural confirm -- so two calls that share one entry are two styles
-  /// where the second is annotated with the first's `file:line`.
-  ///
-  /// Two calls spelled identically are separated here by *position*, and by more
-  /// than one part of the digest: the call and object spans are hashed
-  /// explicitly, and `callee` is hashed through `stable_hash_wide`, which keeps
-  /// spans. So removing either alone still passes -- what this pins is the
-  /// property, not any one term. The property is what the cache depends on.
   #[test]
   fn the_call_digest_separates_two_calls_and_is_stable_for_one() {
     let module = parse(
@@ -455,27 +399,11 @@ const second = stylex.create({ root: { color: 'red' } });
     );
   }
 
-  /// The arrangement production actually runs in, which every other case here
-  /// misses by parsing into a source map of its own.
-  ///
-  /// A `SourceMap` gives each file a start position after the previous file's
-  /// end, so from the second file onward a `BytePos` is nowhere near an offset
-  /// into that file. The index is built from a module re-parsed into the code
-  /// frame's shared, process-global map, while the query is read off the
-  /// compiled call in the compiler's per-transform one -- where the same file is
-  /// usually the first, and so starts near zero.
-  ///
-  /// Comparing the two as raw positions adds a constant to every candidate's
-  /// distance, which does not cancel: `argmin |base + c - t|` over a large
-  /// `base` is just `argmin c`, so the tie-break silently became "the earliest
-  /// candidate in the file" and the second call below resolved to the first
-  /// call's `root`.
   #[test]
   fn a_module_that_does_not_start_the_source_map_is_still_measured_from_itself() {
     let source_map: Lrc<SourceMap> = Default::default();
 
-    // Registered only to push the module under test off the start of the map,
-    // which is what a process that has already compiled one file has done.
+    // Push this module past the first file in the shared SourceMap.
     let earlier = "const filler = 1;\n".repeat(8);
     let _ = parse_into(
       &source_map,
@@ -493,8 +421,6 @@ const b = stylex.create({ root: { color: 'red' } });
       source,
     );
 
-    // The two candidates are indistinguishable by keys, so the proximity
-    // tie-break is the only thing that can separate them -- which is the point.
     let second_object_offset = match source.rfind("({") {
       Some(offset) => offset as u32 + 2,
       None => panic!("the fixture no longer holds two calls"),
@@ -517,21 +443,6 @@ const b = stylex.create({ root: { color: 'red' } });
     );
   }
 
-  /// An object handed to some other function is not a worse answer than the
-  /// right one, it is not an answer at all.
-  ///
-  /// The index walks every call with an object first argument, because narrowing
-  /// it to StyleX would mean teaching it the module's import bindings. So an
-  /// application module full of `useMemo` and `createSlice` puts candidates here
-  /// that can never be right, and one of them spelling a style namespace is only
-  /// a matter of time.
-  ///
-  /// Where that bites is a call with no position of its own -- one an earlier
-  /// transform synthesized, which is the case this index's value-matching
-  /// fallback exists for. Every distance is then unmeasured, every candidate
-  /// ties, and a tie is refused: the lookup falls back to the whole-module value
-  /// walk this index replaced. Ranking the callee first separates them without a
-  /// position.
   #[test]
   fn a_call_to_another_function_does_not_answer_for_a_create_call() {
     let source = "\
@@ -564,10 +475,6 @@ const styles = stylex.create({ root: { color: 'red' } });
     );
   }
 
-  /// `CallLookup` reads its anchor off the object argument, and falls back to
-  /// the call's own position when the object has none. Every other case builds
-  /// its query by hand, so neither the fallback nor the `is_dummy` guard beside
-  /// it was ever taken.
   #[test]
   fn a_lookup_takes_its_anchor_from_the_object_then_from_the_call() {
     let source = "const styles = stylex.create({ root: { color: 'red' } });\n";
@@ -603,10 +510,6 @@ const styles = stylex.create({ root: { color: 'red' } });
     );
   }
 
-  /// `stylex.create(someVar)` has no object argument to read sibling keys from,
-  /// so the lookup offers nothing and the index answers nothing. Reached through
-  /// `CallLookup` rather than a hand-built query, which is the path production
-  /// takes.
   #[test]
   fn a_call_with_no_object_argument_resolves_to_nothing() {
     let module = parse("const styles = stylex.create(someVar);\n");
@@ -623,11 +526,6 @@ const styles = stylex.create({ root: { color: 'red' } });
     assert_eq!(span, DUMMY_SP);
   }
 
-  /// A module with the whole program on one line, which is what a bundler hands
-  /// a downstream transform. Nothing else here feeds one, and it is the shape
-  /// where the line number carries no information at all -- so the column, and
-  /// with it the proximity tie-break, is the only thing separating two
-  /// candidates.
   #[test]
   fn a_single_line_module_still_separates_its_candidates() {
     let source = "import*as stylex from'x';const a=stylex.create({root:{color:'red'}}),\
@@ -660,13 +558,6 @@ b=stylex.create({root:{color:'blue'}});";
     );
   }
 
-  /// A lookup built without a base offers no proximity signal, rather than
-  /// measuring from zero.
-  ///
-  /// The difference between `Option<ModuleBase>` and a base defaulting to zero,
-  /// which `ModuleBase`'s own documentation argues. Not hypothetical: the base
-  /// used to be recorded only on the configurations that also memoize the
-  /// module, while the lookup is reachable on the ones that do not.
   #[test]
   fn a_lookup_without_a_base_offers_no_proximity_signal() {
     let module = parse("const styles = stylex.create({ root: { color: 'red' } });\n");
@@ -691,8 +582,6 @@ b=stylex.create({root:{color:'blue'}});";
     );
   }
 
-  /// A property the index cannot read a name off -- a spread here -- is skipped,
-  /// while the properties beside it are still indexed.
   #[test]
   fn a_property_with_no_readable_name_is_skipped() {
     let source = "\
@@ -708,8 +597,6 @@ const styles = stylex.create({
     );
   }
 
-  /// The compiled call spells the key but binds it to a reference rather than to
-  /// an object literal, so the namespace contributes no value keys to rank on.
   #[test]
   fn a_namespace_bound_to_a_reference_offers_no_value_keys() {
     let module = parse("const styles = stylex.create({ root: someVar });\n");
@@ -729,8 +616,6 @@ const styles = stylex.create({
     );
   }
 
-  /// The wrapped call is a deep clone, so it is built once and handed back to
-  /// every later caller rather than cloned again.
   #[test]
   fn the_wrapped_call_is_built_once_and_reused() {
     let module = parse("const styles = stylex.create({ root: { color: 'red' } });\n");
@@ -760,25 +645,13 @@ const styles = stylex.create({
 
   #[test]
   fn rank_prefers_value_overlap_then_sibling_overlap_then_proximity() {
-    // Namespace-value overlap dominates every other signal.
     assert!(rank(2, 0, Some(100)) > rank(1, 9, Some(0)));
 
-    // Sibling-key overlap breaks value-overlap ties.
     assert!(rank(1, 3, Some(100)) > rank(1, 2, Some(0)));
 
-    // Smaller distance to the target wins a full overlap tie.
     assert!(rank(1, 3, Some(5)) > rank(1, 3, Some(6)));
-
-    // Deliberately not asserted here: that `Reverse(None)` outranks every
-    // measured distance, and that identical signals rank equal. The first is an
-    // ordering no input reaches, because the `Option` comes from the query and
-    // is uniform across one `resolve`; the second is `x == x` under a derived
-    // `PartialEq`. What a lookup does with a tie is
-    // `two_equally_good_candidates_resolve_to_nothing`.
   }
 
-  /// A module whose first byte is not the first byte of the source map, which
-  /// is the arrangement every file after the first is in.
   fn module_based_at(base: u32) -> Module {
     Module {
       span: Span {
@@ -790,8 +663,6 @@ const styles = stylex.create({
     }
   }
 
-  /// The subtraction the type exists for: a position is recorded as the
-  /// distance into its own file, not as the raw source-map position.
   #[test]
   fn an_offset_measures_from_the_base_of_its_own_module() {
     let module = module_based_at(4_096);
@@ -802,8 +673,6 @@ const styles = stylex.create({
     );
   }
 
-  /// The base itself is offset zero, and the largest position a `BytePos` can
-  /// hold does not overflow the subtraction.
   #[test]
   fn an_offset_holds_at_both_ends_of_the_range() {
     let module = module_based_at(4_096);
@@ -816,12 +685,6 @@ const styles = stylex.create({
     );
   }
 
-  /// A release build clamps a position that precedes its own base instead of
-  /// wrapping, because a code frame must not stop the build.
-  ///
-  /// The clamp is what a release build ships, because the assertion in
-  /// [`FileOffset::of`] compiles out of that profile. The case reads the
-  /// arithmetic directly, so every profile runs it.
   #[test]
   fn a_position_before_its_own_base_clamps_to_zero() {
     let module = module_based_at(4_096);
@@ -832,12 +695,6 @@ const styles = stylex.create({
     );
   }
 
-  /// Splitting the arithmetic out of the assertion must not have changed the
-  /// answer, so the two agree everywhere the assertion holds -- at the base,
-  /// one past it, and at the top of the range.
-  ///
-  /// This is the whole risk the split carries. The case below it is what the
-  /// split makes reachable; this one is what it must leave alone.
   #[test]
   fn the_clamp_answers_what_the_asserted_reader_answers() {
     let module = module_based_at(4_096);
@@ -852,8 +709,6 @@ const styles = stylex.create({
     }
   }
 
-  /// And a test build is loud about it, because clamping every candidate to
-  /// zero is the "rank by earliest in the file" failure the type prevents.
   #[test]
   #[cfg(debug_assertions)]
   #[should_panic(expected = "precedes the base of the module holding it")]

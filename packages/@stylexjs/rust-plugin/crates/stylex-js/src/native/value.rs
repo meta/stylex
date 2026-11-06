@@ -257,8 +257,7 @@ pub fn is_truthy(v: &Value) -> bool {
     _ => true,
   }
 }
-/// References are intentionally not compared structurally. Independently resolving
-/// the same binding does not prove object identity without a binding-instance cache.
+/// Compares primitives and proven reference identity; unknown reference identity returns `None`.
 pub fn strict_equal(l: &Value, r: &Value) -> Option<bool> {
   Some(match (l, r) {
     (Value::Undefined, Value::Undefined) | (Value::Null, Value::Null) => true,
@@ -595,8 +594,7 @@ pub fn iterable(v: &Value) -> Option<Vec<Value>> {
   }
 }
 
-/// Array Get exposes undefined for an absent slot; copying algorithms choose
-/// explicitly between Get (dense copies) and preserving an absent slot.
+/// Reads an absent array slot as undefined; callers choose dense Get or hole-preserving copies.
 pub(super) fn get_value(value: &Value) -> Value {
   if matches!(value, Value::Hole) {
     Value::Undefined

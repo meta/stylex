@@ -1,19 +1,4 @@
-//! Applying an arrow the author wrote themselves.
-//!
-//! An arrow folds to a callback, and a call on the *name* that holds it is what
-//! applies the callback. What the application has to get right is the binding:
-//! each parameter takes the argument in the same position, the body is folded
-//! under those names, and the value the body answers is the value of the call.
-//!
-//! Every case is written through a module binding, because that is the only way
-//! an arrow reaches the fold: an arrow called where it is written is not folded
-//! by either compiler, so a case spelled that way would be asserting the
-//! terminal refusal instead of the application.
-//!
-//! The shapes that cannot be applied answer a refusal rather than aborting --
-//! a parameter list the binding cannot read by name, and a body that is a block
-//! of statements rather than one expression. Both are ordinary JavaScript, so
-//! both belong in the output unfolded.
+//! Tests arrow invocation, positional binding and callback-body failures.
 
 use std::rc::Rc;
 
@@ -24,8 +9,6 @@ use stylex_state::{
   theme_ref::ThemeRef,
 };
 
-/// The ordinary application, at the three arities that differ: none, one, and
-/// more than one -- so an argument arriving in the wrong slot is visible.
 #[test]
 fn an_applied_arrow_answers_what_its_body_folds_to() {
   assert_eq!(
@@ -42,8 +25,6 @@ fn an_applied_arrow_answers_what_its_body_folds_to() {
   );
 }
 
-/// A parameter the call passes nothing for is left unbound, exactly as the
-/// language leaves it, so a body that does not read it still folds.
 #[test]
 fn a_parameter_with_no_argument_is_left_unbound() {
   assert_eq!(
@@ -52,9 +33,6 @@ fn a_parameter_with_no_argument_is_left_unbound() {
   );
 }
 
-/// An array argument binds through the evaluator's own list form, which is the
-/// spelling a folded array has -- a binding that read only the literal would
-/// leave the parameter unbound for half the arrays it is handed.
 #[test]
 fn an_array_argument_binds_in_the_form_a_fold_answers_it_in() {
   assert_eq!(
@@ -71,9 +49,6 @@ fn an_array_argument_binds_in_the_form_a_fold_answers_it_in() {
   );
 }
 
-/// A body that folds to an array answers the array, not nothing: the call's
-/// value is written back as a literal so the caller reads the same array
-/// whichever side of the call it is on.
 #[test]
 fn a_body_that_folds_to_an_array_answers_the_array() {
   assert_eq!(
@@ -86,10 +61,6 @@ fn a_body_that_folds_to_an_array_answers_the_array() {
   );
 }
 
-/// An argument with no compile-time form binds nothing, and a body that never
-/// reads the parameter is unaffected -- the call folds. This is what stops a
-/// function passed alongside the values a declaration needs from failing the
-/// whole call.
 #[test]
 fn an_argument_with_no_form_costs_a_body_that_never_reads_it_nothing() {
   assert_eq!(
@@ -98,12 +69,6 @@ fn an_argument_with_no_form_costs_a_body_that_never_reads_it_nothing() {
   );
 }
 
-/// The same argument, in a body that does read the parameter. The arrow is a
-/// value the native path carries, so the body hands it back and the call folds
-/// to that function -- `node` and the reference implementation both answer the
-/// function itself (executed). The refusal was the optional engine's, which had
-/// no form for a function argument. Read through `typeof`, which says so without
-/// asking a function for an expression form.
 #[test]
 fn an_argument_with_no_form_is_handed_back_by_a_body_that_reads_it() {
   folded_value_of(
@@ -116,26 +81,13 @@ fn an_argument_with_no_form_is_handed_back_by_a_body_that_reads_it() {
   );
 }
 
-/// A body that reads a name nothing binds fails too, with every argument
-/// bound.
-///
-/// The arrow is an expression arrow the call has run, so its body's refusal
-/// arrives as a throw rather than a deopt: the reference implementation folds
-/// the binding into a closure, applies it, and the closure throws
-/// `Referenced constant is not defined.` out of `lib/index.js:6451` (executed).
-/// This compiler reproduces that throw at the invocation boundary
-/// (`callback_failure.rs`); the body-without-value sentence was the optional
-/// engine's.
+/// Babel throws unresolved callback-body references at invocation (`lib/index.js:6451`).
 #[test]
 #[should_panic(expected = "Referenced constant is not defined.")]
 fn a_body_that_folds_to_nothing_throws_with_every_argument_bound() {
   evaluated_in_a_module_binding("shadow", "(color) => missingName", "shadow('red')");
 }
 
-/// A parameter list the binding cannot read by name -- a destructuring pattern,
-/// a rest element, a default -- is not applied at all. The refusal names the
-/// arrow rather than the call, because it is the arrow that has no compile-time
-/// value: nothing about the call is what stopped the fold.
 #[test]
 fn a_parameter_the_binding_cannot_name_leaves_the_arrow_unapplied() {
   for (init, source) in [
@@ -153,9 +105,6 @@ fn a_parameter_the_binding_cannot_name_leaves_the_arrow_unapplied() {
   }
 }
 
-/// A body of statements rather than one expression is not folded either, and
-/// names the arrow for the same reason. The evaluator answers expressions, and
-/// a block is a body it has no reading of.
 #[test]
 fn a_block_bodied_arrow_is_not_applied() {
   assert_refused_in_a_module_binding(
@@ -166,12 +115,6 @@ fn a_block_bodied_arrow_is_not_applied() {
   );
 }
 
-// ==================== the argument with no expression form ====================
-
-/// A `defineVars` group binds through the factory a module's own token import
-/// binds through, rather than through an expression form it does not have. So a
-/// parameter holding one resolves a member exactly as the imported name does,
-/// and the body folds the token.
 #[test]
 fn a_group_argument_binds_through_its_own_factory() {
   let fns = a_function_map_holding_a_group();
@@ -190,10 +133,6 @@ fn a_group_argument_binds_through_its_own_factory() {
   );
 }
 
-/// A body that folds to an array answers the array itself, written back as a
-/// literal -- not the empty answer a reader that knew only expressions would
-/// give it. The caller then reads the same array whichever side of the call it
-/// is on.
 #[test]
 fn a_body_that_folds_to_an_array_answers_it_as_a_literal() {
   assert_eq!(
@@ -202,11 +141,8 @@ fn a_body_that_folds_to_an_array_answers_it_as_a_literal() {
   );
 }
 
-/// The name a group is bound under in the two cases above.
 const GROUP: &str = "colors";
 
-/// A map binding that name to a `defineVars` group, which is what a token
-/// import registers.
 fn a_function_map_holding_a_group() -> FunctionMap {
   let theme = ThemeRef::new("vars.stylex.js", "vars", "x");
   let mut fns = FunctionMap::default();

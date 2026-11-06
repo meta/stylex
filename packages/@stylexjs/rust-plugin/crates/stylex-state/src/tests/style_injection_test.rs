@@ -1,12 +1,3 @@
-//! Recording the styles a call produced, and placing the runtime calls that
-//! inject them.
-//!
-//! Two entries: `register_styles`, for a call the module still holds a
-//! declarator for, and `register_atom_styles`, for one compiled away before the
-//! body is written. Both add the style to the metadata the host collects; they
-//! part company over *where* the `_inject2(...)` call goes, and over whether the
-//! runtime helpers are imported at all.
-
 use indexmap::IndexMap;
 use std::rc::Rc;
 
@@ -41,7 +32,6 @@ fn state_with(runtime_injection: Option<RuntimeInjectionState>) -> StateManager 
   StateManager::for_test(None, options(runtime_injection))
 }
 
-/// One ordinary rule, which is what a `create` call produces.
 fn regular_style(class_name: &str, css: &str, rtl: Option<&str>) -> InjectableStylesMap {
   let mut styles: InjectableStylesMap = IndexMap::new();
 
@@ -57,10 +47,6 @@ fn regular_style(class_name: &str, css: &str, rtl: Option<&str>) -> InjectableSt
   styles
 }
 
-/// One constant, which is what a `defineConsts` call produces: the same rule
-/// with the key and value the constant is written under. The value is the JSON
-/// the producer writes, so that the kind the author gave it is still readable
-/// here.
 fn const_style(class_name: &str, const_key: &str, const_value: &str) -> InjectableStylesMap {
   let mut styles: InjectableStylesMap = IndexMap::new();
 
@@ -88,8 +74,6 @@ fn call_expr(callee: &str) -> CallExpr {
   }
 }
 
-/// The module body as text, so a case can say what was written rather than
-/// matching on the AST shape of every statement.
 fn body_shapes(body: &[ModuleItem]) -> Vec<&'static str> {
   body
     .iter()
@@ -138,9 +122,6 @@ fn var_item(name: &str, init: Expr) -> ModuleItem {
   }))))
 }
 
-/// A style map with no entry in it registers nothing, through either entry --
-/// the one that always sets up injection and the one that asks the options
-/// first both answer before they reach it.
 #[test]
 fn an_empty_style_map_registers_nothing() {
   let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -151,8 +132,6 @@ fn an_empty_style_map_registers_nothing() {
   assert!(state.metadata().is_empty());
 }
 
-/// The style the call produced reaches the metadata the host collects, keyed
-/// under the one name every style is collected under.
 #[test]
 fn a_registered_style_reaches_the_metadata() {
   let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -175,8 +154,6 @@ fn a_registered_style_reaches_the_metadata() {
   );
 }
 
-/// Registering the same style twice records it once: the metadata is a set of
-/// rules, and two calls that produce one rule inject it once.
 #[test]
 fn one_style_registered_twice_is_recorded_once() {
   let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -188,10 +165,6 @@ fn one_style_registered_twice_is_recorded_once() {
   assert_eq!(state.metadata().get("stylex").map(|set| set.len()), Some(1));
 }
 
-/// The deduplicated metadata is derived from the reported rules when read. It
-/// holds what recording each rule into a set as it arrived held: every rule
-/// once, in the order of its first report, under `"stylex"` -- also across a
-/// read made between two registrations.
 #[test]
 fn the_metadata_is_the_reported_rules_deduplicated_in_first_report_order() {
   let mut state = state_with(None);
@@ -230,8 +203,6 @@ fn the_metadata_is_the_reported_rules_deduplicated_in_first_report_order() {
   );
 }
 
-/// With no runtime injection configured, the style is still recorded -- the
-/// host writes the stylesheet -- and nothing is queued to inject it.
 #[test]
 fn a_style_is_recorded_without_the_runtime_helpers() {
   let mut state = state_with(None);
@@ -251,9 +222,6 @@ fn a_style_is_recorded_without_the_runtime_helpers() {
   assert_eq!(body_shapes(&body), vec!["var"]);
 }
 
-/// With runtime injection on, a style is injected by a call written directly in
-/// front of the declarator the style belongs to, and the helpers it calls are
-/// imported at the top of the module.
 #[test]
 fn a_style_is_injected_in_front_of_its_own_declarator() {
   let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -279,8 +247,6 @@ fn a_style_is_injected_in_front_of_its_own_declarator() {
   );
 }
 
-/// A directive prologue keeps position zero: the helpers go after it, never
-/// above it, because a directive above anything else is no longer a directive.
 #[test]
 fn a_directive_prologue_stays_at_the_top() {
   let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -299,8 +265,6 @@ fn a_directive_prologue_stays_at_the_top() {
   assert_eq!(body_shapes(&body).first(), Some(&"directive"));
 }
 
-/// The helpers are imported once however many styles are registered: the second
-/// registration reads the identifiers the first one made.
 #[test]
 fn the_runtime_helpers_are_imported_once() {
   let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -331,8 +295,6 @@ fn the_runtime_helpers_are_imported_once() {
   );
 }
 
-/// The three ways runtime injection can be configured each import the helpers,
-/// and each writes the injecting call.
 #[test]
 fn every_runtime_injection_shape_imports_the_helpers() {
   for injection in [
@@ -360,8 +322,6 @@ fn every_runtime_injection_shape_imports_the_helpers() {
   }
 }
 
-/// A rule with a right-to-left half injects both halves in one call, and a
-/// constant injects the key and the value beside them.
 #[test]
 fn a_directional_rule_and_a_constant_carry_their_extra_parts() {
   let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -394,8 +354,6 @@ fn a_directional_rule_and_a_constant_carry_their_extra_parts() {
   );
 }
 
-/// A constant whose value is not a number keeps its text, which is the other
-/// half of how a constant's value is written.
 #[test]
 fn a_constant_with_a_text_value_keeps_its_text() {
   let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -414,8 +372,6 @@ fn a_constant_with_a_text_value_keeps_its_text() {
   assert_eq!(body_shapes(&body), vec!["import", "var", "call", "var"]);
 }
 
-/// A constant that holds nothing writes no key and no value into the injected
-/// call, which is what the reference writes for one.
 #[test]
 fn a_constant_that_holds_nothing_writes_no_key_and_no_value() {
   let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -436,8 +392,6 @@ fn a_constant_that_holds_nothing_writes_no_key_and_no_value() {
   assert!(!injected_text(&body).contains("constVal"));
 }
 
-/// The text of every injected call one body holds, so a case can say what the
-/// call carries rather than only that one was placed.
 fn injected_text(body: &[ModuleItem]) -> String {
   body
     .iter()
@@ -449,8 +403,6 @@ fn injected_text(body: &[ModuleItem]) -> String {
     .join(" ")
 }
 
-/// A call that produced a fallback shape injects in front of both: the
-/// declarator may end up holding either one, and only one of them survives.
 #[test]
 fn a_fallback_shape_is_injected_in_front_of_too() {
   let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -470,17 +422,8 @@ fn a_fallback_shape_is_injected_in_front_of_too() {
   assert_eq!(body_shapes(&body), vec!["import", "var", "call", "var"]);
 }
 
-/// The rules the calls inside an argument left come first in the map the
-/// producer registers, and they are taken with them.
-///
-/// The order is what puts the `@keyframes` block in front of the rule that
-/// names it. Taking them is what keeps the next producer of the module from
-/// carrying them too, which wrote the same block twice -- once in front of a
-/// declaration that named nothing of the sort.
 #[test]
 fn the_nested_rules_come_first_and_are_carried_once() {
-  // Nothing here is injected, so the project's injection setting says nothing
-  // about what is asked.
   let mut state = state_with(None);
 
   state
@@ -502,10 +445,6 @@ fn the_nested_rules_come_first_and_are_carried_once() {
   );
 }
 
-/// A producer that registers something the placement walk does not read keys
-/// its rules to nothing, and the module is printed without them. Nothing does
-/// that today, so what is asked here is that it says so: a producer written
-/// later would otherwise lose its rules in silence.
 #[test]
 fn styles_registered_against_a_shape_the_walk_cannot_read_say_so() {
   let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -527,8 +466,6 @@ fn styles_registered_against_a_shape_the_walk_cannot_read_say_so() {
     "the warning did not name the shape that cannot be found: {messages:?}"
   );
 
-  // A parenthesis is not a different expression, so the message names what is
-  // inside it rather than the wrapper.
   let wrapped = logged_at(Level::Warn, || {
     state.register_styles(
       &call_expr("create"),
@@ -548,12 +485,6 @@ fn styles_registered_against_a_shape_the_walk_cannot_read_say_so() {
   assert_eq!(body_shapes(&body), vec!["import", "var", "var"]);
 }
 
-/// A hoisted call is the shape production hands over: the call site holds a
-/// reference to the declaration the object moved to, and the object reaches
-/// the state as the fallback hash. The reference names nothing the placement
-/// walk reads, so the object is what finds the statement -- and the reference
-/// is queued under no key of its own, which is what lets the walk stop once
-/// the rules are placed.
 #[test]
 fn a_hoisted_call_is_injected_in_front_of_the_object_it_left() {
   let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -579,14 +510,6 @@ fn a_hoisted_call_is_injected_in_front_of_the_object_it_left() {
   );
 }
 
-/// Two statements can hold the same compiled object, and the first of them
-/// takes the metadata. The second is left alone, which is what stops one rule
-/// being injected twice.
-///
-/// Upstream injects the rule in front of both, because it places the rules of
-/// each call against that call rather than against the shape it left. The
-/// stylesheet is the same either way -- the rule is one rule -- so the
-/// divergence is recorded rather than followed.
 #[test]
 fn the_first_statement_holding_the_styles_takes_the_injection() {
   let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -611,8 +534,6 @@ fn the_first_statement_holding_the_styles_takes_the_injection() {
   );
 }
 
-/// Registering the same style against one shape twice queues the injecting call
-/// once, so a re-registration cannot double the rule at runtime.
 #[test]
 fn one_shape_is_injected_in_front_of_once() {
   let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -644,8 +565,6 @@ fn one_shape_is_injected_in_front_of_once() {
   );
 }
 
-/// An atom style has no declarator left to sit in front of, so its injecting
-/// call goes after the import block instead -- ahead of the body that uses it.
 #[test]
 fn an_atom_style_is_injected_after_the_import_block() {
   let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -665,8 +584,6 @@ fn an_atom_style_is_injected_after_the_import_block() {
   );
 }
 
-/// An atom style is recorded even where nothing injects it, and it is placed
-/// after the imports whether or not the runtime helpers were written.
 #[test]
 fn an_atom_style_is_recorded_without_the_runtime_helpers() {
   let mut state = state_with(None);
@@ -681,8 +598,6 @@ fn an_atom_style_is_recorded_without_the_runtime_helpers() {
   assert_eq!(body_shapes(&body), vec!["var"]);
 }
 
-/// An atom style carrying a right-to-left half writes both halves into the one
-/// injecting call.
 #[test]
 fn an_atom_style_carries_its_right_to_left_half() {
   let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -699,8 +614,6 @@ fn an_atom_style_carries_its_right_to_left_half() {
   assert_eq!(body_shapes(&body), vec!["import", "var", "call", "var"]);
 }
 
-/// A theme import is queued once however often it is offered, because the
-/// import is a side effect and repeating it repeats the effect.
 #[test]
 fn a_theme_import_is_queued_once() {
   let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -715,7 +628,6 @@ fn a_theme_import_is_queued_once() {
   assert_eq!(body_shapes(&body), vec!["import", "import", "var"]);
 }
 
-/// Import evaluation compensation is independent of runtime CSS injection.
 #[test]
 fn theme_imports_are_kept_without_the_runtime_helpers() {
   let mut state = state_with(None);
@@ -728,8 +640,6 @@ fn theme_imports_are_kept_without_the_runtime_helpers() {
   assert_eq!(body_shapes(&body), vec!["import", "var"]);
 }
 
-/// A namespace import queued for an `sx` attribute goes above everything,
-/// including the runtime helpers, and is written whether or not injection is on.
 #[test]
 fn a_prepended_import_goes_above_the_runtime_helpers() {
   let mut state = state_with(None);
@@ -745,7 +655,6 @@ fn a_prepended_import_goes_above_the_runtime_helpers() {
   assert_eq!(body_shapes(&body), vec!["import", "import", "var"]);
 }
 
-/// Nothing queued is nothing to place, and the body is left as it was.
 #[test]
 fn a_body_with_nothing_queued_is_left_alone() {
   let mut state = state_with(None);
@@ -756,8 +665,6 @@ fn a_body_with_nothing_queued_is_left_alone() {
   assert_eq!(body_shapes(&body), vec!["var"]);
 }
 
-/// A module of nothing but imports puts the atom injection at the end, because
-/// the import block is the whole body and the call goes after it.
 #[test]
 fn a_module_of_only_imports_takes_the_injection_at_the_end() {
   let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -773,8 +680,6 @@ fn a_module_of_only_imports_takes_the_injection_at_the_end() {
   );
 }
 
-/// A default export of an object is a declarator for this purpose: the style it
-/// produced is injected in front of the export.
 #[test]
 fn a_default_exported_object_takes_its_injection_in_front() {
   let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -798,7 +703,6 @@ fn a_default_exported_object_takes_its_injection_in_front() {
   assert_eq!(body_shapes(&body), vec!["import", "var", "call", "other"]);
 }
 
-/// An exported declarator takes its injection in front of the export too.
 #[test]
 fn an_exported_declarator_takes_its_injection_in_front() {
   let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -828,8 +732,6 @@ fn an_exported_declarator_takes_its_injection_in_front() {
   assert_eq!(body_shapes(&body), vec!["import", "var", "call", "other"]);
 }
 
-/// The style whose declarator the module does not hold is still recorded, and
-/// its injecting call is dropped for want of a place to write it.
 #[test]
 fn a_style_with_no_declarator_left_is_still_recorded() {
   let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -849,8 +751,6 @@ fn a_style_with_no_declarator_left_is_still_recorded() {
   assert_eq!(body_shapes(&body), vec!["import", "var", "var"]);
 }
 
-/// Whether the compiler adds theme imports for the sake of tree shaking is the
-/// project's own setting, read here and decided nowhere else.
 #[test]
 fn the_treeshake_setting_is_read_off_the_project() {
   assert!(!state_with(None).get_treeshake_compensation());
@@ -869,9 +769,6 @@ fn the_treeshake_setting_is_read_off_the_project() {
   assert!(state.get_treeshake_compensation());
 }
 
-/// Registering the styles a call produced also rewrites the call itself,
-/// wherever the state recorded it: the declarator it initialises, the style
-/// variable it is bound to, and the top-level expression it is.
 mod rewriting_the_call {
   use std::rc::Rc;
 
@@ -915,8 +812,6 @@ mod rewriting_the_call {
     styles
   }
 
-  /// The declarator the call initialises holds the compiled object afterwards,
-  /// so the module body no longer calls the API.
   #[test]
   fn the_declarator_the_call_initialises_holds_the_compiled_object() {
     let mut state = state();
@@ -935,8 +830,6 @@ mod rewriting_the_call {
     );
   }
 
-  /// A style variable's declarator is rewritten the same way, which is the
-  /// record the consuming cycle reads a namespace out of.
   #[test]
   fn the_style_variable_the_call_is_bound_to_holds_the_compiled_object() {
     let mut state = state();
@@ -958,8 +851,6 @@ mod rewriting_the_call {
     );
   }
 
-  /// A top-level expression that is the call is rewritten too, so a later
-  /// lookup by name reads the compiled object rather than the call.
   #[test]
   fn the_top_level_expression_the_call_is_holds_the_compiled_object() {
     let mut state = state();
@@ -982,33 +873,25 @@ mod rewriting_the_call {
     );
   }
 
-  /// An identifier names a style variable when the module bound it to one and
-  /// the compiler has compiled that variable's namespace. Either half alone is
-  /// not enough, and neither is a name bound in another scope.
   #[test]
   fn an_identifier_names_a_style_variable_only_when_both_records_hold_it() {
     let mut state = state();
     let declarator = make_var_declarator("styles", string_expr("compiled"));
 
-    // Bound but not compiled.
     state.insert_style_var("styles".to_string(), declarator);
     assert!(!state.is_style_var_ident(&create_ident("styles")));
 
-    // Compiled as well, and now it is one.
     state
       .style_map
       .insert("styles".to_string(), Rc::new(StylesObjectMap::new()));
     assert!(state.is_style_var_ident(&create_ident("styles")));
 
-    // A name the module never bound is not one, however it was compiled.
     state
       .style_map
       .insert("other".to_string(), Rc::new(StylesObjectMap::new()));
     assert!(!state.is_style_var_ident(&create_ident("other")));
   }
 
-  /// The identifier is asked about with the scope it was resolved in, so a name
-  /// that shadows a style variable is not that variable.
   #[test]
   fn a_name_that_shadows_a_style_variable_is_not_that_variable() {
     use swc_core::{common::SyntaxContext, ecma::ast::Ident};
@@ -1034,8 +917,6 @@ mod rewriting_the_call {
   }
 }
 
-/// A default export that is not an object anchors no injection: only an object
-/// is a namespace a style could have come from.
 #[test]
 fn a_default_exported_value_that_is_not_an_object_anchors_no_injection() {
   let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -1059,15 +940,6 @@ fn a_default_exported_value_that_is_not_an_object_anchors_no_injection() {
   assert_eq!(body_shapes(&body), vec!["import", "var", "other"]);
 }
 
-/// Where the walk that places an injecting call looks for the object a producer
-/// registered.
-///
-/// The rules a call declares belong to the statement that holds the call, so
-/// the object the call was replaced by can sit anywhere in that statement: in
-/// an array, in an object the author wrote, in the argument of a wrapping call,
-/// in a branch of a conditional, or in a class field. Each case below writes
-/// the registered object into one of those places and asks that the injecting
-/// call lands in front of the statement.
 mod finding_the_object_a_statement_holds {
   use swc_core::{
     common::{
@@ -1094,13 +966,10 @@ mod finding_the_object_a_statement_holds {
   };
   use crate::state_manager::flush_pending_insertions;
 
-  /// `{ s: <value> }` -- the object an author writes around the styles.
   fn object_holding(value: Expr) -> Expr {
     create_object_expression(vec![create_ident_key_value_prop("s", value)])
   }
 
-  /// `wrap(<value>)` -- a call that reads the styles and answers something
-  /// else.
   fn call_holding(value: Expr) -> Expr {
     Expr::Call(create_call_expr(
       Expr::Ident(create_ident("wrap")),
@@ -1108,13 +977,10 @@ mod finding_the_object_a_statement_holds {
     ))
   }
 
-  /// `true ? <value> : null` -- one branch of a conditional.
   fn branch_holding(value: Expr) -> Expr {
     create_cond_expr(string_expr("on"), value, Expr::Lit(create_null_lit()))
   }
 
-  /// `class { p = <value>; }` -- a field initialized with the styles, which
-  /// stays where it was written because it is built per instance.
   fn class_field_item(value: Expr) -> ModuleItem {
     ModuleItem::Stmt(Stmt::Decl(Decl::Class(ClassDecl {
       ident: create_ident("C"),
@@ -1147,7 +1013,6 @@ mod finding_the_object_a_statement_holds {
     })))
   }
 
-  /// `s = <value>;` -- an assignment rather than a declaration.
   fn assignment_item(value: Expr) -> ModuleItem {
     ModuleItem::Stmt(Stmt::Expr(ExprStmt {
       span: DUMMY_SP,
@@ -1162,7 +1027,6 @@ mod finding_the_object_a_statement_holds {
     }))
   }
 
-  /// Registers one style against `ast` and flushes over a body of one item.
   fn placed_shapes(item: ModuleItem, ast: &Expr) -> Vec<&'static str> {
     let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
     let mut body = vec![item];
@@ -1179,10 +1043,6 @@ mod finding_the_object_a_statement_holds {
     body_shapes(&body)
   }
 
-  /// The module body `source` parses to.
-  ///
-  /// Read as TypeScript, which is what the compiler is handed. A namespace is
-  /// one of the cases below and it has no JavaScript spelling.
   fn parse_body(source: &str) -> Vec<ModuleItem> {
     let source_map: Lrc<SourceMap> = Default::default();
     let file: Lrc<SourceFile> =
@@ -1200,14 +1060,6 @@ mod finding_the_object_a_statement_holds {
     }
   }
 
-  /// A namespace holds module items, so its statements would read as the
-  /// statements of the module itself. Everything in one is below program level,
-  /// which is what hoists a declaration out of it, so a namespace holds nothing
-  /// a producer registered and the walk does not read it.
-  ///
-  /// The object inside the namespace has the shape of the registered one. The
-  /// injection lands in front of the statement after it, which is what says the
-  /// namespace was stepped over rather than read.
   #[test]
   fn a_namespace_is_stepped_over_and_takes_no_injection() {
     let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -1232,15 +1084,6 @@ mod finding_the_object_a_statement_holds {
     );
   }
 
-  /// One statement holding every body the walk steps over, and the registered
-  /// object behind them.
-  ///
-  /// A method, a constructor, an arrow, a getter and a setter each hold code
-  /// that cannot declare the styles of the statement around it, because a call
-  /// written in one is below program level and is hoisted to a declaration of
-  /// its own. The walk reads none of them and still finds the object, and it
-  /// stops reading the statement once the last queued item is placed -- the
-  /// element after the object is never asked about.
   #[test]
   fn the_walk_steps_over_every_body_and_stops_when_nothing_is_left() {
     let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -1317,10 +1160,6 @@ mod finding_the_object_a_statement_holds {
     );
   }
 
-  /// A wrapper chain far longer than anything an author writes, to show the
-  /// walk reads to the bottom of a statement rather than to a fixed depth. The
-  /// old walk read arrays, objects and parentheses only, so this shape dropped
-  /// its rules whatever the depth.
   #[test]
   fn a_long_chain_of_wrapping_calls_still_takes_the_injection() {
     let ast = object_expr();
@@ -1336,10 +1175,6 @@ mod finding_the_object_a_statement_holds {
     );
   }
 
-  /// An object holding an arrow is the other shape the hash gives up on, and a
-  /// compiled dynamic style is exactly that. It is read through here like any
-  /// other wrapper: the walk pays the copy the hash falls back to, and the
-  /// styles inside are still found.
   #[test]
   fn an_object_holding_an_arrow_is_still_read_through() {
     let ast = object_expr();
@@ -1354,11 +1189,6 @@ mod finding_the_object_a_statement_holds {
     );
   }
 
-  /// An object of more than 128 properties is the shape the hash gives up on,
-  /// falling back to a copy of the subtree. It is reached here through a
-  /// wrapper, which is the position that makes the walk read it at all, and it
-  /// is not the registered object -- so the walk pays that copy and then finds
-  /// the styles inside.
   #[test]
   fn a_wide_object_the_hash_copies_is_still_read_through() {
     let ast = object_expr();
@@ -1377,10 +1207,6 @@ mod finding_the_object_a_statement_holds {
     );
   }
 
-  /// A function body holds nothing a producer registered: a call written in one
-  /// is not at program level, so its object is hoisted to a declaration of its
-  /// own and the hoisted declaration is what the walk finds. Not descending
-  /// into a body is what keeps the walk off every component in a module.
   #[test]
   fn an_object_a_function_body_holds_anchors_no_injection() {
     let ast = object_expr();
@@ -1394,13 +1220,6 @@ mod finding_the_object_a_statement_holds {
     );
   }
 
-  /// The walk stops at the object it matched, so a candidate below a registered
-  /// object is not looked for. Nothing real stands there: the rules a nested
-  /// `keyframes` declares are keyed to the object it was folded into, not to
-  /// the name left in it, which
-  /// `crates/stylex-transform/tests/transform_stylex_create_test/program_level_positions.rs`
-  /// measures through the whole compiler. What the stop buys is the price of a
-  /// large compiled object, which stays at the one hash it has always cost.
   #[test]
   fn a_name_below_the_object_that_matched_is_not_looked_for() {
     let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -1426,9 +1245,6 @@ mod finding_the_object_a_statement_holds {
     assert_eq!(body_shapes(&body), vec!["import", "var", "call", "var"]);
   }
 
-  /// A name a compiled `keyframes` left is a candidate where it is not below a
-  /// registered object: `const name = stylex.keyframes({ … })` is a statement
-  /// whose whole initializer is the name.
   #[test]
   fn a_name_a_statement_holds_takes_the_injection_in_front() {
     let mut state = state_with(Some(RuntimeInjectionState::Boolean(true)));
@@ -1448,11 +1264,6 @@ mod finding_the_object_a_statement_holds {
   }
 }
 
-/// The `create` transform records a call's style variable after the call's
-/// rules are registered, holding the compiled object, rather than before with
-/// the call and having registration rewrite it. Where the call registers rules
-/// the two orders leave the state the same, for a fresh name and for a name an
-/// earlier, differently bound declarator already holds.
 mod style_var_registration_order {
   use super::*;
   use stylex_enums::top_level_expression::TopLevelExpressionKind;
@@ -1486,8 +1297,6 @@ mod style_var_registration_order {
     }
   }
 
-  /// A state the discovery pass filled for `name = create(...)`, optionally
-  /// with an earlier style variable of the same name already compiled.
   fn discovered(call: &CallExpr, name: &str, predecessor: bool) -> StateManager {
     let mut state = state_with(None);
     let call_expr = Expr::Call(call.clone());
@@ -1525,16 +1334,14 @@ mod style_var_registration_order {
     )
   }
 
-  /// What an earlier declarator left recorded before the call under test.
   #[derive(Clone, Copy)]
   enum Prior {
     None,
-    /// The same name, bound differently, already compiled.
+
     SameNameCompiled,
-    /// The same name, bound differently, still holding the same call because
-    /// its own call registered no rules.
+
     SameNameHoldingCall,
-    /// Another name still holding the same call.
+
     OtherNameHoldingCall,
   }
 
@@ -1556,8 +1363,6 @@ mod style_var_registration_order {
     state
   }
 
-  /// The order the transform used before: the style variable recorded with
-  /// the call, then the rules registered.
   fn original_sequence(state: &mut StateManager, call: &CallExpr, styles: &InjectableStylesMap) {
     state.insert_style_var(
       "styles".to_string(),
@@ -1566,7 +1371,6 @@ mod style_var_registration_order {
     state.register_styles(call, styles, &compiled(), None);
   }
 
-  /// The order the transform uses now, guards included.
   fn guarded_sequence(state: &mut StateManager, call: &CallExpr, styles: &InjectableStylesMap) {
     let key = stable_hash_unspanned_call(call);
     if !styles.is_empty() && state.style_var_for_call_keyed(call, || key).is_none() {
@@ -1617,11 +1421,6 @@ mod style_var_registration_order {
     assert_same_state(Prior::OtherNameHoldingCall, IndexMap::new());
   }
 
-  /// Without the guards -- the call recorded compiled after registration
-  /// whatever registration did -- a call with no rules, or another name still
-  /// holding the call, would leave a different state. (The same name still
-  /// holding it happens to converge, because recording the name replaces that
-  /// entry either way; the guard keeps the original order there too.)
   #[test]
   fn the_unguarded_order_differs_where_the_guards_apply() {
     for (prior, styles) in [
@@ -1641,10 +1440,6 @@ mod style_var_registration_order {
     }
   }
 
-  /// An earlier declarator of the same name whose call registered no rules
-  /// still holds that call, so registering an identical call with rules would
-  /// rewrite *it*. The transform asks this before recording its own style
-  /// variable compiled, and keeps the old order when it answers.
   #[test]
   fn an_unrewritten_style_variable_for_the_same_call_is_reported() {
     let call = create_call(10);
@@ -1674,10 +1469,6 @@ mod style_var_registration_order {
     assert_eq!(state.style_var_for_call_keyed(&call, || key), None);
   }
 
-  /// Registration rewrites nothing for a call with no rules, so there the
-  /// orders differ -- the style variable keeps the call -- which is why the
-  /// transform records such a call's style variable before registering, as it
-  /// always did.
   #[test]
   fn a_call_with_no_rules_keeps_the_call_as_its_style_variable() {
     let call = create_call(10);

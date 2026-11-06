@@ -1,7 +1,6 @@
 use super::{Context, Value, output_limit, value::*};
 use swc_core::common::DUMMY_SP;
-/// String-pattern replacement only. RegExp objects, Symbol hooks and host callbacks
-/// are not admitted into Value and therefore cannot reach this dispatch.
+/// Replaces string patterns in UTF-16 units; RegExp and Symbol hooks are unsupported.
 pub(super) fn evaluate(
   v: &Value,
   name: &str,

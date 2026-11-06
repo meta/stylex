@@ -1,6 +1,5 @@
-//! Exact integer-radix conversion, bounded to binary64's exponent range. Once
-//! more than 1024 significant bits have accumulated the result is Infinity;
-//! remaining digits are still validated, but cannot grow storage or arithmetic.
+//! Integer-radix conversion to binary64, with storage capped at 1024 significant bits.
+//! Overflow yields Infinity; remaining digits are still validated.
 pub(super) fn parse_digits(text: &str, radix: u32) -> Option<f64> {
   if text.is_empty() || !(2..=36).contains(&radix) {
     return None;

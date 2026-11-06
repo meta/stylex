@@ -16,11 +16,7 @@ use stylex_structures::stylex_env::JSFunction;
 pub type StylexTypeFn = Rc<dyn Fn(ValueWithDefault) -> Expr + 'static>;
 pub type StylexExprFn = fn(Expr, &mut StateManager) -> Expr;
 
-/// The `stylex.when.*` functions, which alone among the StyleX helpers take a
-/// second argument: an optional custom marker to observe instead of the
-/// default one. Both arguments stay `EvaluateResultValue` because a marker
-/// imported from another file resolves to a `ThemeRef`, which no `Expr` can
-/// represent.
+/// The `stylex.when.*` functions, which alone among the StyleX helpers take a second argument: an optional custom marker to observe instead of the default one.
 pub type StylexWhenFn =
   fn(EvaluateResultValue, Option<EvaluateResultValue>, &mut StateManager) -> Expr;
 
@@ -35,14 +31,9 @@ pub enum FunctionType {
   ValueMapper(Rc<dyn Fn() -> EvaluateResultValue + 'static>),
   ThemeRefMapper(Rc<dyn Fn() -> ThemeRef + 'static>),
   /// A function the module wrote, called with evaluated arguments.
-  ///
-  /// The expression itself rather than a named kind of callback: a method on a
-  /// value is evaluated as JavaScript, and a global called as a function is
-  /// too, so an arrow the author wrote is the only callback left to stand for.
   Callback(Box<Expr>),
   DefaultMarker(Arc<IndexMap<String, StylexWhenFn>>),
   /// An env function from the `env` config option.
-  /// Takes evaluated arguments as `Expr`s and returns an `Expr`.
   EnvFunction(JSFunction),
 }
 
@@ -134,20 +125,9 @@ pub struct FunctionConfig {
 pub enum FunctionConfigType {
   Regular(FunctionConfig),
   Map(FunctionConfigMap),
-  /// A compiled style object registered under a name, shared rather than
-  /// copied.
-  ///
-  /// The default marker is the only such object today. One file registers it
-  /// again for each name it imports the marker by, and no reader changes it, so
-  /// every registration points at one map.
+  /// A compiled style object registered under a name, shared rather than copied.
   IndexMap(Rc<FlatCompiledStyles>),
-  /// An env object from the `env` config option. Contains both values and
-  /// functions.
-  /// The `env` option's object, shared rather than copied.
-  ///
-  /// Registered once per `stylex` import name per `create` call, so a copy here
-  /// is a copy per style object. It is read-only after options construction,
-  /// which is what makes the sharing sound.
+  /// An env object from the `env` config option.
   EnvObject(Rc<IndexMap<String, stylex_structures::stylex_env::EnvEntry>>),
 }
 
@@ -182,10 +162,7 @@ impl PartialEq for FunctionConfigType {
       (Self::Regular(a), Self::Regular(b)) => a == b,
       (Self::Map(a), Self::Map(b)) => a == b,
       (Self::IndexMap(a), Self::IndexMap(b)) => Rc::ptr_eq(a, b),
-      // One pointer compare, and an exact answer rather than a conservative
-      // one. The payload was a bare map when this arm was written, where
-      // answering meant a deep compare per probe; it is shared from the options
-      // now, so two `EnvObject`s are the same object or they are not.
+
       (Self::EnvObject(a), Self::EnvObject(b)) => Rc::ptr_eq(a, b),
       _ => false,
     }
@@ -214,8 +191,7 @@ impl std::hash::Hash for FunctionConfigType {
   }
 }
 impl FunctionConfigType {
-  /// Which variant this is, for the memo fingerprint: a name bound to a
-  /// callable and the same name bound to a style object are two entries.
+  /// Which variant this is, for the memo fingerprint: a name bound to a callable and the same name bound to a style object are two entries.
   fn kind_tag(&self) -> u8 {
     match self {
       Self::Regular(_) => 0,
@@ -238,16 +214,12 @@ pub struct FunctionMap {
   pub identifiers: FunctionMapIdentifiers,
   pub bindings: rustc_hash::FxHashMap<swc_core::ecma::ast::Id, Box<FunctionConfigType>>,
   pub member_expressions: FunctionMapMemberExpression,
-  /// If `true`, disables the generation or processing of imports for this
-  /// function map. Set to `true` when imports should not be generated (e.g.,
-  /// for built-in or inlined functions). Set to `false` to allow normal
-  /// import handling.
+  /// If `true`, disables the generation or processing of imports for this function map.
   pub disable_imports: bool,
 }
 
 impl FunctionMap {
-  /// Only static module inventories may participate in AST memoization. A
-  /// call-time binding is not described by the mapper closure's identity.
+  /// Only static module inventories may participate in AST memoization.
   pub fn is_static_memo_context(&self) -> bool {
     fn static_config(config: &FunctionConfigType) -> bool {
       match config {
@@ -270,8 +242,7 @@ impl FunctionMap {
         .all(|members| members.values().all(|config| static_config(config)))
   }
 
-  /// Exact static-inventory comparison. Registration order is not meaningful,
-  /// but nested JS-visible map entry order is part of the value it produces.
+  /// Exact static-inventory comparison.
   pub fn same_memo_inventory(&self, other: &Self) -> bool {
     fn equal_config(a: &FunctionConfigType, b: &FunctionConfigType) -> bool {
       match (a, b) {
@@ -308,23 +279,7 @@ impl FunctionMap {
       })
   }
 
-  /// What this map contributes to a fold's answer, as one number: the names it
-  /// registers, as identifiers and as members of an import source, with the
-  /// kind of entry each is bound to, and whether imports resolve.
-  ///
-  /// Two maps with the same fingerprint fold any one subtree of a module to the
-  /// same value, which is what lets the evaluator's module-lifetime memo answer
-  /// a fold made under one of them with an entry written under the other. Two
-  /// maps with different fingerprints may not: a `create` call registers
-  /// `firstThatWorks`, so it folds `stylex.firstThatWorks('a', 'b')` to a value,
-  /// where the `props` merge, which registers no such helper, leaves the call
-  /// to the runtime as the reference implementation does.
-  ///
-  /// Entry order does not matter: each entry is hashed on its own and the
-  /// hashes are summed, so two maps built in different orders read the same.
-  /// Every entry includes its actual callable/value identity. The module's
-  /// StateManager retains the function maps alongside memo entries, so pointer
-  /// identities cannot be freed and reused while a key remains reachable.
+  /// What this map contributes to a fold's answer, as one number: the names it registers, as identifiers and as members of an import source, with the kind of entry each is bound to, and whether imports resolve.
   pub fn memo_fingerprint(&self) -> u64 {
     use std::hash::{Hash, Hasher};
 
@@ -370,21 +325,15 @@ impl FunctionMap {
   }
 }
 
-/// Which StyleX helpers a rule call folds inside its argument, and the key the
-/// map that registers them is kept under.
-///
-/// `keyframes` and `positionTry` fold `firstThatWorks` alone: a `keyframes`
-/// call written inside either of them must refuse, so its name stays
-/// unregistered there. `viewTransitionClass` folds `keyframes` too, because one
-/// of its steps may name a keyframes rule.
+/// Which StyleX helpers a rule call folds inside its argument, and the key the map that registers them is kept under.
+/// `keyframes` and `positionTry` fold `firstThatWorks` alone: a `keyframes` call written inside either of them must refuse, so its name stays unregistered there.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RuleCallHelpers {
   FirstThatWorks,
   FirstThatWorksAndKeyframes,
 }
 
-/// The function maps the rule calls evaluate their argument with, one per set
-/// of helpers.
+/// The function maps the rule calls evaluate their argument with, one per set of helpers.
 #[derive(Clone, Debug, Default)]
 pub struct RuleCallFunctionMaps {
   first_that_works: Option<Rc<FunctionMap>>,
@@ -393,9 +342,6 @@ pub struct RuleCallFunctionMaps {
 
 impl RuleCallFunctionMaps {
   /// The slot `helpers` is kept in.
-  ///
-  /// One match for the read and the write alike, and an exhaustive one, so a
-  /// new set of helpers does not compile until it has a slot to live in.
   pub fn slot(&mut self, helpers: RuleCallHelpers) -> &mut Option<Rc<FunctionMap>> {
     match helpers {
       RuleCallHelpers::FirstThatWorks => &mut self.first_that_works,

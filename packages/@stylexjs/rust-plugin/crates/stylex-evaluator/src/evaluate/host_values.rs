@@ -1,5 +1,4 @@
-//! Lossless host/result boundaries. Live references remain live during
-//! evaluation; materialization is explicit and only happens for final data.
+//! Fallible conversion between host values and evaluator data.
 use super::*;
 use stylex_structures::stylex_env::{HostEnv, HostError, HostResult, HostValue, Materialized};
 use swc_core::common::DUMMY_SP;

@@ -44,10 +44,6 @@ mod fill_state_declarations_tests {
     assert_eq!(state.declarations.len(), 2);
   }
 
-  /// `var m = f(); var m = f();` — two declarations that read the same but sit
-  /// at different positions. Collapsing them loses the second one, and a
-  /// transform that pins a call to its declarator by span then finds nothing
-  /// to rewrite, leaving the call in the output.
   #[test]
   fn adds_identical_declarations_from_different_positions() {
     let mut state = StateManager::default();
@@ -72,7 +68,6 @@ mod fill_state_declarations_tests {
 
     assert_eq!(state.declarations.len(), 2);
 
-    // Re-recording either one on a later discovery pass is still a no-op.
     fill_state_declarations(&mut state, &first);
     fill_state_declarations(&mut state, &second);
 
@@ -226,7 +221,7 @@ mod fill_top_level_expressions_tests {
 
     fill_top_level_expressions(&module, &mut state);
     assert_eq!(state.top_level_expressions.len(), 1);
-    // Default exports don't add to declarations
+
     assert!(state.declarations.is_empty());
   }
 }
@@ -387,9 +382,6 @@ mod fill_top_level_non_ident_pattern_tests {
   use super::*;
   use swc_core::ecma::ast::{ArrayPat, CallExpr, Callee, ObjectPat};
 
-  /// `export const [ a ] = expr;` exports no single name to record, so it is
-  /// skipped rather than rejected — it is ordinary JavaScript, and the APIs
-  /// that do require a name report that against the call themselves.
   #[test]
   fn export_decl_with_array_pattern_skipped() {
     let mut state = StateManager::default();
@@ -424,8 +416,6 @@ mod fill_top_level_non_ident_pattern_tests {
     assert!(state.declarations.is_empty());
   }
 
-  /// A statement declarator bound to a pattern declares no single name, so it
-  /// contributes no top-level expression either.
   #[test]
   fn stmt_var_with_object_pattern_skipped() {
     let mut state = StateManager::default();
@@ -452,13 +442,10 @@ mod fill_top_level_non_ident_pattern_tests {
       shebang: None,
     };
     fill_top_level_expressions(&module, &mut state);
-    // Object pattern is skipped, no expressions added
+
     assert!(state.top_level_expressions.is_empty());
   }
 
-  /// A pattern-bound declarator declares no name, so nothing reaches the list
-  /// of top-level expressions. Where the call stands is read from
-  /// `fill_call_positions`, which the suite below covers.
   #[test]
   fn export_decl_with_pattern_records_no_expression() {
     let call_span = Span {
@@ -475,10 +462,6 @@ mod fill_top_level_non_ident_pattern_tests {
     assert!(state.top_level_expressions.is_empty());
   }
 
-  /// The export is not what makes the call program level -- a plain statement
-  /// is at program level too. The two shapes reach the same arm through
-  /// different `ModuleItem` variants, so a test of the export alone leaves the
-  /// statement route unwalked.
   #[test]
   fn statement_with_pattern_records_no_expression() {
     let call_span = Span {
@@ -505,7 +488,6 @@ mod fill_top_level_non_ident_pattern_tests {
     }
   }
 
-  /// `const { a } = <init>;`, the declaration both wrappers below carry.
   fn pattern_bound_decl(init: Expr) -> Box<VarDecl> {
     Box::new(VarDecl {
       span: DUMMY_SP,
@@ -526,7 +508,6 @@ mod fill_top_level_non_ident_pattern_tests {
     })
   }
 
-  /// `export const { a } = <init>;`
   fn pattern_bound_export(init: Expr) -> Module {
     Module {
       span: DUMMY_SP,
@@ -538,7 +519,6 @@ mod fill_top_level_non_ident_pattern_tests {
     }
   }
 
-  /// `const { a } = <init>;` -- the same declaration without the export.
   fn pattern_bound_statement(init: Expr) -> Module {
     Module {
       span: DUMMY_SP,
@@ -562,8 +542,6 @@ mod fill_call_positions_tests {
 
   use crate::{state_manager::StateManager, state_writers::fill_call_positions};
 
-  /// Every `create(…)` the source writes, in source order. Only that name, so
-  /// a source can wrap the call in another one and still name a single subject.
   #[derive(Default)]
   struct Calls(Vec<CallExpr>);
 
@@ -605,12 +583,10 @@ mod fill_call_positions_tests {
     })
   }
 
-  /// The state a module leaves behind, with the calls it writes.
   fn positions_of(source: &str) -> (StateManager, Vec<CallExpr>) {
     positions_of_in(source, es_syntax())
   }
 
-  /// The same, for a source only TypeScript reads -- a namespace.
   fn positions_of_ts(source: &str) -> (StateManager, Vec<CallExpr>) {
     positions_of_in(source, Syntax::Typescript(TsSyntax::default()))
   }
@@ -627,7 +603,6 @@ mod fill_call_positions_tests {
     (state, calls.0)
   }
 
-  /// Whether the single call the source writes stands at program level.
   #[track_caller]
   fn only_call_is_program_level(source: &str) -> bool {
     let (state, calls) = positions_of(source);
@@ -637,7 +612,6 @@ mod fill_call_positions_tests {
     state.is_program_level_call(&calls[0])
   }
 
-  /// Whether the single call the source writes is a whole statement.
   #[track_caller]
   fn only_call_is_bare_statement(source: &str) -> bool {
     let (state, calls) = positions_of(source);
@@ -647,9 +621,6 @@ mod fill_call_positions_tests {
     state.is_bare_call_statement(&calls[0])
   }
 
-  /// The shapes a module writes its styles in. Each holds the call in a
-  /// statement of the module itself, with no function and no second statement
-  /// between, which is what keeps the compiled object where it was written.
   #[test]
   fn a_call_a_module_statement_holds_is_at_program_level() {
     for source in [
@@ -667,10 +638,6 @@ mod fill_call_positions_tests {
       "const s = true ? create({}) : null;",
       "const s = (0, create({}));",
       "create({});",
-      // A class body is not a statement and a field initializer is not a
-      // function, so the field stands where the class stands. The object is
-      // then built once per instance rather than once for the module, which is
-      // what the reference implementation does with it too.
       "class C { p = create({}); }",
       "export class C { p = create({}); }",
     ] {
@@ -681,8 +648,6 @@ mod fill_call_positions_tests {
     }
   }
 
-  /// A function and a second statement each put what they hold below program
-  /// level, so the compiled object is hoisted to a declaration of its own.
   #[test]
   fn a_call_a_function_or_a_second_statement_holds_is_not_at_program_level() {
     for source in [
@@ -710,17 +675,12 @@ mod fill_call_positions_tests {
     }
   }
 
-  /// A `for` head holds a declaration, which is a statement of its own below
-  /// the loop. The other two parts of the head are expressions, so a call in
-  /// one stands where the loop stands.
   #[test]
   fn a_for_head_declaration_is_one_statement_deeper() {
     assert!(!only_call_is_program_level(
       "for (const s = create({});;) {}"
     ));
 
-    // What a head reads from is not the declaration, so it stands where the
-    // loop stands.
     for source in [
       "for (s = create({});;) {}",
       "for (;create({});) {}",
@@ -736,8 +696,6 @@ mod fill_call_positions_tests {
     }
   }
 
-  /// A type assertion is read through its brackets, and only the call it wraps
-  /// is under it.
   #[test]
   fn a_type_assertion_is_read_for_the_call_it_wraps() {
     for source in [
@@ -758,14 +716,10 @@ mod fill_call_positions_tests {
     }
   }
 
-  /// A call an assertion does not wrap is not asserted, whatever else the
-  /// module asserts.
   #[test]
   fn a_call_beside_a_type_assertion_is_not_asserted() {
     for source in [
       "const s = create({});\nconst t = other() as Styles;",
-      // The assertion wraps the outer call, and the inner one is an argument
-      // of it rather than the expression asserted.
       "const s = wrap(create({})) as Styles;",
       "const s = (create({}) as Styles).root;\nconst t = create({ b: 1 });",
     ] {
@@ -778,8 +732,6 @@ mod fill_call_positions_tests {
     }
   }
 
-  /// A statement after a function is at program level again: the walk puts
-  /// back what it took away.
   #[test]
   fn a_function_does_not_hide_the_statement_after_it() {
     let (state, calls) =
@@ -790,8 +742,6 @@ mod fill_call_positions_tests {
     assert!(state.is_program_level_call(&calls[1]));
   }
 
-  /// Nothing reads what the call answers. Read through the brackets, because a
-  /// parenthesis is not a different statement.
   #[test]
   fn a_call_that_is_a_whole_statement_is_recorded() {
     for source in ["create({});", "(create({}));", "((create({})));"] {
@@ -802,8 +752,6 @@ mod fill_call_positions_tests {
     }
   }
 
-  /// Something does read what the call answers, even where the statement is
-  /// still an expression one.
   #[test]
   fn a_call_something_reads_is_not_a_whole_statement() {
     for source in [
@@ -820,16 +768,11 @@ mod fill_call_positions_tests {
     }
   }
 
-  /// The statement is refused wherever it is written, so a function body is
-  /// read for it too.
   #[test]
   fn a_whole_statement_inside_a_function_is_recorded() {
     assert!(only_call_is_bare_statement("function f() { create({}); }"));
   }
 
-  /// Two calls spelling the same styles stand in different places, and the
-  /// position is what tells them apart -- the one in the function is hoisted
-  /// and the one at the top is not.
   #[test]
   fn two_calls_that_read_alike_keep_their_own_positions() {
     let (state, calls) = positions_of(
@@ -841,8 +784,6 @@ mod fill_call_positions_tests {
     assert!(!state.is_program_level_call(&calls[1]));
   }
 
-  /// A module of ordinary size, so the counter that answers both questions is
-  /// exercised over more than one statement each way.
   #[test]
   fn a_long_module_keeps_every_position() {
     let source: String = (0..500)
@@ -864,18 +805,11 @@ mod fill_call_positions_tests {
     }
   }
 
-  /// Runs a deep fixture's parse, walk and drop with stack claimed for its
-  /// nesting, as the compiler claims it around the parser and the transform
-  /// (`stacker::maybe_grow`), rather than on whatever a test thread has left.
-  /// The claim is per nesting level, the cost the evaluator's growable stack
-  /// measures a parser level at (`BYTES_PER_LEVEL`, 64 KiB), plus a megabyte.
   fn on_a_stack_for<R>(levels: usize, work: impl FnOnce() -> R) -> R {
     let claim = levels * 64 * 1024 + 1024 * 1024;
     stacker::maybe_grow(claim, claim, work)
   }
 
-  /// Statements nested as deep as a generated module nests them. The walk is
-  /// recursive, so the depth it survives is worth stating.
   #[test]
   fn deeply_nested_statements_do_not_stop_the_walk() {
     let depth = 200;
@@ -890,16 +824,11 @@ mod fill_call_positions_tests {
     )));
   }
 
-  /// A namespace body holds module items, so its statements look like the
-  /// statements of the module itself. They are one level deeper, which is what
-  /// hoists a declaration out of the namespace.
   #[test]
   fn a_call_a_namespace_holds_is_not_at_program_level() {
     for source in [
       "namespace Demo { const s = create({}); }",
       "export namespace Demo { const s = create({}); }",
-      // An export inside a namespace is a module item, so it would read as an
-      // item of the module itself unless the namespace said otherwise.
       "namespace Demo { export const s = create({}); }",
       "export namespace Demo { export const s = create({}); }",
       "namespace Demo { export default create({}); }",
@@ -915,7 +844,6 @@ mod fill_call_positions_tests {
     }
   }
 
-  /// The statement after a namespace is at program level again.
   #[test]
   fn a_namespace_does_not_hide_the_statement_after_it() {
     let (state, calls) = positions_of_ts(
@@ -927,8 +855,6 @@ mod fill_call_positions_tests {
     assert!(state.is_program_level_call(&calls[1]));
   }
 
-  /// A module writing no call records nothing, and asking about a call it does
-  /// not hold answers no rather than reaching for an entry that is not there.
   #[test]
   fn an_empty_module_records_no_position() {
     let (state, calls) = positions_of("const s = 1;");
@@ -945,13 +871,6 @@ mod fill_call_positions_tests {
   }
 }
 
-/// The invariant `transform_define_marker_call` reads a declarator index under:
-/// one writer records a named top-level declarator in both lists, so a call
-/// that answers a named entry in one answers a position in the other.
-///
-/// A default export is the one top-level entry that carries no name, and it is
-/// in no declaration list. The marker check refuses it before the index is
-/// read, which is why the invariant is about a named entry.
 mod top_level_declarator_lists_agree_tests {
   use swc_core::{
     common::{FileName, SourceFile, SourceMap, sync::Lrc},
@@ -966,7 +885,6 @@ mod top_level_declarator_lists_agree_tests {
 
   use crate::{state_manager::StateManager, state_writers::fill_top_level_expressions};
 
-  /// Every call the source writes, in source order.
   #[derive(Default)]
   struct Calls(Vec<CallExpr>);
 
@@ -1019,12 +937,6 @@ mod top_level_declarator_lists_agree_tests {
     }
   }
 
-  /// The position the two lists agree on is the declarator that call
-  /// initialises, and not merely some declarator.
-  ///
-  /// `transform_define_marker_call` writes the marker object back into the
-  /// declarator at that position, so a position off by one would give one
-  /// marker the object of another.
   #[test]
   fn the_position_names_the_declarator_the_call_initialises() {
     let source = "export const first = defineMarker();\nexport const second = defineMarker();";
@@ -1060,16 +972,12 @@ mod top_level_declarator_lists_agree_tests {
     assert_both_lists_answer("export const a = f(), b = g();");
   }
 
-  /// A declarator that binds no single name contributes to neither list, so the
-  /// two still agree.
   #[test]
   fn a_pattern_declarator_is_recorded_in_neither_list() {
     assert_both_lists_answer("export const { marker } = defineMarker();");
     assert_both_lists_answer("const [marker] = defineMarker();");
   }
 
-  /// A call written below the module body is in neither list, and a default
-  /// export is in the top-level list under no name.
   #[test]
   fn an_unnamed_call_answers_no_declarator() {
     assert_both_lists_answer("function f() { const marker = defineMarker(); }");
@@ -1077,10 +985,6 @@ mod top_level_declarator_lists_agree_tests {
   }
 }
 
-/// Object literals no recorded-expression lookup can match are not recorded as
-/// top-level expressions; their declarators still are. The lookups match a
-/// call, or a style variable's compiled initializer -- an object whose every
-/// property is a namespace holding `$$css`, or a function -- or an empty object.
 mod unmatchable_object_literals {
   use super::*;
   use stylex_ast::ast::factories::{create_key_value_prop, create_object_expression};

@@ -9,20 +9,6 @@ struct Bridge<'a> {
 }
 
 /// A theme group carried through the native engine as an opaque object.
-///
-/// The engine stores and passes it -- an array element, a callback argument, an
-/// object value -- and every operation that would read it (a member, a string,
-/// a comparison, a structural static) refuses on an opaque object, so nothing
-/// is invented for it there. It is resolved back to the group whenever the
-/// value crosses back to the evaluator: a callback's parameter, or the answer.
-///
-/// Owned by the active evaluation: the group is kept in the evaluation's own
-/// per-budget store, which an isolated evaluation does not share and which is
-/// dropped with the evaluation, so an id resolves only inside the evaluation
-/// that carried it. Ids come from a thread-local counter that never repeats
-/// and carry a tag bit, so a stale id from an earlier evaluation, or an opaque
-/// host object, can never resolve to a group it was not given for -- it
-/// resolves to nothing and the fold refuses.
 mod carried_group {
   use std::{cell::Cell, rc::Rc};
   use stylex_state::theme_ref::ThemeRef;
@@ -31,8 +17,7 @@ mod carried_group {
   thread_local! {
     static NEXT: Cell<u64> = const { Cell::new(0) };
   }
-  /// The per-evaluation key for one carried group: a name no source text can
-  /// spell (it holds a NUL), so it can never meet a binding the module wrote.
+  /// The per-evaluation key for one carried group: a name no source text can spell (it holds a NUL), so it can never meet a binding the module wrote.
   fn key(id: u64) -> Id {
     (
       format!("\u{0}stylex-carried-group:{id}").into(),
@@ -193,8 +178,7 @@ impl Bridge<'_> {
       },
       Value::Null => Expr::Lit(Lit::Null(Null { span: DUMMY_SP })),
       Value::Bool(value) => create_bool_expr(value),
-      // Spelled where no literal writes it (`NaN`, the infinities), as the
-      // globals step spells them.
+
       Value::Number(value) => stylex_js::coercions::js_number_expr(value),
       Value::String(value) => create_string_expr(&value),
       Value::Utf16(units) => {
@@ -274,25 +258,7 @@ pub(super) fn fold(
       stylex_constants::constants::evaluation_errors::not_a_function("Math"),
     ));
   }
-  // A mutating array method named on a binding.
-  //
-  // The reference implementation labels this call and never resolves the
-  // receiver, so the refusal is the call's own `Unsupported expression:
-  // CallExpression` at the call's frame. Reading the receiver first answers
-  // `NON_CONSTANT` instead: the binding genuinely is disqualified, by the very
-  // mutation the module's write tracker recorded, but that is the answer to a
-  // question the reference implementation never asks here. `a.sort()[0]` is
-  // the shape that showed it -- one refusal, two different sentences and two
-  // different frames.
-  //
-  // Scoped to a name whose declarator writes an array, read off the
-  // declaration and never evaluated: a receiver that is not a written array
-  // keeps the route it had, because a method name is the author's choice and
-  // an object of theirs may carry its own `sort`.
-  //
-  // The arguments are still evaluated. An argument that cannot fold refuses
-  // first on both sides, and skipping it here would answer this call's
-  // sentence to a question the arguments had already failed.
+  // The reference implementation labels this call and never resolves the receiver, so the refusal is the call's own `Unsupported expression: CallExpression` at the call's frame.
   if let Expr::Member(member) = callee
     && is_a_mutating_array_method(&member.prop)
     && let Expr::Ident(ident) = normalize_expr(&member.obj)
@@ -379,19 +345,11 @@ pub(super) fn fold(
   {
     return Some(Err(unsupported_expression("CallExpression")));
   }
-  // A Get on one of the compiler's registered functions reads a property this
-  // model does not have, and the language performs that Get before any
-  // argument is evaluated. The dispatch below refuses it at the read
-  // (`NON_CONSTANT`), so the fold hands the call back without evaluating the
-  // arguments.
+
   if matches!(receiver, Some(EvaluateResultValue::FunctionConfig(_))) {
     return None;
   }
-  // The language reads the callee, evaluates every argument, and only then asks
-  // whether the callee is callable. A callee found not callable is therefore
-  // refused after the arguments have run, so an argument's own refusal comes
-  // first. A Get on `null` or `undefined` fails at the read itself, before the
-  // arguments, and is refused there.
+
   let mut not_callable = false;
   if let Some(receiver) = receiver.as_ref()
     && !matches!(
@@ -446,9 +404,7 @@ pub(super) fn fold(
   if not_callable {
     return Some(Err(unsupported_expression("CallExpression")));
   }
-  // A source callback that has crossed to the host is that live host function:
-  // its own properties are the host's to report, so an `Object` static asks the
-  // host about it rather than answering for the source arrow.
+
   if namespace.as_deref() == Some("Object") {
     for value in &mut args {
       if let Some(registered) = super::builtin_value::registered_callback(value, traversal) {
@@ -456,9 +412,7 @@ pub(super) fn fold(
       }
     }
   }
-  // `Object.keys` and its siblings apply `ToObject` to their argument, which
-  // throws for `null` and `undefined` with the language's own sentence (`node`:
-  // `TypeError: Cannot convert undefined or null to object`).
+
   if namespace.as_deref() == Some("Object")
     && matches!(
       method.as_str(),
@@ -702,10 +656,7 @@ pub(super) fn fold(
   } else {
     None
   };
-  // A group written directly as the receiver or as an argument is answered by
-  // the dispatch below, as it was before groups could be carried: only a group
-  // *inside* a value (an array element, an object value) or handed back by a
-  // callback is carried through the engine.
+
   if receiver
     .iter()
     .chain(args.iter())
@@ -793,11 +744,6 @@ pub(super) fn fold(
 }
 
 /// Whether this property read names one of the array methods that mutate.
-///
-/// The same list the module's write tracker reads, so the call this refuses
-/// and the binding that tracker disqualifies are the same set of names rather
-/// than two that drifted apart. Read off the written key: a computed name the
-/// reader cannot spell without evaluating is not one of these.
 fn is_a_mutating_array_method(prop: &MemberProp) -> bool {
   let name = match prop {
     MemberProp::Ident(key) => Some(key.sym.to_string()),
@@ -813,13 +759,7 @@ fn is_a_mutating_array_method(prop: &MemberProp) -> bool {
   })
 }
 
-/// Whether this name is a binding the module declared with an array written
-/// in its initializer.
-///
-/// Syntactic. The declarator is read and never evaluated, so answering costs
-/// no property read of the author's data, and a name initialized with
-/// anything else -- an object of theirs carrying its own `sort`, a call, a
-/// host value -- is not claimed by the rule above.
+/// Whether this name is a binding the module declared with an array written in its initializer.
 fn names_a_written_array(ident: &Ident, traversal: &StateManager) -> bool {
   traversal
     .declaration_of(ident)
@@ -850,8 +790,7 @@ pub(super) fn primitive_binary(
     failure: None,
     traversal,
   };
-  // A group is not carried into an operator: it is answered where it was
-  // before groups could be carried (see `carried_group`).
+
   if matches!(left, EvaluateResultValue::ThemeRef(_))
     || matches!(right, EvaluateResultValue::ThemeRef(_))
   {

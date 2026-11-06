@@ -5,8 +5,7 @@ use std::{
 };
 use swc_core::common::Span;
 
-/// A retained, exact static inventory. Hashing selects a bucket only; equality
-/// confirms the full inventory, including JS-visible nested map ordering.
+/// A retained, exact static inventory.
 #[derive(Clone, Debug)]
 pub struct StaticMemoInventory(Rc<FunctionMap>);
 impl StaticMemoInventory {
@@ -40,8 +39,7 @@ pub enum MemoExpressionKey {
   RetainedInitializer(u64),
 }
 
-/// Exact semantic context, not a compressed fingerprint. No allocation address
-/// or sum-derived identity can establish equality of two memo keys.
+/// Exact semantic context, not a compressed fingerprint.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct MemoContext {
   pub inventory: StaticMemoInventory,
@@ -65,8 +63,7 @@ pub struct SeenKey {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SeenValue {
-  /// Structural confirmation for fallback hashes. Retained logical initializer
-  /// keys already have exact identity and need no duplicate subtree owner.
+  /// Structural confirmation for fallback hashes.
   pub expression: Option<Rc<swc_core::ecma::ast::Expr>>,
   pub value: Option<EvaluateResultValue>,
   pub resolved: bool,

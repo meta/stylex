@@ -1,10 +1,4 @@
 //! Which declaration binds a name.
-//!
-//! Two readers over the declarators a module holds, each of which can answer
-//! with a declarator the function map synthesizes where the module declares
-//! none. The lookups that only read the state's indices are methods on the
-//! state itself -- [`StateManager::declaration_of`] and
-//! [`StateManager::import_binding`].
 
 #[cfg(test)]
 #[path = "initializer_snapshot_tests.rs"]
@@ -24,14 +18,6 @@ use crate::{
 };
 
 /// The two parts of a declarator the reference chain actually reads.
-///
-/// The indexed initializer is retained as immutable shared AST data: copying
-/// these parts copies only a span and an Rc, not the initializer subtree.
-/// Rewrites invalidate its snapshot while keeping the declaration span for TDZ.
-///
-/// Falls through to [`get_var_decl_by_ident`] for the synthesized declarators
-/// the function map builds, rather than repeating its arms: that path has to
-/// construct one anyway, so there is nothing to save there.
 pub fn get_var_decl_parts_by_ident(
   ident: &Ident,
   traversal_state: &mut StateManager,
@@ -45,19 +31,7 @@ pub fn get_var_decl_parts_by_ident(
     .map(|declarator| (declarator.span, declarator.init.map(|init| Rc::new(*init))))
 }
 
-/// Finds the declarator that an identifier names, or builds one from the
-/// function map.
-///
-/// # Panics
-///
-/// A function-map entry that is a map, an index map, or a regular function
-/// that is not a mapper has no declarator to stand for. Such an entry is a
-/// broken invariant and not a shape that a module can write, so it stops the
-/// build with a code frame. An env object answers `None` instead, because an
-/// env read is a value that the caller resolves somewhere else.
-// The result is owned, so it borrows nothing from the three parameters. The
-// parameters therefore need no shared lifetime, and the function above
-// declares none either.
+/// Finds the declarator that an identifier names, or builds one from the function map. # Panics A function-map entry that is a map, an index map, or a regular function that is not a mapper has no declarator to stand for.
 pub fn get_var_decl_by_ident(
   ident: &Ident,
   traversal_state: &mut StateManager,

@@ -1,8 +1,7 @@
 use super::*;
 use stylex_state::{state_manager::evaluation_scope::ScopedEffects, types::EvaluationFailure};
 use stylex_structures::stylex_env::{HostEnv, HostError, HostResult};
-/// Own the effect collector, never a borrowed StateManager pointer. Immutable
-/// Get/materialize APIs queue work until a mutable evaluator/writer boundary.
+/// Own the effect collector, never a borrowed StateManager pointer.
 pub(super) fn operation<T>(
   state: &StateManager,
   host: Rc<dyn HostEnv>,

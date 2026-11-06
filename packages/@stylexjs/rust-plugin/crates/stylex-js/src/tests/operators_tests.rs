@@ -1,15 +1,9 @@
-// Tests for the numeric binary operators.
 // Source: crates/stylex-js/src/operators.rs
-//
-// Expected values are what a JavaScript runtime answers for the same operator
-// and operands, which is what `@stylexjs/babel-plugin` folds them to.
 
 use super::*;
 
 mod evaluate_bin_expr_tests {
   use super::*;
-
-  // --- Arithmetic operators ---
 
   #[test]
   fn addition() {
@@ -41,9 +35,6 @@ mod evaluate_bin_expr_tests {
     assert_eq!(evaluate_bin_expr(BinaryOp::Exp, 2.0, 10.0), 1024.0);
   }
 
-  /// A base of -0 or -Infinity under a negative or an even exponent. The sign
-  /// of the result comes from the parity of the exponent. Each value is the
-  /// answer of Node.
   #[test]
   fn exponentiation_of_negative_zero_and_negative_infinity_keeps_the_sign_of_node() {
     let rows = [
@@ -71,13 +62,9 @@ mod evaluate_bin_expr_tests {
   fn division_with_an_inexact_result() {
     let result = evaluate_bin_expr(BinaryOp::Div, 1.0, 3.0);
 
-    // A third has no exact binary form, so the test states the bound the
-    // caller may rely on rather than a literal that would only restate f64.
     assert!(result > 0.333_333_3 && result < 0.333_333_4);
     assert_eq!(result * 3.0, 1.0);
   }
-
-  // --- Bitwise operators ---
 
   #[test]
   fn bitwise_or() {
@@ -109,8 +96,6 @@ mod evaluate_bin_expr_tests {
     assert_eq!(evaluate_bin_expr(BinaryOp::ZeroFillRShift, 16.0, 2.0), 4.0);
   }
 
-  /// `>>>` reads its left side as unsigned, which is the whole of what parts it
-  /// from `>>`. Every value below was read out of `node -e 'console.log(x)'`.
   #[test]
   fn zero_fill_right_shift_reads_its_left_side_as_unsigned() {
     assert_eq!(
@@ -131,16 +116,12 @@ mod evaluate_bin_expr_tests {
     );
   }
 
-  /// `>>` keeps the sign, which is the reading `>>>` above does not take.
   #[test]
   fn right_shift_keeps_the_sign() {
     assert_eq!(evaluate_bin_expr(BinaryOp::RShift, -8.0, 1.0), -4.0);
     assert_eq!(evaluate_bin_expr(BinaryOp::RShift, -1.0, 16.0), -1.0);
   }
 
-  /// A side past the signed 32-bit range wraps rather than saturating, and a
-  /// count of the word width or more shifts by nothing. A 64-bit cast answered
-  /// 2147483647 for the first row, and a Rust shift panicked on the third.
   #[test]
   fn the_bitwise_operators_wrap_into_thirty_two_bits() {
     assert_eq!(
@@ -164,8 +145,6 @@ mod evaluate_bin_expr_tests {
       -559_939_584.0
     );
   }
-
-  // --- Edge cases ---
 
   #[test]
   fn division_by_zero_yields_infinity() {
@@ -226,9 +205,6 @@ mod evaluate_bin_expr_tests {
     assert_eq!(evaluate_bin_expr(BinaryOp::Exp, 2.0, -1.0), 0.5);
   }
 
-  /// The three rows where IEEE `pow` and `Number::exponentiate` disagree.
-  /// `pow` answers `1` for a base of 1 whatever the exponent, and for a base of
-  /// magnitude 1 under an infinite exponent; the language answers `NaN`.
   #[test]
   fn exponentiation_answers_not_a_number_where_the_language_does() {
     let cases: [(f64, f64); 4] = [
@@ -248,8 +224,6 @@ mod evaluate_bin_expr_tests {
     }
   }
 
-  /// A zero exponent answers `1` whatever the base, `NaN` included -- which is
-  /// why it is read before the `NaN` rule above.
   #[test]
   fn exponentiation_by_nought_is_one_whatever_the_base() {
     assert_eq!(evaluate_bin_expr(BinaryOp::Exp, f64::NAN, 0.0), 1.0);
@@ -257,9 +231,6 @@ mod evaluate_bin_expr_tests {
     assert_eq!(evaluate_bin_expr(BinaryOp::Exp, 2.0, -0.0), 1.0);
   }
 
-  /// The rows IEEE `pow` and the language agree on, kept beside the three they
-  /// do not: an overflow is infinite, and a fractional exponent over a negative
-  /// base has no real answer.
   #[test]
   fn exponentiation_keeps_the_rows_the_two_readings_share() {
     assert_eq!(evaluate_bin_expr(BinaryOp::Exp, 2.0, 1024.0), f64::INFINITY);
@@ -271,9 +242,7 @@ mod evaluate_bin_expr_tests {
     assert_eq!(evaluate_bin_expr(BinaryOp::Exp, 0.5, f64::INFINITY), 0.0);
   }
 
-  /// Node computes `x ** 2` as `x * x`, on every host and in Node 22 and 24.
-  /// The `pow` of the C library can round the last bit differently: on an
-  /// arm64 Mac, it gives 534174.1058373373 for the first row.
+  // Node uses multiplication for x ** 2; C pow can differ by one bit (evaluator ADR 0008).
   #[test]
   fn exponentiation_by_two_is_one_multiplication() {
     let cases = [
@@ -293,10 +262,7 @@ mod evaluate_bin_expr_tests {
     assert!(evaluate_bin_expr(BinaryOp::Exp, f64::NAN, 2.0).is_nan());
   }
 
-  /// Node computes `x ** 0.5` as the square root of `x + 0`, which rounds
-  /// correctly on every host. The `+ 0` gives `+0` for `-0`. A base of
-  /// `-Infinity` gives `Infinity`, as `pow` does, where the square root gives
-  /// `NaN`.
+  // Node uses sqrt(x + 0), except -Infinity yields Infinity; see operators.rs::js_exponentiate.
   #[test]
   fn exponentiation_by_one_half_is_the_square_root() {
     let cases = [
@@ -319,14 +285,12 @@ mod evaluate_bin_expr_tests {
 
   #[test]
   fn right_shift_negative_number() {
-    // -16 >> 2 == -4 in two's complement
     assert_eq!(evaluate_bin_expr(BinaryOp::RShift, -16.0, 2.0), -4.0);
   }
 
   #[test]
   #[should_panic(expected = "Unsupported binary operator")]
   fn unsupported_operator_panics() {
-    // EqEq is not handled by evaluate_bin_expr
     evaluate_bin_expr(BinaryOp::EqEq, 1.0, 1.0);
   }
 }

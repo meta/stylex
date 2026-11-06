@@ -7,10 +7,6 @@ use crate::{functions::FunctionMap, state_manager::StateManager};
 use stylex_ast::ast::convertors::create_number_expr;
 use stylex_ast::ast::factories::create_ident;
 
-// ──────────────────────────────────────────────
-// get_var_decl_by_ident - Increase and None actions
-// ──────────────────────────────────────────────
-
 mod get_var_decl_by_ident_tests {
   use super::*;
 
@@ -34,10 +30,6 @@ mod get_var_decl_by_ident_tests {
     assert!(result.is_none());
   }
 }
-
-// ──────────────────────────────────────────────
-// get_var_decl_by_ident - FunctionMap branches
-// ──────────────────────────────────────────────
 
 mod get_var_decl_by_ident_function_map_tests {
   use super::*;
@@ -76,18 +68,11 @@ mod get_var_decl_by_ident_function_map_tests {
   }
 }
 
-// ──────────────────────────────────────────────
-// get_var_decl_by_ident - FunctionMap panic branches
-// ──────────────────────────────────────────────
-
 mod get_var_decl_by_ident_fn_map_panic_tests {
   use super::*;
   use crate::functions::{FunctionConfig, FunctionConfigType, FunctionMap, FunctionType};
   use std::rc::Rc;
 
-  /// The three arms below refuse for three different reasons, so each asserts
-  /// the message it is refused with: a bare `#[should_panic]` passes on any
-  /// panic and cannot tell one arm from another.
   #[test]
   #[should_panic(expected = "Function type not supported:")]
   fn panics_for_non_mapper_regular_function() {
@@ -138,10 +123,6 @@ mod get_var_decl_by_ident_fn_map_panic_tests {
   }
 }
 
-// ──────────────────────────────────────────────
-// get_var_decl_parts_by_ident
-// ──────────────────────────────────────────────
-
 mod get_var_decl_parts_by_ident_tests {
   use super::*;
   use crate::functions::{FunctionConfig, FunctionConfigType, FunctionType};
@@ -150,8 +131,6 @@ mod get_var_decl_parts_by_ident_tests {
   use swc_core::common::{BytePos, Span};
   use swc_core::ecma::ast::Lit;
 
-  /// A declarator whose span is distinguishable from `DUMMY_SP`, so a test can
-  /// tell the span it asked for from the one every synthesized node carries.
   fn make_spanned_declarator(name: &str, init: Expr, lo: u32, hi: u32) -> VarDeclarator {
     VarDeclarator {
       span: Span::new(BytePos(lo), BytePos(hi)),
@@ -214,8 +193,6 @@ mod get_var_decl_parts_by_ident_tests {
 
   #[test]
   fn a_recorded_declaration_wins_over_a_function_of_the_same_name() {
-    // The state hit is probed first, and the two answers differ, so which one
-    // comes back says which path ran.
     let mut state = StateManager::default();
     let mut fns = FunctionMap::default();
     fill_state_declarations(

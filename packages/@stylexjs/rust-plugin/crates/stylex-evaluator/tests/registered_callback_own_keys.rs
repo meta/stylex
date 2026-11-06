@@ -1,11 +1,4 @@
-//! A source callback's own keys, before and after it crosses to the host.
-//!
-//! An arrow the author wrote has no enumerable own properties, so `Object.keys`
-//! of it is `[]` -- while it has never left the compiler. Once it is handed to
-//! JavaScript it is a live host function, and host code may give it own
-//! properties; from then on the host is what answers for its keys. This host
-//! registers compiler functions and lets `stylex.env.tag(f)` add an own
-//! property `x` to the function it was handed, as `f.x = 1` would in `node`.
+//! Tests source callback keys and host-owned properties after callback registration.
 use indexmap::IndexMap;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::{cell::RefCell, rc::Rc};
@@ -25,7 +18,6 @@ use swc_ecma_parser::{EsSyntax, Parser, StringInput, Syntax};
 
 #[derive(Default)]
 struct FunctionHost {
-  /// Own enumerable properties host code gave each registered function.
   properties: RefCell<FxHashMap<String, Vec<(String, HostValue)>>>,
   registered: RefCell<usize>,
 }
@@ -202,8 +194,6 @@ fn number(source: &str) -> (f64, usize) {
   }
 }
 
-/// Never handed to the host, a source arrow has no enumerable own keys, which
-/// is `node`'s answer for each question.
 #[test]
 fn a_callback_that_never_crossed_has_no_own_keys() {
   for question in ["keys", "values", "entries"] {
@@ -213,9 +203,6 @@ fn a_callback_that_never_crossed_has_no_own_keys() {
   }
 }
 
-/// Once handed to the host and given an own property there, the callback's
-/// keys are the host's to report: the fold asks the host about the registered
-/// function rather than answering `[]` for the arrow it was written as.
 #[test]
 fn a_callback_the_host_gave_an_own_property_reports_it() {
   assert_eq!(
@@ -228,8 +215,7 @@ fn a_callback_the_host_gave_an_own_property_reports_it() {
   );
 }
 
-/// A question the host cannot answer for that live function refuses rather
-/// than falling back to the arrow's empty list.
+/// Host lookup failure refuses instead of falling back to the unregistered arrow's empty keys.
 #[test]
 fn a_question_the_host_cannot_answer_for_a_registered_callback_refuses() {
   let (result, registered) =

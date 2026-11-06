@@ -1,11 +1,3 @@
-//! The JSX attributes a `stylex.props(...)` spread was rewritten into.
-//!
-//! The spread is met twice: once while the module is walked, which records the
-//! expression, and once while it is rewritten, which records the attributes it
-//! became. The record confirms both actual source-site identity and expression
-//! shape; only generated DUMMY sites share a structural record. A matching hash
-//! alone can never turn an ordinary props call into a JSX replacement.
-
 use swc_core::{
   common::{BytePos, DUMMY_SP, Span},
   ecma::ast::{
@@ -39,7 +31,6 @@ fn props_call(args: Vec<ExprOrSpread>) -> CallExpr {
   }
 }
 
-/// One attribute, standing for whatever the call was rewritten into.
 fn class_name_attr(value: &str) -> Vec<JSXAttrOrSpread> {
   vec![JSXAttrOrSpread::JSXAttr(JSXAttr {
     span: DUMMY_SP,
@@ -52,8 +43,6 @@ fn class_name_attr(value: &str) -> Vec<JSXAttrOrSpread> {
   })]
 }
 
-/// The class names the recorded attributes carry, so a case can say what was
-/// recorded without matching on the attribute shape.
 fn class_names(attrs: &[JSXAttrOrSpread]) -> Vec<&str> {
   attrs
     .iter()
@@ -67,8 +56,6 @@ fn class_names(attrs: &[JSXAttrOrSpread]) -> Vec<&str> {
     .collect()
 }
 
-/// A spread nothing recorded is unknown, and recording it makes it known while
-/// leaving it without a replacement yet.
 #[test]
 fn a_seeded_spread_is_known_and_has_no_replacement_yet() {
   let mut state = state();
@@ -84,8 +71,6 @@ fn a_seeded_spread_is_known_and_has_no_replacement_yet() {
   assert_eq!(state.jsx_spread_replacement(&expr), Some(&[][..]));
 }
 
-/// Recording the attributes a spread became makes them the answer, and says
-/// that a matching record was found.
 #[test]
 fn the_attributes_a_spread_became_are_answered_back() {
   let mut state = state();
@@ -103,8 +88,6 @@ fn the_attributes_a_spread_became_are_answered_back() {
   assert_eq!(class_names(attrs), vec!["x1e2nbdu"]);
 }
 
-/// Recording attributes for a spread that was never seeded records nothing and
-/// says so, rather than inventing an entry the walk did not meet.
 #[test]
 fn attributes_for_a_spread_that_was_never_seeded_are_refused() {
   let mut state = state();
@@ -114,8 +97,6 @@ fn attributes_for_a_spread_that_was_never_seeded_are_refused() {
   assert_eq!(state.jsx_spread_replacement(&Expr::Call(call)), None);
 }
 
-/// A real ordinary call cannot reuse a generated sx spread's record merely
-/// because the two expressions have the same structure.
 #[test]
 fn a_real_call_does_not_match_a_generated_spread() {
   let mut state = state();
@@ -153,8 +134,6 @@ fn equal_authored_spreads_at_different_sites_keep_distinct_replacements() {
   );
 }
 
-/// Two spreads that differ in their arguments are two spreads, and each keeps
-/// its own attributes.
 #[test]
 fn two_different_spreads_keep_their_own_attributes() {
   let mut state = state();
@@ -181,8 +160,6 @@ fn two_different_spreads_keep_their_own_attributes() {
   );
 }
 
-/// Seeding one spread twice records it once, so the second walk over a module
-/// cannot double the entry the first one made.
 #[test]
 fn seeding_one_spread_twice_records_it_once() {
   let mut state = state();
@@ -199,8 +176,6 @@ fn seeding_one_spread_twice_records_it_once() {
   );
 }
 
-/// An expression that is not a call can be seeded and read back, but it is not
-/// a spread *call*: the two questions read the same record differently.
 #[test]
 fn an_expression_that_is_not_a_call_is_no_spread_call() {
   let mut state = state();
@@ -212,7 +187,6 @@ fn an_expression_that_is_not_a_call_is_no_spread_call() {
   assert!(!state.has_jsx_spread_call(&props_call(vec![])));
 }
 
-/// A spread nothing seeded has no attributes, whatever else the record holds.
 #[test]
 fn an_unseeded_spread_has_no_attributes() {
   let mut state = state();

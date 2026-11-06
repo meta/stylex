@@ -1,6 +1,5 @@
 use super::super::*;
-/// Cooked template contents stay UTF-16 through every intermediate operation;
-/// lone surrogates are never sent through a Rust-string conversion here.
+/// Cooked template contents stay UTF-16 through every intermediate operation; lone surrogates are never sent through a Rust-string conversion here.
 pub(in super::super) fn evaluate_quasis(
   path: &Expr,
   exprs: &[Box<Expr>],
@@ -39,10 +38,7 @@ pub(in super::super) fn evaluate_quasis(
     output.extend(units);
     if let Some(expression) = exprs.get(index) {
       let value = evaluate_cached(expression, state, traversal, fns)?;
-      // One of the compiler's own functions has no string a template could
-      // write: the reference implementation interpolates its `{ fn }` wrapper
-      // as `[object Object]`, which is no style value either. Refused under the
-      // sentence for an interpolation that is not a string.
+
       if matches!(value, EvaluateResultValue::FunctionConfig(_)) {
         return deopt(path, state, EXPRESSION_IS_NOT_A_STRING);
       }

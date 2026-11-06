@@ -32,8 +32,7 @@ fn fold(source: &str) -> Box<EvaluateResult> {
 }
 #[test]
 fn constructed_holes_join_without_becoming_textual_undefined() {
-  // Executed Node oracle: Array(3).join(',') and toString are ',,';
-  // Get is undefined, but a missing slot is empty in the array join algorithm.
+  // Get returns undefined for holes; array join treats absent slots as empty text.
   for (source, expected) in [
     ("Array(3).join(',')", ",,"),
     ("Array(3).toString()", ",,"),
@@ -54,10 +53,7 @@ fn constructed_holes_join_without_becoming_textual_undefined() {
 }
 #[test]
 fn copying_and_iterating_choose_absence_or_get_exactly() {
-  // Node: map/slice/concat preserve absent slots; spread and change-by-copy
-  // methods perform Get and make own undefined entries. flatMap skips holes
-  // in the callback's returned array, and neither map nor forEach invokes a
-  // callback for an absent input slot.
+  // map/slice/concat preserve holes; spread and change-by-copy perform Get and create own undefined entries.
   for (source, expected) in [
     ("Array(3).length", 3.0),
     ("0 in Array(3)?1:0", 0.0),
@@ -108,8 +104,6 @@ fn materialization_keeps_absent_slots_and_effectful_literal_lengths_refuse() {
   };
   assert_eq!(expression.elems.len(), 3);
   assert!(expression.elems.iter().all(Option::is_none));
-  // A count shortcut must not skip a reference/call just because another slot
-  // is absent. A source with a hole+spread refuses with the hole's own reason.
   for source in [
     "[missing,,].length",
     "[...['x'],,].length",

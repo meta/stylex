@@ -1,5 +1,4 @@
-//! Shallow final-data classification. Keep typed leaves and live references
-//! intact so a caller can distinguish namespace shape from an invalid leaf.
+//! Shallow final-data classification.
 use super::*;
 use stylex_state::evaluate_result_value::EvaluatedObject;
 use stylex_structures::stylex_env::{HostError, HostResult, HostValue, Materialized};

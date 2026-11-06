@@ -40,9 +40,7 @@ pub(crate) use nodes::binary_expression::binary_expr_to_num_or_str;
 pub use nodes::object_expression::spread_own_properties;
 #[cfg(test)]
 pub(crate) use rebuild::binds_a_parameter;
-// Named one by one rather than through a glob. The rebuild is a private module,
-// so this is the only route to its items, and a glob would publish whatever is
-// added there next.
+
 use rebuild::resolve_env_entry_to_result;
 pub(crate) use rebuild::{array_element_expr, evaluate_result_as_expr, fold_placeholder_function};
 pub use rebuild::{evaluate_result_vec_to_array_expr, function_fold_to_object};
@@ -129,11 +127,6 @@ pub fn evaluate_obj_key(
         return EvaluateResult::refused(computed_result.deopt, computed_result.reason);
       }
 
-      // An array key is read through its array form, because a list names the
-      // property its elements join to -- `{ [[1, 2]]: 'red' }` declares
-      // `1,2: red`. A value with no expression form has no string either, so it
-      // refuses under the same sentence the coercion below refuses with: one
-      // sentence for one mistake, where the key used to answer two.
       let Some(value) = computed_result
         .value
         .as_ref()
@@ -147,23 +140,12 @@ pub fn evaluate_obj_key(
 
       value
     },
-    // The literal itself rather than the text it spells, so a text with no
-    // `str` -- one holding a lone surrogate -- refuses below with every other
-    // key that has no name, rather than aborting the build inside a converter
-    // that has no reading for it.
+
     PropName::Str(strng) => Expr::Lit(Lit::Str(strng.clone())),
     PropName::Num(num) => create_number_expr(num.value),
     PropName::BigInt(big_int) => create_big_int_expr(big_int.clone()),
   };
 
-  // `String(key)` rather than the string the expression spells, because that is
-  // what the language names the property and what the reference implementation
-  // writes: `{ [true]: 'red' }` declares `true: red` in both. The spelling
-  // reader answers for a string and a number and nothing else, so a boolean,
-  // `null` and an object refused here and named a property there.
-  //
-  // A function is the one value with no string at all -- `String(fn)` is its
-  // source text, which this evaluator does not keep -- and it still refuses.
   let key_expr = match coercions::to_js_string(&key) {
     Some(ref text) => create_string_expr(text),
     None => return EvaluateResult::refused(Some(key), Some(KEY_HAS_NO_NAME.to_string())),
@@ -180,11 +162,6 @@ pub fn evaluate_obj_key(
 }
 
 /// Folds `path` with a function map the caller owns.
-///
-/// The map is copied, because the evaluation shares it with every callback it
-/// makes and so must own it. A caller that already holds the map behind an `Rc`
-/// -- one built once for the module rather than once per call -- hands it to
-/// [`evaluate_with_functions`] instead and pays no copy.
 pub fn evaluate(
   path: &Expr,
   traversal_state: &mut StateManager,
@@ -243,9 +220,7 @@ fn _evaluate(
     return None;
   }
 
-  // `normalize_expr` unwraps every layer of parentheses. No arm below reads
-  // one, so `Expr::Paren` needs no arm of its own. The original `path` is kept
-  // beside it: a diagnostic must point at what the author wrote.
+  // The original `path` is kept beside it: a diagnostic must point at what the author wrote.
   let normalized_path = normalize_expr(path);
 
   if is_mutation_expr(normalized_path) {
@@ -254,8 +229,7 @@ fn _evaluate(
 
   let result: Option<EvaluateResultValue> = match normalized_path {
     Expr::Arrow(arrow) => nodes::arrow_function::evaluate(arrow, state),
-    // A name the module gave the StyleX `env` import is resolved by its binding
-    // below rather than by the function map's by-name entry.
+
     Expr::Ident(ident) if binding::spells_the_env_import(ident, state, traversal_state) => None,
     Expr::Ident(ident) => nodes::identifier::evaluate(ident, state),
     Expr::TsSatisfies(ts_satisfaies) => {
@@ -277,9 +251,7 @@ fn _evaluate(
       nodes::typescript_expression::evaluate(&ts_instantiation.expr, state, traversal_state, fns)
     },
     Expr::Seq(sec) => nodes::sequence_expression::evaluate(sec, state, traversal_state, fns),
-    // Only string, numeric, boolean and null literals evaluate to a value.
-    // A BigInt is none of those — it has no CSS spelling and no safe lossy
-    // conversion to one — so it deopts rather than evaluating.
+
     Expr::Lit(Lit::BigInt(_)) => {
       return deopt(
         normalized_path,
@@ -287,12 +259,7 @@ fn _evaluate(
         &unsupported_expression("BigIntLiteral"),
       );
     },
-    // Nor is a regular expression, and the reference implementation refuses one
-    // here rather than anywhere later: it folds no `RegExpLiteral` in any
-    // position, so `{ color: /a/ }`, `[/a/]`, a binding holding one and
-    // `{ .../a/ }` all read the same sentence. Folding it to itself instead left
-    // the refusal to whichever downstream reader tripped over the value, and
-    // that reader had no name for it — the diagnostic came out as `1`.
+
     Expr::Lit(Lit::Regex(_)) => {
       return deopt(
         normalized_path,
@@ -339,8 +306,6 @@ fn _evaluate(
       nodes::optional_chain::evaluate(opt_chain, state, traversal_state, fns)
     },
     _ => {
-      // The kind is read once, and both the log below and the sentence the
-      // author reads use that one reading.
       let kind = get_expr_node_kind(normalized_path);
 
       warn!(
@@ -353,9 +318,6 @@ fn _evaluate(
     },
   };
 
-  // A name that no arm above answered is resolved against the module. One
-  // question is asked here. Asking "is it a name" and then "give me the name"
-  // had a second answer that could not occur.
   if result.is_none()
     && let Some(ident) = normalized_path.as_ident()
   {
@@ -497,10 +459,6 @@ mod folded_answer_tests;
 #[path = "tests/evaluated_array_form_tests.rs"]
 mod evaluated_array_form_tests;
 
-// What the evaluator writes to the log when it declines to fold something. A
-// `log` macro skips its arguments while `log::max_level` is below their level,
-// so the open level this test binary installs is what runs them, and these
-// cases assert the words they build.
 #[cfg(test)]
 #[path = "tests/reported_message_tests.rs"]
 mod reported_message_tests;

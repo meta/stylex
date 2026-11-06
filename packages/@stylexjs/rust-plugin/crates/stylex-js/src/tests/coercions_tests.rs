@@ -1,8 +1,4 @@
-// Tests for the ECMAScript coercions.
 // Source: crates/stylex-js/src/coercions.rs
-//
-// Expected values are what `String(x)` and `Number(x)` answer in a JavaScript
-// runtime, which is what `@stylexjs/babel-plugin` folds those calls to.
 
 use super::*;
 use stylex_utils::string::utf16_length;
@@ -128,7 +124,6 @@ fn numbers_use_the_javascript_spelling() {
   assert_eq!(to_js_string(&num_expr(1.0)).as_deref(), Some("1"));
   assert_eq!(to_js_string(&num_expr(-0.0)).as_deref(), Some("0"));
   assert_eq!(to_js_string(&num_expr(1.5)).as_deref(), Some("1.5"));
-  // Rust's `Display` would spell these out in full; JavaScript does not.
   assert_eq!(to_js_string(&num_expr(1e21)).as_deref(), Some("1e+21"));
   assert_eq!(to_js_string(&num_expr(1e-7)).as_deref(), Some("1e-7"));
   assert_eq!(to_js_string(&num_expr(f64::NAN)).as_deref(), Some("NaN"));
@@ -167,7 +162,6 @@ fn a_regular_expression_renders_its_own_source() {
     to_js_string(&regex_expr("a+b", "gi")).as_deref(),
     Some("/a+b/gi")
   );
-  // Its source is not a numeric literal, so it has a number all the same.
   assert!(
     to_js_number(&regex_expr("x", ""))
       .expect("a regular expression has a number")
@@ -177,8 +171,6 @@ fn a_regular_expression_renders_its_own_source() {
 
 #[test]
 fn an_identifier_that_is_not_a_global_value_has_no_coercion() {
-  // Anything else would have been inlined from its binding before reaching
-  // here, so an identifier that survives is not a value.
   assert_eq!(to_js_string(&ident_expr("someBinding")), None);
 }
 
@@ -206,7 +198,6 @@ fn array_elements_with_no_value_join_as_nothing() {
     .as_deref(),
     Some(",,1")
   );
-  // A hole, which is neither `null` nor `undefined` but joins the same way.
   assert_eq!(
     to_js_string(&array_expr(vec![
       Some(num_expr(1.0)),
@@ -271,8 +262,7 @@ fn ident_key(name: &str) -> PropName {
   PropName::Ident(IdentName::new(name.into(), DUMMY_SP))
 }
 
-/// A zero-parameter arrow returning `body` — the shape an own conversion
-/// method is written in.
+/// A zero-parameter arrow returning `body`.
 fn returning_arrow(body: Expr) -> Expr {
   Expr::Arrow(ArrowExpr {
     span: DUMMY_SP,
@@ -288,8 +278,6 @@ fn returning_arrow(body: Expr) -> Expr {
 
 #[test]
 fn an_own_to_string_answers_the_string_coercion() {
-  // `String({ toString: () => 'red' })` is `'red'` in a runtime, so answering
-  // the `Object.prototype` default would be a value no runtime produces.
   let overriding = object_expr(vec![key_value_prop(
     ident_key("toString"),
     returning_arrow(str_expr("red")),
@@ -297,7 +285,6 @@ fn an_own_to_string_answers_the_string_coercion() {
 
   assert_eq!(to_js_string(&overriding).as_deref(), Some("red"));
 
-  // The same name spelled as a string key is the same own property.
   let string_key = object_expr(vec![key_value_prop(
     PropName::Str(Str {
       span: DUMMY_SP,
@@ -312,8 +299,6 @@ fn an_own_to_string_answers_the_string_coercion() {
 
 #[test]
 fn the_two_hints_ask_for_the_methods_in_opposite_orders() {
-  // `String` prefers `toString` and `Number` prefers `valueOf`, which is the
-  // whole of the difference between them.
   let both = object_expr(vec![
     key_value_prop(ident_key("toString"), returning_arrow(str_expr("1"))),
     key_value_prop(ident_key("valueOf"), returning_arrow(num_expr(2.0))),
@@ -325,8 +310,6 @@ fn the_two_hints_ask_for_the_methods_in_opposite_orders() {
 
 #[test]
 fn a_missing_method_falls_through_the_way_object_prototype_does() {
-  // `Object.prototype.valueOf` answers the object itself, which is not a
-  // primitive, so a number falls through to an own `toString`.
   let to_string_only = object_expr(vec![key_value_prop(
     ident_key("toString"),
     returning_arrow(str_expr("7")),
@@ -334,8 +317,6 @@ fn a_missing_method_falls_through_the_way_object_prototype_does() {
 
   assert_eq!(to_js_number(&to_string_only), Some(7.0));
 
-  // `Object.prototype.toString` answers a primitive, so a string never reaches
-  // an own `valueOf`.
   let value_of_only = object_expr(vec![key_value_prop(
     ident_key("valueOf"),
     returning_arrow(str_expr("v")),
@@ -345,15 +326,11 @@ fn a_missing_method_falls_through_the_way_object_prototype_does() {
     to_js_string(&value_of_only).as_deref(),
     Some(OBJECT_TO_STRING)
   );
-  // The number still goes through that own `valueOf`, whose `'v'` is not a
-  // numeric literal.
   assert!(to_js_number(&value_of_only).is_some_and(f64::is_nan));
 }
 
 #[test]
 fn a_method_in_a_form_that_cannot_be_applied_has_no_coercion() {
-  // A value that is not callable ends in a `TypeError` rather than a value,
-  // and a method answering an object has not answered a primitive.
   let not_callable = object_expr(vec![key_value_prop(
     ident_key("toString"),
     str_expr("notfn"),
@@ -371,8 +348,6 @@ fn a_method_in_a_form_that_cannot_be_applied_has_no_coercion() {
 
 #[test]
 fn an_object_whose_keys_cannot_be_named_has_no_coercion() {
-  // A spread may carry an override in, and a computed key is how
-  // `Symbol.toPrimitive` is spelled — neither can be read off the literal.
   let spread = object_expr(vec![PropOrSpread::Spread(SpreadElement {
     dot3_token: DUMMY_SP,
     expr: Box::new(empty_object_expr()),
@@ -393,7 +368,6 @@ fn an_object_whose_keys_cannot_be_named_has_no_coercion() {
 
 #[test]
 fn an_object_carrying_the_override_deeper_still_coerces() {
-  // Only an *own* key replaces the default: a nested one does not.
   let nested = object_expr(vec![key_value_prop(
     ident_key("a"),
     object_expr(vec![key_value_prop(ident_key("toString"), arrow_expr())]),
@@ -404,8 +378,6 @@ fn an_object_carrying_the_override_deeper_still_coerces() {
 
 #[test]
 fn an_overriding_object_inside_an_array_converts_through_its_own_method() {
-  // `Array.prototype.join` takes each element's `ToString`, own method and
-  // all.
   let element = object_expr(vec![key_value_prop(
     ident_key("toString"),
     returning_arrow(str_expr("z")),
@@ -419,8 +391,6 @@ fn an_overriding_object_inside_an_array_converts_through_its_own_method() {
 
 #[test]
 fn a_function_has_no_compile_time_coercion() {
-  // `String(fn)` is the function's source text, which the evaluator does not
-  // retain — so there is no answer to give.
   assert_eq!(to_js_string(&arrow_expr()), None);
 }
 
@@ -463,10 +433,7 @@ fn surrounding_whitespace_is_ignored() {
   assert_eq!(string_to_js_number("\t\n\r 7  \u{FEFF}"), 7.0);
   assert_eq!(string_to_js_number("\u{2028}1\u{2029}"), 1.0);
   assert_eq!(string_to_js_number("\u{3000}1\u{2000}"), 1.0);
-  // Interior whitespace is not, because it is not part of the literal.
   assert!(string_to_js_number("1 0").is_nan());
-  // U+0085 is Unicode whitespace but not JavaScript whitespace, so a string
-  // padded with it is not a numeric literal at all.
   assert!(string_to_js_number("\u{0085}1").is_nan());
 }
 
@@ -479,7 +446,6 @@ fn the_radix_prefixes_are_read_as_javascript_reads_them() {
   assert_eq!(string_to_js_number("0o17"), 15.0);
   assert_eq!(string_to_js_number("0O17"), 15.0);
   assert_eq!(string_to_js_number("  0x1f  "), 31.0);
-  // Wider than `u128`, so the digits are accumulated rather than converted.
   assert_eq!(
     string_to_js_number("0xdeadbeefdeadbeefdeadbeef"),
     6.891571802158121e28
@@ -496,7 +462,6 @@ fn a_radix_prefix_without_digits_of_that_radix_is_not_a_number() {
   assert!(string_to_js_number("0xg").is_nan());
   assert!(string_to_js_number("0b2").is_nan());
   assert!(string_to_js_number("0o8").is_nan());
-  // A radix literal takes no sign, and is not a decimal literal either.
   assert!(string_to_js_number("-0x1f").is_nan());
   assert!(string_to_js_number("+0x1f").is_nan());
 }
@@ -513,8 +478,6 @@ fn infinity_is_spelled_the_way_javascript_spells_it() {
 
 #[test]
 fn the_rust_float_spellings_are_not_numbers() {
-  // Rust's own float parsing accepts all of these; JavaScript accepts none of
-  // them, and taking Rust's answer would put `inf` in a stylesheet.
   assert!(string_to_js_number("inf").is_nan());
   assert!(string_to_js_number("-inf").is_nan());
   assert!(string_to_js_number("nan").is_nan());
@@ -533,8 +496,6 @@ fn a_string_that_is_not_a_numeric_literal_is_not_a_number() {
 
 #[test]
 fn negative_zero_survives_the_coercion() {
-  // It renders as `0`, but it is not `0`, and losing the sign here would lose
-  // it everywhere downstream.
   assert!(string_to_js_number("-0").is_sign_negative());
   assert_eq!(string_to_js_number("-0"), 0.0);
   assert!(string_to_js_number("-0.0").is_sign_negative());
@@ -553,8 +514,6 @@ fn numbers_are_their_own_coercion() {
 fn booleans_null_and_undefined_coerce_to_their_javascript_numbers() {
   assert_eq!(to_js_number(&bool_expr(true)), Some(1.0));
   assert_eq!(to_js_number(&bool_expr(false)), Some(0.0));
-  // `null` is zero; `undefined` is not. The two differ here where they agree
-  // under `ToString`.
   assert_eq!(to_js_number(&null_expr()), Some(0.0));
   assert!(matches!(to_js_number(&ident_expr("undefined")), Some(value) if value.is_nan()));
   assert!(matches!(to_js_number(&ident_expr("NaN")), Some(value) if value.is_nan()));
@@ -571,8 +530,6 @@ fn strings_coerce_through_the_numeric_literal_grammar() {
 
 #[test]
 fn arrays_and_objects_coerce_through_their_string_form() {
-  // An array's primitive value is its join, so a one-element array coerces
-  // its element and a longer one cannot be a number.
   assert_eq!(to_js_number(&array_expr(vec![])), Some(0.0));
   assert_eq!(
     to_js_number(&array_expr(vec![Some(num_expr(5.0))])),
@@ -594,17 +551,12 @@ fn arrays_and_objects_coerce_through_their_string_form() {
     to_js_number(&array_expr(vec![Some(num_expr(1.0)), Some(num_expr(2.0))])),
     Some(value) if value.is_nan()
   ));
-  // `[object Object]` is not a numeric literal.
   assert!(matches!(to_js_number(&empty_object_expr()), Some(value) if value.is_nan()));
 }
 
 #[test]
 fn a_function_coerces_to_not_a_number() {
-  // Its source text is unknown but irrelevant: no source text is a numeric
-  // literal, so the number is `NaN` either way. `ToString` has no such luck.
   assert!(matches!(to_js_number(&arrow_expr()), Some(value) if value.is_nan()));
-  // Which means a function inside an array does not make the array's number
-  // unknowable either — the join is not a numeric literal whatever it holds.
   assert!(matches!(
     to_js_number(&array_expr(vec![Some(arrow_expr())])),
     Some(value) if value.is_nan()
@@ -623,9 +575,6 @@ fn a_value_with_no_string_form_has_no_number_either() {
 
 #[test]
 fn every_value_but_a_function_coerces_to_a_plain_object() {
-  // The nullish pair takes a fresh object, an object and an array already are
-  // one, and a primitive is boxed in one -- three outcomes `typeof` cannot tell
-  // apart, and the one caller left is `typeof`.
   assert_eq!(to_object(&null_expr()), Some(ObjectCoercion::Object));
   assert_eq!(
     to_object(&ident_expr("undefined")),
@@ -642,8 +591,6 @@ fn every_value_but_a_function_coerces_to_a_plain_object() {
   assert_eq!(to_object(&str_expr("red")), Some(ObjectCoercion::Object));
   assert_eq!(to_object(&num_expr(10.0)), Some(ObjectCoercion::Object));
   assert_eq!(to_object(&bool_expr(true)), Some(ObjectCoercion::Object));
-  // The numeric globals arrive as identifiers and box like the numbers they
-  // are, as does the `undefined` that arrives the same way.
   assert_eq!(to_object(&ident_expr("NaN")), Some(ObjectCoercion::Object));
   assert_eq!(
     to_object(&ident_expr("Infinity")),
@@ -653,13 +600,10 @@ fn every_value_but_a_function_coerces_to_a_plain_object() {
 
 #[test]
 fn a_function_coerces_to_an_object_that_says_it_is_a_function() {
-  // An object like the rest, and reported apart because it is the one whose
-  // `typeof` is not `object`.
   assert_eq!(to_object(&arrow_expr()), Some(ObjectCoercion::Function));
 }
 
-/// An expression the evaluator reduced to no value at all — neither a literal,
-/// nor one of the surviving globals, nor an object, array, or function.
+/// An unresolved `this` expression.
 fn this_expr() -> Expr {
   Expr::This(ThisExpr { span: DUMMY_SP })
 }
@@ -671,8 +615,7 @@ fn binding_pat(name: &str) -> Pat {
   })
 }
 
-/// A one-parameter arrow returning `body` — a form the crate refuses, because a
-/// default initialiser on that parameter would make the body depend on it.
+/// A one-parameter arrow returning `body`.
 fn parameterised_arrow(body: Expr) -> Expr {
   Expr::Arrow(ArrowExpr {
     span: DUMMY_SP,
@@ -686,7 +629,7 @@ fn parameterised_arrow(body: Expr) -> Expr {
   })
 }
 
-/// A block-bodied arrow, whose statements are more than the crate reads.
+/// A block-bodied arrow.
 fn block_bodied_arrow() -> Expr {
   Expr::Arrow(ArrowExpr {
     span: DUMMY_SP,
@@ -743,9 +686,6 @@ fn assign_prop(name: &str, value: Expr) -> PropOrSpread {
 
 #[test]
 fn an_expression_that_is_not_a_value_has_no_coercion_at_all() {
-  // Unlike an identifier, which may still be one of the globals that survive
-  // evaluation, this is not a value of any kind — so neither coercion has an
-  // answer and its `ToObject` outcome cannot be read off it either.
   assert_eq!(to_js_string(&this_expr()), None);
   assert_eq!(to_js_number(&this_expr()), None);
   assert_eq!(to_object(&this_expr()), None);
@@ -753,8 +693,6 @@ fn an_expression_that_is_not_a_value_has_no_coercion_at_all() {
 
 #[test]
 fn an_object_whose_own_method_cannot_be_applied_has_no_number_either() {
-  // A number asks for `valueOf` first, so a form that this crate cannot apply
-  // refuses before the `Object.prototype` default is ever reached.
   let unapplicable = object_expr(vec![method_prop("valueOf")]);
 
   assert_eq!(to_js_number(&unapplicable), None);
@@ -762,8 +700,6 @@ fn an_object_whose_own_method_cannot_be_applied_has_no_number_either() {
 
 #[test]
 fn a_conversion_method_written_as_a_method_or_an_accessor_has_no_coercion() {
-  // Each of these is an own `toString`, so the `Object.prototype` default no
-  // longer applies — and none of them is a form this crate can apply.
   assert_eq!(
     to_js_string(&object_expr(vec![method_prop("toString")])),
     None
@@ -797,8 +733,6 @@ fn a_conversion_arrow_the_crate_cannot_read_has_no_coercion() {
 
 #[test]
 fn a_shorthand_or_assignment_property_names_a_method_the_same_way() {
-  // Neither carries a key node, so both are named from the identifier they
-  // were written as — and neither is a form the coercion can apply.
   assert_eq!(
     to_js_string(&object_expr(vec![shorthand_prop("toString")])),
     None
@@ -807,7 +741,6 @@ fn a_shorthand_or_assignment_property_names_a_method_the_same_way() {
     to_js_string(&object_expr(vec![assign_prop("toString", str_expr("red"))])),
     None
   );
-  // Under any other name they leave the default in place.
   assert_eq!(
     to_js_string(&object_expr(vec![shorthand_prop("a")])).as_deref(),
     Some(OBJECT_TO_STRING)
@@ -816,8 +749,6 @@ fn a_shorthand_or_assignment_property_names_a_method_the_same_way() {
 
 #[test]
 fn a_key_that_is_not_a_name_is_not_a_conversion_method() {
-  // A numeric key is readable — it is not the computed key `Symbol.toPrimitive`
-  // is spelled with — but it names neither method, so the default stands.
   let numeric = object_expr(vec![key_value_prop(
     PropName::Num(Number {
       span: DUMMY_SP,
@@ -844,13 +775,6 @@ fn a_key_that_is_not_a_name_is_not_a_conversion_method() {
   );
 }
 
-/// The three numbers the grammar has no literal for carry their authored text,
-/// and every other number carries none.
-///
-/// The text is what a reader diffs, what the reference implementation prints, and
-/// what a class name is a hash of, so a `Number` node holding `NaN` must not
-/// reach the emitter bare — it writes `0 / 0` for one and a numeral no author
-/// wrote for an infinity.
 #[test]
 fn only_the_unspellable_numbers_carry_their_text() {
   let raw_of = |value: f64| match js_number_expr(value) {
@@ -868,8 +792,6 @@ fn only_the_unspellable_numbers_carry_their_text() {
   assert_eq!(raw_of(f64::MAX), None);
 }
 
-/// The value is the number itself whatever its text, so a consumer that reads
-/// the value rather than the spelling is unaffected by the arm above.
 #[test]
 fn an_unspellable_number_still_holds_its_value() {
   let value_of = |value: f64| match js_number_expr(value) {
@@ -885,19 +807,13 @@ fn an_unspellable_number_still_holds_its_value() {
 
 #[test]
 fn a_value_of_no_readable_kind_has_no_object_coercion() {
-  // Whether this is a function cannot be read off it, so the caller deopts
-  // rather than picking an answer.
   assert_eq!(to_object(&ident_expr("someBinding")), None);
-  // An array is an object however its elements were written, so a spread does
-  // not make its kind unreadable the way it makes its string form unknowable.
   assert_eq!(
     to_object(&spread_array_expr(array_expr(vec![]))),
     Some(ObjectCoercion::Object)
   );
 }
 
-/// `void 0` — the third spelling of `undefined`, and the only one that is an
-/// operator rather than a literal or a name.
 fn void_expr(operand: Expr) -> Expr {
   Expr::Unary(UnaryExpr {
     span: DUMMY_SP,
@@ -914,9 +830,6 @@ fn the_falsy_primitives_are_the_whole_of_the_falsy_list() {
   assert_eq!(to_js_boolean(&bool_expr(false)), Some(false));
   assert_eq!(to_js_boolean(&null_expr()), Some(false));
   assert_eq!(to_js_boolean(&ident_expr("undefined")), Some(false));
-  // `NaN` reaches the coercion two ways — as the global it was written as, and
-  // as the number a fold arrived at — and is falsy by both routes. The second
-  // is the one an inequality against zero answers wrongly.
   assert_eq!(to_js_boolean(&ident_expr("NaN")), Some(false));
   assert_eq!(to_js_boolean(&num_expr(f64::NAN)), Some(false));
   assert_eq!(to_js_boolean(&void_expr(num_expr(0.0))), Some(false));
@@ -924,8 +837,6 @@ fn the_falsy_primitives_are_the_whole_of_the_falsy_list() {
 
 #[test]
 fn a_primitive_that_is_not_on_that_list_is_truthy() {
-  // `'0'` and `'false'` are the two that catch a reader out: a non-empty
-  // string is truthy whatever it spells.
   assert_eq!(to_js_boolean(&str_expr("0")), Some(true));
   assert_eq!(to_js_boolean(&str_expr("false")), Some(true));
   assert_eq!(to_js_boolean(&num_expr(-1.0)), Some(true));
@@ -936,9 +847,6 @@ fn a_primitive_that_is_not_on_that_list_is_truthy() {
 
 #[test]
 fn the_two_spellings_of_a_value_agree_on_its_boolean_and_its_nullishness() {
-  // `void x` and `NaN` each reach a coercion two ways, and a caller that folds
-  // `??` on one spelling and refuses `||` on the other would disagree about a
-  // value the language does not.
   for expr in [void_expr(num_expr(0.0)), ident_expr("undefined")] {
     assert_eq!(to_js_boolean(&expr), Some(false));
     assert!(is_nullish(&expr));
@@ -967,9 +875,6 @@ fn every_object_is_truthy_however_empty_it_is() {
 
 #[test]
 fn an_own_conversion_method_does_not_enter_into_the_boolean() {
-  // `ToBoolean` is the one coercion that never reaches `ToPrimitive`, so an
-  // object whose `toString` answers the empty string is still truthy — where
-  // its string coercion is the falsy value that method returns.
   let overriding = object_expr(vec![key_value_prop(
     ident_key("toString"),
     returning_arrow(str_expr("")),
@@ -981,8 +886,6 @@ fn an_own_conversion_method_does_not_enter_into_the_boolean() {
 
 #[test]
 fn an_object_with_no_string_form_still_has_a_boolean() {
-  // A spread makes the elements unnameable and so the join unknowable, but an
-  // array is truthy without any of them being read.
   let spread = spread_array_expr(array_expr(vec![]));
 
   assert_eq!(to_js_string(&spread), None);
@@ -991,8 +894,6 @@ fn an_object_with_no_string_form_still_has_a_boolean() {
 
 #[test]
 fn a_value_of_no_readable_kind_has_no_boolean() {
-  // Which side of the falsy list this falls on cannot be read off it, so the
-  // caller deopts rather than picking one.
   assert_eq!(to_js_boolean(&ident_expr("someBinding")), None);
   assert_eq!(to_js_boolean(&this_expr()), None);
 }
@@ -1001,16 +902,12 @@ fn a_value_of_no_readable_kind_has_no_boolean() {
 fn the_nullish_values_are_null_undefined_and_void() {
   assert!(is_nullish(&null_expr()));
   assert!(is_nullish(&ident_expr("undefined")));
-  // `void` yields `undefined` whatever it is applied to, so the operand is
-  // never read.
   assert!(is_nullish(&void_expr(num_expr(0.0))));
   assert!(is_nullish(&void_expr(str_expr("red"))));
 }
 
 #[test]
 fn a_falsy_value_that_is_not_nullish_says_so() {
-  // The distinction `??` rests on, and the one `||` does not draw: each of
-  // these is falsy and none of them is nullish.
   assert!(!is_nullish(&str_expr("")));
   assert!(!is_nullish(&num_expr(0.0)));
   assert!(!is_nullish(&bool_expr(false)));
@@ -1019,24 +916,12 @@ fn a_falsy_value_that_is_not_nullish_says_so() {
 
 #[test]
 fn a_value_this_crate_cannot_read_is_not_nullish() {
-  // Both spellings of nullish are syntax the predicate always recognises, so
-  // anything else is answered rather than refused.
   assert!(!is_nullish(&ident_expr("someBinding")));
   assert!(!is_nullish(&this_expr()));
   assert!(!is_nullish(&empty_object_expr()));
   assert!(!is_nullish(&arrow_expr()));
 }
 
-// ==================== the global set, read as a set ====================
-
-/// The three names the language spells as an identifier rather than as a
-/// literal, and the only three.
-///
-/// Asked as a set rather than through a coercion because that is how the
-/// evaluator asks: its reference-resolution chain has to know whether a name
-/// *could* be one of these before it can decide whether something in scope took
-/// the name over, and its object coercion answers that all three carry no own
-/// properties. Neither wants a string back.
 #[test]
 fn the_three_globals_are_spelled_as_identifiers() {
   assert!(is_global_spelled_as_an_identifier(&ident("undefined")));
@@ -1044,10 +929,6 @@ fn the_three_globals_are_spelled_as_identifiers() {
   assert!(is_global_spelled_as_an_identifier(&ident("Infinity")));
 }
 
-/// Nothing else is, including every neighbouring spelling. The comparison is on
-/// the whole symbol, so a difference of case or of one character is an ordinary
-/// binding name -- and a binding is exactly what the caller must not mistake for
-/// the global.
 #[test]
 fn no_other_name_is_a_global_spelled_as_an_identifier() {
   for name in [
@@ -1061,15 +942,10 @@ fn no_other_name_is_a_global_spelled_as_an_identifier() {
     "undefined_",
     "_undefined",
     "undefined2",
-    // Other globals, which are spelled as identifiers but are not values a
-    // coercion can read.
     "Math",
     "String",
     "Number",
     "globalThis",
-    // Spellings no source can produce, which the predicate still must not
-    // accept: a name carrying whitespace, one carrying a zero-width space, and
-    // the empty symbol.
     "NaN ",
     " NaN",
     "NaN\u{200b}",
@@ -1083,12 +959,6 @@ fn no_other_name_is_a_global_spelled_as_an_identifier() {
   }
 }
 
-/// The predicate and the coercions read one set, which is the whole reason the
-/// set is written down once. A name the predicate accepts has a string form; one
-/// it rejects is a binding this crate cannot read, and answers no string at all.
-///
-/// Asserted as a pair, per name, so a fourth global added to one reader and not
-/// the other fails here rather than at whichever call site notices first.
 #[test]
 fn the_predicate_and_the_string_coercion_read_the_same_set() {
   for (name, expected) in [
@@ -1110,89 +980,67 @@ fn the_predicate_and_the_string_coercion_read_the_same_set() {
   }
 }
 
-/// Every value here was read out of `node -e 'console.log(x | 0)'`, which is
-/// `ToInt32` spelled the shortest way, rather than derived from the
-/// specification text.
+// Node oracle: `node -e 'console.log(x | 0)'`.
 #[test]
 fn to_int32_wraps_into_the_signed_32_bit_range() {
-  // The reason this function exists: a 64-bit negation answers -4294967297 for
-  // `~[4294967296]`, where JavaScript answers -1.
   assert_eq!(to_int32(4_294_967_296.0), 0);
   assert_eq!(to_int32(2_147_483_648.0), -2_147_483_648);
   assert_eq!(to_int32(-2_147_483_649.0), 2_147_483_647);
   assert_eq!(to_int32(3_000_000_000.0), -1_294_967_296);
   assert_eq!(to_int32(1e21), -559_939_584);
 
-  // Truncation is toward zero, not flooring.
   assert_eq!(to_int32(1.9), 1);
   assert_eq!(to_int32(-1.9), -1);
 
-  // The values with no integer to wrap all answer zero rather than refusing.
   assert_eq!(to_int32(f64::NAN), 0);
   assert_eq!(to_int32(f64::INFINITY), 0);
   assert_eq!(to_int32(f64::NEG_INFINITY), 0);
   assert_eq!(to_int32(0.0), 0);
   assert_eq!(to_int32(-0.0), 0);
 
-  // Inside the range, it is the identity on integers.
   assert_eq!(to_int32(2_147_483_647.0), 2_147_483_647);
   assert_eq!(to_int32(-2_147_483_648.0), -2_147_483_648);
   assert_eq!(to_int32(-1.0), -1);
 }
 
-/// Every value here was read out of `node -e 'console.log(x >>> 0)'`, which is
-/// `ToUint32` spelled the shortest way.
+// Node oracle: `node -e 'console.log(x >>> 0)'`.
 #[test]
 fn to_uint32_wraps_into_the_unsigned_32_bit_range() {
-  // The reason this function exists: `>>>` reads its left side as unsigned, so
-  // a negative number becomes the large one the language answers with.
   assert_eq!(to_uint32(-1.0), 4_294_967_295);
   assert_eq!(to_uint32(-9.0), 4_294_967_287);
   assert_eq!(to_uint32(-2_147_483_648.0), 2_147_483_648);
 
-  // Above the range it wraps, exactly as `to_int32` does.
   assert_eq!(to_uint32(4_294_967_296.0), 0);
   assert_eq!(to_uint32(4_294_967_297.0), 1);
   assert_eq!(to_uint32(3_000_000_000.0), 3_000_000_000);
 
-  // The values with no integer to wrap all answer zero rather than refusing.
   assert_eq!(to_uint32(f64::NAN), 0);
   assert_eq!(to_uint32(f64::INFINITY), 0);
   assert_eq!(to_uint32(f64::NEG_INFINITY), 0);
   assert_eq!(to_uint32(-0.0), 0);
 
-  // Truncation is toward zero here too.
   assert_eq!(to_uint32(1.9), 1);
   assert_eq!(to_uint32(-1.9), 4_294_967_295);
 }
 
-/// Read out of `node -e 'console.log(1 << x)'`: the language keeps the low five
-/// bits of a shift count and nothing else.
+// Node oracle: `node -e 'console.log(1 << x)'`.
 #[test]
 fn to_shift_count_keeps_the_low_five_bits() {
   assert_eq!(to_shift_count(0.0), 0);
   assert_eq!(to_shift_count(31.0), 31);
 
-  // A count of the word width shifts by nothing, which is where a Rust shift
-  // panics in a debug build instead.
   assert_eq!(to_shift_count(32.0), 0);
   assert_eq!(to_shift_count(33.0), 1);
   assert_eq!(to_shift_count(64.0), 0);
 
-  // A negative count wraps through `ToUint32` first, so `-1` is a shift of 31.
   assert_eq!(to_shift_count(-1.0), 31);
   assert_eq!(to_shift_count(-32.0), 0);
 
-  // The values with no integer answer a shift of nothing.
   assert_eq!(to_shift_count(f64::NAN), 0);
   assert_eq!(to_shift_count(f64::INFINITY), 0);
   assert_eq!(to_shift_count(2.9), 2);
 }
 
-// ── the equality readings ────────────────────────────────────────────
-
-/// The five primitives this evaluator holds, read off the expressions that
-/// spell them -- including the three globals the language spells as a name.
 #[test]
 fn to_js_primitive_reads_every_primitive_spelling() {
   assert!(matches!(
@@ -1229,9 +1077,6 @@ fn to_js_primitive_reads_every_primitive_spelling() {
   ));
 }
 
-/// Everything else has no primitive to compare: the language compares two
-/// objects by reference, and this evaluator holds a copy rather than a
-/// reference.
 #[test]
 fn to_js_primitive_refuses_every_value_that_is_not_one() {
   for expr in [
@@ -1260,8 +1105,7 @@ fn to_js_primitive_refuses_every_value_that_is_not_one() {
   }
 }
 
-/// Read out of `node -e "console.log(a === b)"`. Two values of different types
-/// are unequal with no coercion at all, and `NaN` equals nothing.
+// Node oracle: `node -e "console.log(a === b)"`.
 #[test]
 fn strict_equals_compares_the_type_before_the_value() {
   let cases: [(Expr, Expr, bool); 12] = [
@@ -1274,7 +1118,6 @@ fn strict_equals_compares_the_type_before_the_value() {
     (bool_expr(true), bool_expr(true), true),
     (null_expr(), null_expr(), true),
     (ident_expr("undefined"), ident_expr("undefined"), true),
-    // The four rows a coercion would have folded together.
     (num_expr(1.0), str_expr("1"), false),
     (null_expr(), ident_expr("undefined"), false),
     (bool_expr(true), num_expr(1.0), false),
@@ -1293,27 +1136,22 @@ fn strict_equals_compares_the_type_before_the_value() {
   }
 }
 
-/// Read out of `node -e "console.log(a == b)"`. The three coercions the
-/// algorithm applies, and the rows where it applies none.
+// Node oracle: `node -e "console.log(a == b)"`.
 #[test]
 fn loose_equals_applies_the_three_coercions_and_no_others() {
   let cases: [(Expr, Expr, bool); 14] = [
-    // A string meeting a number becomes its number.
     (num_expr(1.0), str_expr("1"), true),
     (str_expr("1"), num_expr(1.0), true),
     (num_expr(1.0), str_expr("1px"), false),
     (num_expr(0.0), str_expr(""), true),
     (num_expr(0.0), str_expr("  "), true),
-    // A boolean becomes its number on whichever side it is.
     (bool_expr(true), num_expr(1.0), true),
     (num_expr(0.0), bool_expr(false), true),
     (bool_expr(true), str_expr("1"), true),
-    // The two nullish values equal each other and nothing else.
     (null_expr(), ident_expr("undefined"), true),
     (null_expr(), num_expr(0.0), false),
     (ident_expr("undefined"), str_expr(""), false),
     (null_expr(), bool_expr(false), false),
-    // Same type is the strict reading, `NaN` included.
     (str_expr("a"), str_expr("a"), true),
     (ident_expr("NaN"), ident_expr("NaN"), false),
   ];
@@ -1331,9 +1169,6 @@ fn loose_equals_applies_the_three_coercions_and_no_others() {
   }
 }
 
-/// Two strings that hold different lone surrogates are different strings, which
-/// is why the reading holds the atom rather than the text: `as_str` reads both
-/// as one replacement character.
 #[test]
 fn two_lone_surrogates_are_not_the_same_string() {
   let high = lone_surrogate_expr(0xD83D);
@@ -1347,35 +1182,26 @@ fn two_lone_surrogates_are_not_the_same_string() {
   let (high_value, same) = primitive_pair(&high, &same_high);
   assert!(strict_equals(&high_value, &same));
 
-  // A text with no `str` is not a numeric literal, so it meets a number as
-  // `NaN` rather than refusing.
   let zero_expr = num_expr(0.0);
   let (high_value, zero) = primitive_pair(&high, &zero_expr);
   assert!(!loose_equals(&high_value, &zero));
 }
 
-/// Read out of `node -e "console.log(a < b)"`. Two strings compare by code
-/// unit and every other pair compares as two numbers.
+// Node oracle: `node -e "console.log(a < b)"`.
 #[test]
 fn js_less_than_orders_two_strings_by_code_unit_and_everything_else_by_number() {
   let cases: [(Expr, Expr, bool); 12] = [
-    // The rows a numeric reading gets wrong, because both sides are strings.
     (str_expr("10"), str_expr("9"), true),
     (str_expr("2"), str_expr("10"), false),
     (str_expr("a"), str_expr("b"), true),
     (str_expr(""), str_expr("a"), true),
     (str_expr("a"), str_expr(""), false),
-    // One string and one number is the numeric reading, so the text is read
-    // through `StringToNumber` rather than by code unit.
     (str_expr("10"), num_expr(9.0), false),
     (num_expr(9.0), str_expr("10"), true),
-    // The nullish pair: `null` is nought and `undefined` is `NaN`.
     (null_expr(), num_expr(1.0), true),
     (num_expr(1.0), null_expr(), false),
-    // A boolean is its number, on whichever side it is.
     (bool_expr(false), num_expr(1.0), true),
     (num_expr(1.0), bool_expr(true), false),
-    // The two zeroes are neither less than nor greater than each other.
     (num_expr(0.0), num_expr(-0.0), false),
   ];
 
@@ -1392,8 +1218,6 @@ fn js_less_than_orders_two_strings_by_code_unit_and_everything_else_by_number() 
   }
 }
 
-/// A `NaN` on either side has no ordering at all, which is the `undefined` the
-/// specification names -- and what makes all four relational operators false.
 #[test]
 fn js_less_than_has_no_answer_for_a_not_a_number_operand() {
   let not_a_number = ident_expr("NaN");
@@ -1405,14 +1229,10 @@ fn js_less_than_has_no_answer_for_a_not_a_number_operand() {
   let (left, right) = primitive_pair(&one, &not_a_number);
   assert_eq!(js_less_than(&left, &right), Some(None));
 
-  // A text with no numeric literal in it is `NaN` too, so it has no ordering
-  // against a number -- but it still orders against another string.
   let text = str_expr("10px");
   let (left, right) = primitive_pair(&text, &one);
   assert_eq!(js_less_than(&left, &right), Some(None));
 
-  // `undefined` is the third spelling of `NaN` here, and the one that separates
-  // it from `null`: `null < 1` is true and `undefined < 1` is false.
   let absent = ident_expr("undefined");
   let (left, right) = primitive_pair(&absent, &one);
   assert_eq!(js_less_than(&left, &right), Some(None));
@@ -1421,14 +1241,6 @@ fn js_less_than_has_no_answer_for_a_not_a_number_operand() {
   assert_eq!(js_less_than(&left, &right), Some(None));
 }
 
-/// A string this crate cannot read has no ordering, and the refusal travels out
-/// rather than being answered as `false`: `'\u{D83D}' < 'a'` is a question with
-/// a real answer, and guessing it would put the wrong arm of a conditional in
-/// the stylesheet.
-///
-/// It refuses only where the code-unit rule claims the pair. Against a number
-/// the same text is read as `NaN`, which every text with no numeric literal in
-/// it already is.
 #[test]
 fn js_less_than_refuses_a_string_it_cannot_read() {
   let surrogate = lone_surrogate_expr(0xD83D);
@@ -1445,10 +1257,6 @@ fn js_less_than_refuses_a_string_it_cannot_read() {
   assert_eq!(js_less_than(&left, &right), Some(None));
 }
 
-/// Code unit rather than code point, which is the one row the two orderings
-/// disagree on: an astral character is a surrogate pair whose first unit is
-/// below `U+E000`, so it sorts *before* a character the code-point order puts
-/// first.
 #[test]
 fn js_less_than_orders_an_astral_character_by_its_first_code_unit() {
   let astral = str_expr("\u{1F600}");
@@ -1458,9 +1266,6 @@ fn js_less_than_orders_an_astral_character_by_its_first_code_unit() {
   assert_eq!(js_less_than(&left, &right), Some(Some(true)));
 }
 
-/// `ToPrimitive` with no hint asks an object for its own `valueOf` first, which
-/// is the reduction `+` applies before it decides whether it is addition or
-/// concatenation.
 #[test]
 fn to_js_default_primitive_prefers_an_own_value_of() {
   let both = object_expr(vec![
@@ -1475,8 +1280,6 @@ fn to_js_default_primitive_prefers_an_own_value_of() {
     Some("2")
   );
 
-  // `toString` alone still answers, because the order is a preference rather
-  // than a requirement.
   let to_string_only = object_expr(vec![key_value_prop(
     ident_key("toString"),
     returning_arrow(str_expr("5")),
@@ -1490,9 +1293,6 @@ fn to_js_default_primitive_prefers_an_own_value_of() {
   );
 }
 
-/// A value that is already a primitive answers itself, whatever it is. So does
-/// every value that is not an object at all, which is what keeps the reduction
-/// a no-op for every side but the one it was written for.
 #[test]
 fn to_js_default_primitive_answers_a_primitive_with_itself() {
   for expr in [
@@ -1509,15 +1309,10 @@ fn to_js_default_primitive_answers_a_primitive_with_itself() {
   }
 }
 
-/// An object that keeps the `Object.prototype` pair reduces to nothing: its
-/// primitive is the default text, which the caller's string path already
-/// writes.
 #[test]
 fn to_js_default_primitive_leaves_the_default_pair_to_the_string_path() {
   assert!(to_js_default_primitive(&object_expr(vec![])).is_none());
 
-  // A method answering an object has answered no primitive, and the other
-  // method is the default one -- so there is no value to fold.
   let answers_an_object = object_expr(vec![key_value_prop(
     ident_key("valueOf"),
     returning_arrow(object_expr(vec![])),
@@ -1526,8 +1321,6 @@ fn to_js_default_primitive_leaves_the_default_pair_to_the_string_path() {
   assert!(to_js_default_primitive(&answers_an_object).is_none());
 }
 
-/// A method answering another object keeps reducing, because the value a
-/// conversion hands back is itself read through `ToPrimitive`.
 #[test]
 fn to_js_default_primitive_reduces_what_a_conversion_answers() {
   let nested = object_expr(vec![key_value_prop(
@@ -1543,7 +1336,6 @@ fn to_js_default_primitive_reduces_what_a_conversion_answers() {
   );
 }
 
-/// Both sides of a comparison, for a case that spells them as expressions.
 #[track_caller]
 fn primitive_pair<'a>(left: &'a Expr, right: &'a Expr) -> (Primitive<'a>, Primitive<'a>) {
   match (to_js_primitive(left), to_js_primitive(right)) {
@@ -1552,7 +1344,7 @@ fn primitive_pair<'a>(left: &'a Expr, right: &'a Expr) -> (Primitive<'a>, Primit
   }
 }
 
-/// A string literal holding one lone surrogate, which no Rust `str` can spell.
+/// A string literal containing one lone surrogate.
 fn lone_surrogate_expr(code_unit: u16) -> Expr {
   let mut buffer = Wtf8Buf::new();
 
@@ -1568,16 +1360,6 @@ fn lone_surrogate_expr(code_unit: u16) -> Expr {
   }))
 }
 
-// ── global_identifier_to_value ───────────────────────────────────────
-
-/// The two numeric globals answer with the numbers they *are*, and `undefined`
-/// answers with itself.
-///
-/// The split is not cosmetic. A consumer that inspects the expression's shape
-/// rather than coercing it — style-value validation is the one that does, since
-/// it admits a number and refuses an identifier — sees `NaN` as a number here,
-/// so `height: [NaN, '2px']` is accepted exactly as `height: [0/0, '2px']` is.
-/// `undefined` has no numeric reading to answer with, so it stands.
 #[test]
 fn global_identifier_to_value_answers_numbers_for_the_two_numeric_globals() {
   match global_identifier_to_value(&ident("NaN")) {
@@ -1601,9 +1383,6 @@ fn global_identifier_to_value_answers_numbers_for_the_two_numeric_globals() {
   }
 }
 
-/// `undefined` has no literal spelling, so the identifier is the answer. The
-/// span comes back with it, which is what lets a caller report against the
-/// reference it read.
 #[test]
 fn global_identifier_to_value_answers_undefined_with_itself() {
   match global_identifier_to_value(&ident("undefined")) {
@@ -1612,9 +1391,6 @@ fn global_identifier_to_value_answers_undefined_with_itself() {
   }
 }
 
-/// `None` for every other name, which is what lets a caller use this as the set
-/// as well as the coercion — and it agrees with the predicate that publishes
-/// the set on its own.
 #[test]
 fn global_identifier_to_value_declines_every_other_name() {
   for name in ["Number", "nan", "NAN", "infinity", "undefined_", "x", ""] {
@@ -1640,10 +1416,6 @@ fn global_identifier_to_value_declines_every_other_name() {
   }
 }
 
-/// The `raw` text is the point of `number_spelled_as`, not the value: asked to
-/// print a `Number` node holding `NaN` with no raw text, the emitter writes
-/// `0 / 0`, and `Infinity` becomes a numeral no author wrote. Both evaluate
-/// correctly either way, so this pins the text a reader diffs.
 #[test]
 fn the_numeric_globals_carry_the_text_they_were_authored_with() {
   let raw_of = |name: &str| match global_identifier_to_value(&ident(name)) {
@@ -1655,15 +1427,7 @@ fn the_numeric_globals_carry_the_text_they_were_authored_with() {
   assert_eq!(raw_of("Infinity").as_deref(), Some("Infinity"));
 }
 
-// ──────────────────────────────────────────────
-// The streamed join
-// ──────────────────────────────────────────────
-
-/// A sink that takes a fixed number of code units and refuses the piece that
-/// would pass it -- the shape of the character ceiling, without a compile.
-///
-/// It records what it took as well, so a case can assert that a refusal arrives
-/// *before* the rest of the pieces are written rather than after.
+/// A sink that refuses pieces exceeding a UTF-16 code-unit ceiling.
 struct Bounded {
   text: String,
   ceiling: usize,
@@ -1682,8 +1446,6 @@ impl StringSink for Bounded {
   type Refusal = usize;
 
   fn write(&mut self, piece: &str) -> Result<(), usize> {
-    // UTF-16 code units, which is what the real ceiling spends -- so the stand-in
-    // cannot pass a case the compiler's own sink would refuse.
     let grown = utf16_length(&self.text) + utf16_length(piece);
 
     if grown > self.ceiling {
@@ -1696,9 +1458,6 @@ impl StringSink for Bounded {
   }
 }
 
-/// Streaming answers exactly what collecting did, over every shape an array's
-/// join has a rule for: the separator between elements, the two values that join
-/// as nothing, a hole, and nesting.
 #[test]
 fn a_streamed_join_writes_what_the_collected_one_answered() {
   let cases: &[(Expr, &str)] = &[
@@ -1739,9 +1498,6 @@ fn a_streamed_join_writes_what_the_collected_one_answered() {
   }
 }
 
-/// A refusal ends the join where it happens, so the pieces after it are never
-/// written. That is the whole point of streaming: the elements a bounded caller
-/// refuses are elements it never rendered.
 #[test]
 fn a_sink_refusal_ends_the_join_where_it_happens() {
   let array = array_expr(vec![
@@ -1753,8 +1509,6 @@ fn a_sink_refusal_ends_the_join_where_it_happens() {
   let mut sink = Bounded::new(5);
 
   match write_js_string_of(&array, FunctionForm::Refuse, &mut sink) {
-    // Four code units are held -- `aaa` and the separator -- and `bbb` would
-    // make seven, which is the number the refusal carries.
     Err(StringRefusal::Sink(grown)) => assert_eq!(grown, 7),
     other => panic!("expected the sink to refuse, got {:?}", other),
   }
@@ -1762,8 +1516,6 @@ fn a_sink_refusal_ends_the_join_where_it_happens() {
   assert_eq!(sink.text, "aaa,");
 }
 
-/// The separator counts against the sink as much as an element does, since it is
-/// part of the string being built. Two single-character elements need three.
 #[test]
 fn the_separator_is_measured_with_the_elements() {
   let array = array_expr(vec![Some(str_expr("a")), Some(str_expr("b"))]);
@@ -1772,9 +1524,6 @@ fn the_separator_is_measured_with_the_elements() {
   assert!(write_js_string_of(&array, FunctionForm::Refuse, &mut exact).is_ok());
   assert_eq!(exact.text, "a,b");
 
-  // Two admits the first element and the separator after it, and refuses the
-  // second element -- so the separator is charged where it is written rather
-  // than held back until an element follows it.
   let mut one_short = Bounded::new(2);
   assert!(matches!(
     write_js_string_of(&array, FunctionForm::Refuse, &mut one_short),
@@ -1783,9 +1532,6 @@ fn the_separator_is_measured_with_the_elements() {
   assert_eq!(one_short.text, "a,");
 }
 
-/// An element with no string form is the join's other ending, and it is reported
-/// as its own kind rather than as the sink's -- a caller that reads them alike
-/// would tell an author about a ceiling where a function was written.
 #[test]
 fn an_element_with_no_string_form_is_not_a_sink_refusal() {
   let array = array_expr(vec![Some(str_expr("a")), Some(arrow_expr())]);
@@ -1797,16 +1543,11 @@ fn an_element_with_no_string_form_is_not_a_sink_refusal() {
     Err(StringRefusal::NoStringForm)
   ));
 
-  // Under the number form the same function stands in for its source text, so
-  // the join has an answer and the sink takes it.
   let mut counted = Bounded::new(1000);
   assert!(write_js_string_of(&array, FunctionForm::NotANumber, &mut counted).is_ok());
   assert_eq!(counted.text, "a,function");
 }
 
-/// A spread element is not a written element, so an array holding one has no
-/// join at all -- and the pieces before it are what the sink was given, since a
-/// refusal stops rather than rewinds.
 #[test]
 fn a_spread_element_has_no_join() {
   let array = Expr::Array(ArrayLit {
@@ -1832,8 +1573,6 @@ fn a_spread_element_has_no_join() {
   assert_eq!(sink.text, "a,");
 }
 
-/// Nesting deep enough to be worth naming still answers one flat join, and the
-/// sink sees no separator for a level that holds one element.
 #[test]
 fn nesting_flattens_into_one_join() {
   let mut nested = str_expr("a");
@@ -1848,9 +1587,6 @@ fn nesting_flattens_into_one_join() {
   assert_eq!(sink.text, "a");
 }
 
-/// A sink that takes nothing at all refuses the first piece, and a value with no
-/// pieces to write is not a refusal -- an empty array writes nothing, so a
-/// ceiling of zero admits it.
 #[test]
 fn a_sink_that_takes_nothing_still_admits_an_empty_join() {
   let mut sink = Bounded::new(0);
@@ -1864,12 +1600,6 @@ fn a_sink_that_takes_nothing_still_admits_an_empty_join() {
   ));
 }
 
-// ──────────────────────────────────────────────
-// The streamed number
-// ──────────────────────────────────────────────
-
-/// `ToNumber` writes only where the value has no number of its own, so a caller
-/// measuring the text is charged for nothing it did not have to read.
 #[test]
 fn a_value_with_its_own_number_writes_nothing() {
   for (expr, number) in [
@@ -1888,8 +1618,6 @@ fn a_value_with_its_own_number_writes_nothing() {
   }
 }
 
-/// Everything else reaches its number through the text it renders, which is what
-/// the sink is handed.
 #[test]
 fn a_value_without_one_reaches_its_number_through_the_sink() {
   let array = array_expr(vec![Some(str_expr("1")), Some(str_expr("2"))]);
@@ -1900,8 +1628,6 @@ fn a_value_without_one_reaches_its_number_through_the_sink() {
   assert!(string_to_js_number(&sink.text).is_nan());
 }
 
-/// The two answers together are the collecting coercion, so the wrapper and the
-/// stream cannot come to disagree.
 #[test]
 fn the_streamed_number_agrees_with_the_collected_one() {
   let cases = [
@@ -1934,8 +1660,6 @@ fn the_streamed_number_agrees_with_the_collected_one() {
   }
 }
 
-/// The character test is sound: every character a numeric literal can hold
-/// answers `true`, so a `false` proves the whole text is `NaN`.
 #[test]
 fn every_character_a_numeric_literal_holds_is_admitted() {
   let literals = [
@@ -1969,8 +1693,6 @@ fn every_character_a_numeric_literal_holds_is_admitted() {
   }
 }
 
-/// And the characters that settle the answer, of which the separator between two
-/// array elements is the one that matters.
 #[test]
 fn a_character_no_numeric_literal_holds_is_refused() {
   for character in [
@@ -1993,10 +1715,6 @@ fn a_character_no_numeric_literal_holds_is_refused() {
   }
 }
 
-/// The separator is a piece the sink can refuse on its own, which is the case a
-/// ceiling that admits every element still reaches: two one-character elements
-/// under a ceiling of one hold the first and stop at the comma, before the
-/// second element is ever rendered.
 #[test]
 fn a_refused_separator_ends_the_join_before_the_next_element() {
   let array = array_expr(vec![Some(str_expr("a")), Some(str_expr("b"))]);
@@ -2004,16 +1722,12 @@ fn a_refused_separator_ends_the_join_before_the_next_element() {
   let mut sink = Bounded::new(1);
 
   match write_js_string_of(&array, FunctionForm::Refuse, &mut sink) {
-    // One code unit is held and the separator would make two, which is the
-    // number the refusal carries -- an element's own length is not in it.
     Err(StringRefusal::Sink(grown)) => assert_eq!(grown, 2),
     other => panic!("expected the separator to be refused, got {:?}", other),
   }
 
   assert_eq!(sink.text, "a");
 
-  // The same array one code unit higher gets past the separator and refuses on
-  // the element after it, so the ceiling above is the separator's alone.
   let mut wider = Bounded::new(2);
 
   assert!(matches!(
@@ -2023,10 +1737,6 @@ fn a_refused_separator_ends_the_join_before_the_next_element() {
   assert_eq!(wider.text, "a,");
 }
 
-/// A string literal holding a lone surrogate has no `str` for Rust to write, so
-/// it is the value's own ending rather than the sink's -- the same deopt every
-/// unreadable value gets, which leaves the caller free to name the property the
-/// value sits on.
 #[test]
 fn a_string_with_no_utf8_form_has_no_string_form() {
   // A lone surrogate: valid WTF-8 storage, invalid UTF-8 decoding.
@@ -2049,11 +1759,8 @@ fn a_string_with_no_utf8_form_has_no_string_form() {
     write_js_string_of(&unreadable, FunctionForm::Refuse, &mut sink),
     Err(StringRefusal::NoStringForm)
   ));
-  // A refusal writes nothing, so a bounded caller is charged for no part of it.
   assert_eq!(sink.text, "");
 
-  // The collecting coercion answers the same nothing, and so does the value in
-  // every position a string reaches: an array element and an object's key.
   assert_eq!(to_js_string(&unreadable), None);
   assert_eq!(
     to_js_string(&array_expr(vec![Some(unreadable.clone())])),
@@ -2069,14 +1776,9 @@ fn a_string_with_no_utf8_form_has_no_string_form() {
     ),
     Err(StringRefusal::NoStringForm)
   ));
-  // The join stops rather than rewinds, so what was written before the
-  // unreadable element stays written.
   assert_eq!(nested, "a,");
 }
 
-/// An object with no primitive of its own reaches its number through the
-/// `Object.prototype` text, and that text is a piece the sink may refuse -- so
-/// the number form has the sink's ending too, not only the string form's.
 #[test]
 fn an_object_default_text_can_be_refused_by_the_sink() {
   let object = object_expr(vec![key_value_prop(
@@ -2092,8 +1794,6 @@ fn an_object_default_text_can_be_refused_by_the_sink() {
   ));
   assert_eq!(sink.text, "");
 
-  // One code unit wider the same object writes its text and answers through it,
-  // which is `NaN` -- so the refusal above is the ceiling's and not the shape's.
   let mut exact = Bounded::new(OBJECT_TO_STRING.len());
 
   assert_eq!(write_js_number_of(&object, &mut exact), Ok(NumberOf::Text));
@@ -2101,13 +1801,8 @@ fn an_object_default_text_can_be_refused_by_the_sink() {
   assert!(string_to_js_number(&exact.text).is_nan());
 }
 
-/// A regular expression reaches the sink as the four pieces it spells rather
-/// than as one joined text, so a caller measuring against a ceiling refuses at
-/// the piece that passes it -- and what it has already taken is what stands.
 #[test]
 fn a_regular_expression_is_written_piece_by_piece() {
-  // One ceiling per piece, so each of the four is the one that refuses: the
-  // opening delimiter, the source, the closing delimiter and the flags.
   for (ceiling, kept) in [(0, ""), (1, "/"), (4, "/a+b"), (5, "/a+b/")] {
     let mut narrow = Bounded::new(ceiling);
 
@@ -2122,7 +1817,6 @@ fn a_regular_expression_is_written_piece_by_piece() {
     assert_eq!(narrow.text, kept);
   }
 
-  // The whole text still reaches a sink wide enough for it.
   let mut wide = Bounded::new(7);
 
   assert_eq!(
@@ -2132,17 +1826,8 @@ fn a_regular_expression_is_written_piece_by_piece() {
   assert_eq!(wide.text, "/a+b/gi");
 }
 
-/// Every ending the number form has, reached through a sink that can refuse --
-/// the recursion into an own method's answer, the value with no string form at
-/// all, and the sink's own refusal on the text a non-object renders.
-///
-/// The bounded sink is walked through all of them rather than only the ones a
-/// ceiling is interesting for, because a sink that answers on some endings and
-/// not others is a sink whose behaviour depends on which arm the value took.
 #[test]
 fn the_number_form_reaches_every_ending_through_a_bounded_sink() {
-  // An own `valueOf` answers a primitive, and the coercion carries on into it:
-  // the number is that answer's, and no text was written to reach it.
   let returning = object_expr(vec![key_value_prop(
     ident_key("valueOf"),
     returning_arrow(num_expr(2.0)),
@@ -2156,9 +1841,6 @@ fn the_number_form_reaches_every_ending_through_a_bounded_sink() {
   );
   assert_eq!(answered.text, "");
 
-  // A method in a form this crate cannot apply is the value's own ending, not
-  // the sink's -- a caller that read them alike would name a ceiling where a
-  // `TypeError` was written.
   let unapplicable = object_expr(vec![method_prop("valueOf")]);
 
   let mut refused = Bounded::new(1000);
@@ -2169,8 +1851,6 @@ fn the_number_form_reaches_every_ending_through_a_bounded_sink() {
   );
   assert_eq!(refused.text, "");
 
-  // A BigInt has no number. The refusal is the value's own, and the sink gets
-  // no text.
   let mut big_integer = Bounded::new(1000);
 
   assert_eq!(
@@ -2179,8 +1859,6 @@ fn the_number_form_reaches_every_ending_through_a_bounded_sink() {
   );
   assert_eq!(big_integer.text, "");
 
-  // And a value that is neither a number nor an object reaches its number
-  // through the text it renders, which the sink may refuse part-way.
   let mut narrow = Bounded::new(2);
 
   assert!(matches!(
@@ -2189,8 +1867,6 @@ fn the_number_form_reaches_every_ending_through_a_bounded_sink() {
   ));
   assert_eq!(narrow.text, "");
 
-  // One code unit wider than the text the same value renders, the sink takes it
-  // and the number is read back through what was written.
   let mut wide = Bounded::new(6);
 
   assert_eq!(
@@ -2201,10 +1877,6 @@ fn the_number_form_reaches_every_ending_through_a_bounded_sink() {
   assert!(string_to_js_number(&wide.text).is_nan());
 }
 
-/// `ToNumber` of a BigInt throws a `TypeError`, so a BigInt has no number. This
-/// is true for a BigInt that an own conversion method answers too: the method
-/// is not evaluated, and its body is read as it stands. The string form is not
-/// changed, because `ToString` of a BigInt is its digits.
 #[test]
 fn a_big_integer_has_no_number_where_it_is_read_as_one() {
   let returning = |method: &str| {
@@ -2221,15 +1893,10 @@ fn a_big_integer_has_no_number_where_it_is_read_as_one() {
   assert_eq!(to_js_string(&big_int_expr(2)).as_deref(), Some("2"));
 }
 
-/// `OrdinaryToPrimitive` skips an own method that cannot be called, and one
-/// that answers an object. It then asks the other method. Only an object whose
-/// two methods give no primitive has no conversion, because there the
-/// language throws a `TypeError`. Each value is the answer of Node.
 #[test]
 fn a_conversion_method_that_gives_no_primitive_is_skipped() {
   let method = |name: &str, value: Expr| key_value_prop(ident_key(name), value);
 
-  // The number asks for `valueOf` first, skips it, and reaches `toString`.
   for skipped in [
     num_expr(1.0),
     null_expr(),
@@ -2237,7 +1904,6 @@ fn a_conversion_method_that_gives_no_primitive_is_skipped() {
     object_expr(vec![]),
     array_expr(vec![]),
     returning_arrow(object_expr(vec![])),
-    // The parentheses that `() => ({})` needs in source.
     returning_arrow(Expr::Paren(ParenExpr {
       span: DUMMY_SP,
       expr: Box::new(object_expr(vec![])),
@@ -2257,14 +1923,12 @@ fn a_conversion_method_that_gives_no_primitive_is_skipped() {
     assert_eq!(to_js_number(&with_own), Some(3.0), "{with_own:?}");
   }
 
-  // The string asks for `toString` first, skips it, and reaches `valueOf`.
   let string_skips = object_expr(vec![
     method("toString", num_expr(2.0)),
     method("valueOf", returning_arrow(str_expr("v"))),
   ]);
   assert_eq!(to_js_string(&string_skips).as_deref(), Some("v"));
 
-  // Both methods give no primitive, so the language throws.
   for no_primitive in [
     object_expr(vec![method("toString", num_expr(1.0))]),
     object_expr(vec![
@@ -2281,10 +1945,6 @@ fn a_conversion_method_that_gives_no_primitive_is_skipped() {
   }
 }
 
-/// A name can hold a function or a value, so a method that a name holds cannot
-/// be read off the expression. A coercion that asks for that method refuses,
-/// and does not guess. A string asks for `toString` first, so an own `valueOf`
-/// does not enter into it.
 #[test]
 fn a_conversion_method_held_by_a_name_has_no_coercion() {
   let held = |name: &str| object_expr(vec![key_value_prop(ident_key(name), ident_expr("convert"))]);
@@ -2298,9 +1958,6 @@ fn a_conversion_method_held_by_a_name_has_no_coercion() {
   assert_eq!(to_js_string(&held("toString")), None);
 }
 
-/// No method gives a primitive, so the language throws a `TypeError`. The
-/// reduction refuses, which is not the default text that it leaves to the
-/// string path.
 #[test]
 fn to_js_default_primitive_refuses_an_object_with_no_primitive() {
   let no_primitive = object_expr(vec![key_value_prop(ident_key("toString"), num_expr(1.0))]);
@@ -2309,11 +1966,7 @@ fn to_js_default_primitive_refuses_an_object_with_no_primitive() {
   assert_eq!(to_js_string(&no_primitive), None);
 }
 
-/// A regular expression is an object, so a method that answers one gives no
-/// primitive. The reference implementation refuses every regular expression
-/// literal, so a coercion that asks a method that holds one refuses too. A
-/// string asks for `toString` first, so an own `valueOf` does not enter into
-/// it.
+// Babel refuses RegExp conversion methods; see coercions.rs::own_conversion_method.
 #[test]
 fn a_regular_expression_in_a_conversion_method_has_no_coercion() {
   for value in [returning_arrow(regex_expr("a", "")), regex_expr("a", "")] {
@@ -2327,8 +1980,6 @@ fn a_regular_expression_in_a_conversion_method_has_no_coercion() {
   }
 }
 
-/// The last of two own keys with one name is the property, as in the language.
-/// A method in parentheses is the same method.
 #[test]
 fn a_conversion_method_is_the_last_own_key_read_through_parentheses() {
   let paren = |expr: Expr| {

@@ -11,8 +11,7 @@ pub struct EvaluationState {
   pub deopt_path: Option<Expr>,
   pub added_imports: FxHashSet<String>,
   pub functions: Rc<FunctionMap>,
-  /// Lazily retained static inventory. Memo key equality confirms its complete
-  /// content; this is not an address-derived fingerprint.
+  /// Lazily retained static inventory.
   pub memo_inventory: Option<stylex_state::seen_value::StaticMemoInventory>,
   pub deopt_reason: Option<String>,
 }

@@ -115,11 +115,6 @@ mod stylex_first_that_works {
     assert_eq!(result, create_string_expr(expected_value));
   }
 
-  /// An argument that the plan reads and the fold reads again is read once.
-  ///
-  /// Counted through a mapper, which is the one binding whose reads can be
-  /// observed: every read of the identifier calls it. The first argument is in
-  /// the chain, so both passes want it.
   #[test]
   fn an_argument_is_read_to_text_once() {
     let reads = Rc::new(Cell::new(0_usize));
@@ -148,9 +143,6 @@ mod stylex_first_that_works {
     assert_eq!(reads.get(), 1);
   }
 
-  /// Every fallback is a piece of CSS text, so an argument with no string at
-  /// compile time stops the build rather than being written into the rule as
-  /// something else. An object literal is such an argument.
   #[test]
   #[should_panic(expected = "Expected a string value but received a non-string expression.")]
   fn panics_for_an_argument_with_no_string() {
@@ -162,24 +154,12 @@ mod stylex_first_that_works {
   }
 }
 
-/// The ordering arithmetic on its own, over positions rather than over values.
-///
-/// Asked here as well as through the transform because two callers share it —
-/// the evaluator's expression path and the compile-time engine's — and a case
-/// that reads awkwardly as a declaration reads plainly as a list of booleans.
 #[cfg(test)]
 mod fallback_plan {
   use crate::stylex_first_that_works::{
     Fallbacks, css_variable_name, cut_to_css_variable_name, fold_fallback_chain, plan_fallbacks,
   };
 
-  /// The plan for `is_var`, as `(chain, rest)`, or `None` where there is no
-  /// variable to build a chain from.
-  ///
-  /// Reads the shape back down to the pair the arithmetic cases are written
-  /// against, so which of the three shapes a plan answers with is asserted in
-  /// one place — [`the_shape_says_how_the_answer_is_assembled`] — rather than
-  /// once per case.
   fn plan(is_var: &[bool]) -> Option<(Vec<usize>, Vec<usize>)> {
     match plan_fallbacks(is_var.len(), |index| is_var[index]) {
       Fallbacks::Reversed => None,
@@ -188,12 +168,6 @@ mod fallback_plan {
     }
   }
 
-  /// Which shape a plan answers with, which is the half both callers assemble
-  /// from and neither decides.
-  ///
-  /// A chain with nothing behind it is its own shape rather than a chain and an
-  /// empty list, because the two are assembled differently: one stays a single
-  /// value that can be concatenated, the other becomes a list of declarations.
   #[test]
   fn the_shape_says_how_the_answer_is_assembled() {
     let shape = |is_var: &[bool]| match plan_fallbacks(is_var.len(), |index| is_var[index]) {
@@ -241,8 +215,6 @@ mod fallback_plan {
     );
   }
 
-  /// Everything past the value the chain stops on is dropped, which is the one
-  /// part of this arithmetic an author is likely to be surprised by.
   #[test]
   fn the_arguments_past_the_chains_end_are_dropped() {
     assert_eq!(
@@ -256,8 +228,6 @@ mod fallback_plan {
     assert_eq!(plan(&[true, true, true]), Some((vec![2, 1, 0], vec![])));
   }
 
-  /// A thousand variables, which is past anything a stylesheet writes and still
-  /// one walk with no recursion in it.
   #[test]
   fn a_very_long_argument_list_plans_in_one_walk() {
     let is_var = vec![true; 1000];
@@ -276,17 +246,12 @@ mod fallback_plan {
     assert_eq!(fold_fallback_chain(Vec::new()), "");
   }
 
-  /// One part that is a value stays that value; one that is a variable name is
-  /// wrapped, since a name is not a reference until it is.
   #[test]
   fn one_part_folds_to_itself_or_to_a_reference() {
     assert_eq!(fold_fallback_chain(vec!["red".to_string()]), "red");
     assert_eq!(fold_fallback_chain(vec!["--x".to_string()]), "var(--x)");
   }
 
-  /// An empty first part leaves the chain empty, so the part after it is still
-  /// the innermost — which is why `firstThatWorks('var(--p)', '')` answers the
-  /// bare reference.
   #[test]
   fn an_empty_part_does_not_start_the_chain() {
     assert_eq!(
@@ -313,9 +278,6 @@ mod fallback_plan {
     );
   }
 
-  /// A bare reference reads as the name inside it; anything else reads as no
-  /// variable at all, which is what keeps the name from ever being sliced out of
-  /// text that has none.
   #[test]
   fn only_a_bare_single_reference_reads_as_a_variable() {
     assert_eq!(css_variable_name("var(--x)"), Some("--x"));
@@ -333,9 +295,6 @@ mod fallback_plan {
     assert_eq!(css_variable_name("var(--é)"), None);
   }
 
-  /// The cut answers what the question above answers, and leaves the text it
-  /// refuses exactly as it was. Every shape the question reads is asked again
-  /// here, because the cut is the form the fold actually uses.
   #[test]
   fn the_cut_leaves_the_name_and_refuses_the_rest() {
     let cut = |text: &str| {

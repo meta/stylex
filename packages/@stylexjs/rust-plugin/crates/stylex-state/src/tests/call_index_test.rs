@@ -1,10 +1,3 @@
-//! Which member expressions are the callee of a call the module still holds.
-//!
-//! Asked once per member the visitor meets, so the answer has to stay exact
-//! while calls are rewritten under it: a member kept after its last call was
-//! replaced would make the visitor treat a plain property read as a call, and
-//! one forgotten while a call still holds it would do the opposite.
-
 use indexmap::IndexMap;
 use std::rc::Rc;
 
@@ -21,7 +14,6 @@ use crate::state_manager::StateManager;
 use crate::tests::prelude::{object_expr, test_state as state};
 use crate::types::InjectableStylesMap;
 
-/// `object.property`, the shape every StyleX call off a namespace import takes.
 fn member(object: &str, property: &str) -> MemberExpr {
   MemberExpr {
     span: DUMMY_SP,
@@ -65,7 +57,6 @@ fn plain_call(name: &str) -> CallExpr {
   )
 }
 
-/// One rule, so that replacing a call has something to register.
 fn one_style() -> InjectableStylesMap {
   let mut styles: InjectableStylesMap = IndexMap::new();
 
@@ -81,8 +72,6 @@ fn one_style() -> InjectableStylesMap {
   styles
 }
 
-/// Replaces `call` with `ast`, which is what registering the styles a call
-/// produced does to the call itself.
 fn replace(state: &mut StateManager, call: &CallExpr, ast: &Expr) {
   state.register_styles(call, &one_style(), ast, None);
 }
@@ -96,8 +85,6 @@ fn a_member_that_is_a_callee_is_recognised() {
   assert!(state.is_member_call_callee(&member("stylex", "create")));
 }
 
-/// A member nothing calls is not a callee, and neither is one that differs from
-/// a recorded callee in either half.
 #[test]
 fn a_member_nothing_calls_is_not_a_callee() {
   let mut state = state();
@@ -108,8 +95,6 @@ fn a_member_nothing_calls_is_not_a_callee() {
   assert!(!state.is_member_call_callee(&member("other", "create")));
 }
 
-/// A call on a bare name has no member to record, so it leaves the index as it
-/// was.
 #[test]
 fn a_call_on_a_bare_name_records_no_member() {
   let mut state = state();
@@ -119,8 +104,6 @@ fn a_call_on_a_bare_name_records_no_member() {
   assert!(!state.is_member_call_callee(&member("stylex", "create")));
 }
 
-/// The position a call was written at is not part of what identifies its
-/// callee: the same call met twice under different spans is one callee.
 #[test]
 fn a_callee_is_recognised_wherever_the_call_was_written() {
   let mut state = state();
@@ -133,7 +116,6 @@ fn a_callee_is_recognised_wherever_the_call_was_written() {
   assert!(state.is_member_call_callee(&member("stylex", "create")));
 }
 
-/// A real callee site cannot classify a separate member value read as a call.
 #[test]
 fn callee_sites_distinguish_an_earlier_value_read_from_a_later_call() {
   use swc_core::common::{BytePos, Span};
@@ -201,8 +183,6 @@ fn callee_sites_unrecorded_equal_call_cannot_release_a_recorded_site() {
   assert!(state.is_member_call_callee(&member("env", "double")));
 }
 
-/// A callee shared by two calls survives the first of them being replaced, and
-/// is forgotten only when the last one goes.
 #[test]
 fn a_shared_callee_lives_until_its_last_call_is_replaced() {
   let mut state = state();
@@ -224,8 +204,6 @@ fn a_shared_callee_lives_until_its_last_call_is_replaced() {
   assert!(!state.is_member_call_callee(&member("stylex", "create")));
 }
 
-/// Recording one call twice records one call: the second recording replaces the
-/// first, and the callee it displaced is released with it.
 #[test]
 fn recording_one_call_twice_still_leaves_one_call() {
   let mut state = state();
@@ -239,8 +217,6 @@ fn recording_one_call_twice_still_leaves_one_call() {
   assert!(!state.is_member_call_callee(&member("stylex", "create")));
 }
 
-/// Replacing a call with another call moves the callee rather than dropping it:
-/// the new call's own member is what the index holds afterwards.
 #[test]
 fn replacing_a_call_with_a_call_records_the_new_callee() {
   let mut state = state();
@@ -257,8 +233,6 @@ fn replacing_a_call_with_a_call_records_the_new_callee() {
   assert!(state.is_member_call_callee(&member("runtime", "inject")));
 }
 
-/// Replacing a call the index never held leaves it as it was, rather than
-/// forgetting a callee some other call still holds.
 #[test]
 fn replacing_a_call_the_index_never_held_changes_nothing() {
   let mut state = state();
@@ -274,8 +248,6 @@ fn replacing_a_call_the_index_never_held_changes_nothing() {
   assert!(state.is_member_call_callee(&member("stylex", "create")));
 }
 
-/// A member read off a call rather than a name -- `f().b` -- is still a member,
-/// and it is a callee when something calls it.
 #[test]
 fn a_member_read_off_a_call_is_a_callee_too() {
   let mut state = state();
@@ -293,8 +265,6 @@ fn a_member_read_off_a_call_is_a_callee_too() {
   assert!(state.is_member_call_callee(&nested));
 }
 
-/// Many calls on one callee are counted rather than listed, so the callee
-/// survives every replacement but the last however many there are.
 #[test]
 fn a_callee_held_by_a_thousand_calls_survives_all_but_the_last() {
   let mut state = state();
@@ -316,8 +286,6 @@ fn a_callee_held_by_a_thousand_calls_survives_all_but_the_last() {
   assert!(!state.is_member_call_callee(&member("stylex", "create")));
 }
 
-/// A callee that is not an expression at all -- `super()` -- names no member,
-/// so the index has nothing to record for it.
 #[test]
 fn a_call_on_super_records_no_member() {
   use swc_core::ecma::ast::Super;
@@ -329,9 +297,6 @@ fn a_call_on_super_records_no_member() {
   assert!(!state.is_member_call_callee(&member("stylex", "create")));
 }
 
-/// Releasing one callee leaves every other one alone. The index buckets by
-/// member, and `release_member` walks the whole bucket rather than stopping at
-/// the first match, so nothing may fall out of a bucket it was not asked about.
 #[test]
 fn releasing_one_callee_leaves_every_other_one_alone() {
   let mut state = state();
@@ -350,10 +315,6 @@ fn releasing_one_callee_leaves_every_other_one_alone() {
   );
 }
 
-/// A callee released a second time stays forgotten, and the bucket it left is
-/// gone rather than held at a count the next call cannot raise. The release
-/// walks a bucket the key has no entry in, which is the miss the index has to
-/// leave exactly as it found it.
 #[test]
 fn a_callee_released_a_second_time_stays_forgotten() {
   let mut state = state();

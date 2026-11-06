@@ -71,8 +71,7 @@ pub(super) fn global(name: &str, args: &[Value], ctx: &mut Context<'_>) -> Optio
     })),
     "Array" => {
       if let [Value::Number(n)] = args {
-        // Invalid Array lengths are JavaScript RangeErrors, not compiler quotas.
-        // Decide validity before the quota, so infinity/fractions are not mislabeled.
+        // Validate Array RangeErrors before quota refusal (ECMA-262 Array constructor).
         if !n.is_finite() || *n < 0.0 || n.fract() != 0.0 || *n > u32::MAX as f64 {
           return None;
         }
@@ -396,12 +395,7 @@ fn object_static(name: &str, args: &[Value], ctx: &mut Context<'_>) -> Option<Va
       if v.opaque_reference() && matches!(name, "keys" | "getOwnPropertyNames") {
         return None;
       }
-      // A genuine source function (an evaluator callback; a host function is
-      // `OpaqueFunction` and handled above) has no enumerable own properties:
-      // `length` and `name` are non-enumerable and nothing can assign one, so
-      // `Object.keys`, `values` and `entries` answer `[]`, as `node` does.
-      // `getOwnPropertyNames` lists the non-enumerable ones too, and they are
-      // not modelled here, so it still refuses.
+      // Source functions have no enumerable keys; non-enumerable name/length are unmodeled.
       if matches!(v, Value::Function(_)) {
         return (name != "getOwnPropertyNames").then(|| array(vec![]));
       }
@@ -452,8 +446,7 @@ fn object_static(name: &str, args: &[Value], ctx: &mut Context<'_>) -> Option<Va
       if v.opaque_reference() {
         return None;
       }
-      // A blocked name is answered too: this asks whether the key is an own
-      // property, which the model knows exactly, and reads no slot.
+      // Own-key predicates may check blocked names because they do not read the property.
       let key = arg(args, 1).to_js_string()?;
       Some(Value::Bool(
         own_entries(&v)?.contains_key(&key)
@@ -600,8 +593,7 @@ fn array_method(
         return super::refuse_resource();
       }
       let mut out = vec![];
-      // Map's output has one slot per input, including holes. Add the nested
-      // contribution only after each callback actually returns successfully.
+      // Count map slots, including holes; nested entries count only after a successful callback.
       let mut result_entries = values.len();
       let indices: Box<dyn Iterator<Item = usize>> = if matches!(name, "findLast" | "findLastIndex")
       {
@@ -955,12 +947,7 @@ fn array_method(
     _ => None,
   }
 }
-/// `Object.prototype`'s three reflective predicates on a plain object, answered
-/// from this model's own keys, as the language answers them. Every own
-/// property of a model object is a data property its literal wrote, so each is
-/// enumerable, and its prototype is the plain one, which no value here has in
-/// its chain except through the language's own prototypes -- so `isPrototypeOf`
-/// is false for every value whose chain this model knows.
+/// Answers Object.prototype predicates from modeled own data properties.
 fn object_predicate(
   properties: &IndexMap<String, Value>,
   name: &str,
@@ -968,8 +955,7 @@ fn object_predicate(
 ) -> Option<Value> {
   let first = args.first().unwrap_or(&Value::Undefined);
   match name {
-    // A blocked name is answered too: this asks whether the key is an own
-    // property, which the model knows exactly, and reads no slot.
+    // Own-key predicates may check blocked names because they do not read the property.
     "hasOwnProperty" | "propertyIsEnumerable" => {
       let key = first.to_js_string()?;
       Some(Value::Bool(properties.contains_key(&key)))
@@ -987,15 +973,8 @@ fn object_predicate(
   }
 }
 
-/// `String.prototype.normalize` over the string's UTF-16 code units. A form
-/// other than the four the language names throws its `RangeError`, which is a
-/// refusal here.
-///
-/// A lone surrogate is kept, as the language keeps it: the normalizer would
-/// answer U+FFFD for one, so each run of whole characters between them is
-/// normalized on its own. That is exact, not an approximation -- a lone
-/// surrogate is a starter with no decomposition, so nothing composes or
-/// reorders across it.
+/// Normalizes UTF-16 in a supported Unicode form; invalid forms return `None`.
+/// Normalize scalar runs separately to preserve lone surrogates without replacement.
 fn normalize(s: &[u16], args: &[Value]) -> Option<Value> {
   use icu_normalizer::{ComposingNormalizerBorrowed, DecomposingNormalizerBorrowed};
   let form = match args.first() {

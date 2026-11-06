@@ -7,9 +7,6 @@ pub(in super::super) fn evaluate(
   traversal_state: &mut StateManager,
   fns: &FunctionMap,
 ) -> Option<EvaluateResultValue> {
-  // Optional member reads are supported, but optional calls remain an
-  // explicit refusal. Do not evaluate the callee as a builtin VALUE first:
-  // that would hide the OptionalCallExpression guard behind MemberExpression.
   if matches!(opt_chain.base.as_ref(), OptChainBase::Call(_)) {
     return deopt(
       &Expr::OptChain(opt_chain.clone()),
@@ -17,30 +14,25 @@ pub(in super::super) fn evaluate(
       &unsupported_expression("OptionalCallExpression"),
     );
   }
-  // Evaluate the base object/callee first
+
   let base_result = match opt_chain.base.as_ref() {
     OptChainBase::Member(member) => evaluate_cached(&member.obj, state, traversal_state, fns),
     OptChainBase::Call(call) => evaluate_cached(&call.callee, state, traversal_state, fns),
   };
 
-  // Check if we should short-circuit:
-  // 1. Base is null literal
-  // 2. Base is undefined identifier
-  // 3. Base evaluation failed (returned None)
   let should_short_circuit = match &base_result {
     Some(EvaluateResultValue::Expr(base_expr)) => {
       matches!(base_expr, Expr::Lit(Lit::Null(_)))
         || (matches!(base_expr, Expr::Ident(ident) if is_js_undefined(ident)))
     },
     None => true,
-    // For other result types (Object, Array, FunctionConfig, etc.), don't short-circuit
+
     _ => false,
   };
 
   if should_short_circuit {
     None
   } else {
-    // Otherwise, evaluate the full optional chain expression
     match opt_chain.base.as_ref() {
       OptChainBase::Member(member) => {
         let member_expr = Expr::Member(member.clone());

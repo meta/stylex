@@ -1,10 +1,3 @@
-//! What the state answers about the file it compiles and the project it
-//! compiles it for.
-//!
-//! The file reaches the state as a `FileName`, which is a real path only when
-//! the host has one: a module compiled from a string has no name to read, and
-//! every question below answers empty rather than refusing.
-
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -56,7 +49,6 @@ fn haste(theme_file_extension: Option<&str>) -> CheckModuleResolution {
   }
 }
 
-/// Every option this state answers for, so a case can say which one it changed.
 #[test]
 fn the_build_flags_are_read_off_the_project() {
   let plain = StateManager::for_test(None, StyleXStateOptions::default());
@@ -78,8 +70,6 @@ fn the_build_flags_are_read_off_the_project() {
   assert!(configured.is_debug());
 }
 
-/// Whether a conditional style is merged into the style it varies is the
-/// project's own setting.
 #[test]
 fn the_inlined_conditional_merge_setting_is_read_off_the_project() {
   let mut options = StyleXStateOptions::default();
@@ -98,8 +88,6 @@ fn the_inlined_conditional_merge_setting_is_read_off_the_project() {
   );
 }
 
-/// A refusal is the subtree's own unless the walk was too deep to say where it
-/// came from, or was only reading a name to decide whether it could fold.
 #[test]
 fn a_refusal_is_the_subtree_s_own_unless_something_else_raised_it() {
   let mut state = StateManager::for_test(None, StyleXStateOptions::default());
@@ -117,7 +105,6 @@ fn a_refusal_is_the_subtree_s_own_unless_something_else_raised_it() {
   assert!(!state.owns_its_refusals());
 }
 
-/// A real path answers as itself, and as its name without the extension.
 #[test]
 fn a_real_file_answers_its_path_and_its_name() {
   let state = state_for(real("/repo/src/app.stylex.js"), common_js(None, None));
@@ -126,8 +113,6 @@ fn a_real_file_answers_its_path_and_its_name() {
   assert_eq!(state.get_short_filename(), "app.stylex");
 }
 
-/// A module with no file behind it answers empty rather than refusing, which is
-/// what lets a module compiled from a string still be compiled.
 #[test]
 fn a_module_with_no_file_answers_empty() {
   let state = state_for(FileName::Anon, common_js(None, None));
@@ -140,8 +125,6 @@ fn a_module_with_no_file_answers_empty() {
   );
 }
 
-/// Only a file that defines variables or constants is named for hashing: every
-/// other file's styles are named from their own content.
 #[test]
 fn only_a_variable_file_is_named_for_hashing() {
   let ordinary = state_for(real("/repo/src/app.js"), common_js(None, None));
@@ -172,8 +155,6 @@ fn only_a_variable_file_is_named_for_hashing() {
   );
 }
 
-/// The extension that marks a variable file is the project's own, so a project
-/// that spells it differently names its own files and not the default ones.
 #[test]
 fn the_variable_file_extension_is_the_project_s_own() {
   let state = state_for(
@@ -195,8 +176,6 @@ fn the_variable_file_extension_is_the_project_s_own() {
   );
 }
 
-/// Under Haste resolution a file is named by its own name alone, because that
-/// is what a Haste import spells.
 #[test]
 fn haste_names_a_variable_file_by_its_own_name() {
   let state = state_for(real("/repo/src/vars.stylex.js"), haste(None));
@@ -207,8 +186,6 @@ fn haste_names_a_variable_file_by_its_own_name() {
   );
 }
 
-/// A module compiled from a string resolves no import: there is no file for a
-/// relative path to be relative to.
 #[test]
 fn a_module_with_no_file_resolves_no_import() {
   let state = state_for(FileName::Anon, common_js(None, None));
@@ -219,8 +196,6 @@ fn a_module_with_no_file_resolves_no_import() {
   ));
 }
 
-/// Only an import of a variable file is resolved. Every other import is left
-/// alone, because nothing in it can name a variable.
 #[test]
 fn an_import_that_names_no_variable_file_is_left_alone() {
   let state = state_for(real("/repo/src/app.js"), common_js(None, None));
@@ -237,9 +212,6 @@ fn an_import_that_names_no_variable_file_is_left_alone() {
   }
 }
 
-/// Under Haste an import of a variable file is resolved by giving it the
-/// importing file's own extension, and one that already has an extension keeps
-/// it.
 #[test]
 fn haste_gives_an_import_the_importing_file_s_extension() {
   let state = state_for(real("/repo/src/app.tsx"), haste(None));
@@ -255,8 +227,6 @@ fn haste_gives_an_import_the_importing_file_s_extension() {
   ));
 }
 
-/// An importing file with no extension of its own has none to give, so the
-/// import is left as written.
 #[test]
 fn haste_leaves_an_import_alone_when_there_is_no_extension_to_give() {
   let state = state_for(real("/repo/src/app"), haste(None));
@@ -267,8 +237,6 @@ fn haste_leaves_an_import_alone_when_there_is_no_extension_to_give() {
   ));
 }
 
-/// An import that cannot be found on disk is left unresolved rather than
-/// stopping the build: the file may be written by another tool.
 #[test]
 fn an_import_that_is_not_on_disk_is_left_unresolved() {
   let state = state_for(
@@ -282,8 +250,6 @@ fn an_import_that_is_not_on_disk_is_left_unresolved() {
   ));
 }
 
-/// The base a compiled call's position is measured from is recorded once, as
-/// the module walk begins.
 #[test]
 fn the_module_base_is_recorded_once() {
   let mut state = StateManager::for_test(None, StyleXStateOptions::default());
@@ -307,8 +273,6 @@ fn the_module_base_is_recorded_once() {
   );
 }
 
-/// The module the compiler parsed is kept so a diagnostic can quote it, along
-/// with the source it was parsed from where the host has one.
 #[test]
 fn the_parsed_module_is_kept_for_a_diagnostic_to_quote() {
   use stylex_diagnostics::state::DiagnosticState;
@@ -337,9 +301,6 @@ fn the_parsed_module_is_kept_for_a_diagnostic_to_quote() {
   assert_eq!(source, Some("const a = 1;"));
 }
 
-/// The `env` option reaches the function map two ways: through a namespace
-/// import, where it is a member of the namespace, and through a direct import
-/// of `env`, where it is a name of its own.
 #[test]
 fn the_env_option_reaches_the_function_map_both_ways() {
   use std::rc::Rc;
@@ -387,8 +348,6 @@ fn the_env_option_reaches_the_function_map_both_ways() {
   assert_eq!(function_map.member_expressions.len(), 1);
 }
 
-/// A project that configures no `env` adds nothing, so a module that never
-/// reads one pays no lookup for it.
 #[test]
 fn a_project_with_no_env_adds_nothing_to_the_function_map() {
   use swc_core::atoms::Atom;
@@ -411,8 +370,6 @@ fn a_project_with_no_env_adds_nothing_to_the_function_map() {
   assert!(function_map.member_expressions.is_empty());
 }
 
-/// The parsed source file is handed in by the host, and holding it is all the
-/// state does with it.
 #[test]
 fn the_host_s_source_file_is_taken_as_handed_in() {
   use std::sync::Arc;
@@ -436,8 +393,6 @@ fn the_host_s_source_file_is_taken_as_handed_in() {
   assert_eq!(source_file.start_pos, BytePos(1));
 }
 
-/// An import of a module by path, which is what a theme side effect is written
-/// as.
 #[test]
 fn an_import_of_a_module_is_written_as_a_bare_path() {
   use swc_core::ecma::ast::{ModuleDecl, ModuleItem};
@@ -455,14 +410,10 @@ fn an_import_of_a_module_is_written_as_a_bare_path() {
   assert!(!import.type_only);
 }
 
-/// A syntax context is not part of what a file name is, so the state answers the
-/// same name whichever scope asked.
 #[test]
 fn a_file_name_does_not_depend_on_a_scope() {
   let state = state_for(real("/repo/src/app.js"), common_js(Some("/repo"), None));
 
-  // Asked from the root scope and from one that is not it: the name is a
-  // property of the file, so neither answer may depend on which scope asked.
   for ctxt in [SyntaxContext::empty(), SyntaxContext::from_u32(2)] {
     assert_eq!(
       state.get_filename(),
@@ -473,9 +424,6 @@ fn a_file_name_does_not_depend_on_a_scope() {
   }
 }
 
-/// Under CommonJs an import of a variable file resolves to the name the file is
-/// hashed under, which is what makes a variable imported from another file name
-/// the same CSS variable in both.
 #[test]
 fn common_js_resolves_an_import_to_the_name_the_file_is_hashed_under() {
   let state = state_for(
@@ -490,10 +438,6 @@ fn common_js_resolves_an_import_to_the_name_the_file_is_hashed_under() {
   ));
 }
 
-/// The resolution is written as well as returned, because the name a file is
-/// hashed under is what a reader of the log matches against the CSS. The
-/// message is built from the resolved path, which a `log` macro does not build
-/// while no logger admits the level.
 #[test]
 fn common_js_writes_the_name_it_resolved_an_import_to() {
   let state = state_for(
@@ -505,7 +449,6 @@ fn common_js_writes_the_name_it_resolved_an_import_to() {
     state.import_path_resolver("./vars.stylex.js", &mut FxHashMap::default())
   });
 
-  // Compared as a path, so the platform's own separator is read as one.
   assert!(
     messages.iter().any(|message| {
       message
@@ -519,8 +462,6 @@ fn common_js_writes_the_name_it_resolved_an_import_to() {
   );
 }
 
-/// An import that is not on disk is left alone, and the reason is only in what
-/// was written: the import, and the error behind it.
 #[test]
 fn common_js_writes_why_an_import_stayed_unresolved() {
   let state = state_for(
@@ -542,8 +483,6 @@ fn common_js_writes_why_an_import_stayed_unresolved() {
   );
 }
 
-/// A build that does not ask for debug messages is written nothing, which is
-/// what keeps the resolver's cost off every other build.
 #[test]
 fn an_import_resolution_writes_nothing_at_a_higher_level() {
   let state = state_for(
@@ -558,9 +497,7 @@ fn an_import_resolution_writes_nothing_at_a_higher_level() {
   assert!(messages.is_empty());
 }
 
-/// `experimental_crossFileParsing` resolves an import as `commonJS` does, so a
-/// consumer references the theme file's variables (upstream refused the mode
-/// with "This module resolution strategy is not yet supported.").
+// `experimental_crossFileParsing` resolves an import as `commonJS` does, so a consumer references the theme file's variables (upstream refused the mode with "This module resolution strategy is not yet supported.").
 #[test]
 fn cross_file_parsing_resolves_as_common_js() {
   let file = fixture("package_json_with_name/app.js");
@@ -582,8 +519,6 @@ fn cross_file_parsing_resolves_as_common_js() {
   );
 }
 
-/// A project that spells the variable-file extension as nothing marks every
-/// module file as one, because every module file ends in a module extension.
 #[test]
 fn an_empty_variable_file_extension_marks_every_module_file() {
   let state = state_for(real("/repo/src/app.tsx"), haste(Some("")));
@@ -594,8 +529,6 @@ fn an_empty_variable_file_extension_marks_every_module_file() {
   );
 }
 
-/// The name a file is hashed under falls back to its place under the project
-/// root when no package encloses it, and to its own name when neither does.
 #[test]
 fn a_file_outside_every_package_is_named_from_the_project_root() {
   let rooted = state_for(
@@ -616,8 +549,6 @@ fn a_file_outside_every_package_is_named_from_the_project_root() {
   );
 }
 
-/// A namespace import carries `env` whether or not `env` was also imported by
-/// name, so a project that never imports it directly still reads it as a member.
 #[test]
 fn a_namespace_import_carries_env_without_a_direct_import() {
   use std::rc::Rc;
@@ -662,8 +593,6 @@ fn a_namespace_import_carries_env_without_a_direct_import() {
   assert_eq!(function_map.member_expressions.len(), 1);
 }
 
-/// A path with no folder above it names no package, which is where the walk up
-/// the tree stops.
 #[test]
 fn a_path_with_no_folder_above_it_names_no_package() {
   assert_eq!(
@@ -672,10 +601,7 @@ fn a_path_with_no_folder_above_it_names_no_package() {
   );
 }
 
-/// A file that belongs to no package resolves its imports against its own
-/// directory, as the Babel plugin's resolver does (a StyleX change from
-/// upstream, which refused such a file; see crates/PROVENANCE.md). An import
-/// that is not there is left unresolved like any other missing import.
+// A file that belongs to no package resolves its imports against its own directory, as the Babel plugin's resolver does (a StyleX change from upstream, which refused such a file; see crates/PROVENANCE.md).
 #[test]
 fn an_import_from_a_file_outside_every_package_resolves_against_its_own_directory() {
   let state = state_for(real("/vars.stylex.js"), common_js(None, None));
@@ -686,9 +612,6 @@ fn an_import_from_a_file_outside_every_package_resolves_against_its_own_director
   ));
 }
 
-/// The positive control: beside a file that belongs to no package, an import
-/// that is on disk resolves, under the name a file outside every package is
-/// hashed under.
 #[test]
 fn an_import_beside_a_file_outside_every_package_resolves() {
   let dir = std::env::temp_dir().join(format!(
@@ -722,7 +645,6 @@ fn an_import_beside_a_file_outside_every_package_resolves() {
   );
 }
 
-/// The directory the compilation runs in is the one the pass states.
 #[test]
 fn answers_the_working_directory_the_pass_states() {
   let mut state = StateManager::default();
@@ -732,8 +654,6 @@ fn answers_the_working_directory_the_pass_states() {
   assert_eq!(state.cwd().as_deref(), Some(Path::new("/project/app")));
 }
 
-/// A pass that states none leaves the process to answer, which is where the
-/// compiler reads the directory it states.
 #[test]
 fn answers_the_process_directory_where_the_pass_states_none() {
   let here = match std::env::current_dir() {
@@ -747,19 +667,12 @@ fn answers_the_process_directory_where_the_pass_states_none() {
   );
 }
 
-/// What [`matches_file_suffix`] answers, which is what decides whether a file
-/// is a variable file and whether an import names one.
-///
-/// The suffix is carried at the end of a name or in front of a module
-/// extension, which is the shape Babel's
-/// `['', ...EXTENSIONS].some(e => filename.endsWith(`${suffix}${e}`))` spells.
+// The suffix is carried at the end of a name or in front of a module extension, which is the shape Babel's `['', ...EXTENSIONS].some(e => filename.endsWith(`${suffix}${e}`))` spells.
 mod file_suffix {
   use stylex_path_resolver::resolvers::EXTENSIONS;
 
   use crate::state_manager::matches_file_suffix;
 
-  /// A file carries a suffix at its end, and in front of every extension the
-  /// resolver knows.
   #[test]
   fn a_suffix_is_carried_at_the_end_or_in_front_of_any_module_extension() {
     assert!(matches_file_suffix(".stylex", "vars.stylex"));
@@ -775,9 +688,6 @@ mod file_suffix {
     }
   }
 
-  /// The suffix has to sit where the name ends or where the extension begins:
-  /// an extension the resolver does not know, and a suffix read anywhere else
-  /// in the name, are both refused.
   #[test]
   fn a_suffix_elsewhere_in_the_name_is_not_carried() {
     assert!(!matches_file_suffix(".stylex", "vars.js"));
@@ -786,17 +696,12 @@ mod file_suffix {
     assert!(!matches_file_suffix(".stylex", ".js"));
   }
 
-  /// A name that is nothing but the suffix carries it, and a name that is
-  /// nothing but an extension has an empty stem, which carries only the empty
-  /// suffix.
   #[test]
   fn a_name_that_is_only_the_suffix_or_only_an_extension() {
     assert!(matches_file_suffix(".stylex", ".stylex"));
     assert!(matches_file_suffix("", ".js"));
   }
 
-  /// A suffix that already names an extension is matched whole, so it is not
-  /// matched again in front of a second one.
   #[test]
   fn a_suffix_that_already_names_an_extension_is_matched_whole() {
     assert!(matches_file_suffix(".stylex.js", "vars.stylex.js"));
@@ -804,11 +709,7 @@ mod file_suffix {
     assert!(!matches_file_suffix(".stylex.js", "vars.stylex.js.map"));
   }
 
-  /// A project that spells the suffix as nothing marks every file, not every
-  /// module file: the empty suffix is carried by any name at all, so the first
-  /// check answers before the extension list is ever consulted. This is what
-  /// Babel answers -- its `''` entry makes `filename.endsWith('')` the first
-  /// question -- and the extension list is dead weight for this case in both.
+  // This is what Babel answers -- its `''` entry makes `filename.endsWith('')` the first question -- and the extension list is dead weight for this case in both.
   #[test]
   fn an_empty_suffix_is_carried_by_every_name_at_all() {
     assert!(matches_file_suffix("", "vars.js"));

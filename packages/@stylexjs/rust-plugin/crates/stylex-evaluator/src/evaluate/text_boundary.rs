@@ -1,7 +1,6 @@
 use super::*;
-/// Scalar text boundary for APIs which require a Rust string. Evaluation itself
-/// retains WTF-8/UTF-16; an unpaired unit is a refusal here, never U+FFFD, an
-/// empty property, or a panic from the upstream infallible string converter.
+/// Scalar text boundary for APIs which require a Rust string.
+/// Evaluation itself retains WTF-8/UTF-16; an unpaired unit is a refusal here, never U+FFFD, an empty property, or a panic from the upstream infallible string converter.
 pub(super) fn literal_text(literal: &Lit) -> Option<String> {
   match literal {
     Lit::Str(text) => text.value.as_str().map(str::to_owned),

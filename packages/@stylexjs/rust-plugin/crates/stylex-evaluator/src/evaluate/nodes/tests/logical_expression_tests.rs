@@ -77,11 +77,7 @@ fn nullish_keeps_a_left_side_that_is_neither() {
   );
 }
 
-/// Upstream's nullish guard tests the left side's truthiness rather than its
-/// nullishness, so a left side that is falsy but present refuses to fold. The
-/// restriction is inherited rather than corrected: folding here where upstream
-/// does not would be a silent CSS difference between two builds of the same
-/// source.
+/// Babel's inherited `??` guard checks truthiness, not nullishness.
 #[test]
 fn nullish_refuses_a_falsy_left_side_that_is_not_nullish() {
   for left in [
@@ -136,9 +132,6 @@ fn and_takes_the_right_side_when_the_left_is_truthy() {
   );
 }
 
-/// A falsy confident left side is returned as it is — upstream returns the same
-/// value, and what an empty value means for the surrounding declaration is
-/// decided downstream.
 #[test]
 fn and_returns_a_falsy_left_side_verbatim() {
   assert_eq!(
@@ -151,8 +144,6 @@ fn and_returns_a_falsy_left_side_verbatim() {
   );
 }
 
-/// The winning operand is not normalised on its way out: an object stays the
-/// object it was.
 #[test]
 fn the_winning_operand_keeps_its_own_shape() {
   let (value, reason) = fold_expr(
@@ -169,8 +160,6 @@ fn the_winning_operand_keeps_its_own_shape() {
   );
 }
 
-/// An unresolvable side the fold never consults cannot deopt the expression:
-/// the truthy left side wins on its own.
 #[test]
 fn an_unresolvable_right_side_does_not_deopt_a_decided_or() {
   assert_eq!(
@@ -183,7 +172,6 @@ fn an_unresolvable_right_side_does_not_deopt_a_decided_or() {
   );
 }
 
-/// An unresolvable side the fold does need deopts with that side's own reason.
 #[test]
 fn an_unresolvable_right_side_deopts_an_undecided_or() {
   let (value, reason) = fold_expr(
@@ -196,12 +184,6 @@ fn an_unresolvable_right_side_deopts_an_undecided_or() {
   assert!(reason.is_some(), "expected a deopt reason");
 }
 
-/// Only the three the reference implementation puts on a node of their own are
-/// recognised; every other binary operator belongs to the paths that coerce.
-///
-/// Each is named against the reading it takes rather than against "some
-/// reading", because a mapping that sent `||` to `And` would satisfy the weaker
-/// assertion and fold the wrong operand.
 #[test]
 fn only_the_three_logical_operators_are_recognised() {
   assert_eq!(LogicalOp::of(BinaryOp::LogicalOr), Some(LogicalOp::Or));
@@ -220,13 +202,6 @@ fn only_the_three_logical_operators_are_recognised() {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Which operands a short circuit reaches
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// The table the guard in front of the engine reads, so that a walk stops on
-/// exactly the operands the fold does. Every row is what the language does with
-/// the left side it names.
 #[test]
 fn the_right_operand_runs_only_where_the_language_reaches_it() {
   let truthy = EvaluateResultValue::Expr(create_string_expr("red"));
@@ -271,10 +246,6 @@ fn the_right_operand_runs_only_where_the_language_reaches_it() {
       true,
       "`x ?? y` reaches y for null",
     ),
-    // The operator's own guard tests truthiness where it meant nullishness, so a
-    // falsy-but-present left side settles nothing and the walk has to carry both
-    // sides. Wrong of upstream and inherited on purpose — what matters here is
-    // that the walk and the fold inherit it identically.
     (LogicalOp::Nullish, &zero, true, "`0 ?? y` decides nothing"),
     (LogicalOp::And, &zero, false, "`0 && y` skips y"),
     (LogicalOp::Or, &zero, true, "`0 || y` reaches y"),
@@ -283,9 +254,6 @@ fn the_right_operand_runs_only_where_the_language_reaches_it() {
   }
 }
 
-/// An undefined left side, which the evaluator answers as a name rather than as
-/// a value, reads as falsy on all three — the row a table written over literals
-/// alone would miss.
 #[test]
 fn an_undefined_left_side_is_read_as_the_falsy_nullish_value_it_is() {
   let undefined = js_undefined();
@@ -295,16 +263,6 @@ fn an_undefined_left_side_is_read_as_the_falsy_nullish_value_it_is() {
   assert!(evaluates_its_right_operand(LogicalOp::Nullish, &undefined));
 }
 
-// ==================== the two operands no source can write ====================
-
-/// A left side that evaluated confidently to *no value at all* is `undefined`,
-/// and reads as falsy on all three operators.
-///
-/// Asked of the decision directly, because no source reaches it: every path
-/// that answers no value deopts first, so the reading exists for the day one
-/// stops doing so. It is the reading the language gives a missing value, and
-/// the alternative -- refusing -- would leave a declaration to the runtime that
-/// both compilers fold.
 #[test]
 fn a_left_side_with_no_value_at_all_reads_as_undefined() {
   assert_eq!(truthiness(None), Some(false), "no value is falsy");
@@ -324,13 +282,6 @@ fn a_left_side_with_no_value_at_all_reads_as_undefined() {
   );
 }
 
-/// A left side whose truthiness cannot be read settles nothing, so `||` and
-/// `&&` refuse rather than guessing which operand belongs in the stylesheet.
-///
-/// The absent element of an array is the value with no truthiness: read as
-/// "absent" it is falsy and read as "unknown" it has none, and a guess between
-/// the two puts the wrong operand in the output. `??` is not among them --
-/// absence is exactly what it asks about, so it answers.
 #[test]
 fn a_left_side_with_no_truthiness_refuses_the_two_operators_that_need_one() {
   let unreadable = EvaluateResultValue::Null;

@@ -105,9 +105,6 @@ mod get_canonical_file_path {
     state
   }
 
-  /// Separators are normalized, so a path written the Windows way answers the
-  /// name a POSIX one does. The backslash is data rather than a separator off
-  /// Windows, which is what lets one assertion stand on every platform.
   #[test]
   fn a_backslash_in_a_path_is_answered_as_a_forward_slash() {
     let state = rooted("/root");
@@ -118,8 +115,6 @@ mod get_canonical_file_path {
     );
   }
 
-  /// A file the root dir does not enclose is named by climbing out of it rather
-  /// than refused, which is what a relative path with no common prefix reads as.
   #[test]
   fn a_file_beside_the_root_dir_is_named_by_climbing_out_of_it() {
     let state = rooted("/root/src");

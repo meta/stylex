@@ -160,8 +160,6 @@ mod state_manager {
     );
   }
 
-  /// An array literal holding `elements`, the shape a module writes when it
-  /// binds every style it declares to one name.
   fn array_expr(elements: Vec<Expr>) -> Expr {
     Expr::Array(ArrayLit {
       span: DUMMY_SP,
@@ -191,9 +189,6 @@ mod state_manager {
     })
   }
 
-  /// The styles a `create` inside a top-level array leaves behind sit one level
-  /// down from the declarator, so the injection call is keyed to the object and
-  /// the initializer is the array. It still belongs before the statement.
   #[test]
   fn flush_pending_insertions_looks_through_an_array_initializer() {
     let mut state = StateManager::default();
@@ -211,8 +206,6 @@ mod state_manager {
     assert_eq!(item_labels(&body), vec!["before_decl", "var:styles"]);
   }
 
-  /// Arrays nest, and a parenthesis is not a different initializer, so both are
-  /// read through at every level.
   #[test]
   fn flush_pending_insertions_looks_through_nested_arrays_and_parentheses() {
     let mut state = StateManager::default();
@@ -231,9 +224,6 @@ mod state_manager {
     assert_eq!(item_labels(&body), vec!["before_decl", "var:styles"]);
   }
 
-  /// An array holds what the author put in it. A value that can hold no styles
-  /// is stepped over, and a string -- the shape a compiled `keyframes` leaves --
-  /// is read like any other initializer.
   #[test]
   fn flush_pending_insertions_reads_every_kind_of_array_element() {
     let mut state = StateManager::default();
@@ -252,8 +242,6 @@ mod state_manager {
     assert_eq!(item_labels(&body), vec!["before_decl", "var:styles"]);
   }
 
-  /// An object literal holding `entries`, the shape an author writes to group
-  /// the styles a module declares.
   fn object_holding(entries: Vec<PropOrSpread>) -> Expr {
     Expr::Object(ObjectLit {
       span: DUMMY_SP,
@@ -279,8 +267,6 @@ mod state_manager {
     PropOrSpread::Prop(Box::new(Prop::Shorthand(ident(name))))
   }
 
-  /// An array can hold the styles inside an object the author wrote, so the
-  /// walk looks inside an object a container holds.
   #[test]
   fn flush_pending_insertions_looks_inside_an_object_an_array_holds() {
     let mut state = StateManager::default();
@@ -299,13 +285,6 @@ mod state_manager {
     assert_eq!(item_labels(&body), vec!["before_decl", "var:styles"]);
   }
 
-  /// A spread is read like the value it stands for, and a parenthesis around
-  /// that value is not a different value.
-  ///
-  /// The shorthand beside them carries a name rather than an expression. It
-  /// cannot change the answer, because a name is not a candidate wherever the
-  /// walk meets it -- it is here to show the walk steps over what it cannot
-  /// read instead of stopping.
   #[test]
   fn flush_pending_insertions_reads_a_spread_and_steps_over_a_shorthand() {
     let mut state = StateManager::default();
@@ -330,9 +309,6 @@ mod state_manager {
     assert_eq!(item_labels(&body), vec!["before_decl", "var:styles"]);
   }
 
-  /// An initializer that is itself an object is read like any other container:
-  /// an author can group the styles a module declares under one object, and the
-  /// rules still belong to the statement.
   #[test]
   fn flush_pending_insertions_looks_inside_an_object_initializer() {
     let mut state = StateManager::default();
@@ -353,11 +329,6 @@ mod state_manager {
     assert_eq!(item_labels(&body), vec!["before_decl", "var:styles"]);
   }
 
-  /// The walk stops at the object it matched. Nothing below a registered object
-  /// is another registered object -- what is below one is the namespaces of the
-  /// styles that matched -- so a large top-level object keeps the one hash it
-  /// has always cost. The inner queue below is a shape no producer writes, and
-  /// it is here to hold that boundary.
   #[test]
   fn flush_pending_insertions_stops_at_the_object_it_matched() {
     let mut state = StateManager::default();
@@ -379,8 +350,6 @@ mod state_manager {
     assert_eq!(item_labels(&body), vec!["outer", "var:styles"]);
   }
 
-  /// A declarator can carry no initializer at all. It names no declaration the
-  /// injection call can land before, and the walk steps over it.
   #[test]
   fn flush_pending_insertions_steps_over_a_declarator_with_no_initializer() {
     let mut state = StateManager::default();
@@ -410,8 +379,6 @@ mod state_manager {
     );
   }
 
-  /// A hole holds nothing, so the walk steps over it and the queued call lands
-  /// before the statement on the strength of the element beside it.
   #[test]
   fn flush_pending_insertions_steps_over_an_array_hole() {
     let mut state = StateManager::default();
@@ -439,8 +406,6 @@ mod state_manager {
     assert_eq!(item_labels(&body), vec!["before_decl", "var:styles"]);
   }
 
-  /// A spread stands for the elements it holds, so `[...[styles]]` names the
-  /// same declaration `[styles]` does.
   #[test]
   fn flush_pending_insertions_reads_a_spread_like_what_it_spreads() {
     let mut state = StateManager::default();
@@ -465,8 +430,6 @@ mod state_manager {
     assert_eq!(item_labels(&body), vec!["before_decl", "var:styles"]);
   }
 
-  /// A zero-argument call, the shape every `defineMarker()` shares, carrying
-  /// only the position that tells two of them apart.
   fn call_at(span: Span) -> CallExpr {
     CallExpr {
       span,
@@ -502,8 +465,6 @@ mod state_manager {
       Some("second".into()),
     ));
 
-    // The two calls are equal ignoring spans, so only the span tells the
-    // entries apart.
     assert_eq!(
       state.find_top_level_expr_by_span(&second).map(|tpe| &tpe.0),
       Some(&TopLevelExpressionKind::Stmt)
@@ -536,8 +497,6 @@ mod state_manager {
       Some("notACall".into()),
     ));
 
-    // The span is only ever consulted to tell two recorded *calls* apart, so a
-    // position match on some other expression is not a match.
     assert!(state.find_top_level_expr_by_span(&call).is_none());
   }
 
@@ -558,10 +517,6 @@ mod state_manager {
     );
   }
 
-  /// A crate above reads the list through the accessor, and the accessor gives
-  /// back what `push_declaration` wrote, in source order. The field itself is
-  /// `pub(crate)`, so a crate above cannot grow the list past the writer that
-  /// keeps `declaration_index` in step with it.
   #[test]
   fn declarations_gives_back_what_push_declaration_wrote() {
     let mut state = StateManager::default();
@@ -606,23 +561,12 @@ mod state_manager {
     );
   }
 
-  /// A parenthesis is not a different initializer, so a call wrapped in one is
-  /// found by the same lookups the bare call is found by.
-  ///
-  /// Both indexes, because they are keyed differently and a paren blinded each:
-  /// the structural one recorded the declarator under no key at all, and the
-  /// span one matched no recorded expression. A producer call written
-  /// `const fade = (stylex.keyframes({…}))` was left untransformed for it, with
-  /// no error.
   #[test]
   fn a_parenthesised_initializer_is_found_by_the_call_it_holds() {
     let mut state = StateManager::default();
 
     let bare = call_at(span_at(1, 10));
 
-    // Structurally different from `bare`, because the structural lookup below
-    // answers the earliest declarator a call reads as, and two calls that
-    // differ only in their span read alike.
     let mut wrapped = call_at(span_at(20, 30));
     wrapped.callee = Callee::Expr(Box::new(ident_expr("defineConsts")));
 
@@ -687,20 +631,8 @@ mod state_manager {
     );
   }
 
-  /// The options struct holds each ceiling as a bare `usize`, which a
-  /// struct-update literal can set to anything -- so what the three accessors
-  /// answer is bracketed again where it is read rather than trusted as held.
-  /// Without that bracket a zero would refuse every fold the compiler runs to do
-  /// its own work, and a `usize::MAX` would be no ceiling at all.
-  ///
-  /// Asserted through the accessors rather than through `Ceiling::clamped`,
-  /// because the claim is that these three readings are wired to it: a `clamped`
-  /// pinned only in its own crate stays green when a call site here drops it.
   #[test]
   fn a_ceiling_held_by_the_options_struct_is_read_back_inside_its_bracket() {
-    /// One reading: the option a project writes, the field the options struct
-    /// holds it in, the accessor that spends it, and the ceiling that brackets
-    /// it. Named rather than a tuple, so the loop below reads as the claim.
     struct Reading {
       option: &'static str,
       hold: fn(&mut StateManager, usize),
@@ -751,8 +683,6 @@ mod state_manager {
     }
   }
 
-  /// A call carrying `argument`, so two calls can differ in content rather than
-  /// only in position.
   fn call_of(name: &str, argument: &str) -> CallExpr {
     CallExpr {
       span: DUMMY_SP,
@@ -766,8 +696,6 @@ mod state_manager {
     }
   }
 
-  /// A call that carries both content and a position, so the two lookups can be
-  /// asked about the same node.
   fn call_of_at(name: &str, argument: &str, span: Span) -> CallExpr {
     CallExpr {
       span,
@@ -775,7 +703,6 @@ mod state_manager {
     }
   }
 
-  /// The name a found declarator binds, for assertions that only care about it.
   fn bound_name(declarator: Option<&VarDeclarator>) -> Option<&str> {
     declarator
       .and_then(|decl| decl.name.as_ident())
@@ -820,22 +747,12 @@ mod state_manager {
     state.push_declaration(make_var_declarator("earlier", Expr::Call(call.clone())));
     state.push_declaration(make_var_declarator("later", Expr::Call(call.clone())));
 
-    // Two declarators can hold structurally equal calls, and the walk this
-    // replaced answered with whichever came first in the module.
     assert_eq!(
       bound_name(state.find_call_declaration(&call)),
       Some("earlier")
     );
   }
 
-  /// The two lookups answer different questions and must keep disagreeing.
-  ///
-  /// `find_call_declaration` is keyed on what a call *is*, so two calls that
-  /// differ only in position collapse onto the earliest declarator holding one.
-  /// `find_call_declaration_by_span` is keyed on where a call was *written*, so
-  /// the same pair resolves to one declarator each. Routing either through the
-  /// other would look like a tidy-up and would silently break whichever
-  /// question it stopped answering.
   #[test]
   fn a_call_is_found_by_content_collapsed_and_by_position_apart() {
     let mut state = StateManager::default();
@@ -863,9 +780,6 @@ mod state_manager {
     );
   }
 
-  /// The same disagreement at a width no hand-written module reaches, so the
-  /// index answering from a bucket and the walk answering from a position are
-  /// both exercised past the point where a linear fallback would be visible.
   #[test]
   fn content_and_position_keep_disagreeing_across_five_thousand_equal_calls() {
     const DECLARATORS: usize = 5_000;
@@ -899,7 +813,6 @@ mod state_manager {
       );
     }
 
-    // A position no declarator was written at is not the last one seen.
     assert!(
       state
         .find_call_declaration_by_span(&call_of_at("create", "shared", span_at(7, 8)))
@@ -933,8 +846,6 @@ mod state_manager {
     state.push_declaration(make_var_declarator("styles", Expr::Call(original.clone())));
     state.set_declaration_init(0, Expr::Call(replacement.clone()));
 
-    // The key the declarator was recorded under stops being true, so the call
-    // it no longer holds must stop finding it.
     assert!(state.find_call_declaration(&original).is_none());
     assert!(state.find_call_declaration(&replacement).is_some());
   }
@@ -960,8 +871,6 @@ mod state_manager {
     state.push_declaration(make_var_declarator("styles", Expr::Call(call.clone())));
     state.set_declaration_init(0, Expr::Call(call.clone()));
 
-    // Forgetting and recording happen in that order, so a replacement that
-    // reads the same must not leave the record dropped.
     assert!(state.find_call_declaration(&call).is_some());
   }
 
@@ -1024,12 +933,9 @@ mod state_manager {
       Some("lotsOfStyles".into()),
     ));
 
-    // The entry *is* the array, not the call inside it. Where the call stands
-    // is answered by its position, not by the entry it sits in.
     assert!(state.find_top_level_expr(&call).is_none());
   }
 
-  /// A record holding `span` in every position there is.
   fn positions_holding(span: Span) -> CallPositions {
     let mut positions = CallPositions::default();
 
@@ -1044,8 +950,6 @@ mod state_manager {
     positions
   }
 
-  /// A call the walk recorded is answered by its own position, and a call
-  /// beside it is not. Two calls that read the same are two calls.
   #[test]
   fn a_call_position_answers_for_that_call_alone() {
     let mut state = StateManager::default();
@@ -1064,9 +968,6 @@ mod state_manager {
     assert!(!state.is_type_asserted_call(&beside));
   }
 
-  /// A synthesized call was written nowhere. A dummy span reads as position
-  /// zero, which a recorded position starting at zero would otherwise answer
-  /// for.
   #[test]
   fn a_span_less_call_stands_in_no_position() {
     let mut state = StateManager::default();
@@ -1080,10 +981,6 @@ mod state_manager {
     assert!(!state.is_type_asserted_call(&synthesized));
   }
 
-  /// A bucket a lookup can stop early in is one nothing has moved. Rewriting an
-  /// entry back to the expression it started with re-records it at the back, so
-  /// the bucket stops being ascending -- and the answer has to stay the earliest
-  /// entry the module writes, not the first the bucket holds.
   #[test]
   fn a_bucket_an_entry_moved_back_into_still_answers_with_the_earliest() {
     let mut state = StateManager::default();
@@ -1099,8 +996,6 @@ mod state_manager {
       ));
     }
 
-    // Out of the bucket and back into it, which leaves position 0 behind
-    // positions 1 and 2 in it.
     state.set_top_level_expr(0, Expr::Call(other));
     state.set_top_level_expr(0, Expr::Call(shared.clone()));
 
@@ -1148,8 +1043,6 @@ mod state_manager {
       Some("second".into()),
     ));
 
-    // Both entries read the same, so only the name tells them apart -- where a
-    // walk comparing expressions answered with whichever came first for either.
     assert_eq!(
       state
         .find_top_level_expr_named(&"second".into(), &shared)
@@ -1201,8 +1094,7 @@ mod state_manager {
 
     assert!(state.holds_declaration(&first));
     assert!(!state.holds_declaration(&same_position_other_content));
-    // Two declarations that merely read alike stay two entries, because a
-    // lookup that pins a call to its declarator by span needs them to.
+
     assert!(!state.holds_declaration(&same_content_other_position));
   }
 
@@ -1215,8 +1107,6 @@ mod state_manager {
 
     state.push_declaration(first.clone());
 
-    // Every synthesized declarator shares `DUMMY_SP`, so content is all that
-    // separates them.
     assert!(state.holds_declaration(&first));
     assert!(!state.holds_declaration(&second));
   }
@@ -1230,7 +1120,7 @@ mod state_manager {
     state.insert_style_var("styles".to_string(), declarator.clone());
 
     assert!(state.matching_style_var(&declarator).is_some());
-    // A declarator of another name is another style variable, however it reads.
+
     assert!(
       state
         .matching_style_var(&make_var_declarator(
@@ -1239,7 +1129,7 @@ mod state_manager {
         ))
         .is_none()
     );
-    // And the recorded name having moved on is not a match either.
+
     assert!(
       state
         .matching_style_var(&make_var_declarator(
@@ -1250,9 +1140,6 @@ mod state_manager {
     );
   }
 
-  /// A declarator that holds no value is no style variable either: the two
-  /// parts the lookup answers with are the name and the initializer, and this
-  /// one has only the name.
   #[test]
   fn matching_style_var_refuses_a_declarator_with_no_initializer() {
     let mut state = StateManager::default();
@@ -1367,8 +1254,7 @@ mod state_manager {
       Some(DeclarationType::Function)
     ));
     assert!(state.declared_as(&ident("unbound")).is_none());
-    // First writer wins, which is the position a used-before-declaration
-    // diagnostic is about.
+
     assert_eq!(
       state.class_name_declaration(&ident("Widget")),
       Some(span_at(1, 10))
@@ -1380,8 +1266,7 @@ mod state_manager {
     let mut state = StateManager::default();
 
     let outer = ident("Widget");
-    // A context of its own, spelled directly rather than through a `Mark`,
-    // which needs a `GLOBALS` scope this unit test has no other use for.
+
     let shadowed = Ident {
       ctxt: SyntaxContext::from_u32(1),
       ..ident("Widget")
@@ -1393,13 +1278,10 @@ mod state_manager {
       state.declared_as(&outer),
       Some(DeclarationType::Class)
     ));
-    // A name shadowing the class declares something else, and resolving it to
-    // the declaration it shadows is what keying on the symbol alone would do.
+
     assert!(state.declared_as(&shadowed).is_none());
   }
 
-  /// Far past any authored module, to show the lookups answer from a key rather
-  /// than by walking what has been recorded.
   #[test]
   fn the_lookups_stay_exact_across_ten_thousand_declarations() {
     let mut state = StateManager::default();
@@ -1447,8 +1329,6 @@ mod state_manager {
     let first = Expr::Call(call_of("create", "first"));
     let second = Expr::Call(call_of("create", "second"));
 
-    // `var styles = ...; var styles = ...;` is legal, so one name can bind two
-    // entries and the second must stay findable.
     state.push_top_level_expression(TopLevelExpression(
       TopLevelExpressionKind::NamedExport,
       first.clone(),
@@ -1491,10 +1371,6 @@ mod state_manager {
       Some("styles".into()),
     ));
 
-    // Both entries read the same, and the exported one comes first. The answer
-    // is the entry this name binds, not whichever the module spells first --
-    // the kind belongs to a declarator, and reading another's is what the walk
-    // this replaced did.
     assert_eq!(
       state
         .find_top_level_expr_named(&"styles".into(), &shared)
@@ -1530,25 +1406,10 @@ mod state_manager {
     );
   }
 
-  /// Which declaration binds a name, over the two indices the state keeps for
-  /// it. Every case fixes the records first and then asks, because the answer is
-  /// the index and the list agreeing.
-  ///
-  /// Four narrower cases that used to sit above the pass-through are folded in
-  /// rather than carried: a plain hit and a plain miss, which
-  /// [`answers_for_the_binding_a_specifier_declares`] asserts together, and a
-  /// bare hit for each of the default and namespace arms, which
-  /// [`answers_for_a_default_specifier`] and
-  /// [`answers_for_a_namespace_specifier`] assert with the matching miss beside
-  /// it.
   mod import_binding {
     use super::*;
     use swc_core::ecma::ast::ModuleExportName;
 
-    /// One import declaration over the specifiers handed in. Every case here is
-    /// some choice of source and specifier list, so they share one builder --
-    /// otherwise a case that needs a shape no helper covers grows a fifteen-line
-    /// literal of its own and the shapes stop being comparable at a glance.
     fn import_from(source: &str, specifiers: Vec<ImportSpecifier>) -> ImportDecl {
       ImportDecl {
         span: DUMMY_SP,
@@ -1564,13 +1425,10 @@ mod state_manager {
       }
     }
 
-    /// `import { a, b }` at the parser's context, for the cases that only need a
-    /// list of plain names.
     fn named_import(source: &str, names: &[&str]) -> ImportDecl {
       import_from(source, names.iter().map(|name| named(name, 0)).collect())
     }
 
-    /// `import { local }` -- the specifier whose comparison #1266 was about.
     fn named(local: &str, ctxt: u32) -> ImportSpecifier {
       ImportSpecifier::Named(ImportNamedSpecifier {
         span: DUMMY_SP,
@@ -1580,7 +1438,6 @@ mod state_manager {
       })
     }
 
-    /// `import { imported as local }`.
     fn aliased(local: &str, imported: &str, ctxt: u32) -> ImportSpecifier {
       ImportSpecifier::Named(ImportNamedSpecifier {
         span: DUMMY_SP,
@@ -1590,8 +1447,6 @@ mod state_manager {
       })
     }
 
-    /// `import { "imported" as local }`, whose imported name need not be a legal
-    /// identifier.
     fn str_named(local: &str, imported: &str, ctxt: u32) -> ImportSpecifier {
       ImportSpecifier::Named(ImportNamedSpecifier {
         span: DUMMY_SP,
@@ -1605,7 +1460,6 @@ mod state_manager {
       })
     }
 
-    /// `import local from` and `import * as local from`.
     fn default_of(local: &str, ctxt: u32) -> ImportSpecifier {
       ImportSpecifier::Default(ImportDefaultSpecifier {
         span: DUMMY_SP,
@@ -1620,9 +1474,6 @@ mod state_manager {
       })
     }
 
-    /// The source a lookup answered with, as authored text. Reads the atom
-    /// directly rather than comparing `Debug` renderings, which would pass for
-    /// the wrong reason the moment the atom's formatting changes.
     fn source_of<'a>(found: Option<(&'a ImportDecl, &ImportSpecifier)>) -> Option<&'a str> {
       found.and_then(|(import, _)| import.src.value.as_str())
     }
@@ -1645,8 +1496,6 @@ mod state_manager {
       assert!(state.import_binding(&ident_at("unbound", 0)).is_none());
     }
 
-    /// A module that imports nothing has no index to probe, which is a step
-    /// earlier than the miss the case above asks for.
     #[test]
     fn answers_for_nothing_where_the_module_imports_nothing() {
       let state = StateManager::default();
@@ -1654,9 +1503,6 @@ mod state_manager {
       assert!(state.import_binding(&ident_at("nonexistent", 0)).is_none());
     }
 
-    /// `import * as stylex` binds through another arm of `local_binding_of` than
-    /// the named form, and the namespace form is what every StyleX module
-    /// actually writes.
     #[test]
     fn answers_for_a_namespace_specifier() {
       let mut state = StateManager::default();
@@ -1670,8 +1516,6 @@ mod state_manager {
       assert!(state.import_binding(&ident_at("other", 0)).is_none());
     }
 
-    /// `import stylex from` is the third arm, and the only one whose binding is
-    /// the declaration's own default.
     #[test]
     fn answers_for_a_default_specifier() {
       let mut state = StateManager::default();
@@ -1693,9 +1537,6 @@ mod state_manager {
         vec![aliased("localName", "create", 0)],
       ));
 
-      // `import { create as localName }` leaves `create` unbound in this module,
-      // so a reference spelled that way names something else or nothing at all.
-      // Answering the import for it resolved a binding no scope holds.
       assert!(state.import_binding(&ident_at("create", 0)).is_none());
     }
 
@@ -1718,26 +1559,10 @@ mod state_manager {
         vec![str_named("localName", "strExport", 0)],
       ));
 
-      // The same answer for the string-named spelling, and the one that was
-      // reachable in practice: an imported name that *is* a legal identifier
-      // matched a reference to it by symbol alone, across every scope.
       assert!(state.import_binding(&ident_at("strExport", 0)).is_none());
 
-      // The local binding is what the declaration introduces, and it still
-      // answers -- a lookup that said `None` to everything would pass the
-      // assertion above on its own.
       assert!(state.import_binding(&ident_at("localName", 0)).is_some());
     }
-
-    // ──────────────────────────────────────────────
-    // Shadowing: the lookup answers about a binding, not a name (#1266)
-    //
-    // Every case here fixes two references with the same symbol at *different*
-    // syntax contexts, which is what a shadowing binding looks like once the
-    // resolver has run. Written against the lookup rather than the transform
-    // because a context is the whole question and the transform has to build a
-    // whole module to ask it.
-    // ──────────────────────────────────────────────
 
     #[test]
     fn refuses_a_reference_to_a_named_import_from_another_scope() {
@@ -1745,11 +1570,6 @@ mod state_manager {
 
       state.push_top_import(named_import("theme.stylex.js", &["spacing"]));
 
-      // The arrow parameter in `(spacing) => ({ spacing })`: same symbol, its
-      // own context. Resolving it to the import it shadows is #1266.
-      //
-      // Both halves in one case on purpose: a fix that answered `None` for
-      // everything would pass the refusal on its own.
       assert!(state.import_binding(&ident_at("spacing", 0)).is_some());
       assert!(state.import_binding(&ident_at("spacing", 1)).is_none());
     }
@@ -1762,8 +1582,6 @@ mod state_manager {
         vec![aliased("zi", "zIndex", 1)],
       ));
 
-      // `import { zIndex as zi }` shadowed by a parameter `zi`, which failed
-      // identically to the unaliased shape.
       assert!(state.import_binding(&ident_at("zi", 2)).is_none());
       assert!(state.import_binding(&ident_at("zi", 1)).is_some());
     }
@@ -1774,8 +1592,6 @@ mod state_manager {
       state.push_top_import(import_from("first.stylex.js", vec![named("shadowed", 1)]));
       state.push_top_import(import_from("second.stylex.js", vec![named("shadowed", 2)]));
 
-      // Two declarations cannot bind one name in valid source, but the lookup
-      // must not answer by position.
       assert_eq!(
         source_of(state.import_binding(&ident_at("shadowed", 2))),
         Some("second.stylex.js")
@@ -1803,11 +1619,6 @@ mod state_manager {
         vec![named("spacing", 1), named("zIndex", 1)],
       ));
 
-      // The answer is per declaration, but the match is per specifier: a
-      // declaration that binds a live `spacing` does not thereby answer for a
-      // shadowed `zIndex`. Both are the same declaration, so a lookup that
-      // stopped at "does this declaration mention the name" would say yes to
-      // both.
       assert!(state.import_binding(&ident_at("spacing", 1)).is_some());
       assert!(state.import_binding(&ident_at("zIndex", 1)).is_some());
       assert!(state.import_binding(&ident_at("zIndex", 2)).is_none());
@@ -1823,8 +1634,6 @@ mod state_manager {
         vec![namespace_of("tokens", 1)],
       ));
 
-      // The two arms the named one now matches. Pinned so a later edit cannot
-      // regress all three to a name match at once.
       assert!(state.import_binding(&ident_at("theme", 2)).is_none());
       assert!(state.import_binding(&ident_at("tokens", 2)).is_none());
       assert!(state.import_binding(&ident_at("theme", 1)).is_some());
@@ -1839,14 +1648,9 @@ mod state_manager {
         vec![str_named("spacing", "spacing-lg", 1)],
       ));
 
-      // The imported name is compared against nothing now, at any context.
-      // `spacing-lg` is not a legal identifier, so the only way a reference
-      // could ever have carried that symbol was through the specifier itself.
       assert!(state.import_binding(&ident_at("spacing-lg", 9)).is_none());
       assert!(state.import_binding(&ident_at("spacing-lg", 1)).is_none());
 
-      // Its local binding still resolves, and a parameter shadowing that local
-      // binding still does not.
       assert!(state.import_binding(&ident_at("spacing", 1)).is_some());
       assert!(state.import_binding(&ident_at("spacing", 2)).is_none());
     }
@@ -1854,12 +1658,7 @@ mod state_manager {
     #[test]
     fn a_non_ascii_local_name_matches_by_binding_too() {
       let mut state = StateManager::default();
-      // `zÍndex` is a different identifier that merely looks like `zIndex`, and
-      // the lookup compares interned atoms, so it must not match one for the
-      // other. A unicode-escaped spelling needs no case of its own here: the
-      // lexer folds a unicode escape to the atom it spells long before this, so at
-      // this seam the two spellings are one value. The escape is exercised where
-      // it can still differ -- as authored source, in the parity corpus.
+
       state.push_top_import(import_from("zIndex.stylex.js", vec![named("zIndex", 1)]));
       state.push_top_import(import_from("accented.stylex.js", vec![named("zÍndex", 1)]));
 
@@ -1876,10 +1675,6 @@ mod state_manager {
         vec![default_of("theme", 1), named("spacing", 1)],
       ));
 
-      // One declaration can bind both kinds, and the chain refuses a default
-      // where it resolves a named one. Which specifier answered is therefore
-      // part of the answer, not something the caller can re-derive from the
-      // declaration -- searching it again by name is what could come back empty.
       let (_, default_specifier) = match state.import_binding(&ident_at("theme", 1)) {
         Some(found) => found,
         None => panic!("the default specifier binds `theme`"),
@@ -1898,15 +1693,9 @@ mod state_manager {
       let mut state = StateManager::default();
       state.push_top_import(import_from("side-effect.css", vec![]));
 
-      // `import './side-effect.css'` binds no name at all. A walk over no
-      // specifiers finds nothing, which is the answer -- pinned because a
-      // refactor to `all` would make it `true` and resolve every reference to
-      // it.
       assert!(state.import_binding(&ident_at("anything", 0)).is_none());
     }
 
-    /// Far past any authored module, to show the lookup answers from a key
-    /// rather than by walking every specifier the module imports.
     #[test]
     fn stays_exact_across_ten_thousand_specifiers() {
       let mut state = StateManager::default();
@@ -1927,8 +1716,6 @@ mod state_manager {
     }
   }
 
-  /// The declarator a name is bound by, over the position index
-  /// [`StateManager::push_declaration`] keeps beside the list.
   mod declaration_of {
     use super::*;
 
@@ -1948,8 +1735,6 @@ mod state_manager {
       assert!(state.declaration_of(&ident("nonexistent")).is_none());
     }
 
-    /// The same claim the import lookup makes, for the other index: far past any
-    /// authored module, and answering from a key rather than by a walk.
     #[test]
     fn stays_exact_across_ten_thousand_declarators() {
       let mut state = StateManager::default();
@@ -1993,7 +1778,6 @@ mod state_manager {
     use stylex_diagnostics::state::DiagnosticState;
     use swc_core::{common::DUMMY_SP, ecma::ast::Module};
 
-    /// Whether the state kept a copy after being asked for one.
     fn keeps(debug_build: bool, reads_source_from_disk: bool) -> bool {
       let mut state = StateManager::default();
 
@@ -2010,17 +1794,12 @@ mod state_manager {
       DiagnosticState::get_seen_module_source_code(&state).is_some()
     }
 
-    /// A debug build keeps the copy whatever the option says: the assertions
-    /// and the code frames that quote the source only run there.
     #[test]
     fn a_debug_build_keeps_the_copy_whatever_the_option_says() {
       assert!(keeps(true, true));
       assert!(keeps(true, false));
     }
 
-    /// A release build keeps the copy only where no file can be read back,
-    /// because the copy is a deep clone of the whole module. Asked from
-    /// whichever build runs this, which is the half the walk cannot vary.
     #[test]
     fn a_release_build_keeps_the_copy_only_when_no_file_may_be_read() {
       assert!(!keeps(false, true));

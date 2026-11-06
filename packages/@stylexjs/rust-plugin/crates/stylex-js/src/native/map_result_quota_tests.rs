@@ -1,4 +1,3 @@
-//! Result-entry guards run after executed callbacks, before the crossing append.
 use super::*;
 struct ReturnReceiver {
   calls: usize,

@@ -2,8 +2,7 @@ use super::*;
 use std::cell::Cell;
 use stylex_state::types::EvaluationFailure;
 thread_local! {static CAUSAL_INVOCATIONS:Cell<usize>=const{Cell::new(0)};}
-/// A registered compiler callback returns a typed failure through HostEnv;
-/// ordinary evaluation keeps its established plain-arrow panic transport.
+/// A registered compiler callback returns a typed failure through HostEnv; ordinary evaluation keeps its established plain-arrow panic transport.
 pub(super) struct CausalInvocation {
   previous: usize,
 }
@@ -30,8 +29,7 @@ pub(crate) fn with_isolated_causal_failures<T>(operation: impl FnOnce() -> T) ->
   let _restore = CausalInvocation { previous };
   operation()
 }
-/// Expression-arrow errors preserve typed kind/message/span. Capability and
-/// resource refusals are not author exceptions. No message classification.
+/// Expression-arrow errors preserve typed kind/message/span.
 pub(super) fn invocation_failure(
   failure: EvaluationFailure,
   state: &mut EvaluationState,

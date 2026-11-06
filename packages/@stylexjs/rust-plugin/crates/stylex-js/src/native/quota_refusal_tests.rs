@@ -1,4 +1,3 @@
-//! Quota labels come from the failed guard, not a generic error message.
 use super::*;
 
 #[test]

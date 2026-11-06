@@ -10,9 +10,7 @@ pub fn evaluate_function_in_scope(
 ) -> Result<EvaluateResultValue, EvaluationFailure> {
   evaluate_function_in_scope_observed(function, args, state, span, overlays, None)
 }
-/// Install observation only after entering the stored counter ledger. This
-/// preserves spent counters after first-arg evaluation has returned and keeps
-/// the observer local to this invocation (including unwind).
+/// Install observation only after entering the stored counter ledger.
 pub fn evaluate_function_in_scope_observed(
   function: &EvaluationCallback,
   args: Vec<EvaluateResultValue>,

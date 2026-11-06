@@ -27,9 +27,7 @@ pub(super) fn notify(receiver: &EvaluateResultValue, key: &str) {
     (reads.observer)(receiver, key);
   }
 }
-/// Preserve pure AST memoization. Only folds which can execute a get/call are
-/// re-evaluated while a dependency observer is active; each subtree is scanned
-/// once per observer using the already computed structural key.
+/// Preserve pure AST memoization.
 pub(super) fn needs_events(path: &Expr, key: u128) -> bool {
   let Some(reads) = stylex_js::native::scoped_read_observer::<ObservedReads>() else {
     return false;

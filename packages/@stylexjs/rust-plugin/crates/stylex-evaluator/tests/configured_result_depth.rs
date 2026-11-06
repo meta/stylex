@@ -34,8 +34,6 @@ fn nest(levels: usize) -> String {
 }
 #[test]
 fn generated_result_depth_honours_the_configured_ceiling_and_absolute_cap() {
-  // This existing-public-API shape reaches the native value/data renderer,
-  // rather than only AST descent: the old renderer capped itself at32.
   let deep_join = format!("{}'x'{}.join('')", "[".repeat(40), "]".repeat(40));
   let joined = fold(&deep_join, 200);
   assert!(
@@ -46,15 +44,12 @@ fn generated_result_depth_honours_the_configured_ceiling_and_absolute_cap() {
   assert!(
     matches!(joined.value.as_ref().and_then(|value|value.as_expr()),Some(swc_core::ecma::ast::Expr::Lit(swc_core::ecma::ast::Lit::Str(value))) if value.value.as_str()==Some("x"))
   );
-  // Put the raised-ceiling behavior first so the old-base RED reaches the
-  // fixed hard-32 regression through existing public evaluator APIs.
   let raised = fold(&nest(40), 200);
   assert!(
     raised.confident,
     "raised data depth must fold: {:?}",
     raised.reason
   );
-  // Confidence alone cannot prove nesting survived callback transport.
   let Some(stylex_state::evaluate_result_value::EvaluateResultValue::NativeArray(values)) =
     raised.value.as_ref()
   else {

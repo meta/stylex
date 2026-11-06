@@ -1,8 +1,7 @@
 use super::*;
 use stylex_structures::stylex_env::{EnvEntry, HostError, HostResult, HostValue};
 use swc_core::ecma::ast::MemberExpr;
-/// A static path is a linear sequence of host reads, not recursive evaluation
-/// depth. Computed expressions and non-host paths stay with the normal walker.
+/// A static path is a linear sequence of host reads, not recursive evaluation depth.
 pub(super) fn evaluate(
   member: &MemberExpr,
   state: &mut EvaluationState,

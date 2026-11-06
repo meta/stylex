@@ -1,7 +1,6 @@
 use super::*;
 use swc_core::ecma::ast::MemberExpr;
-/// Refuse a known builtin function value rather than misrepresenting it as
-/// undefined. Method invocation is a separate allowlisted operation.
+/// Refuse a known builtin function value rather than misrepresenting it as undefined.
 pub(super) fn refuse(path: &Expr, state: &mut EvaluationState) -> Option<EvaluateResultValue> {
   stylex_js::native::observe_model_refusal();
   deopt(path, state, &unsupported_expression("MemberExpression"))
@@ -175,11 +174,7 @@ pub(super) fn static_read(member: &MemberExpr, state: &StateManager, fns: &Funct
     }
 }
 
-/// The JavaScript function a source callback became when it crossed to the
-/// host, if it has. A registered callback is a live host function that host
-/// code may have given own properties, so a question about its own keys has to
-/// be asked of the host rather than answered from the source arrow, whose
-/// enumerable own keys are none only while it has never crossed.
+/// The JavaScript function a source callback became when it crossed to the host, if it has.
 pub(super) fn registered_callback(
   value: &EvaluateResultValue,
   state: &StateManager,

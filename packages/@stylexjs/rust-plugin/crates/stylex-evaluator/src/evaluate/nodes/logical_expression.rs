@@ -1,16 +1,10 @@
 use super::super::*;
 use swc_core::ecma::ast::{BinExpr, BinaryOp};
 
-/// The reason recorded for an expression that lost no confidence on either side
-/// and still could not be folded.
+/// The reason recorded for an expression that lost no confidence on either side and still could not be folded.
 const DEFAULT_DEOPT_REASON: &str = "unknown error";
 
-/// One of the three operators the reference implementation keeps on a
-/// logical-expression node of its own.
-///
-/// SWC has no such node — `||`, `&&` and `??` arrive as binary expressions
-/// alongside `+` and `>>` — so the binary-expression node asks for this before
-/// doing anything else, and hands the three it names over here.
+/// One of the three operators the reference implementation keeps on a logical-expression node of its own.
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub(in super::super) enum LogicalOp {
   Or,
@@ -30,21 +24,8 @@ impl LogicalOp {
   }
 }
 
-/// Folds `||`, `&&` and `??` over evaluated values, returning the winning
-/// operand verbatim.
-///
-/// Each side is evaluated under a confidence of its own, so a side the fold
-/// never consults cannot deopt the expression — `token ?? 'red'` folds whether
-/// or not the fallback would have.
-///
-/// The right side is evaluated only where the guard actually asks about it,
-/// which is the short-circuit the language performs and this node's whole
-/// reason for existing. It is not merely a saving: evaluating an operand is
-/// what queues a `*.stylex.js` theme import for tree-shake compensation, so a
-/// losing `tokens.color` evaluated anyway would leave an import behind for a
-/// value that never reached the stylesheet. Which operand the fold keeps is
-/// unchanged by the laziness — a left side that wins wins whatever the right
-/// side would have said.
+/// Folds `||`, `&&` and `??` over evaluated values, returning the winning operand verbatim.
+/// Each side is evaluated under a confidence of its own, so a side the fold never consults cannot deopt the expression — `token ?? 'red'` folds whether or not the fallback would have.
 pub(in super::super) fn evaluate(
   op: LogicalOp,
   bin: &BinExpr,
@@ -86,9 +67,7 @@ pub(in super::super) fn evaluate(
         decide(op, left.value.as_ref())
       }
     },
-    // The right side is still evaluated below, because which path the deopt
-    // names depends on it: an unconfident right side is the one reported, and
-    // only a confident one lets the left side's own reason through.
+
     false => Decision::Refuse,
   };
 
@@ -126,17 +105,7 @@ impl Operand {
   }
 }
 
-/// Evaluates one side against a forked state, so that losing confidence there
-/// says nothing about the expression as a whole until the fold has asked.
-///
-/// Only the confidence is forked. Everything the evaluation discovers about the
-/// module — imports to queue, values to memoize — lands on `traversal_state`,
-/// which is shared, and which is where those are deduplicated.
-///
-/// The reason is carried over rather than cleared, matching the state the
-/// reference implementation forks. It cannot arrive stale: a reason is only ever
-/// recorded together with the loss of confidence that produced it, and this node
-/// is reached with confidence intact.
+/// Evaluates one side against a forked state, so that losing confidence there says nothing about the expression as a whole until the fold has asked.
 fn evaluate_operand(
   expr: &Expr,
   state: &EvaluationState,
@@ -162,24 +131,13 @@ fn evaluate_operand(
 enum Decision {
   /// The left operand is the answer, whatever the right side holds.
   Left,
-  /// The right operand is the answer if it evaluated confidently, and the
-  /// caller deopts on it if it did not.
+  /// The right operand is the answer if it evaluated confidently, and the caller deopts on it if it did not.
   Right,
   /// The guard declines to fold, and the caller deopts.
   Refuse,
 }
 
-/// The operand the reference implementation's guard lets through, decided from
-/// the left side alone so the right one is evaluated only where it is consulted.
-///
-/// The guards are reproduced in the shape upstream writes them, including the
-/// nullish one — `leftConfident && !!(left ?? rightConfident)` tests the left
-/// side's *truthiness* where it evidently meant its nullishness, so `0 ?? 5`
-/// refuses to fold even though both sides are confident. Correcting it here
-/// would make this compiler fold a value the reference implementation leaves
-/// alone, and a silent CSS difference between two builds of the same source is
-/// worse than inheriting the restriction. Reported upstream rather than fixed
-/// locally.
+/// The operand the reference implementation's guard lets through, decided from the left side alone so the right one is evaluated only where it is consulted.
 fn decide(op: LogicalOp, left: Option<&EvaluateResultValue>) -> Decision {
   match op {
     LogicalOp::Or => match truthiness(left) {
@@ -205,16 +163,7 @@ fn decide(op: LogicalOp, left: Option<&EvaluateResultValue>) -> Decision {
   }
 }
 
-/// `ToBoolean` over an operand, or `None` when its truthiness cannot be read at
-/// compile time and the caller has to deopt.
-///
-/// An operand that evaluated confidently to no value is `undefined`, which is
-/// falsy.
-///
-/// Upstream always holds a real JavaScript value here, so its `!!left` always
-/// answers and it would fold where a refusal deopts. The refusal is kept on
-/// purpose: it costs a declaration that falls to the runtime, where a guess
-/// would put the wrong operand in the stylesheet.
+/// `ToBoolean` over an operand, or `None` when its truthiness cannot be read at compile time and the caller has to deopt.
 fn truthiness(value: Option<&EvaluateResultValue>) -> Option<bool> {
   match value {
     Some(value) => evaluate_result_to_js_boolean(value),
@@ -223,9 +172,6 @@ fn truthiness(value: Option<&EvaluateResultValue>) -> Option<bool> {
 }
 
 /// Whether an operand is one of the two values `??` takes its right side for.
-///
-/// An operand that evaluated confidently to no value is `undefined`, which is
-/// one of them.
 fn is_nullish(value: Option<&EvaluateResultValue>) -> bool {
   match value {
     Some(value) => evaluate_result_is_nullish(value),
@@ -233,8 +179,7 @@ fn is_nullish(value: Option<&EvaluateResultValue>) -> bool {
   }
 }
 
-/// The winning operand as a value, spelling a confidently absent one as the
-/// `undefined` the language gives it.
+/// The winning operand as a value, spelling a confidently absent one as the `undefined` the language gives it.
 fn operand_value(value: Option<EvaluateResultValue>) -> EvaluateResultValue {
   value.unwrap_or_else(js_undefined)
 }

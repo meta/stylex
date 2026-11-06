@@ -23,8 +23,7 @@ use stylex_js::coercions::to_js_string;
 use stylex_structures::stylex_env::EnvEntry;
 use stylex_types::traits::WhenMarkerValue;
 
-/// A host value and its read-time method receiver. Receiver metadata is not
-/// JavaScript identity; aliases preserve it without re-reading the property.
+/// A host value and its read-time method receiver.
 #[derive(Clone, Debug)]
 pub struct HostedValue {
   pub value: stylex_structures::stylex_env::HostValue,
@@ -220,25 +219,6 @@ impl PartialEq for EvaluateResultValue {
 
 impl EvaluateResultValue {
   /// Extracts a string key from an `EvaluateResultValue::Expr` variant.
-  ///
-  /// Handles the common pattern of resolving a property name from an evaluated
-  /// expression:
-  /// - `Expr::Ident` → symbol name as string
-  /// - `Expr::Lit(Str)` → string value
-  /// - `Expr::Lit(Num)` → number formatted as string
-  /// - `Expr::Lit(BigInt)` → bigint formatted as string
-  /// - All other variants → `None`
-  ///
-  /// `None` is an answer and not a fault -- a computed key or a value the
-  /// language does not spell as a property name reaches here -- so the caller
-  /// handles it rather than asserting it away.
-  ///
-  /// # Example
-  /// ```ignore
-  /// let Some(key) = property.as_string_key() else {
-  ///   return None;
-  /// };
-  /// ```
   #[inline]
   pub fn as_string_key(&self) -> Option<String> {
     match self {
@@ -276,9 +256,7 @@ impl EvaluateResultValue {
   }
 }
 
-/// Lets `stylex-css` read a marker out of an evaluated value without naming
-/// any of the evaluator's types. Every accessor mirrors one of the type tests
-/// the `when` functions perform on their second argument.
+/// Lets `stylex-css` read a marker out of an evaluated value without naming any of the evaluator's types.
 impl WhenMarkerValue for EvaluateResultValue {
   fn as_str_value(&self) -> Option<&str> {
     match self {
@@ -303,10 +281,7 @@ impl WhenMarkerValue for EvaluateResultValue {
       return None;
     };
 
-    // Two lazy passes rather than one collected `Vec`: inspecting a marker
-    // object then costs no allocation. The second pass stops at the first
-    // non-`$$css` key — the marker class — so for the two-key object
-    // `defineMarker` emits, neither pass reads more than it must.
+    // The second pass stops at the first non-`$$css` key — the marker class — so for the two-key object `defineMarker` emits, neither pass reads more than it must.
     let is_compiled = key_value_props(object).any(|(key, value)| {
       key == COMPILED_KEY && matches!(value, Expr::Lit(Lit::Bool(compiled)) if compiled.value)
     });
@@ -325,10 +300,7 @@ impl WhenMarkerValue for EvaluateResultValue {
   }
 }
 
-/// The plain key/value properties of an object literal, paired with their
-/// values. Spreads, getters, setters, methods, shorthands and computed or
-/// numeric keys are skipped, none of which a compiled StyleX object carries —
-/// so what remains is exactly what `Object.keys` walks in the original.
+/// The plain key/value properties of an object literal, paired with their values.
 fn key_value_props(object: &ObjectLit) -> impl Iterator<Item = (&str, &Expr)> {
   object.props.iter().filter_map(|prop| match prop {
     PropOrSpread::Prop(prop) => match prop.as_ref() {
@@ -342,33 +314,15 @@ fn key_value_props(object: &ObjectLit) -> impl Iterator<Item = (&str, &Expr)> {
 }
 
 /// The property one expression names, which is `String(key)`.
-///
-/// Taken by reference rather than off a value, so a caller that holds only the
-/// expression asks the same question without building a value to hold it --
-/// which copied the whole subtree of a key that folded to an object or a list.
 pub fn string_key_of_expr(expr: &Expr) -> Option<String> {
   match expr {
-    // A property written as a name is that name. Read through the coercion
-    // below instead, a name would answer for the global it spells -- `NaN`
-    // and `Infinity` have a text and every other name has none -- where what
-    // is asked for here is the property `obj.NaN` reads.
     Expr::Ident(ident) => Some(ident.sym.to_string()),
-    // `ToPropertyKey`, which is `ToString` -- not Rust's `Display`. The two
-    // part company on `-0` (`"0"` in the language, `"-0"` here) and on every
-    // magnitude that takes exponential form (`"1e-7"` against `"0.0000001"`),
-    // so `list[-0]` read no element and `obj[1e-7]` found no property.
-    //
-    // One coercion rather than a table of the kinds a key may be written as,
-    // because a key is written and read in two places and they have to agree:
-    // `{ [true]: 'red' }` names the property `true`, so `obj[true]` has to
-    // look for that one. A table answered for a string and a number only, so
-    // a boolean key was written nowhere and found nowhere.
+
     expr => to_js_string(expr),
   }
 }
 
-/// Reads a property name as a string, for the key shapes a compiled StyleX
-/// object can carry.
+/// Reads a property name as a string, for the key shapes a compiled StyleX object can carry.
 fn prop_name_as_str(key: &PropName) -> Option<&str> {
   match key {
     PropName::Ident(ident) => Some(ident.sym.as_str()),
@@ -395,15 +349,8 @@ mod string_key_tests {
     .as_string_key()
   }
 
-  /// A property key is `ToPropertyKey`, which is `ToString`. Rust's `Display`
-  /// agrees on the ordinary magnitudes and parts company on three shapes: it
-  /// signs negative zero, and it never switches to exponential form at either
-  /// end of the range.
-  ///
-  /// Only the first of those is reachable through a member read today -- an
-  /// array reads `[-0]` as its first slot, where `"-0"` named no slot at all --
-  /// but all three are the same one-line mistake, and the receiver that
-  /// distinguishes the other two is one new fold away.
+  /// A property key is `ToPropertyKey`, which is `ToString`.
+  /// Rust's `Display` agrees on the ordinary magnitudes and parts company on three shapes: it signs negative zero, and it never switches to exponential form at either end of the range.
   #[test]
   fn a_number_key_is_spelled_the_way_the_language_spells_it() {
     assert_eq!(key_of(-0.0).as_deref(), Some("0"));
@@ -411,8 +358,6 @@ mod string_key_tests {
     assert_eq!(key_of(1e21).as_deref(), Some("1e+21"));
   }
 
-  /// And agrees with `Display` everywhere else, so the change is confined to the
-  /// spellings above.
   #[test]
   fn an_ordinary_number_key_is_unchanged() {
     assert_eq!(key_of(0.0).as_deref(), Some("0"));

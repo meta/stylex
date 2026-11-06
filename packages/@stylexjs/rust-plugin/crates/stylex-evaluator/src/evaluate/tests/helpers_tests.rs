@@ -8,9 +8,7 @@ use swc_core::{
   ecma::ast::{ExprOrSpread, UnaryExpr, UnaryOp},
 };
 
-/// `ToString` over an evaluated value, collected -- the shape these cases assert
-/// on. The bridge itself streams, since its one caller has a ceiling to spend,
-/// so the collecting is here rather than beside it.
+/// Collects the streaming string coercion for assertions.
 fn string_of(
   value: &EvaluateResultValue,
   function_form: coercions::FunctionForm,
@@ -78,12 +76,6 @@ fn the_nullish_bridge_answers_no_for_the_evaluator_s_own_variants() {
   ));
 }
 
-/// The two coercions that have to tell an object from a function once said
-/// different things about a folded function map, and a template that
-/// interpolated the namespace refused because of it. They are separate
-/// exhaustive matches by design -- so that a new variant cannot be added
-/// without classifying it in both -- and this is what stops the two
-/// classifications from drifting apart again.
 #[test]
 fn the_two_bridges_agree_a_function_map_is_an_object() {
   let map = EvaluateResultValue::FunctionConfigMap(FunctionConfigMap::default());
@@ -103,9 +95,6 @@ fn the_two_bridges_agree_a_function_map_is_an_object() {
   );
 }
 
-/// The other two variants of the family are functions, and both bridges have to
-/// say so. `Refuse` is the form the style-value consumers use, and a function
-/// under it has no string at all.
 #[test]
 fn the_two_bridges_agree_a_callback_is_a_function() {
   let callback = super::source_evaluation::evaluate_source("()=>null")
@@ -118,9 +107,6 @@ fn the_two_bridges_agree_a_callback_is_a_function() {
     "a function has no compile-time string under the refusing form"
   );
 
-  // The other form stands the function in with text that is not a numeric
-  // literal, so one function inside an array does not make the whole array's
-  // number unknowable.
   assert_eq!(
     string_of(&callback, coercions::FunctionForm::NotANumber).as_deref(),
     coercions::FunctionForm::NotANumber.render(),
@@ -136,15 +122,6 @@ fn the_two_bridges_agree_a_callback_is_a_function() {
   );
 }
 
-/// A `defineVars` group carries a `toString` of its own, so its string is the
-/// var group hash rather than the object default. The reference
-/// implementation's proxy answers the same hash from the same trap -- and the
-/// hash pinned below is that compiler's own answer for the same two names, read
-/// out of it rather than recomputed here.
-///
-/// Its *object* coercion is an object all the same, which is the one place the
-/// two bridges answer differently on purpose: the language reads
-/// `String(group)` through the trap and `typeof group` through the kind.
 #[test]
 fn a_var_group_answers_its_hash_as_a_string_and_an_object_as_a_kind() {
   let group = EvaluateResultValue::ThemeRef(ThemeRef::new("vars.stylex.js", "vars", "x"));
@@ -164,8 +141,6 @@ fn a_var_group_answers_its_hash_as_a_string_and_an_object_as_a_kind() {
   );
 }
 
-/// The two values that stand for a plain object take the `Object.prototype`
-/// default, which is what the language answers for one.
 #[test]
 fn the_values_that_stand_for_a_plain_object_take_the_object_default() {
   for value in [
@@ -190,22 +165,15 @@ fn the_values_that_stand_for_a_plain_object_take_the_object_default() {
   }
 }
 
-/// The whole of the character ceiling's arithmetic, tested without a compile:
-/// the boundary in both directions, and what a "character" is counted as.
 #[test]
 fn the_character_ceiling_admits_exactly_the_ceiling() {
   assert_eq!(units_within(0, "abcd", 4), Some(4));
   assert_eq!(units_within(4, "efgh", 8), Some(8));
   assert_eq!(units_within(4, "efghi", 8), None);
 
-  // An empty append grows nothing, so it can never be the piece that refuses --
-  // not even against a buffer already sitting exactly on the ceiling.
   assert_eq!(units_within(8, "", 8), Some(8));
 }
 
-/// Counted in UTF-16 code units, which is the length JavaScript reports. An
-/// astral character occupies two of them and spells as four bytes, so neither the
-/// scalar count nor the byte count would answer here.
 #[test]
 fn the_character_ceiling_counts_code_units() {
   assert_eq!(units_within(0, "\u{1F600}", 2), Some(2));
@@ -213,17 +181,9 @@ fn the_character_ceiling_counts_code_units() {
   assert_eq!(units_within(2, "\u{1F600}", 4), Some(4));
   assert_eq!(units_within(2, "\u{1F600}", 3), None);
 
-  // Two bytes, one code unit — the direction a byte count would get wrong the
-  // other way, by refusing a string the ceiling allows.
   assert_eq!(units_within(0, "é", 1), Some(1));
 }
 
-/// The sum exists to be refused on, so it saturates: a wrapped one would come
-/// back small and admit the very append it was asked about. Measured against the
-/// largest ceiling a project can ask for, because that is what the clamped option
-/// can actually be -- a saturated sum only has to beat *that*, and no buffer
-/// holding `usize::MAX` code units is reachable through a compile, which is why
-/// this is asserted here at all.
 #[test]
 fn the_character_ceiling_refuses_rather_than_wrapping() {
   assert_eq!(
@@ -236,18 +196,13 @@ fn the_character_ceiling_refuses_rather_than_wrapping() {
   );
 }
 
-/// A ceiling of zero reaches this arithmetic only if something upstream let it:
-/// `Ceiling::clamped` reads an unset option as the default, so what the compiler
-/// spends is never zero. Pinned anyway, because the arithmetic is the layer that
-/// would silently refuse everything if that ever changed.
 #[test]
 fn a_zero_ceiling_admits_only_an_empty_append() {
   assert_eq!(units_within(0, "", 0), Some(0));
   assert_eq!(units_within(0, "x", 0), None);
 }
 
-/// A sink that takes a fixed number of characters and refuses the piece that
-/// would pass it, standing in for the character ceiling without a compile.
+/// A UTF-16-counted sink that refuses writes exceeding its character limit.
 struct Bounded {
   text: String,
   ceiling: usize,
@@ -257,8 +212,6 @@ impl coercions::StringSink for Bounded {
   type Refusal = ();
 
   fn write(&mut self, piece: &str) -> Result<(), ()> {
-    // UTF-16 code units, which is what the real ceiling spends -- so the stand-in
-    // cannot pass a case `GrownString` would refuse.
     if utf16_length(&self.text) + utf16_length(piece) > self.ceiling {
       return Err(());
     }
@@ -273,17 +226,12 @@ fn string_expr(value: &str) -> EvaluateResultValue {
   EvaluateResultValue::Expr(create_string_expr(value))
 }
 
-/// The evaluator's own array representation joins by an array literal's rule,
-/// including the two values that join as nothing -- and the absent-value variant
-/// is one of them, which is the arm no coercion in `stylex_js` can reach.
 #[test]
 fn the_evaluator_s_own_array_joins_by_the_literal_s_rule() {
   let cases: &[(Vec<EvaluateResultValue>, &str)] = &[
     (vec![], ""),
     (vec![string_expr("a")], "a"),
     (vec![string_expr("a"), string_expr("b")], "a,b"),
-    // The absent value and a written `null` both join as nothing, so an array of
-    // them is separators alone.
     (
       vec![
         EvaluateResultValue::Null,
@@ -292,7 +240,6 @@ fn the_evaluator_s_own_array_joins_by_the_literal_s_rule() {
       ],
       ",,a",
     ),
-    // A nested array flattens into the outer join rather than adding a level.
     (
       vec![
         EvaluateResultValue::Vec(vec![string_expr("a"), string_expr("b")]),
@@ -317,10 +264,6 @@ fn the_evaluator_s_own_array_joins_by_the_literal_s_rule() {
   }
 }
 
-/// The join is written into the sink as it goes, so a bounded caller refuses at
-/// the element that passes the ceiling and the elements after it are never
-/// rendered. That is the whole of the change: the same array measured after the
-/// join had already been paid for in full.
 #[test]
 fn a_bounded_sink_stops_the_array_join_where_it_passes() {
   let array = EvaluateResultValue::Vec(vec![
@@ -341,14 +284,8 @@ fn a_bounded_sink_stops_the_array_join_where_it_passes() {
   assert_eq!(sink.text, "aaa,");
 }
 
-// ──────────────────────────────────────────────
-// The text a number is read out of
-// ──────────────────────────────────────────────
-
 use coercions::StringSink as _;
 
-/// Text that could still spell a number is kept and measured, and the number is
-/// the language's own reading of it.
 #[test]
 fn a_numeric_text_reads_the_number_it_spells() {
   for (pieces, number) in [
@@ -377,11 +314,6 @@ fn a_numeric_text_reads_the_number_it_spells() {
   }
 }
 
-/// The first character no numeric literal holds settles the answer, and nothing
-/// after it is kept -- which is what makes an array of two elements cost the
-/// first of them rather than the whole join. The pieces after the settling one
-/// pass the ceiling several times over and are still taken, because the sink has
-/// nothing left to measure.
 #[test]
 fn a_settled_text_stops_measuring_and_answers_not_a_number() {
   let mut text = NumericText::new(8);
@@ -399,8 +331,6 @@ fn a_settled_text_stops_measuring_and_answers_not_a_number() {
   assert!(text.into_number().is_nan());
 }
 
-/// A text that is still a number at the ceiling is where the ceiling is spent,
-/// and the piece that passes it is refused rather than truncated.
 #[test]
 fn a_numeric_text_past_the_ceiling_refuses() {
   let mut text = NumericText::new(4);
@@ -411,17 +341,11 @@ fn a_numeric_text_past_the_ceiling_refuses() {
     "one code unit past four must refuse"
   );
 
-  // The ceiling is reached inside a piece as well as between two, since what is
-  // measured is the text and not the number of writes.
   let mut once = NumericText::new(4);
 
   assert!(once.write("12345").is_err());
 }
 
-/// The characters the ceiling never has to measure, because no numeric literal
-/// holds them. An astral character is one, which is why the code-unit
-/// convention is pinned on `units_within` rather than here: every text this
-/// buffer can still be measuring is ASCII or whitespace.
 #[test]
 fn a_character_outside_a_number_settles_rather_than_counts() {
   for piece in ["\u{1F600}", ",", "px"] {
@@ -436,13 +360,6 @@ fn a_character_outside_a_number_settles_rather_than_counts() {
   }
 }
 
-/// A buffer that adopts a measured string takes the count with the text, and
-/// spends the ceiling against that count.
-///
-/// The whole of what adopting has to be right about: the text is the text, the
-/// count is the count, and the next append is measured from where the adopted
-/// one left off. A count adopted too low would let a chain grow past the
-/// ceiling, and one adopted too high would refuse a chain inside it.
 #[test]
 fn an_adopted_buffer_keeps_the_count_it_was_handed() {
   let (text, units) = GrownString::adopt("abcd".to_string(), 4, "concatenation").into_measured();
@@ -450,18 +367,12 @@ fn an_adopted_buffer_keeps_the_count_it_was_handed() {
   assert_eq!(text, "abcd");
   assert_eq!(units, 4);
 
-  // And an empty one, which is the operand a chain of empty strings adopts at
-  // every link.
   let (empty, none) = GrownString::adopt(String::new(), 0, "concatenation").into_measured();
 
   assert_eq!(empty, "");
   assert_eq!(none, 0);
 }
 
-/// A grown buffer answers with the count it measured, so the level above adopts
-/// a number rather than reading the text again. Grown through the coercion as
-/// well as through a direct append, since a template and a `+` reach the buffer
-/// by the two different doors.
 #[test]
 fn a_grown_buffer_answers_with_the_count_it_measured() {
   let mut state = EvaluationState::new();
@@ -490,8 +401,6 @@ fn a_grown_buffer_answers_with_the_count_it_measured() {
       .is_ok()
   );
 
-  // An astral character, so the answer is a code-unit count rather than a
-  // scalar or a byte one.
   assert!(
     grown
       .push(
@@ -510,10 +419,6 @@ fn a_grown_buffer_answers_with_the_count_it_measured() {
   assert_eq!(units, utf16_length(&text));
 }
 
-/// Adopting is only a shortcut when it answers the same as re-reading, so the
-/// two readings are compared directly -- over the texts a chain actually grows,
-/// ASCII and otherwise, and over the one a byte count would get right by
-/// accident.
 #[test]
 fn an_adopted_count_agrees_with_a_fresh_reading() {
   for text in [
@@ -539,12 +444,6 @@ fn an_adopted_count_agrees_with_a_fresh_reading() {
   }
 }
 
-/// The absent value has no string of its own at the top of a coercion, which is
-/// not the same answer it gets inside an array.
-///
-/// Inside one it joins as nothing, because that is what `undefined` does in a
-/// join. Alone it is a value the caller could not read, and inventing an empty
-/// string for it would write a declaration the source does not describe.
 #[test]
 fn the_absent_value_has_no_string_of_its_own() {
   assert_eq!(
@@ -563,17 +462,6 @@ fn the_absent_value_has_no_string_of_its_own() {
   );
 }
 
-/// Every slot of an array literal names the index it sits at, so a slot with no
-/// element to name leaves the receiver unreadable rather than shortening the
-/// list.
-///
-/// Written against the reader rather than against a source, because no fold
-/// writes such an array today: `array_expression` refuses a hole and a spread
-/// before either reaches a value. That is exactly why the reader has to answer
-/// for one. A second reader that trusts the first is the defect this pair of
-/// arms closes -- `[, 'a']` read past its hole names `'a'` key `0`, and
-/// `[...xs]` read past its spread names the whole list key `0`, both of which
-/// are a stylesheet the source does not describe.
 #[test]
 fn a_written_array_slot_with_nothing_to_name_leaves_the_receiver_unreadable() {
   let hole = ArrayLit {
@@ -606,8 +494,6 @@ fn a_written_array_slot_with_nothing_to_name_leaves_the_receiver_unreadable() {
   );
 }
 
-/// The same reader, over the slots it can name: each index names the element
-/// that sits at it, in order.
 #[test]
 fn a_written_array_names_each_index_after_the_element_that_sits_at_it() {
   let array = ArrayLit {

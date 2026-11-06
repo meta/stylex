@@ -32,8 +32,7 @@ fn fold(source: &str) -> Box<stylex_evaluator::evaluate_result::EvaluateResult> 
 }
 #[test]
 fn unmodelled_builtin_function_values_refuse_instead_of_becoming_undefined() {
-  // Node: every listed read yields a function. Babel executes supported reads,
-  // but a function is not style data; none may be silently emitted as undefined.
+  // Node/Babel yield functions here; function values are not emittable style data.
   for source in [
     "'a'.trim",
     "'a'.normalize",

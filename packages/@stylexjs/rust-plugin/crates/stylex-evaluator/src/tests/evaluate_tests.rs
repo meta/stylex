@@ -15,14 +15,10 @@ use swc_core::{
   },
 };
 
-// ==================== HELPER FUNCTIONS ====================
-
-// Helper: Create undefined expression
 fn make_undefined_expr() -> Expr {
   Expr::Ident(create_ident("undefined"))
 }
 
-// Helper: Create regular member expression
 fn make_member_expr(obj: Expr, prop: &str) -> Expr {
   Expr::Member(MemberExpr {
     span: DUMMY_SP,
@@ -31,7 +27,6 @@ fn make_member_expr(obj: Expr, prop: &str) -> Expr {
   })
 }
 
-// Helper: Create optional member expression
 fn make_optional_member_expr(obj: Expr, prop: &str) -> Expr {
   Expr::OptChain(OptChainExpr {
     span: DUMMY_SP,
@@ -44,7 +39,6 @@ fn make_optional_member_expr(obj: Expr, prop: &str) -> Expr {
   })
 }
 
-// Helper: Create unary expression (e.g., -5, !true, +x)
 fn make_unary_expr(op: UnaryOp, arg: Expr) -> Expr {
   Expr::Unary(UnaryExpr {
     span: DUMMY_SP,
@@ -53,7 +47,6 @@ fn make_unary_expr(op: UnaryOp, arg: Expr) -> Expr {
   })
 }
 
-// Helper: Create binary expression (e.g., 5 + 3, x && y)
 fn make_binary_expr(left: Expr, op: BinaryOp, right: Expr) -> Expr {
   Expr::Bin(BinExpr {
     span: DUMMY_SP,
@@ -63,7 +56,6 @@ fn make_binary_expr(left: Expr, op: BinaryOp, right: Expr) -> Expr {
   })
 }
 
-// Helper: Create await expression
 fn make_await_expr(arg: Expr) -> Expr {
   Expr::Await(AwaitExpr {
     span: DUMMY_SP,
@@ -77,8 +69,6 @@ fn evaluate_expr(expr: &Expr) -> (bool, bool) {
   let result = evaluate(expr, &mut state_manager, &fns);
   (result.confident, result.value.is_some())
 }
-
-// ==================== OPTIONAL CHAINING TESTS ====================
 
 #[test]
 fn test_optional_chaining_with_null_returns_none() {
@@ -184,8 +174,6 @@ fn test_optional_vs_regular_member_access() {
   );
 }
 
-// ==================== AWAIT EXPRESSION TESTS ====================
-
 #[test]
 fn test_await_with_variable() {
   let await_expr = make_await_expr(create_ident_expr("someVar"));
@@ -223,16 +211,13 @@ fn test_await_with_boolean() {
 
 #[test]
 fn test_await_removes_await_keyword() {
-  // Test that await evaluates its argument (not the await keyword itself)
   let await_expr = make_await_expr(create_number_expr(123.0));
   let (_confident, has_value) = evaluate_expr(&await_expr);
-  // Should have a value since we evaluate the number
   assert!(has_value, "Await should evaluate its argument");
 }
 
 #[test]
 fn test_await_with_optional_chaining() {
-  // Test: await obj?.prop
   let optional_member = make_optional_member_expr(create_ident_expr("obj"), "prop");
   let await_expr = make_await_expr(optional_member);
   let (confident, _has_value) = evaluate_expr(&await_expr);
@@ -241,14 +226,11 @@ fn test_await_with_optional_chaining() {
 
 #[test]
 fn test_await_with_null_optional_chaining() {
-  // Test: await null?.prop
   let optional_member = make_optional_member_expr(create_null_expr(), "prop");
   let await_expr = make_await_expr(optional_member);
   let (_confident, has_value) = evaluate_expr(&await_expr);
   assert!(!has_value, "Short-circuit should propagate through await");
 }
-
-// ==================== LITERAL EXPRESSION TESTS ====================
 
 #[test]
 fn test_null_literal_evaluation() {
@@ -297,8 +279,6 @@ fn test_variable_reference_not_confident() {
   assert!(!confident, "Variable reference should not be confident");
 }
 
-// ==================== UNARY EXPRESSION TESTS ====================
-
 #[test]
 fn test_unary_minus_number() {
   let unary_expr = make_unary_expr(UnaryOp::Minus, create_number_expr(5.0));
@@ -332,8 +312,6 @@ fn test_unary_minus_variable() {
     "Unary minus on variable should not be confident"
   );
 }
-
-// ==================== BINARY EXPRESSION TESTS ====================
 
 #[test]
 fn test_binary_addition_numbers() {
@@ -419,8 +397,6 @@ fn test_binary_logical_or() {
   );
 }
 
-// ==================== MEMBER EXPRESSION TESTS ====================
-
 #[test]
 fn test_member_access_with_variable() {
   let member_expr = make_member_expr(create_ident_expr("obj"), "prop");
@@ -440,8 +416,6 @@ fn test_member_access_nested() {
     "Nested member access on variable should not be confident"
   );
 }
-
-// ==================== COMPOSITE TESTS ====================
 
 #[test]
 fn test_nested_optional_chaining() {
@@ -499,7 +473,6 @@ fn test_multiple_levels_of_optional_chaining_with_null_at_end() {
 
 #[test]
 fn test_await_with_multiple_chained_operations() {
-  // await (await someVar)
   let inner_await = make_await_expr(create_ident_expr("someVar"));
   let outer_await = make_await_expr(inner_await);
   let (confident, _has_value) = evaluate_expr(&outer_await);
@@ -511,7 +484,6 @@ fn test_await_with_multiple_chained_operations() {
 
 #[test]
 fn test_complex_expression_await_optional_unary() {
-  // Complex: await !(obj?.prop)
   let optional = make_optional_member_expr(create_ident_expr("obj"), "prop");
   let unary = make_unary_expr(UnaryOp::Bang, optional);
   let await_expr = make_await_expr(unary);
@@ -524,20 +496,13 @@ fn test_complex_expression_await_optional_unary() {
 
 #[test]
 fn test_null_coalescing_like_pattern() {
-  // Pattern: null?.prop (similar to nullish coalescing behavior)
   let optional = make_optional_member_expr(create_null_expr(), "prop");
   let (_confident, has_value) = evaluate_expr(&optional);
   assert!(!has_value, "Null coalescing pattern should short-circuit");
 }
 
-// ==================== LITERAL MEMBER ACCESS TESTS ====================
-
 #[test]
 fn test_null_literal_member_access() {
-  // A property read off a literal receiver used to answer the receiver itself,
-  // so `"abc".length` folded to `"abc"` and shipped `content: "abc"`. The
-  // evaluator refuses instead; only `length` on a string or an array is read,
-  // and those are pinned in `evaluate/tests/member_length_tests.rs`.
   let member_expr = make_member_expr(create_null_expr(), "prop");
   let (confident, has_value) = evaluate_expr(&member_expr);
   assert!(
@@ -568,11 +533,6 @@ fn test_boolean_literal_member_access() {
 
 #[test]
 fn test_string_literal_member_access() {
-  // A string is the one literal that carries a readable property, so a name it
-  // does not carry answers `undefined` here rather than refusing — the same
-  // answer the reference implementation's `object[property]` gives, and the one
-  // that lets a `??` fallback fold. `length` is covered in
-  // `evaluate/tests/member_length_tests.rs`.
   let member_expr = make_member_expr(create_string_expr("test"), "prop");
   let (confident, has_value) = evaluate_expr(&member_expr);
   assert!(
@@ -583,8 +543,6 @@ fn test_string_literal_member_access() {
 
 #[test]
 fn test_literal_with_optional_chaining() {
-  // `?.` decides whether the property is read at all, not what reading it
-  // answers, so a property a literal does not carry refuses here too.
   let opt_chain = make_optional_member_expr(create_number_expr(5.0), "prop");
   let (confident, has_value) = evaluate_expr(&opt_chain);
   assert!(
@@ -593,9 +551,6 @@ fn test_literal_with_optional_chaining() {
   );
 }
 
-// ==================== REGEX EXPRESSION TESTS ====================
-
-// Helper: Create regex literal expression
 fn make_regex_expr(pattern: &str, flags: &str) -> Expr {
   Expr::Lit(swc_core::ecma::ast::Lit::Regex(Regex {
     span: DUMMY_SP,
@@ -604,7 +559,6 @@ fn make_regex_expr(pattern: &str, flags: &str) -> Expr {
   }))
 }
 
-// Helper: Create call expression
 fn make_call_expr(callee: Expr, args: Vec<Expr>) -> Expr {
   Expr::Call(CallExpr {
     span: DUMMY_SP,
@@ -621,11 +575,6 @@ fn make_call_expr(callee: Expr, args: Vec<Expr>) -> Expr {
   })
 }
 
-// A regular expression is never folded, in any position and whatever it spells.
-// The reference implementation refuses every `RegExpLiteral`, and folding one to
-// itself left the refusal to whichever downstream reader tripped over the value:
-// `{ color: /a/ }` reported a diagnostic that read `1`, and `String(/re/)` did
-// not refuse at all — it wrote `color: / re /` into the stylesheet.
 #[test]
 fn test_regex_literal_refuses_to_fold() {
   for (pattern, flags) in [
@@ -647,9 +596,6 @@ fn test_regex_literal_refuses_to_fold() {
       pattern, flags
     );
 
-    // No value beside the refusal, and the sentence names the literal. A
-    // refusal that still carried a value is what let a downstream reader write
-    // the regular expression into the stylesheet.
     assert!(
       result.value.is_none(),
       "regex /{}/{} refused and still answered a value",
@@ -668,7 +614,6 @@ fn test_regex_literal_refuses_to_fold() {
 
 #[test]
 fn test_regex_test_method_with_variable() {
-  // Test: /regex/.test(someVar)
   let regex_expr = make_regex_expr("test", "");
   let member_expr = make_member_expr(regex_expr, "test");
   let call_expr = make_call_expr(member_expr, vec![create_ident_expr("someVar")]);
@@ -681,7 +626,6 @@ fn test_regex_test_method_with_variable() {
 
 #[test]
 fn test_regex_test_method_with_literal() {
-  // Test: /regex/.test("literal")
   let regex_expr = make_regex_expr("test", "");
   let member_expr = make_member_expr(regex_expr, "test");
   let call_expr = make_call_expr(member_expr, vec![create_string_expr("literal")]);
@@ -694,7 +638,6 @@ fn test_regex_test_method_with_literal() {
 
 #[test]
 fn test_regex_exec_method() {
-  // Test: /regex/.exec(someVar)
   let regex_expr = make_regex_expr("test", "");
   let member_expr = make_member_expr(regex_expr, "exec");
   let call_expr = make_call_expr(member_expr, vec![create_ident_expr("someVar")]);
@@ -707,7 +650,6 @@ fn test_regex_exec_method() {
 
 #[test]
 fn test_regex_match_method() {
-  // Test: /regex/.match()
   let regex_expr = make_regex_expr("test", "");
   let member_expr = make_member_expr(regex_expr, "match");
   let call_expr = make_call_expr(member_expr, vec![]);
@@ -720,10 +662,8 @@ fn test_regex_match_method() {
 
 #[test]
 fn test_regex_test_method_with_nullish_coalescing() {
-  // Test: /regex/.test(someVar ?? '')
   let regex_expr = make_regex_expr("\\/test", "");
   let member_expr = make_member_expr(regex_expr, "test");
-  // Using binary expression for nullish coalescing
   let nullish = make_binary_expr(
     create_ident_expr("pattern"),
     BinaryOp::NullishCoalescing,
@@ -737,11 +677,6 @@ fn test_regex_test_method_with_nullish_coalescing() {
   );
 }
 
-// ==================== PANIC CONTEXT TESTS ====================
-// These tests verify that panics in the member expression evaluation path
-// include useful context (e.g., property names) rather than generic messages.
-
-// Helper: Create array literal expression
 fn make_array_expr(elems: Vec<Expr>) -> Expr {
   Expr::Array(ArrayLit {
     span: DUMMY_SP,
@@ -757,13 +692,12 @@ fn make_array_expr(elems: Vec<Expr>) -> Expr {
   })
 }
 
-// Helper: evaluate with SWC GLOBALS set (needed for the code-frame paths)
+// SWC GLOBALS is required for diagnostic code-frame paths.
 fn evaluate_expr_with_globals(expr: &Expr) -> (bool, bool) {
   let globals = Globals::default();
   GLOBALS.set(&globals, || evaluate_expr(expr))
 }
 
-// Helper: evaluate with SWC GLOBALS set, keeping the deopt reason
 fn evaluate_expr_reason_with_globals(expr: &Expr) -> (bool, Option<String>) {
   let globals = Globals::default();
 
@@ -776,12 +710,6 @@ fn evaluate_expr_reason_with_globals(expr: &Expr) -> (bool, Option<String>) {
   })
 }
 
-/// An unsupported method on an array literal refuses to fold rather than
-/// aborting the build, with the reference compiler's reason: `[1].unsupported()`
-/// reaches its terminal arm and is named as a `CallExpression` (babel-plugin
-/// `lib/index.js:6942`; the oracle run of the unchanged plugin answers exactly
-/// `Unsupported expression: CallExpression`). The language has no such method
-/// either (`node`: `TypeError: [1].unsupported is not a function`).
 #[test]
 fn test_unsupported_array_method_deopts_as_a_call_expression() {
   let array = make_array_expr(vec![create_number_expr(1.0)]);
@@ -802,10 +730,6 @@ fn test_unsupported_array_method_deopts_as_a_call_expression() {
   );
 }
 
-/// The same for a string literal receiver — the exact shape reported in
-/// [#1265](https://github.com/Dwlad90/stylex-swc-plugin/issues/1265). The
-/// reference compiler answers the same `CallExpression` reason (`:6942`, oracle
-/// run), and `node` throws `TypeError: "hello".unsupported is not a function`.
 #[test]
 fn test_unsupported_string_method_deopts_as_a_call_expression() {
   let string = create_string_expr("hello");
@@ -828,8 +752,6 @@ fn test_unsupported_string_method_deopts_as_a_call_expression() {
 
 #[test]
 fn test_supported_array_methods_no_panic() {
-  // Calling supported methods like .join() should not panic during evaluation.
-  // (.map() and .filter() need callback args, but .join() can work without)
   let array = make_array_expr(vec![create_number_expr(1.0), create_number_expr(2.0)]);
   let member = make_member_expr(array, "join");
   let call = make_call_expr(member, vec![create_string_expr(",")]);
@@ -844,14 +766,6 @@ fn test_supported_array_methods_no_panic() {
   );
 }
 
-// ==================== ERROR REASON OF AN OBJECT VALUE ====================
-// When an object expression holds a non-static value, the object refuses with
-// the value's own reason. The reference compiler's object arm passes the
-// value's reason through unchanged, with no key prefix (babel-plugin
-// `lib/index.js:6720-6724`), and this evaluator's `evaluate` has no
-// `stylex.create()` argument key-prefix layer either; the key is reported by
-// the code frame of the call that rejected the object.
-
 fn evaluate_expr_full(expr: &Expr) -> (bool, Option<String>) {
   let mut state_manager = StateManager::new(StyleXOptions::default());
   let fns = FunctionMap::default();
@@ -861,9 +775,6 @@ fn evaluate_expr_full(expr: &Expr) -> (bool, Option<String>) {
 
 #[test]
 fn test_object_eval_failure_reason_is_the_reason_of_its_value() {
-  // `({ color: someVar })` refuses as the unbound `someVar` refuses: the
-  // reference plugin answers exactly `Referenced constant is not defined.`
-  // (`lib/index.js:6635`, passed through at `:6720-6724`; oracle run).
   let obj = Expr::Object(ObjectLit {
     span: DUMMY_SP,
     props: vec![PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
@@ -886,9 +797,6 @@ fn test_object_eval_failure_reason_is_the_reason_of_its_value() {
 
 #[test]
 fn test_object_eval_failure_reason_is_the_reason_of_its_value_for_any_key() {
-  // The same for a camel-cased key: `({ backgroundColor: dynamicValue })`
-  // answers exactly `Referenced constant is not defined.` in the reference
-  // plugin (oracle run), with no key in the reason.
   let obj = Expr::Object(ObjectLit {
     span: DUMMY_SP,
     props: vec![PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {

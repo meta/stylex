@@ -17,8 +17,6 @@ pub(crate) fn evaluate_cached(
     normalized,
     Expr::Lit(Lit::Str(_) | Lit::Num(_) | Lit::Bool(_) | Lit::Null(_))
   ) {
-    // A primitive leaf consumes work, not another recursive AST level. Atom
-    // cloning retains exact WTF-8, including lone UTF-16 surrogates.
     let bytes = traversal_state.input_source_file.as_ref().map_or_else(
       || path.span().hi.0.saturating_sub(path.span().lo.0) as usize,
       |source| source.src.len(),
@@ -47,11 +45,6 @@ pub(crate) fn evaluate_cached(
 }
 
 /// A value one level of a fold can answer with, and what the memo keeps of it.
-///
-/// Everything the memo stores is an [`EvaluateResultValue`], because that is
-/// what the tree can hold. A caller whose own value carries more than that says
-/// here how it crosses in each direction -- and, by saying it, accepts that the
-/// extra does not survive a remembered answer.
 pub(crate) trait Memoized: Sized {
   /// A remembered answer, read back as this caller's own value.
   fn from_memo(remembered: EvaluateResultValue) -> Self;
@@ -64,8 +57,7 @@ pub(crate) trait Memoized: Sized {
   }
 }
 
-/// The evaluator's own value, which is what the memo holds, so both directions
-/// are the identity.
+/// Values that can cross the AST memo boundary.
 impl Memoized for EvaluateResultValue {
   fn from_memo(remembered: Self) -> Self {
     remembered
@@ -76,8 +68,7 @@ impl Memoized for EvaluateResultValue {
   }
 
   fn can_memoize(&self) -> bool {
-    // Fresh containers/closures must retain per-invocation identity. Their
-    // binding values are shared by the guarded operation ledger, not this memo.
+    // Fresh containers/closures must retain per-invocation identity.
     matches!(
       self,
       Self::Expr(Expr::Lit(_) | Expr::Ident(_)) | Self::Null | Self::ThemeRef(_)
@@ -86,20 +77,6 @@ impl Memoized for EvaluateResultValue {
 }
 
 /// One level of a fold, through the ceiling and through the memo.
-///
-/// [`evaluate_cached`] is this with the evaluator's own dispatch as the fold.
-/// The binary-expression node passes a fold of its own, because what it folds a
-/// `+` to carries a measurement no expression can hold — but the level it
-/// costs, the memo it reads and writes, and the refusal it records all have to
-/// stay one behaviour, and that is what lives here. A second copy of it would be
-/// a second answer to "how deep is this", which is the one question a memo
-/// keyed by structure alone cannot be asked twice.
-///
-/// [`Memoized`] is how a caller's value crosses into the memo and back. One
-/// carrying more than the tree can hold — a measured string — loses the extra on
-/// the way through and keeps it everywhere else, which is exactly the trade: the
-/// memo answers for a subtree written twice, and the measurement for a subtree
-/// grown once.
 pub(crate) fn folded_once<T: Memoized>(
   path: &Expr,
   state: &mut EvaluationState,
@@ -145,68 +122,22 @@ pub(crate) fn folded_once<T: Memoized>(
   }
 }
 
-/// The outer half of [`folded_once`]: `descend` costs a level of the evaluation
-/// ceiling, or `path` is refused because there are none left.
-///
-/// Split from the memo so the level is charged before the structural hash runs,
-/// which is where the comment below starts.
+/// Charge one evaluation level before a memo lookup or descent.
 fn descend_one_level<T>(
   path: &Expr,
   state: &mut EvaluationState,
   traversal_state: &mut StateManager,
   descend: impl FnOnce(&mut EvaluationState, &mut StateManager) -> Option<T>,
 ) -> Option<T> {
-  // Checked before the descent, which for the memo begins with a structural hash
-  // over the same subtree -- the frame that would overflow if the budget were
-  // checked after it.
-  //
-  // Returning here leaves *this* node out of `seen`, which is deliberate: the
-  // memo is keyed by a structural hash that says nothing about the depth the
-  // fold reached the node at, so recording "no" against the subtree that earned
-  // it would answer for the same subtree written shallowly.
-  //
-  // The ancestors have to be left out for the same reason, which is what
-  // `depth_refused` is for. Leaving them in was a bug: the entry a memo write
-  // makes is post-order -- after `_evaluate` returns, not before it recurses --
-  // so it is not the in-progress marker a cycle terminates on and nothing needs
-  // it to be there. What it did instead was answer for a shallow reading of any
-  // subtree the refusal happened inside, so a dynamic style deep enough to
-  // refuse decided whether the *next* namespace folded, and property order
-  // decided the emitted CSS.
-  //
-  // What the ceiling counts, given that, is the levels the fold *descends*, not
-  // the levels an expression is written with: a hit answers without descending,
-  // so a subtree already folded elsewhere costs one level rather than its own
-  // height, and an expression can fold beside a sibling that warmed its inner
-  // subtree where it would refuse alone. Charging a hit for the height it skips
-  // was built and measured: the height a subtree records is the deepest the fold
-  // went *anywhere* under it, which for the object of a member chain is the
-  // whole object literal rather than the one member a read plucks out of it, so
-  // the charge refused two of the member-chain boundaries this suite pins. Left
-  // as it is because the asymmetry only ever folds *more* -- upstream has no
-  // ceiling at all, so every case it decides differently is a case upstream
-  // folds too, and no working input becomes a build error.
-  //
-  // The ceiling is read off the per-file options rather than threaded down the
-  // recursion: every arm already carries the state manager, and a ceiling passed
-  // through the arms instead would be a parameter each of them ignores. Where the
-  // number comes from, and why the default is sized for hand-written styles
-  // rather than for the deepest foldable input, is
-  // `stylex_structures::evaluation_depth`.
   let ceiling = traversal_state.evaluation_ceiling();
 
   if traversal_state.evaluation_depth == 0 {
-    // A new top-level fold. Whatever the previous one refused, its unwind is
-    // over, so the frames of this one are free to record their own answers.
     traversal_state.depth_refused = false;
   }
 
   if traversal_state.evaluation_depth >= ceiling {
     traversal_state.depth_refused = true;
 
-    // `deopt` answers with the evaluator's own value type, and this helper
-    // answers with the caller's, so the refusal is recorded here and the `None`
-    // returned separately.
     deopt(path, state, &expression_too_deep(ceiling));
 
     return None;
@@ -221,8 +152,6 @@ fn descend_one_level<T>(
   result
 }
 
-// Only a literal string's repeat with inert literal arguments is proven pure
-// before evaluation. Alias receivers, getters and argument calls stay live.
 fn inert_literal_repeat(call: &CallExpr) -> bool {
   let Callee::Expr(callee) = &call.callee else {
     return false;
@@ -260,15 +189,11 @@ fn memoized_fold<T: Memoized>(
   traversal_state: &mut StateManager,
   fold: impl FnOnce(&mut EvaluationState, &mut StateManager) -> Option<T>,
 ) -> Option<T> {
-  // Only static module inventories are memo contexts. Call-time parameters,
-  // overlays and externally supplied mapper bindings must run for every call.
-  // Their closure addresses neither describe the bound value nor distinguish
-  // contexts under a lossy aggregate fingerprint.
+  // Call-time parameters, overlays and externally supplied mapper bindings must run for every call.
   if !state.functions.is_static_memo_context() {
     return fold(state, traversal_state);
   }
-  // Calls/gets run live; identifiers reach the guarded operation binding ledger.
-  // Fresh literal/local allocations cannot become one instance across frames.
+
   let normalized = normalize_expr(path);
   if matches!(normalized, Expr::Call(call) if !inert_literal_repeat(call))
     || matches!(
@@ -283,9 +208,7 @@ fn memoized_fold<T: Memoized>(
   {
     return fold(state, traversal_state);
   }
-  // Retained immutable initializer roots use exact owned identity. Rebuilt
-  // expressions keep the structural fallback; no transient AST address is a
-  // memo key. Position, call-time context and limits remain distinct inputs.
+  // Retained immutable initializer roots use exact owned identity.
   use stylex_state::seen_value::{MemoContext, MemoExpressionKey};
   if super::member_observer::active()
     && super::member_observer::needs_events(path, stable_hash_unspanned(path))
@@ -325,8 +248,7 @@ fn memoized_fold<T: Memoized>(
           .as_deref()
           .is_some_and(|recorded| recorded.eq_ignore_span(path))
       {
-        // The hash selects a bucket, never a semantic answer. An actual hash
-        // collision is a conservative live fold, including for refusal entries.
+        // The hash selects a bucket, never a semantic answer.
         return fold(state, traversal_state);
       }
 
@@ -344,26 +266,7 @@ fn memoized_fold<T: Memoized>(
       let model_before = stylex_js::native::model_refusal_epoch();
       let val = fold(state, traversal_state);
 
-      // A fold that filed a nested rule is not remembered. The memo answers a
-      // second identical expression without folding it, so an entry here would
-      // give the next `keyframes({ … })` of the module its name and none of the
-      // rule behind it, and the producer holding that call would carry nothing.
-      // The reference has no memo and folds every rule call, which is what this
-      // keeps. Every ancestor of the call is skipped for the same reason, and
-      // by the same comparison.
-      //
-      // The refusal record below is skipped as well, and deliberately: a fold
-      // that filed a rule and then refused has to run again too, or the rule
-      // the second holder needs is never filed. The cost is that such a subtree
-      // is walked once more, which is what the reference pays every time.
-      //
-      // What this costs, measured: a module writing the same `keyframes({ … })`
-      // literal inline N times now costs what N different ones cost -- 8.08 ms
-      // against 11.24 ms at N = 64, both straight lines from N = 1. It cannot
-      // become quadratic. The skip reaches the call and its ancestors within one
-      // fold, and the depth those ancestors can reach is the evaluation ceiling,
-      // 32 by default. A name bound once and read many times is untouched: the
-      // binding folds once and each use reads the stored value.
+      // The refusal record below is skipped as well, and deliberately: a fold that filed a rule and then refused has to run again too, or the rule the second holder needs is never filed.
       if traversal_state.evaluation_input_revision() != input_revision
         || stylex_js::native::memo_host_revision() != host_revision
         || traversal_state.nested_rules_filed() != filings_before
@@ -376,8 +279,7 @@ fn memoized_fold<T: Memoized>(
 
       if state.confident && val.as_ref().is_none_or(Memoized::can_memoize) {
         traversal_state.keep_evaluation_functions(Rc::clone(&state.functions));
-        // Only primitive/shareable values reach this copy; allocating AST
-        // containers and callbacks are never cloned into the module memo.
+        // Only primitive/shareable values reach this copy; allocating AST containers and callbacks are never cloned into the module memo.
         traversal_state.seen.entry(key).or_insert_with(|| {
           Rc::new(SeenValue {
             expression: matches!(expression, MemoExpressionKey::SubtreeHash(_))
@@ -388,10 +290,7 @@ fn memoized_fold<T: Memoized>(
         });
       } else if !state.confident && traversal_state.owns_its_refusals() {
         traversal_state.keep_evaluation_functions(Rc::clone(&state.functions));
-        // Recorded so the same refusal is not re-walked, but only where the
-        // refusal was about the subtree itself -- which is the one question
-        // `owns_its_refusals` answers, and where the reasons it can answer `false`
-        // are written down.
+
         traversal_state.seen.entry(key).or_insert_with(|| {
           Rc::new(SeenValue {
             expression: matches!(expression, MemoExpressionKey::SubtreeHash(_))

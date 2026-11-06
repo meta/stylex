@@ -20,7 +20,6 @@ fn deserializes_json_null_as_null() {
   assert_eq!(value, EvaluateResultValue::Null);
 }
 
-/// Every key shape a property name can take, and the shapes that name none.
 mod string_key {
   use swc_core::{
     common::DUMMY_SP,
@@ -35,7 +34,6 @@ mod string_key {
     EvaluateResultValue::Expr(expr).as_string_key()
   }
 
-  /// A bare name reads as itself: `{ color: red }` names the key `color`.
   #[test]
   fn an_identifier_names_itself() {
     assert_eq!(
@@ -44,8 +42,6 @@ mod string_key {
     );
   }
 
-  /// A quoted key reads as its text, including the spellings no identifier can
-  /// take -- a custom property, a media query, an empty string.
   #[test]
   fn a_string_names_its_text() {
     for text in ["color", "--custom-prop", "@media (min-width: 320px)", ""] {
@@ -61,8 +57,6 @@ mod string_key {
     }
   }
 
-  /// A bigint key is spelled without the `n` the source carries, which is how
-  /// the language spells it.
   #[test]
   fn a_bigint_names_its_digits() {
     assert_eq!(
@@ -76,13 +70,6 @@ mod string_key {
     );
   }
 
-  /// Every value the language spells names a key, because a property key is
-  /// `String(key)` -- `null` names the property `null`, and an object names its
-  /// default text.
-  ///
-  /// A table of the kinds a key may be written as answered for a string and a
-  /// number only, so a key written as anything else was written nowhere and
-  /// found nowhere.
   #[test]
   fn every_value_the_language_spells_names_a_key() {
     assert_eq!(
@@ -99,8 +86,6 @@ mod string_key {
     );
   }
 
-  /// A value that is not an expression at all names no key either: the outer
-  /// match declines before the key shapes are read.
   #[test]
   fn a_non_expression_value_names_no_key() {
     assert_eq!(EvaluateResultValue::Null.as_string_key(), None);
@@ -108,7 +93,6 @@ mod string_key {
   }
 }
 
-/// The four accessors that read one variant out of an evaluated value.
 mod accessors {
   use indexmap::IndexMap;
   use swc_core::ecma::ast::{Expr, KeyValueProp};
@@ -118,8 +102,6 @@ mod accessors {
   use crate::tests::prelude::string_expr;
   use crate::{evaluate_result_value::EvaluateResultValue, theme_ref::ThemeRef};
 
-  /// One value of every variant an accessor is asked about, so a case that must
-  /// name the variants it does not read has a list to take them from.
   fn every_readable_variant() -> Vec<EvaluateResultValue> {
     let mut map: IndexMap<Expr, Vec<KeyValueProp>> = IndexMap::new();
 
@@ -166,8 +148,6 @@ mod accessors {
     assert_eq!(count_answering(|value| value.as_vec().is_some()), 1);
   }
 
-  /// An empty list is a list. A `create` call whose namespace holds no rule
-  /// evaluates to one, and reading it as absent would lose the namespace.
   #[test]
   fn an_empty_list_is_still_a_list() {
     assert_eq!(EvaluateResultValue::Vec(vec![]).as_vec(), Some(&Vec::new()));
@@ -185,8 +165,6 @@ mod accessors {
   fn a_theme_reference_answers_itself_and_nothing_else_does() {
     let value = EvaluateResultValue::ThemeRef(ThemeRef::new("vars.stylex.js", "vars", "x"));
 
-    // The identity is pinned as text rather than re-read off `theme_ref`, so
-    // an accessor that answered the wrong reference still fails here.
     assert_eq!(
       value.as_theme_ref().map(ThemeRef::base_id),
       Some("vars.stylex.js//vars")
@@ -195,11 +173,6 @@ mod accessors {
   }
 }
 
-/// What `stylex-css` reads off the second argument of a `when` call.
-///
-/// The marker can arrive as a literal class name, as a proxy standing in for a
-/// marker another file defined, or as the compiled object a `defineMarker` call
-/// left behind. Each accessor answers for one of those and declines the rest.
 mod when_marker {
   use std::rc::Rc;
 
@@ -231,8 +204,6 @@ mod when_marker {
     EvaluateResultValue::Expr(Expr::Object(create_object_lit(props)))
   }
 
-  /// The object a compiled marker is: the compiled flag that says this compiler
-  /// wrote the object, and the marker's own class name.
   fn compiled_marker() -> Vec<PropOrSpread> {
     vec![
       create_str_key_value_prop("$$css", create_bool_expr(true)),
@@ -257,9 +228,7 @@ mod when_marker {
     let value = EvaluateResultValue::ThemeRef(theme_ref.clone());
 
     assert!(value.is_proxy());
-    // The group's own name, spelled out rather than re-derived: comparing
-    // against `theme_ref.to_string_value()` would pass on any two wrong halves
-    // that agree.
+
     assert_eq!(value.as_proxy_string(), Some("x3hqbbp".to_string()));
     assert_eq!(value.as_proxy_string(), Some(theme_ref.to_string_value()));
   }
@@ -284,9 +253,6 @@ mod when_marker {
     );
   }
 
-  /// The compiled flag can be written before or after the class name, and the
-  /// answer is the class name either way: the search for the flag and the search
-  /// for the name are separate walks.
   #[test]
   fn the_compiled_flag_may_be_written_after_the_class_name() {
     let mut props = compiled_marker();
@@ -295,8 +261,6 @@ mod when_marker {
     assert_eq!(object_value(props).first_css_key(), Some("x1marker"));
   }
 
-  /// An object this compiler did not write carries no compiled flag, so it names
-  /// no marker even though it has keys that look like one.
   #[test]
   fn an_object_without_the_compiled_flag_names_no_marker() {
     assert_eq!(
@@ -309,8 +273,6 @@ mod when_marker {
     );
   }
 
-  /// The flag must be `true`. A `$$css` written as anything else -- `false`, or
-  /// the text `"true"` -- is not the flag.
   #[test]
   fn a_compiled_flag_that_is_not_true_names_no_marker() {
     for flag in [
@@ -332,8 +294,6 @@ mod when_marker {
     }
   }
 
-  /// An object carrying the flag and nothing else names no marker: there is no
-  /// key left after the flag for the class name to be.
   #[test]
   fn an_object_holding_only_the_compiled_flag_names_no_marker() {
     assert_eq!(
@@ -346,14 +306,11 @@ mod when_marker {
     );
   }
 
-  /// An empty object names no marker, which is the same walk finding no flag.
   #[test]
   fn an_empty_object_names_no_marker() {
     assert_eq!(object_value(vec![]).first_css_key(), None);
   }
 
-  /// A key written as a bare name reads the same as a quoted one, because both
-  /// are what `Object.keys` walks.
   #[test]
   fn a_marker_key_written_as_a_bare_name_reads_the_same() {
     assert_eq!(
@@ -366,9 +323,6 @@ mod when_marker {
     );
   }
 
-  /// Property shapes a compiled marker never carries are stepped over rather
-  /// than read: a spread, a shorthand, and a computed key are each skipped, so
-  /// the class name is still the first plain key that is not the flag.
   #[test]
   fn shapes_a_compiled_object_never_carries_are_stepped_over() {
     let props = vec![
@@ -391,15 +345,12 @@ mod when_marker {
     assert_eq!(object_value(props).first_css_key(), Some("x1marker"));
   }
 
-  /// A value that is not an object names no marker at all.
   #[test]
   fn a_value_that_is_not_an_object_names_no_marker() {
     assert_eq!(EvaluateResultValue::Null.first_css_key(), None);
     assert_eq!(string_value("x1marker").first_css_key(), None);
   }
 
-  /// The class-name prefix is a property of the options and never of a marker,
-  /// so an evaluated value answers none whatever it holds.
   #[test]
   fn an_evaluated_value_never_carries_a_class_name_prefix() {
     for value in [
@@ -412,8 +363,6 @@ mod when_marker {
     }
   }
 
-  /// An env object is an evaluated value like any other and answers no marker
-  /// question, so a `when` call handed one refuses rather than reading into it.
   #[test]
   fn an_env_object_answers_no_marker_question() {
     let value = EvaluateResultValue::EnvObject(Rc::new(IndexMap::new()));

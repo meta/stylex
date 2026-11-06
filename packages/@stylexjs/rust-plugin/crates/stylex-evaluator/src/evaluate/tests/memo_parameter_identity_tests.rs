@@ -23,8 +23,7 @@ fn map(a: &FunctionConfigType, b: &FunctionConfigType) -> FunctionMap {
 }
 #[test]
 fn memo_distinct_retained_parameter_contexts_do_not_reuse_a_wrong_value() {
-  // Keep every allocation alive. This exercises the lossy aggregate directly,
-  // not ABA or a probabilistic stress test of address recycling.
+  // Keep allocations alive to isolate aggregate identity collisions from address recycling.
   let parameters: Vec<_> = (0..32).map(|n| parameter(n as f64)).collect();
   let mut collision = None;
   for a in 0..parameters.len() {

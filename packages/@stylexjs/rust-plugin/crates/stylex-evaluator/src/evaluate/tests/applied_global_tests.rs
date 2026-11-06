@@ -1,23 +1,8 @@
-//! `String`, `Number`, `Array` and `Object` applied as functions.
-//!
-//! The four are native JavaScript functions, so they fold by being called
-//! rather than by a conversion written out in Rust. What is left to test is
-//! therefore the same thing every other fold tests: the guard in front of the
-//! engine — which names it recognises as the global rather than as a binding,
-//! which arguments cross the bridge, and which shapes it refuses and with what
-//! sentence.
-//!
-//! The conversions themselves are the language's, and the second half of this
-//! file is what keeps the *other* implementation of them honest: the operators,
-//! template literals and unary forms still coerce in Rust, and a differential
-//! pass asserts the two agree over the input matrix beside them.
+//! Tests applied global conversions, composition and allocation limits.
 
 use super::source_evaluation::*;
 use super::*;
 
-// ==================== the conversions, through the engine ====================
-
-/// The string conversion, on the values the existing suite pins.
 #[test]
 fn the_string_conversion_folds() {
   assert_folds_to_string("String(\"#fff\")", "#fff");
@@ -27,19 +12,13 @@ fn the_string_conversion_folds() {
   assert_folds_to_string("String(undefined)", "undefined");
   assert_folds_to_string("String(NaN)", "NaN");
   assert_folds_to_string("String(Infinity)", "Infinity");
-  // The JavaScript spelling, not Rust's float formatting.
   assert_folds_to_string("String(1e21)", "1e+21");
   assert_folds_to_string("String(0.0000001)", "1e-7");
   assert_folds_to_string("String(-0)", "0");
-  // No argument at all is the empty string, not `String(undefined)`.
   assert_folds_to_string("String()", "");
-  // Surplus arguments are ignored.
   assert_folds_to_string("String(\"a\", \"b\")", "a");
 }
 
-/// The number conversion, whose whole difficulty is that the numeric-literal
-/// grammar is not Rust's float parsing: `0x1f` is `31`, whitespace is part of no
-/// literal, and `inf` and `nan` are spellings JavaScript rejects.
 #[test]
 fn the_number_conversion_folds() {
   assert_folds_to_number("Number(\"10\")", 10.0);
@@ -51,12 +30,9 @@ fn the_number_conversion_folds() {
   assert_folds_to_number("Number(\"\")", 0.0);
   assert_folds_to_number("Number(null)", 0.0);
   assert_folds_to_number("Number(true)", 1.0);
-  // No argument is zero, where `Number(undefined)` is `NaN`.
   assert_folds_to_number("Number()", 0.0);
 }
 
-/// `NaN` is a value the language answers with, not a refusal: it reaches the
-/// declaration exactly as it does upstream.
 #[test]
 fn a_number_conversion_that_answers_not_a_number_folds() {
   for source in [
@@ -73,8 +49,6 @@ fn a_number_conversion_that_answers_not_a_number_folds() {
           "expected `{}` to fold to NaN",
           source
         );
-        // Spelled, because `NaN` has no numeric literal and the emitter would
-        // otherwise write `0 / 0`.
         assert_eq!(number.raw.as_deref(), Some("NaN"), "wrong spelling");
       },
       other => panic!("expected `{}` to fold to a number, got {:?}", source, other),
@@ -82,29 +56,20 @@ fn a_number_conversion_that_answers_not_a_number_folds() {
   }
 }
 
-/// An array conversion answers the evaluator's own list, so it is as usable as
-/// an array the author wrote.
 #[test]
 fn the_array_conversion_folds() {
   assert_folds_to_strings("Array(\"red\", \"blue\")", &["red", "blue"]);
-  // A lone number is a length, where a lone string is an element.
   assert_folds_to_strings("Array(\"3\")", &["3"]);
   assert_folds_to_strings("Array()", &[]);
   assert_folds_to_strings("Array(0)", &[]);
-  // The holes join as nothing, which is the one shape a counted array folds to
-  // that a declaration can use.
   assert_folds_to_string("Array(3).join(\",\")", ",,");
 }
 
-/// A counted array's holes cross back as `undefined` — the one value with no
-/// literal spelling of its own — so the array itself folds and the style-array
-/// check is what refuses it.
 #[test]
 fn a_counted_array_folds_to_holes() {
   let items = folds_to_a_list("Array(2)");
   assert_eq!(items.len(), 2);
-  // The shared test reader performs Get/iteration: holes read as undefined.
-  // Sparse materialization itself is pinned separately, without filling slots.
+  // The shared reader performs Get: holes read as undefined without changing sparse materialization.
   for item in &items {
     match item {
       EvaluateResultValue::Expr(Expr::Ident(ident)) => assert_eq!(&*ident.sym, "undefined"),
@@ -113,8 +78,6 @@ fn a_counted_array_folds_to_holes() {
   }
 }
 
-/// The object conversion: nullish arguments take a fresh empty object, and an
-/// object argument is handed back.
 #[test]
 fn the_object_conversion_folds() {
   assert_folds_to_object_keys("Object(null)", &[]);
@@ -122,11 +85,9 @@ fn the_object_conversion_folds() {
   assert_folds_to_object_keys("Object()", &[]);
   assert_folds_to_object_keys("Object({ a: 1, b: 2 })", &["a", "b"]);
   assert_folds_to_strings("Object([\"a\", \"b\"])", &["a", "b"]);
-  // Surplus arguments are ignored here too.
   assert_folds_to_object_keys("Object({ a: 1 }, { b: 2 })", &["a"]);
 }
 
-/// The four compose, and a conversion's answer is a value like any other.
 #[test]
 fn the_conversions_compose() {
   assert_folds_to_string("String(String(1))", "1");
@@ -140,42 +101,20 @@ fn the_conversions_compose() {
   assert_folds_to_string("Array(\"a\", \"b\").join(\"-\")", "a-b");
 }
 
-/// An applied global and a static compose in either order.
-///
-/// One expression, two names — the receiver `Math`, and the callee `Number` of
-/// an argument. The fold guard answers each by its own name, so neither needs a
-/// value the surrounding environment supplies.
 #[test]
 fn an_applied_global_and_a_static_compose_in_either_order() {
   assert_folds_to_number("Math.max(Number(1), Number(2))", 2.0);
-  // A hexadecimal string is the conversion's own grammar, so `31` shows the
-  // argument folded before the static read it.
   assert_folds_to_number("Math.max(Number(\"0x1f\"), 2)", 31.0);
-  // The other order: the static's answer as the argument.
   assert_folds_to_number("Number(Math.max(1, 2))", 2.0);
 }
 
-// ==================== what the guard refuses ====================
-
-/// A global that only contributes methods is not a function, and the refusal
-/// says so rather than passing on the engine's `not a callable function` — which
-/// names neither the global nor the mistake.
 #[test]
 fn a_global_that_is_not_a_function_names_itself() {
   assert_deopt_reason_contains("Math(1)", "Math is not a function.");
   assert_deopt_reason_contains("Math()", "Math is not a function.");
-  // Its methods keep folding, which is why the name is a valid callee at all.
   assert_folds_to_number("Math.pow(2, 3)", 8.0);
 }
 
-/// A value the bridge cannot carry is handed back rather than refused, and what
-/// an author reads is the argument's own reason.
-///
-/// The conversion behind the fold evaluates the argument like any other
-/// expression, so a shape the evaluator has never folded is named for what it is
-/// and a name that resolves to nothing is named for that. Both sentences are the
-/// reference compiler's own, measured: naming the callee instead said which
-/// conversion was written and nothing about why it could not be done.
 #[test]
 fn an_argument_the_bridge_cannot_carry_reads_its_own_reason() {
   assert_deopt_reason_contains("String(/re/)", "Unsupported expression: RegExpLiteral");
@@ -186,16 +125,7 @@ fn an_argument_the_bridge_cannot_carry_reads_its_own_reason() {
   );
 }
 
-/// A spread of an array the evaluator folded contributes that array's own
-/// elements, which is what the language does with an argument list (approved
-/// native extension: JavaScript-correct spread). `node` answers `"a"` and
-/// `[1, 2]`; the reference implementation refuses every spread
-/// (`Unsupported expression: SpreadElement`, `lib/index.js:6670-6684`), which
-/// is the one place this compiler deliberately answers more.
-///
-/// The guards beside it stay: a spread of something that is not iterable is a
-/// `TypeError` in the language, and a spread of a name nothing binds has no
-/// elements to contribute, so both refuse.
+/// Bounded argument spread is a JS-correct extension; Babel refuses `SpreadElement`.
 #[test]
 fn a_spread_argument_contributes_the_elements_it_spreads() {
   assert_folds_to_string("String(...[\"a\"])", "a");
@@ -206,16 +136,6 @@ fn a_spread_argument_contributes_the_elements_it_spreads() {
   assert_deopts("String(...unknownThing)");
 }
 
-/// A function's only string form is its source text, and the engine the fold
-/// runs in is built without one — so every conversion that would read one
-/// refuses, and a function that is merely *called* is untouched.
-///
-/// The refusal is the contract and is kept; its sentence was the optional
-/// engine's. `node` answers the arrow's source text (and `NaN` for `Number`),
-/// and the reference implementation answers the source of its own internal
-/// wrapper closure (`lib/index.js:6440-6457`; and `NaN`; executed), none of
-/// which is a value this compiler derives from a function -- so this asserts
-/// the refusal without pinning either compiler's wording.
 #[test]
 fn a_function_has_no_source_text() {
   for source in [
@@ -227,23 +147,12 @@ fn a_function_has_no_source_text() {
     assert_deopts(source);
   }
 
-  // Called rather than spelled, which is what an own conversion method is.
   assert_folds_to_string("String({ toString: () => \"red\" })", "red");
   assert_folds_to_number("Number({ valueOf: () => 5 })", 5.0);
-  // A string prefers `toString` and a number `valueOf`, which is the whole of
-  // the difference between the two conversions.
   assert_folds_to_number("Number({ toString: () => \"1\", valueOf: () => 2 })", 2.0);
-  // An own key that is neither leaves the `Object.prototype` default standing.
   assert_folds_to_string("String({ a: () => 1 })", "[object Object]");
 }
 
-/// A count the language refuses is a `RangeError`, and a count the fold will not
-/// materialise is the fold's own bound. Two different faults, two sentences.
-///
-/// Which fault a count is decides which sentence it gets, so the fold's bound
-/// deliberately reads none of the counts above it: each is a number the language
-/// rejects before allocating anything, and a ceiling in front of that would
-/// replace an accurate sentence with a misleading one.
 #[test]
 fn a_count_that_is_not_an_array_length_refuses() {
   for source in [
@@ -256,22 +165,12 @@ fn a_count_that_is_not_an_array_length_refuses() {
     assert_deopt_reason_contains(source, "Cannot fold 'Array' at compile time.");
   }
 
-  // A length the language accepts and the fold will not build, which is the
-  // ceiling's own fault to report — and it reports it from in front of the
-  // engine, naming the length that has to change.
   assert_deopt_reason_contains(
     "Array(4294967295)",
     "It declares a length of 4294967295 elements, and at most 10000 are supported.",
   );
 }
 
-/// A conversion the language itself refuses is reported in the language's own
-/// words, which say more than any sentence this compiler could substitute.
-///
-/// The words are `node`'s: both rows throw `TypeError: Cannot convert object to
-/// primitive value`, and the reference implementation throws the same
-/// `TypeError` out of its `String` call (executed). The lower-case spelling was
-/// the optional engine's.
 #[test]
 fn an_object_with_no_primitive_refuses_in_the_languages_words() {
   for source in [
@@ -282,13 +181,6 @@ fn an_object_with_no_primitive_refuses_in_the_languages_words() {
   }
 }
 
-/// A primitive boxed by `Object(x)` is not a plain object, so it is not a value
-/// a style can carry, and the fold refuses it.
-///
-/// The refusal is kept; its sentence was the optional engine's bridge. `node`
-/// and the reference implementation both build the boxed `String`/`Number`/
-/// `Boolean` object (executed), a value the style validators downstream reject,
-/// so neither has a refusal sentence to pin here.
 #[test]
 fn a_boxed_primitive_cannot_cross_back() {
   for source in [
@@ -300,32 +192,9 @@ fn a_boxed_primitive_cannot_cross_back() {
     assert_deopts(source);
   }
 
-  // A function is already an object, so `Object` hands the same function back:
-  // `node` and the reference implementation both answer `"function"` for its
-  // `typeof` (executed). The native path carries the function, so this folds;
-  // the engine's "cannot carry a folded function back" refusal is gone with the
-  // engine.
   assert_folds_to_string("typeof Object(() => 1)", "function");
 }
 
-// ==================== the two conversions, checked against each other ========
-//
-// The matrix lives here rather than beside the predicates in `stylex-js`, which
-// is where the coercions' own tests are: that crate does not depend on the
-// engine and must not, so the only place the two can be compared is a crate that
-// holds both. A value added to the coercions' matrix has to be added here too.
-
-/// Every value both conversions can read, in the one place the two
-/// implementations can be compared.
-///
-/// The applied globals coerce in the engine and the operators, template
-/// literals and unary forms coerce in Rust, so the workspace holds two
-/// implementations of `ToString` and `ToNumber` used in disjoint positions.
-/// Nothing stops them drifting except this.
-/// Values rather than expressions: `-0` is a negation and `1 + 1` an addition,
-/// and the hand-written conversions are handed an operand the evaluator has
-/// already folded. Feeding one syntax the evaluator would have reduced first
-/// would report the reduction as a disagreement.
 const AGREEING_VALUES: [&str; 29] = [
   "\"\"",
   "\"red\"",
@@ -358,11 +227,6 @@ const AGREEING_VALUES: [&str; 29] = [
   "{ toString: () => \"red\" }",
 ];
 
-/// The hand-written `ToString` agrees with the engine's, value for value.
-///
-/// Read through the coercion the operators reach for rather than through an
-/// operator, so a disagreement is reported as the conversion's rather than as
-/// one operator's.
 #[test]
 fn the_hand_written_string_conversion_agrees_with_the_engine() {
   for value in AGREEING_VALUES {
@@ -378,7 +242,6 @@ fn the_hand_written_string_conversion_agrees_with_the_engine() {
   }
 }
 
-/// And the hand-written `ToNumber`, over the same matrix.
 #[test]
 fn the_hand_written_number_conversion_agrees_with_the_engine() {
   for value in AGREEING_VALUES {
@@ -405,14 +268,6 @@ fn the_hand_written_number_conversion_agrees_with_the_engine() {
   }
 }
 
-/// The one value the two do *not* agree about, stated rather than left to be
-/// discovered.
-///
-/// A function's `ToNumber` is reached through its source text, and needs only
-/// that the text is not a numeric literal — so the hand-written conversion
-/// answers `NaN` and the operators keep folding `+fn`. The engine has no source
-/// text to read at all, so a call refuses. The divergence is in the safe
-/// direction: a refused build never names a class another build does not define.
 #[test]
 fn the_two_conversions_part_company_only_on_a_function() {
   let function = parse_expr("() => 1");
@@ -423,24 +278,10 @@ fn the_two_conversions_part_company_only_on_a_function() {
     "the hand-written number conversion must still answer NaN for a function"
   );
 
-  // Refused, as `a_function_has_no_source_text` says; the sentence was the
-  // optional engine's and neither the reference implementation nor `node` has
-  // one to pin (both fold a source text, and `NaN` for `Number`).
   assert_deopts("String(() => 1)");
   assert_deopts("Number(() => 1)");
 }
 
-// ==================== the extremes ====================
-
-/// A count the fold will materialise, right up to the bound and one past it.
-///
-/// The bound is read where the length is *declared*, so one past it refuses
-/// wherever the array is written — including where only a string would have
-/// crossed back. The entry ceiling used to be read on the way out alone, which
-/// left the elements inside the engine unmeasured: `Array(100000000).join(',')`
-/// spent twenty seconds building an array nothing had bounded before a string
-/// ceiling caught the text it came to. A project that really generates arrays
-/// this long raises `maxFoldedEntries`, which is why the number is an option.
 #[test]
 fn a_count_at_the_bound_folds_and_one_past_it_refuses() {
   assert_eq!(folds_to_a_list("Array(10000)").len(), 10_000);
@@ -453,8 +294,6 @@ fn a_count_at_the_bound_folds_and_one_past_it_refuses() {
   }
 }
 
-/// A string a conversion is asked to build past the amplification bound refuses
-/// before the engine allocates it, whichever conversion asks.
 #[test]
 fn an_amplified_string_past_the_bound_refuses() {
   assert_deopt_reason_contains(
@@ -467,24 +306,17 @@ fn an_amplified_string_past_the_bound_refuses() {
   );
 }
 
-/// Nesting is the fold's own ceiling, not the evaluator's, so a conversion
-/// nested past it names the ceiling rather than aborting the process.
 #[test]
 fn a_conversion_nested_past_the_ceiling_refuses() {
   let deep = (0..40).fold("1".to_string(), |inner, _| format!("String({})", inner));
 
   assert_deopt_reason_contains(&deep, "Expression is too deeply nested");
 
-  // And a nesting the ceiling admits still folds, so the refusal above is the
-  // bound rather than the shape.
   let shallow = (0..8).fold("1".to_string(), |inner, _| format!("String({})", inner));
 
   assert_folds_to_string(&shallow, "1");
 }
 
-/// An empty argument list, an argument that is itself empty, and the values the
-/// grammar has no literal for — the shapes a conversion is most likely to be
-/// written with by accident.
 #[test]
 fn the_empty_and_unspellable_arguments_fold() {
   assert_folds_to_string("String([])", "");
@@ -492,39 +324,16 @@ fn the_empty_and_unspellable_arguments_fold() {
   assert_folds_to_number("Number([])", 0.0);
   assert_folds_to_string("String([[], []])", ",");
   assert_folds_to_string("String([null, undefined])", ",");
-  // A nested empty array joins as nothing at every level.
   assert_folds_to_string("String([[[]]])", "");
 }
 
-/// A conversion inside a callback runs once per element and still folds, which
-/// is the one position where the guard's scope and the transport meet.
 #[test]
 fn a_conversion_inside_a_callback_folds() {
   assert_folds_to_string("[1, 2].map(x => String(x)).join(\"-\")", "1-2");
   assert_folds_to_string("[\"0x1f\", \"2\"].map(x => Number(x)).join(\"-\")", "31-2");
-  // Elements written out, which is not a length: `Array` folds inside a callback
-  // wherever the guard can see the call declares no length.
   assert_folds_to_string("[1, 2].map(x => Array(x, x).length).join(\"-\")", "2-2");
 }
 
-/// `Array` applied to one argument is the exception, and the argument is why.
-///
-/// A single argument is the length position, so inside a callback the guard has to
-/// see what it holds — and a parameter is the one thing it cannot resolve. It
-/// refuses rather than admitting, because the element the parameter holds is a
-/// number the receiver carried and nothing bounded: `[100000000].map(x =>
-/// Array(x).fill(0))` is thirty-four seconds per element, and
-/// `[{length: 100000000}].map(x => Array.from(x).length)` folded in sixty-eight.
-///
-/// `Array([1])` really is one element, so this costs a fold. What it buys is that
-/// no shape of it costs a build, and `[x, x]` above is the spelling that folds.
-///
-/// The static pre-measurement that refused these ran ahead of the optional
-/// engine; the native path bounds what a callback builds at run time instead,
-/// so the two small rows fold to what `node` and the reference implementation
-/// answer (`"1-1"` and `"ab-cd"`; executed). The two rows that motivated the
-/// guard must still refuse, now under the runtime bound -- they are kept beside
-/// this case as the guard's own.
 #[test]
 fn a_length_inside_a_callback_folds_under_the_runtime_bound() {
   assert_folds_to_string("[[1], [2]].map(x => Array(x).length).join(\"-\")", "1-1");
@@ -534,10 +343,6 @@ fn a_length_inside_a_callback_folds_under_the_runtime_bound() {
   );
 }
 
-/// The two rows that motivated the engine's static guard still refuse, now
-/// under the runtime bound. Neither has an oracle: `node` and the reference
-/// implementation both build the hundred-million-element array (the oracle run
-/// exhausts a 512 MB heap), which is exactly what the bound exists to stop.
 #[test]
 fn a_length_inside_a_callback_past_the_runtime_bound_refuses() {
   for source in [
@@ -548,9 +353,6 @@ fn a_length_inside_a_callback_past_the_runtime_bound_refuses() {
   }
 }
 
-/// A property read that leaves the value the author wrote is refused wherever it
-/// sits, an argument to a conversion included — the engine is shared by every
-/// later fold in the build, so a route onto its function graph is not a fold.
 #[test]
 fn an_escaping_read_inside_a_conversion_refuses() {
   assert_deopt_reason_contains("String(\"\".constructor)", "constructor");

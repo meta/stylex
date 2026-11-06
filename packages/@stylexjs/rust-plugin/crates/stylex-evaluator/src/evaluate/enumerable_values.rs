@@ -1,8 +1,7 @@
 use super::*;
 use stylex_structures::stylex_env::{HostError, HostResult, HostValue};
-/// Shallow enumerable own values. This preserves typed callables instead of
-/// printing/re-evaluating their source, and performs real host Gets only for
-/// a spread/entries operation (never for a keys-only inspection).
+/// Shallow enumerable own values.
+/// This preserves typed callables instead of printing/re-evaluating their source, and performs real host Gets only for a spread/entries operation (never for a keys-only inspection).
 pub(super) fn enumerable_values(
   value: &EvaluateResultValue,
   state: &StateManager,

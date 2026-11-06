@@ -1,10 +1,4 @@
-//! Why a resolved binding held nothing to fold.
-//!
-//! Three inputs and three refusals, and the difference between them is the
-//! whole of what the reader does: which message the author is shown, and which
-//! line the code frame names. Asserted here rather than through a transform,
-//! because a whole-transform case shows the message and hides which node the
-//! refusal was recorded against.
+//! Tests declaration refusals and the binding recorded for diagnostic frames.
 
 use swc_core::{atoms::Atom, ecma::ast::Expr};
 
@@ -18,15 +12,12 @@ use crate::{
   tests::scaffolding::parse_expr,
 };
 
-/// One refusal, with the pieces a caller reads back off it.
 struct Refusal {
   reason: Option<String>,
   deopt_path: Option<Expr>,
   framed: Option<Atom>,
 }
 
-/// Refuses the reference `name`, bound as `declared_as` says, and hands back
-/// what the refusal recorded.
 fn refuse(name: &str, declared_as: Option<DeclarationType>) -> Refusal {
   let path = parse_expr(name);
   let ident = match &path {
@@ -43,7 +34,6 @@ fn refuse(name: &str, declared_as: Option<DeclarationType>) -> Refusal {
   let answer =
     check_ident_declaration(&ident, declared_as, &mut state, &mut traversal_state, &path);
 
-  // A refusal is never a value, whichever arm raised it.
   assert!(answer.is_none());
   assert!(!state.confident);
 
@@ -74,8 +64,6 @@ fn refuses_a_function_declaration_by_name() {
   );
 }
 
-/// A name that resolved to itself has no declaration left to name, so this arm
-/// reports on the reference and records nothing to frame.
 #[test]
 fn refuses_a_name_bound_to_nothing_on_the_reference_itself() {
   let refusal = refuse("missing", None);
@@ -84,28 +72,16 @@ fn refuses_a_name_bound_to_nothing_on_the_reference_itself() {
   assert_eq!(refusal.framed, None);
 }
 
-/// A declaration kind is framed against the declaration, which the reader
-/// records by name -- so a refusal of either kind leaves the binding behind for
-/// the code frame to place.
 #[test]
 fn a_declaration_kind_records_the_binding_to_frame() {
   for declared_as in [DeclarationType::Class, DeclarationType::Function] {
     let refusal = refuse("Button", Some(declared_as));
 
     assert_eq!(refusal.framed, Some(Atom::from("Button")));
-    // Recorded against the reference the refusal was raised on, since that is
-    // the key the code frame later hashes.
     assert!(matches!(refusal.deopt_path, Some(Expr::Ident(_))));
   }
 }
 
-/// A state that has already refused keeps its first message and its first
-/// framed declaration. Both halves are guarded by the same `state.confident`
-/// test, so a second refusal on the same evaluation has to leave both alone --
-/// which is what makes the *first* refusal the one an author is shown.
-///
-/// The second refusal names a declaration kind rather than passing `None`: the
-/// `None` arm never reaches the framing at all, so it could not observe this.
 #[test]
 fn a_second_refusal_does_not_overwrite_the_first() {
   let path = parse_expr("Button");

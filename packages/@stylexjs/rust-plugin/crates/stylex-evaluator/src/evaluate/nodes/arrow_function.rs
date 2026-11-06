@@ -61,8 +61,7 @@ pub(in super::super) fn evaluate(
           plain: false,
         });
       };
-      // Parameters live in the function map, not the module state. Using the
-      // caller directly retains keyframe/import effects and avoids O(N) clones.
+
       let model_before = stylex_js::native::model_refusal_epoch();
       let result = evaluate_with_functions(body, traversal, Rc::new(functions));
       match result.value {
@@ -72,8 +71,7 @@ pub(in super::super) fn evaluate(
             .reason
             .unwrap_or_else(|| unsupported_expression("ArrowFunctionExpression")),
           span: result.deopt.as_ref().map_or(body.span(), Spanned::span),
-          // Resource refusal is terminal evaluator control flow, not an
-          // author's evaluated-arrow exception. Preserve the spent ledger.
+          // Resource refusal is terminal evaluator control flow, not an author's evaluated-arrow exception.
           plain: !stylex_js::native::budget_exhausted()
             && stylex_js::native::model_refusal_epoch() == model_before,
         }),

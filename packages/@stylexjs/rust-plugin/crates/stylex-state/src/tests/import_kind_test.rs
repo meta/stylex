@@ -1,14 +1,5 @@
-//! Which StyleX API a name imports.
-//!
-//! The name in the source is the whole of what decides, so every API the
-//! compiler answers for is listed once here. A name this compiler does not know
-//! answers nothing, which is what lets an unrelated import of the same module
-//! pass through untouched.
-
 use crate::state_manager::ImportKind;
 
-/// Every API name, paired with the kind it names. Written out rather than read
-/// off the constants, so a constant that changes value fails here.
 const EVERY_API: &[(&str, ImportKind)] = &[
   ("attrs", ImportKind::Attrs),
   ("create", ImportKind::Create),
@@ -46,8 +37,6 @@ fn every_api_name_answers_its_own_kind() {
   }
 }
 
-/// No two names answer the same kind, which is what makes the table above a
-/// mapping rather than a list.
 #[test]
 fn no_two_api_names_answer_one_kind() {
   for (index, (name, kind)) in EVERY_API.iter().enumerate() {
@@ -61,9 +50,6 @@ fn no_two_api_names_answer_one_kind() {
   }
 }
 
-/// A name this compiler does not know is not an API, whatever it looks like.
-/// The spellings below are the near misses: a different case, a plural, a
-/// prefixed form, the empty name.
 #[test]
 fn a_name_this_compiler_does_not_know_is_not_an_api() {
   for name in [

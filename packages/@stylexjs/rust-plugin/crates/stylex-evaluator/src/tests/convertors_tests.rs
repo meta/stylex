@@ -14,10 +14,7 @@ use swc_core::{
   },
 };
 
-/// `const <name> = <init>`, as the module-wide collector would have recorded
-/// it. One copy for every module below, because they all resolve a name
-/// through the same declaration table and a copy that spelled the binding
-/// differently would be resolving something else.
+/// Registers a source declaration in the module's declaration table.
 fn make_var_declarator(name: &str, init: Expr) -> VarDeclarator {
   VarDeclarator {
     span: Default::default(),
@@ -115,7 +112,6 @@ fn string_to_prop_name_without_quotes() {
 fn test_simple_tpl_to_string_without_expressions() {
   use swc_core::ecma::ast::{Tpl, TplElement};
 
-  // Create a simple template literal: `hello world`
   let tpl = Tpl {
     span: Default::default(),
     exprs: vec![],
@@ -144,7 +140,6 @@ fn test_simple_tpl_to_string_without_expressions() {
 fn test_simple_tpl_to_string_with_expressions() {
   use swc_core::ecma::ast::{Tpl, TplElement};
 
-  // Create a template literal with expressions: `hello ${name}`
   let tpl = Tpl {
     span: Default::default(),
     exprs: vec![Box::new(create_ident_expr("name"))],
@@ -175,7 +170,6 @@ fn test_simple_tpl_to_string_with_expressions() {
 fn test_convert_simple_tpl_to_str_expr() {
   use swc_core::ecma::ast::{Tpl, TplElement};
 
-  // Create a simple template literal
   let tpl = Tpl {
     span: Default::default(),
     exprs: vec![],
@@ -205,7 +199,6 @@ fn test_convert_simple_tpl_to_str_expr() {
 fn test_convert_simple_tpl_to_str_expr_with_expressions() {
   use swc_core::ecma::ast::{Tpl, TplElement};
 
-  // Create a template with expressions
   let tpl = Tpl {
     span: Default::default(),
     exprs: vec![Box::new(create_ident_expr("value"))],
@@ -228,11 +221,8 @@ fn test_convert_simple_tpl_to_str_expr_with_expressions() {
   let expr = Expr::Tpl(tpl);
   let result = convert_simple_tpl_to_str_expr(expr);
 
-  // Should remain as Tpl since it has expressions
   match result {
-    Expr::Tpl(_) => {
-      // This is expected
-    },
+    Expr::Tpl(_) => {},
     _ => panic!("Expected Expr::Tpl to remain unchanged"),
   }
 }
@@ -241,7 +231,6 @@ fn test_convert_simple_tpl_to_str_expr_with_expressions() {
 fn test_convert_concat_to_tpl_expr_simple() {
   use swc_core::ecma::ast::{CallExpr, Callee, ExprOrSpread, MemberExpr, MemberProp};
 
-  // Create: "hello".concat("world")
   let call_expr = CallExpr {
     span: Default::default(),
     callee: Callee::Expr(Box::new(Expr::Member(MemberExpr {
@@ -262,7 +251,6 @@ fn test_convert_concat_to_tpl_expr_simple() {
   let expr = Expr::Call(call_expr);
   let result = convert_concat_to_tpl_expr(expr);
 
-  // Should be converted to template literal: `hello${world}`
   match result {
     Expr::Tpl(tpl) => {
       assert_eq!(tpl.quasis.len(), 2, "Should have 2 quasis");
@@ -284,7 +272,6 @@ fn test_convert_concat_to_tpl_expr_simple() {
 fn test_convert_concat_to_tpl_expr_multiple_args() {
   use swc_core::ecma::ast::{CallExpr, Callee, ExprOrSpread, MemberExpr, MemberProp};
 
-  // Create: "prefix".concat(var1, var2, var3)
   let call_expr = CallExpr {
     span: Default::default(),
     callee: Callee::Expr(Box::new(Expr::Member(MemberExpr {
@@ -315,7 +302,6 @@ fn test_convert_concat_to_tpl_expr_multiple_args() {
   let expr = Expr::Call(call_expr);
   let result = convert_concat_to_tpl_expr(expr);
 
-  // Should be converted to template literal: `prefix${var1}${var2}${var3}`
   match result {
     Expr::Tpl(tpl) => {
       assert_eq!(tpl.quasis.len(), 4, "Should have 4 quasis");
@@ -338,7 +324,6 @@ fn test_convert_concat_to_tpl_expr_multiple_args() {
 fn test_convert_concat_to_tpl_expr_not_concat_method() {
   use swc_core::ecma::ast::{CallExpr, Callee, ExprOrSpread, MemberExpr, MemberProp};
 
-  // Create: "hello".split("world") - not a concat call
   let call_expr = CallExpr {
     span: Default::default(),
     callee: Callee::Expr(Box::new(Expr::Member(MemberExpr {
@@ -346,7 +331,7 @@ fn test_convert_concat_to_tpl_expr_not_concat_method() {
       obj: Box::new(create_string_expr("hello")),
       prop: MemberProp::Ident(IdentName {
         span: Default::default(),
-        sym: "split".into(), // Not "concat"
+        sym: "split".into(),
       }),
     }))),
     args: vec![ExprOrSpread {
@@ -359,22 +344,17 @@ fn test_convert_concat_to_tpl_expr_not_concat_method() {
   let original_expr = Expr::Call(call_expr);
   let result = convert_concat_to_tpl_expr(original_expr);
 
-  // Should remain as CallExpr since it's not concat
   match result {
-    Expr::Call(_) => {
-      // This is expected - should remain unchanged
-    },
+    Expr::Call(_) => {},
     _ => panic!("Expected Expr::Call to remain unchanged"),
   }
 }
 
 #[test]
 fn test_convert_concat_to_tpl_expr_non_call_expr() {
-  // Test with a non-call expression (e.g., just a string)
   let expr = create_string_expr("hello");
   let result = convert_concat_to_tpl_expr(expr);
 
-  // Should remain as string literal
   match result {
     Expr::Lit(Lit::Str(str_lit)) => {
       assert_eq!(
@@ -390,7 +370,6 @@ fn test_convert_concat_to_tpl_expr_non_call_expr() {
 fn test_convert_concat_to_tpl_expr_with_spread() {
   use swc_core::ecma::ast::{CallExpr, Callee, ExprOrSpread, MemberExpr, MemberProp};
 
-  // Create: "prefix".concat(...args) - with spread argument
   let call_expr = CallExpr {
     span: Default::default(),
     callee: Callee::Expr(Box::new(Expr::Member(MemberExpr {
@@ -411,7 +390,6 @@ fn test_convert_concat_to_tpl_expr_with_spread() {
   let expr = Expr::Call(call_expr);
   let result = convert_concat_to_tpl_expr(expr);
 
-  // Should still convert but skip spread arguments
   match result {
     Expr::Tpl(tpl) => {
       assert_eq!(
@@ -428,10 +406,6 @@ fn test_convert_concat_to_tpl_expr_with_spread() {
     _ => panic!("Expected Expr::Tpl"),
   }
 }
-
-// ──────────────────────────────────────────────
-// convert_unary_to_num tests
-// ──────────────────────────────────────────────
 
 mod convert_unary_to_num_tests {
   use super::*;
@@ -466,8 +440,6 @@ mod convert_unary_to_num_tests {
     assert_eq!(result, 3.0);
   }
 
-  /// `-0` keeps its sign, which `assert_eq!` against `0.0` cannot see: the two
-  /// zeroes compare equal. The sign is what parts `1 / -0` from `1 / 0`.
   #[test]
   fn minus_zero() {
     let unary = make_unary(UnaryOp::Minus, 0.0);
@@ -520,8 +492,6 @@ mod convert_unary_to_num_tests {
     assert_eq!(result, -0.5);
   }
 
-  /// An operator the numeric reading has no answer for stops the build, and
-  /// says which expression it could not read.
   #[test]
   #[should_panic(expected = "Union operation 'UnaryExpression' is invalid")]
   fn unsupported_op_panics() {
@@ -532,10 +502,6 @@ mod convert_unary_to_num_tests {
     convert_unary_to_num(&unary, &mut state, &mut traversal_state, &fns);
   }
 }
-
-// ──────────────────────────────────────────────
-// convert_key_value_to_str tests
-// ──────────────────────────────────────────────
 
 mod convert_key_value_to_str_tests {
   use super::*;
@@ -580,8 +546,6 @@ mod convert_key_value_to_str_tests {
     assert_eq!(result, "42");
   }
 
-  /// The plain number arm has to spell the number the way JavaScript does, the
-  /// same as the computed arm beside it: `1e21` names the property `1e+21`.
   #[test]
   fn num_key_uses_the_javascript_spelling() {
     let kv = make_kv(PropName::Num(Number {
@@ -593,7 +557,6 @@ mod convert_key_value_to_str_tests {
     assert_eq!(result, "1e+21");
   }
 
-  /// Written as a computed key, the same number reads back the same way.
   #[test]
   fn computed_num_key_uses_the_javascript_spelling() {
     let kv = make_kv(PropName::Computed(ComputedPropName {
@@ -614,10 +577,6 @@ mod convert_key_value_to_str_tests {
     assert!(result.contains("dynamic"));
   }
 }
-
-// ──────────────────────────────────────────────
-// expr_tpl_to_string tests
-// ──────────────────────────────────────────────
 
 mod expr_tpl_to_string_tests {
   use super::*;
@@ -735,10 +694,6 @@ mod expr_tpl_to_string_tests {
     assert_eq!(result, "hello world");
   }
 
-  /// A name bound to a literal with no string form stops the build rather than
-  /// writing a text no runtime would produce. `true` is such a literal: this
-  /// reader answers the three that spell a value -- a string, a number and a
-  /// big integer -- and nothing else.
   #[test]
   #[should_panic(expected = "A style value can only contain an array, string or number.")]
   fn panics_for_an_ident_bound_to_a_literal_with_no_string_form() {
@@ -778,10 +733,6 @@ mod expr_tpl_to_string_tests {
     expr_tpl_to_string(&tpl, &mut state, &mut traversal_state, &fns);
   }
 }
-
-// ──────────────────────────────────────────────
-// ident_to_number tests
-// ──────────────────────────────────────────────
 
 mod ident_to_number_tests {
   use super::*;
@@ -824,10 +775,6 @@ mod ident_to_number_tests {
     ident_to_number(&ident, &mut state, &mut traversal_state, &fns);
   }
 }
-
-// ──────────────────────────────────────────────
-// expr_to_num additional tests
-// ──────────────────────────────────────────────
 
 mod expr_to_num_tests {
   use super::*;
@@ -887,9 +834,6 @@ mod expr_to_num_tests {
     assert_eq!(result, 7.0);
   }
 
-  /// A comparison folds to a boolean, and a boolean asked for a number is one
-  /// or nought. `-(1 < 2)` is `-1` in the language, and
-  /// `@stylexjs/babel-plugin@0.19.0` writes `z-index:-1` for it.
   #[test]
   fn a_comparison_reads_as_one_or_nought() {
     for (op, left, right, expected) in [
@@ -920,9 +864,6 @@ mod expr_to_num_tests {
     }
   }
 
-  /// A concatenation has no number of its own, so it is refused rather than
-  /// folded. The text has one only through `StringToNumber`, which belongs to
-  /// the caller that holds the text.
   #[test]
   fn a_concatenation_is_refused() {
     let mut state = EvaluationState::new();
@@ -942,10 +883,6 @@ mod expr_to_num_tests {
   }
 }
 
-// ──────────────────────────────────────────────
-// convert_key_value_to_str - BigInt key
-// ──────────────────────────────────────────────
-
 mod convert_key_value_to_str_bigint_tests {
   use super::*;
   use swc_core::ecma::ast::{BigInt, KeyValueProp, PropName};
@@ -964,10 +901,6 @@ mod convert_key_value_to_str_bigint_tests {
     assert!(result.contains("100"));
   }
 }
-
-// ──────────────────────────────────────────────
-// ident_to_number - bin/unary declaration resolution
-// ──────────────────────────────────────────────
 
 mod ident_to_number_extended_tests {
   use super::*;
@@ -997,9 +930,6 @@ mod ident_to_number_extended_tests {
     assert_eq!(result, 10.0);
   }
 
-  /// A binding declared as a comparison reads through the same one-or-nought
-  /// rule the expression does. `const flag = 1 < 2; -flag` is `-1` in the
-  /// language, and `@stylexjs/babel-plugin@0.19.0` writes `z-index:-1` for it.
   #[test]
   fn resolves_ident_declared_as_a_comparison() {
     for (op, expected) in [(BinaryOp::Lt, 1.0), (BinaryOp::GtEq, 0.0)] {
@@ -1029,8 +959,6 @@ mod ident_to_number_extended_tests {
     }
   }
 
-  /// A binding declared as a concatenation has no number, so the build stops
-  /// on it rather than folding a wrong one.
   #[test]
   #[should_panic(expected = "Binary expression is not a number")]
   fn panics_for_an_ident_declared_as_a_concatenation() {
@@ -1077,12 +1005,6 @@ mod ident_to_number_extended_tests {
     assert_eq!(result, -5.0);
   }
 
-  /// A declaration whose binary expression reads as neither a number nor a
-  /// string is a broken read rather than a value, and this path has no refusal
-  /// to answer with — its callers take a number.
-  ///
-  /// `({ toString: 1 }) - 1` is such an expression: the object has no
-  /// conversion method that can be called, so the subtraction has no number.
   #[test]
   #[should_panic(expected = "Expression is not a number")]
   fn panics_for_a_declaration_whose_binary_expression_has_no_number() {
@@ -1103,7 +1025,6 @@ mod ident_to_number_extended_tests {
     ident_to_number(&ident, &mut state, &mut traversal_state, &fns);
   }
 
-  /// A name nothing declares has no number, and the refusal names the name.
   #[test]
   #[should_panic(expected = "is not declared")]
   fn panics_for_undeclared_ident() {
@@ -1119,8 +1040,6 @@ mod ident_to_number_extended_tests {
     ident_to_number(&ident, &mut state, &mut traversal_state, &fns);
   }
 
-  /// A name declared as a text that is not a numeric literal names the text,
-  /// rather than the name.
   #[test]
   #[should_panic(expected = "Value is not a number: hello")]
   fn panics_for_non_number_decl() {
@@ -1138,10 +1057,6 @@ mod ident_to_number_extended_tests {
     ident_to_number(&ident, &mut state, &mut traversal_state, &fns);
   }
 }
-
-// ──────────────────────────────────────────────
-// expr_tpl_to_string - bin expr and literal expressions
-// ──────────────────────────────────────────────
 
 mod expr_tpl_to_string_extended_tests {
   use super::*;
@@ -1237,10 +1152,6 @@ mod expr_tpl_to_string_extended_tests {
   }
 }
 
-// ──────────────────────────────────────────────
-// transform_bin_expr_to_number tests
-// ──────────────────────────────────────────────
-
 mod transform_bin_expr_to_number_tests {
   use super::*;
   use crate::convertors::transform_bin_expr_to_number;
@@ -1276,18 +1187,11 @@ mod transform_bin_expr_to_number_tests {
   }
 }
 
-// ──────────────────────────────────────────────
-// expr_to_num - reports an unsupported expr
-// ──────────────────────────────────────────────
-
 mod expr_to_num_unsupported_tests {
   use super::*;
   use crate::convertors::expr_to_num;
   use swc_core::ecma::ast::ArrayLit;
 
-  /// An expression with no numeric reading is reported through the `Result`
-  /// this returns, not by aborting: `-[]` is ordinary JavaScript, and the
-  /// evaluator has to be able to refuse to fold it.
   #[test]
   fn reports_an_array_expr_as_an_error() {
     let mut state = EvaluationState::new();
@@ -1308,8 +1212,6 @@ mod expr_to_num_unsupported_tests {
     );
   }
 
-  /// The same for a binary expression that folds to a string rather than a
-  /// number — the arm one level in, which used to abort separately.
   #[test]
   fn reports_a_string_valued_binary_expr_as_an_error() {
     let mut state = EvaluationState::new();
@@ -1329,16 +1231,10 @@ mod expr_to_num_unsupported_tests {
   }
 }
 
-// ──────────────────────────────────────────────
-// convert_key_value_to_str - computed non-literal panic
-// ──────────────────────────────────────────────
-
 mod convert_key_value_to_str_panic_tests {
   use super::*;
   use swc_core::ecma::ast::{ComputedPropName, KeyValueProp, PropName};
 
-  /// A computed key that is still an expression names no property, and the
-  /// refusal says which half it could not read.
   #[test]
   #[should_panic(expected = "Computed key is not a literal")]
   fn panics_for_computed_non_literal_key() {
@@ -1353,10 +1249,6 @@ mod convert_key_value_to_str_panic_tests {
   }
 }
 
-// ──────────────────────────────────────────────
-// ident_to_number - additional edge cases
-// ──────────────────────────────────────────────
-
 mod ident_to_number_edge_tests {
   use super::*;
   use crate::convertors::ident_to_number;
@@ -1366,7 +1258,6 @@ mod ident_to_number_edge_tests {
     let mut state = EvaluationState::new();
     let mut traversal_state = StateManager::default();
     let fns = FunctionMap::default();
-    // Declare val = 42 (as number literal)
     let decl = make_var_declarator("val", create_number_expr(42.0));
     fill_state_declarations(&mut traversal_state, &decl);
     let ident = Ident {
@@ -1379,7 +1270,6 @@ mod ident_to_number_edge_tests {
     assert_eq!(result, 42.0);
   }
 
-  /// A name declared as an object names the kind of expression it holds.
   #[test]
   #[should_panic(expected = "Variable ObjectExpression is not a number")]
   fn panics_for_object_expr_decl() {
@@ -1399,14 +1289,9 @@ mod ident_to_number_edge_tests {
       optional: false,
       ctxt: SyntaxContext::empty(),
     };
-    // This should panic with "Variable ... is not a number"
     ident_to_number(&ident, &mut state, &mut traversal_state, &fns);
   }
 }
-
-// ──────────────────────────────────────────────
-// convert_unary_to_num - error branches
-// ──────────────────────────────────────────────
 
 mod convert_unary_to_num_error_tests {
   use super::*;
@@ -1442,15 +1327,6 @@ mod convert_unary_to_num_error_tests {
   }
 }
 
-// ──────────────────────────────────────────────
-// what each conversion does with an input it cannot read
-// ──────────────────────────────────────────────
-//
-// These four conversions are older than the evaluator's own refusal path and
-// abort the build rather than deopting. Every arm is pinned here so a reader
-// can see which inputs still stop a build, and so that moving one onto the
-// deopt path is a visible change rather than a silent one.
-
 mod refusals {
   use super::*;
   use crate::convertors::{
@@ -1460,8 +1336,6 @@ mod refusals {
   use stylex_ast::ast::convertors::create_bool_expr;
   use swc_core::ecma::ast::{Tpl, TplElement, UnaryExpr, UnaryOp};
 
-  /// A template of one quasi and one interpolation, which is the shape every
-  /// case below reads.
   fn interpolating(expr: Expr) -> Tpl {
     Tpl {
       span: Default::default(),
@@ -1496,9 +1370,6 @@ mod refusals {
     }
   }
 
-  /// A binary expression whose operands are strings, so it concatenates rather
-  /// than adding -- the one shape that reads as a binary expression and answers
-  /// something that is not a number.
   fn a_concatenation() -> Expr {
     Expr::Bin(bin(
       BinaryOp::Add,
@@ -1507,9 +1378,6 @@ mod refusals {
     ))
   }
 
-  /// The three global names that are identifiers rather than literals. The
-  /// numeric conversion answers them from the language's own table, before it
-  /// asks the module for a declaration -- which it has none of.
   #[test]
   fn the_numeric_globals_are_read_without_a_declaration() {
     let mut state = EvaluationState::new();
@@ -1540,9 +1408,6 @@ mod refusals {
     }
   }
 
-  /// A binary expression that concatenates is reported rather than fatal: the
-  /// conversion answers a `Result` precisely so the evaluator can refuse to
-  /// fold instead of stopping the build.
   #[test]
   fn a_binary_expression_that_is_not_a_number_is_reported() {
     let mut state = EvaluationState::new();
@@ -1555,9 +1420,6 @@ mod refusals {
     );
   }
 
-  /// The unary conversion has no `Result` to answer with, so an operand with no
-  /// number stops the build. Both signs, because each reads the operand through
-  /// a call of its own.
   #[test]
   #[should_panic(expected = "is not a number")]
   fn a_negation_of_something_that_is_not_a_number_stops_the_build() {
@@ -1588,8 +1450,6 @@ mod refusals {
     );
   }
 
-  /// A name declared as a concatenation reads as a binary expression and
-  /// answers no number, which the numeric reading of a name cannot report.
   #[test]
   #[should_panic(expected = "Binary expression is not a number")]
   fn a_name_declared_as_a_concatenation_stops_the_build() {
@@ -1615,8 +1475,6 @@ mod refusals {
     );
   }
 
-  /// An interpolated name the module never declared has nothing to write, and
-  /// the sentence names the conversion so a reader can see which one stopped.
   #[test]
   #[should_panic(expected = "expr_tpl_to_string")]
   fn an_interpolated_name_that_is_not_declared_stops_the_build() {
@@ -1632,8 +1490,6 @@ mod refusals {
     );
   }
 
-  /// An interpolated name declared as something with no string form stops the
-  /// build too, and says a style value is what was wanted.
   #[test]
   #[should_panic(expected = "A style value can only contain")]
   fn an_interpolated_name_with_no_string_form_stops_the_build() {
@@ -1654,8 +1510,6 @@ mod refusals {
     );
   }
 
-  /// An interpolation of a kind this conversion has no reading of at all --
-  /// neither a name, a binary expression nor a literal.
   #[test]
   #[should_panic(expected = "TPL expression")]
   fn an_interpolation_of_an_unread_kind_stops_the_build() {
@@ -1671,10 +1525,6 @@ mod refusals {
     );
   }
 
-  /// A literal the conversion has no string for stops the build in the literal
-  /// arm, as a name declared as one does in the arm above it. A boolean is such
-  /// a literal here: this conversion predates the coercion bridge the evaluator
-  /// interpolates through, where `${true}` writes `true`.
   #[test]
   #[should_panic(expected = "A style value can only contain")]
   fn an_interpolated_literal_with_no_string_stops_the_build() {
@@ -1690,9 +1540,6 @@ mod refusals {
     );
   }
 
-  /// The numeric fold of a binary expression evaluates each side first, so a
-  /// side that folds to nothing stops the build -- naming the side rather than
-  /// the operator.
   #[test]
   #[should_panic(expected = "Left expression is not a number: Identifier")]
   fn a_left_side_that_folds_to_nothing_stops_the_build() {
@@ -1712,8 +1559,6 @@ mod refusals {
     );
   }
 
-  /// The right side names itself, which is the half a substring assertion
-  /// cannot see: this sentence read `Left` while reporting on the right side.
   #[test]
   #[should_panic(expected = "Right expression is not a number: Identifier")]
   fn a_right_side_that_folds_to_nothing_stops_the_build() {
@@ -1734,14 +1579,6 @@ mod refusals {
   }
 }
 
-/// `({ toString: 1 }) - 1`, a binary expression with no numeric reading. The
-/// object has no conversion method that can be called, so the language throws
-/// where the subtraction asks for a number. An empty object is not such a
-/// shape: `({}) - 1` is `NaN`.
-///
-/// One spelling for the two readings below, which are the same expression asked
-/// of the two paths that read one — the one that answers a `Result` and the one
-/// that has no refusal to answer with.
 fn an_unconvertible_object_minus_one() -> Expr {
   Expr::Bin(BinExpr {
     span: Default::default(),
@@ -1753,8 +1590,6 @@ fn an_unconvertible_object_minus_one() -> Expr {
   })
 }
 
-/// A binary expression with no numeric reading is reported rather than fatal,
-/// because the evaluator is allowed to refuse where it cannot fold.
 #[test]
 fn a_binary_expression_with_no_number_is_reported_rather_than_fatal() {
   use crate::convertors::expr_to_num;

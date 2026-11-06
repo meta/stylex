@@ -7,10 +7,6 @@ use swc_core::{
   ecma::ast::{Expr, Ident, Lit},
 };
 
-// ──────────────────────────────────────────────
-// convert_ident_to_expr tests
-// ──────────────────────────────────────────────
-
 mod convert_ident_to_expr_tests {
   use super::*;
   use crate::resolution::convertors::convert_ident_to_expr;
@@ -76,10 +72,6 @@ mod convert_ident_to_expr_tests {
   }
 }
 
-// ──────────────────────────────────────────────
-// handle_tpl_to_expression tests
-// ──────────────────────────────────────────────
-
 mod handle_tpl_to_expression_tests {
   use super::*;
   use crate::resolution::convertors::handle_tpl_to_expression;
@@ -116,7 +108,7 @@ mod handle_tpl_to_expression_tests {
     match result {
       Expr::Tpl(result_tpl) => {
         assert_eq!(result_tpl.exprs.len(), 1);
-        // The expression should have been replaced with the var init
+
         match result_tpl.exprs[0].as_ref() {
           Expr::Lit(Lit::Str(s)) => {
             assert_eq!(s.value.as_str().expect("Expected string"), "replaced")
@@ -163,10 +155,6 @@ mod handle_tpl_to_expression_tests {
   }
 }
 
-// ──────────────────────────────────────────────
-// convert_expr_to_str tests
-// ──────────────────────────────────────────────
-
 mod convert_expr_to_str_tests {
   use super::*;
   use crate::resolution::convertors::convert_expr_to_str;
@@ -200,8 +188,6 @@ mod convert_expr_to_str_tests {
     assert_eq!(result, Some("42".to_string()));
   }
 
-  /// A literal that is not a string spells no string. Callers decide what that
-  /// means to them, so nothing is raised here.
   #[test]
   fn non_string_literal_returns_none() {
     let mut state = StateManager::default();
@@ -216,8 +202,6 @@ mod convert_expr_to_str_tests {
     assert_eq!(convert_expr_to_str(&boolean, &mut state, &fns), None);
   }
 
-  /// An identifier with no binding to read spells no string either -- which is
-  /// what `undefined` is, an ordinary global rather than a literal.
   #[test]
   fn unbound_ident_returns_none() {
     let mut state = StateManager::default();
@@ -226,8 +210,6 @@ mod convert_expr_to_str_tests {
     assert_eq!(convert_expr_to_str(&expr, &mut state, &fns), None);
   }
 
-  /// An identifier bound to something that is not a string spells no string,
-  /// however many hops it takes to find that out.
   #[test]
   fn ident_bound_to_a_non_string_returns_none() {
     let mut state = StateManager::default();
@@ -244,10 +226,6 @@ mod convert_expr_to_str_tests {
     assert_eq!(convert_expr_to_str(&expr, &mut state, &fns), None);
   }
 }
-
-// ──────────────────────────────────────────────
-// handle_tpl_to_expression tests
-// ──────────────────────────────────────────────
 
 mod handle_tpl_to_expression_extended_tests {
   use super::*;
@@ -310,10 +288,6 @@ mod handle_tpl_to_expression_extended_tests {
   }
 }
 
-// ──────────────────────────────────────────────
-// convert_ident_to_expr tests
-// ──────────────────────────────────────────────
-
 mod convert_ident_to_expr_extended_tests {
   use super::*;
   use crate::resolution::convertors::convert_ident_to_expr;
@@ -349,18 +323,11 @@ mod convert_ident_to_expr_extended_tests {
   }
 }
 
-// ──────────────────────────────────────────────
-// convert_expr_to_str - no string for an expression that is not one
-// ──────────────────────────────────────────────
-
 mod convert_expr_to_str_non_string_tests {
   use super::*;
   use crate::resolution::convertors::convert_expr_to_str;
   use swc_core::ecma::ast::{ArrayLit, ObjectLit};
 
-  /// An expression that spells no string answers `None` rather than raising, so
-  /// each caller decides what a non-string means to it — an animation step
-  /// declares nothing, a namespace name is a hard error.
   #[test]
   fn answers_none_for_an_expression_that_is_not_a_string() {
     let mut state = StateManager::default();
@@ -380,10 +347,6 @@ mod convert_expr_to_str_non_string_tests {
   }
 }
 
-// ──────────────────────────────────────────────
-// convert_expr_to_str - ident resolving to ident chain
-// ──────────────────────────────────────────────
-
 mod convert_expr_to_str_ident_chain_tests {
   use super::*;
   use crate::resolution::convertors::convert_expr_to_str;
@@ -392,10 +355,10 @@ mod convert_expr_to_str_ident_chain_tests {
   fn ident_resolves_through_chain_to_string() {
     let mut state = StateManager::default();
     let fns = FunctionMap::default();
-    // inner = "red"
+
     let inner_decl = make_var_declarator("inner", create_string_expr("red"));
     fill_state_declarations(&mut state, &inner_decl);
-    // outer = inner (ident)
+
     let outer_decl = make_var_declarator("outer", create_ident_expr("inner"));
     fill_state_declarations(&mut state, &outer_decl);
 
@@ -405,16 +368,11 @@ mod convert_expr_to_str_ident_chain_tests {
   }
 }
 
-// ──────────────────────────────────────────────
-// handle_tpl_to_expression - declarations that spell no expression
-// ──────────────────────────────────────────────
-
 mod handle_tpl_to_expression_no_init_tests {
   use super::*;
   use crate::resolution::convertors::handle_tpl_to_expression;
   use swc_core::ecma::ast::{Tpl, TplElement};
 
-  /// One template of `pre ${ident} post`.
   fn tpl_of(ident: &str) -> Tpl {
     Tpl {
       span: Default::default(),
@@ -486,10 +444,6 @@ mod handle_tpl_to_expression_no_init_tests {
   }
 }
 
-// ──────────────────────────────────────────────
-// convert_lit_to_raw_value
-// ──────────────────────────────────────────────
-
 mod convert_lit_to_raw_value_tests {
   use super::*;
   use crate::resolution::convertors::convert_lit_to_raw_value;
@@ -531,8 +485,6 @@ mod convert_lit_to_raw_value_tests {
 
   #[test]
   fn the_numbers_javascript_prints_as_words_stay_numbers() {
-    // `NaN` and the infinities are ordinary `f64` values here. The distinction
-    // this function keeps is the JS *type*, not whether the value is finite.
     for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
       match convert_lit_to_raw_value(&num_lit(value)) {
         Some(TRawValue::Number(number)) => {
@@ -571,8 +523,6 @@ mod convert_lit_to_raw_value_tests {
 
   #[test]
   fn a_string_that_spells_a_number_stays_a_string() {
-    // The JS type is what decides whether a unit suffix is appended later, so
-    // `"42"` and `42` must not collapse into one answer.
     match convert_lit_to_raw_value(&str_lit("42")) {
       Some(TRawValue::String(text)) => assert_eq!(text, "42"),
       other => panic!("Expected a string, got {:?}", other),

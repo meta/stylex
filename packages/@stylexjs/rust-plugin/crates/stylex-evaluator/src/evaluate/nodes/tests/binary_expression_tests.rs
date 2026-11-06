@@ -1,7 +1,4 @@
-//! Coverage for the two paths the binary-expression node folds through, at the
-//! operators real StyleX source cannot reach — comparison, bitwise, `in` and
-//! `instanceof`. Everything an author can write is pinned from above, on the
-//! `stylex.create` fixtures.
+//! Tests binary folding, coercion and reference identity.
 
 use super::*;
 use crate::evaluate::source_evaluation::{
@@ -17,8 +14,6 @@ use swc_core::atoms::Wtf8Atom;
 use swc_core::atoms::wtf8::{CodePoint, Wtf8Buf};
 use swc_core::ecma::ast::Str;
 
-/// The expression under test. Built here rather than at each case so a case
-/// reads as its operator and its operands, and nothing else.
 fn bin_expr(op: BinaryOp, left: Expr, right: Expr) -> BinExpr {
   BinExpr {
     span: Default::default(),
@@ -28,10 +23,7 @@ fn bin_expr(op: BinaryOp, left: Expr, right: Expr) -> BinExpr {
   }
 }
 
-/// A string literal holding one lone surrogate, which no Rust `str` can spell.
-///
-/// The one string with no text to read, and so the one operand that separates
-/// "this compiler cannot read the value" from "the language has no answer".
+/// Builds a lone-surrogate literal that Rust `str` cannot represent.
 fn lone_surrogate_expr() -> Expr {
   let mut buffer = Wtf8Buf::new();
 
@@ -47,12 +39,10 @@ fn lone_surrogate_expr() -> Expr {
   }))
 }
 
-/// The number-or-string path, against state of its own.
 fn num_or_str_path(bin: &BinExpr) -> Result<BinaryExprType, anyhow::Error> {
   num_or_str_path_with_fns(bin, &FunctionMap::default())
 }
 
-/// The string path, against state of its own.
 fn string_path(bin: &BinExpr) -> Result<BinaryExprType, anyhow::Error> {
   let mut state = EvaluationState::new();
   let mut traversal_state = StateManager::default();
@@ -61,15 +51,8 @@ fn string_path(bin: &BinExpr) -> Result<BinaryExprType, anyhow::Error> {
   binary_expr_to_string(bin, &mut state, &mut traversal_state, &fns)
 }
 
-/// The name a function of the compiler's own is bound to below.
 const OWN_FUNCTION: &str = "own";
 
-/// A map binding [`OWN_FUNCTION`] to a function of the compiler's own.
-///
-/// The one value that has neither a string nor a number: its only string would
-/// be its source text, and this evaluator keeps none. Nothing an author writes
-/// spells it, so a case about an operand with no reading at all has to build
-/// it.
 fn a_map_holding_a_function() -> FunctionMap {
   let mut fns = FunctionMap::default();
 
@@ -84,12 +67,7 @@ fn a_map_holding_a_function() -> FunctionMap {
   fns
 }
 
-/// The number-or-string path, against a map the case built.
-///
-/// The map goes on the state as well as beside it. A name resolves through
-/// `state.functions`, so a map handed only as the argument would leave the name
-/// unresolved and the case would read the operand walk's refusal rather than
-/// the coercion's.
+/// Installs `fns` in both evaluation state and the call argument for name resolution.
 fn num_or_str_path_with_fns(
   bin: &BinExpr,
   fns: &FunctionMap,
@@ -102,11 +80,6 @@ fn num_or_str_path_with_fns(
   binary_expr_to_num_or_str(bin, &mut state, &mut traversal_state, fns)
 }
 
-/// The number a path folded to, or a failure naming what it answered instead.
-///
-/// Matched rather than unwrapped so a path that refused, or that answered with
-/// a string, says which of the two it did — an unwrapped `Err` reports only
-/// that something was not `Ok`.
 #[track_caller]
 fn expect_number(result: Result<BinaryExprType, anyhow::Error>) -> f64 {
   match result {
@@ -116,11 +89,6 @@ fn expect_number(result: Result<BinaryExprType, anyhow::Error>) -> f64 {
   }
 }
 
-/// The boolean a path folded to, on the same terms as [`expect_number`].
-///
-/// A comparison answers one, which is what the language and the reference
-/// implementation answer. Read as a number, `1 > 2` named a property `0` where
-/// the reference implementation names it `false`.
 #[track_caller]
 fn expect_boolean(result: Result<BinaryExprType, anyhow::Error>) -> bool {
   match result {
@@ -130,12 +98,7 @@ fn expect_boolean(result: Result<BinaryExprType, anyhow::Error>) -> bool {
   }
 }
 
-/// The string a path folded to, on the same terms as [`expect_number`].
-///
-/// The count the string carries is checked against a fresh reading of the text
-/// on the way through, because every case here then holds the carried count as
-/// well as the text: a count that drifts from what it labels would spend the
-/// character ceiling against a length nothing has.
+/// Extracts folded text and verifies its carried UTF-16 count.
 #[track_caller]
 fn expect_string(result: Result<BinaryExprType, anyhow::Error>) -> String {
   match result {
@@ -154,7 +117,6 @@ fn expect_string(result: Result<BinaryExprType, anyhow::Error>) -> String {
   }
 }
 
-/// One operator over two numeric operands, through the number-or-string path.
 #[track_caller]
 fn fold_numbers(op: BinaryOp, left: f64, right: f64) -> f64 {
   expect_number(num_or_str_path(&bin_expr(
@@ -164,7 +126,6 @@ fn fold_numbers(op: BinaryOp, left: f64, right: f64) -> f64 {
   )))
 }
 
-/// One comparison operator over two numeric operands, through the same path.
 #[track_caller]
 fn compare_numbers(op: BinaryOp, left: f64, right: f64) -> bool {
   expect_boolean(num_or_str_path(&bin_expr(
@@ -174,16 +135,11 @@ fn compare_numbers(op: BinaryOp, left: f64, right: f64) -> bool {
   )))
 }
 
-/// One equality operator over two operands, through the number-or-string path.
-///
-/// Two expressions rather than two numbers, because which reading each operator
-/// takes is decided by what the sides *are* rather than by what they coerce to.
 #[track_caller]
 fn fold_equality(op: BinaryOp, left: Expr, right: Expr) -> bool {
   expect_boolean(num_or_str_path(&bin_expr(op, left, right)))
 }
 
-/// `+` over two operands, through the string path.
 #[track_caller]
 fn concatenate(left: Expr, right: Expr) -> String {
   expect_string(string_path(&bin_expr(BinaryOp::Add, left, right)))
@@ -239,9 +195,6 @@ mod the_number_path {
     assert_eq!(fold_numbers(BinaryOp::BitXor, 6.0, 3.0), 5.0);
   }
 
-  /// Operands on which the signed and the unsigned readings part company, so
-  /// the case fails against either one written for the other. Every value was
-  /// read out of `node -e 'console.log(x)'`.
   #[test]
   fn right_shift_shifts_right_and_keeps_the_sign() {
     assert_eq!(fold_numbers(BinaryOp::RShift, 6.0, 3.0), 0.0);
@@ -255,8 +208,6 @@ mod the_number_path {
     assert_eq!(fold_numbers(BinaryOp::LShift, 1.0, 31.0), -2_147_483_648.0);
   }
 
-  /// `>>>` reads its left side as unsigned, so a negative operand answers the
-  /// large number rather than itself. Read as signed, `-1 >>> 0` answered `-1`.
   #[test]
   fn zero_fill_right_shift_reads_its_left_side_as_unsigned() {
     assert_eq!(fold_numbers(BinaryOp::ZeroFillRShift, 6.0, 3.0), 0.0);
@@ -272,21 +223,12 @@ mod the_number_path {
     );
   }
 
-  /// Two rows the 32-bit reading answers and a 64-bit one does not, which is
-  /// what says this node reaches that reading rather than one of its own.
-  ///
-  /// Short on purpose. The values every operand shape answers are asserted
-  /// where the reading lives, in `stylex-js`'s own suite, and a second copy of
-  /// the table here would be one more place to edit and one more to forget.
   #[test]
   fn the_bitwise_operators_are_read_in_thirty_two_bits() {
     assert_eq!(fold_numbers(BinaryOp::BitOr, 4_294_967_296.0, 0.0), 0.0);
     assert_eq!(fold_numbers(BinaryOp::LShift, 1.0, 32.0), 1.0);
   }
 
-  /// The three numbers with no digits, as operands of the arithmetic. Each is a
-  /// value the language answers with rather than a refusal, and `NaN` is the
-  /// one that equals nothing -- including itself.
   #[test]
   fn the_numbers_with_no_digits_are_operands_like_any_other() {
     assert!(fold_numbers(BinaryOp::Add, f64::NAN, 1.0).is_nan());
@@ -297,16 +239,11 @@ mod the_number_path {
     );
     assert_eq!(fold_numbers(BinaryOp::Div, 1.0, 0.0), f64::INFINITY);
 
-    // `-0` is what `0 * -1` answers, and `assert_eq!` against `0.0` cannot see
-    // it: the two zeroes compare equal. The sign is what parts `1 / -0` from
-    // `1 / 0`.
     let negative_zero = fold_numbers(BinaryOp::Mul, 0.0, -1.0);
 
     assert_eq!(negative_zero, 0.0);
     assert!(negative_zero.is_sign_negative());
 
-    // Every comparison against `NaN` is false, and the inequality is the one
-    // that is true.
     assert!(!compare_numbers(BinaryOp::EqEqEq, f64::NAN, f64::NAN));
     assert!(compare_numbers(BinaryOp::NotEqEq, f64::NAN, f64::NAN));
     assert!(!compare_numbers(BinaryOp::Lt, f64::NAN, 1.0));
@@ -336,13 +273,7 @@ mod the_number_path {
     assert!(!compare_numbers(BinaryOp::NotEqEq, 5.0, 5.0));
   }
 
-  /// Which reading each of the four operators takes, over the pairs where the
-  /// two readings part company.
-  ///
-  /// `!=` sits with the strict pair, which is how the reference implementation
-  /// writes it rather than how the language reads it. Compared as two numbers,
-  /// as this path did before, `1 != '1'` answered `false` and put the other arm
-  /// of a conditional into the stylesheet.
+  /// This internal path retains Babel's strict `!=`; source evaluation uses JS-correct inequality.
   #[test]
   fn the_four_equality_operators_compare_two_primitives() {
     let one = create_number_expr(1.0);
@@ -366,9 +297,6 @@ mod the_number_path {
     assert!(fold_equality(BinaryOp::NotEqEq, one, one_as_text));
   }
 
-  /// Two pairs a numeric reading has no answer for: two strings that are not
-  /// numeric literals, and the two nullish spellings. Both refused before, and
-  /// the language answers `true` for both under `==`.
   #[test]
   fn two_values_with_no_number_still_compare() {
     assert!(fold_equality(
@@ -393,12 +321,6 @@ mod the_number_path {
     ));
   }
 
-  /// A side with no primitive refuses, and names what it could not read rather
-  /// than the comparison. The language compares two objects by reference, which
-  /// this evaluator does not hold.
-  ///
-  /// Either side, because each is read at its own step: the left before the
-  /// right is evaluated at all, and the right after.
   #[test]
   fn a_side_with_no_primitive_is_refused() {
     for (left, right) in [
@@ -418,8 +340,6 @@ mod the_number_path {
     }
   }
 
-  /// A right side that answered nothing at all refuses before either value is
-  /// compared, and the refusal names the side rather than the comparison.
   #[test]
   fn an_equality_over_a_right_side_that_answered_nothing_is_refused() {
     let bin = bin_expr(
@@ -431,11 +351,6 @@ mod the_number_path {
     assert_refuses_with(num_or_str_path(&bin), RIGHT_NOT_A_NUMBER);
   }
 
-  /// A right side that answered a value with no expression form is refused
-  /// where it is read, rather than compared as whatever it stands for.
-  ///
-  /// An array is one: the evaluator holds it as its own list, so there is no
-  /// expression to ask for a primitive.
   #[test]
   fn an_equality_over_a_right_side_with_no_expression_is_refused() {
     let bin = bin_expr(
@@ -471,9 +386,6 @@ mod the_number_path {
     assert!(!compare_numbers(BinaryOp::LtEq, 10.0, 2.0));
   }
 
-  /// Two strings compare by code unit, not as two numbers. Read as two numbers,
-  /// as this path did before, `'10' < '9'` answered `false` and put the other
-  /// arm of a conditional into the stylesheet.
   #[test]
   fn two_strings_compare_by_code_unit() {
     let cases: [(BinaryOp, &str, &str, bool); 8] = [
@@ -503,8 +415,6 @@ mod the_number_path {
     }
   }
 
-  /// One string and one number is the numeric reading, so the text is read
-  /// through `StringToNumber` rather than by code unit.
   #[test]
   fn a_string_against_a_number_compares_as_two_numbers() {
     let bin = bin_expr(
@@ -522,8 +432,6 @@ mod the_number_path {
     assert!(expect_boolean(num_or_str_path(&bin)));
   }
 
-  /// All four relational operators are false against `NaN`, the negated pair
-  /// included -- which is what the third answer `IsLessThan` gives is for.
   #[test]
   fn every_relational_operator_is_false_against_not_a_number() {
     for op in [BinaryOp::Lt, BinaryOp::LtEq, BinaryOp::Gt, BinaryOp::GtEq] {
@@ -532,10 +440,6 @@ mod the_number_path {
     }
   }
 
-  /// The two nullish values are read as the numbers the language gives them:
-  /// `null` is nought and so is less than one, and `undefined` is `NaN` and so
-  /// is ordered against nothing. Neither has a number the literal grammar can
-  /// read, so both refused here before.
   #[test]
   fn the_nullish_values_compare_as_the_numbers_they_coerce_to() {
     let bin = bin_expr(BinaryOp::Lt, create_null_expr(), create_number_expr(1.0));
@@ -549,9 +453,6 @@ mod the_number_path {
     assert!(!expect_boolean(num_or_str_path(&bin)));
   }
 
-  /// A string this compiler cannot read has no ordering, so the comparison
-  /// falls to the numeric coercion -- which refuses it too, and the caller
-  /// deopts rather than being handed a guess.
   #[test]
   fn a_string_with_no_text_is_refused_rather_than_ordered() {
     let bin = bin_expr(BinaryOp::Lt, lone_surrogate_expr(), create_string_expr("a"));
@@ -559,25 +460,20 @@ mod the_number_path {
     assert_refuses_with(num_or_str_path(&bin), ILLEGAL_PROP_VALUE);
   }
 
-  /// `in` asks a question about an object, and this path has already coerced
-  /// both sides to numbers — so what it answers is not the operator's meaning.
-  /// Pinned as found: nothing real StyleX source can write reaches the arm.
+  /// This internal `in` arm tests coerced numbers, not JavaScript object membership.
   #[test]
   fn in_answers_on_the_coerced_right_side_being_zero() {
     assert_eq!(fold_numbers(BinaryOp::In, 10.0, 0.0), 1.0);
     assert_eq!(fold_numbers(BinaryOp::In, 10.0, 1.0), 0.0);
   }
 
-  /// `instanceof` is the same shape as `in`, and pinned for the same reason.
+  /// This internal `instanceof` arm has the same numeric behavior as `in`.
   #[test]
   fn instanceof_answers_on_the_coerced_right_side_being_zero() {
     assert_eq!(fold_numbers(BinaryOp::InstanceOf, 10.0, 0.0), 1.0);
     assert_eq!(fold_numbers(BinaryOp::InstanceOf, 10.0, 2.0), 0.0);
   }
 
-  /// The three logical operators never reach this path — the node dispatches
-  /// them to their own before it runs — and it refuses rather than coercing
-  /// them to a number, which is what it used to do.
   #[test]
   fn the_logical_operators_are_refused_rather_than_coerced() {
     for op in [
@@ -591,11 +487,6 @@ mod the_number_path {
     }
   }
 
-  /// A string operand is read through `StringToNumber`, which is where Rust's
-  /// float grammar and the language part company. Rust reads `inf` and `nan`,
-  /// which the language does not; the language reads the radix prefixes, the
-  /// surrounding whitespace and the empty string, which Rust does not; and a
-  /// text that is no numeric literal at all is `NaN` rather than a refusal.
   #[test]
   fn a_string_operand_is_read_the_way_the_language_reads_it() {
     let folds = |text: &str| {
@@ -606,19 +497,15 @@ mod the_number_path {
       )))
     };
 
-    // Rust reads these three as numbers and the language reads none of them.
     assert!(folds("inf").is_nan());
     assert!(folds("infinity").is_nan());
     assert!(folds("nan").is_nan());
 
-    // The language reads these four and Rust reads none of them.
     assert_eq!(folds("0x10"), 16.0);
     assert_eq!(folds("0b11"), 3.0);
     assert_eq!(folds(" 10 "), 10.0);
     assert_eq!(folds("\u{FEFF}10"), 10.0);
 
-    // The empty string is nought, and a text with no numeric literal in it is
-    // `NaN` -- a value that reaches the stylesheet, not a refusal.
     assert_eq!(
       expect_number(num_or_str_path(&bin_expr(
         BinaryOp::Sub,
@@ -631,12 +518,6 @@ mod the_number_path {
     assert!(folds("10px").is_nan());
   }
 
-  /// `null` is nought under every operator that takes a number, which the
-  /// literal grammar had no reading of at all.
-  ///
-  /// `+` is asked too, because it is the one operator that decides its own
-  /// result type: neither side is a string, so it adds rather than
-  /// concatenating, and `null + 1` is `1` and not `"null1"`.
   #[test]
   fn a_null_operand_is_nought() {
     let bin = bin_expr(BinaryOp::Mul, create_null_expr(), create_number_expr(1.0));
@@ -649,8 +530,6 @@ mod the_number_path {
     assert_eq!(expect_number(num_or_str_path(&bin)), 1.0);
   }
 
-  /// A string this compiler cannot read has no number either, so an operator
-  /// that needs one refuses and the caller deopts.
   #[test]
   fn a_string_operand_with_no_text_is_refused() {
     let bin = bin_expr(
@@ -662,8 +541,6 @@ mod the_number_path {
     assert_refuses_with(num_or_str_path(&bin), ILLEGAL_PROP_VALUE);
   }
 
-  /// An operand that cannot be resolved at compile time takes its confidence
-  /// with it, and the path refuses rather than folding around it.
   #[test]
   fn an_unresolvable_left_operand_is_refused() {
     let bin = bin_expr(
@@ -675,9 +552,6 @@ mod the_number_path {
     assert_refuses_with(num_or_str_path(&bin), LEFT_HAS_NO_VALUE);
   }
 
-  /// The right side of a `+` names itself, which is the sentence the left one
-  /// above does not prove: `+` is the one operator that reads both sides before
-  /// either is coerced, so each side has a refusal of its own.
   #[test]
   fn an_unresolvable_right_operand_of_an_addition_is_refused() {
     let bin = bin_expr(
@@ -717,10 +591,6 @@ mod the_string_path {
     );
   }
 
-  /// Only `+` has a string result. Every other operator arrives here having
-  /// already been refused by the number path, and is refused again so the
-  /// caller deopts — rather than failing the build over an expression the
-  /// language reads as a value.
   #[test]
   fn a_non_addition_operator_is_refused() {
     let bin = bin_expr(
@@ -732,8 +602,6 @@ mod the_string_path {
     assert_refuses_with(string_path(&bin), "only addition is supported");
   }
 
-  /// An operand with no compile-time value refuses here too, so a `+` whose
-  /// right side is only known at runtime falls to the runtime whole.
   #[test]
   fn an_unresolvable_right_operand_is_refused() {
     let bin = bin_expr(
@@ -746,11 +614,6 @@ mod the_string_path {
   }
 }
 
-/// An operand with no number refuses on the numeric path, and the refusal is
-/// the coercion's own rather than the operand walk's: the side evaluated, and
-/// then had no number to give. `{ toString: 1 }` is such a value -- neither
-/// conversion method is callable, so the language itself throws where a number
-/// was wanted.
 #[test]
 fn a_left_operand_that_evaluated_but_has_no_number_is_refused() {
   let bin = bin_expr(
@@ -766,9 +629,6 @@ fn a_left_operand_that_evaluated_but_has_no_number_is_refused() {
   assert_refuses_with(num_or_str_path(&bin), "is not a number");
 }
 
-/// A `+` concatenates as soon as either side is a string, and a side with no
-/// string at all refuses there. A function is the value with none: its only
-/// string is its source text, which neither compiler keeps.
 #[test]
 fn a_concatenation_over_a_value_with_no_string_is_refused() {
   let fns = a_map_holding_a_function();
@@ -791,18 +651,10 @@ fn a_concatenation_over_a_value_with_no_string_is_refused() {
   }
 }
 
-/// The right side of an operator that is not `+` is read after the left has
-/// coerced, and each way it can fail is answered where it fails.
-///
-/// The left side's ways are pinned above. These are the right's, and they are
-/// a different order of events: `+` asks its right side before either coerces,
-/// so only the other operators reach a right side with the left already read.
 #[test]
 fn a_right_operand_with_no_number_is_refused_where_it_fails() {
   let fns = a_map_holding_a_function();
 
-  // Evaluated, and then no number: neither conversion method is callable, so
-  // the language itself throws where a number was wanted.
   let unconvertible = Expr::from(create_object_lit(vec![create_key_value_prop(
     "toString",
     create_number_expr(1.0),
@@ -811,10 +663,6 @@ fn a_right_operand_with_no_number_is_refused_where_it_fails() {
 
   assert_refuses_with(num_or_str_path_with_fns(&bin, &fns), "is not a number");
 
-  // A value the module holds that is not an expression at all, which is what a
-  // name bound to one of this compiler's own functions resolves to. A function
-  // has the number `NaN`, as under a unary operator, so the subtraction folds.
-  // A comparison does not read a side as a number, so there it still refuses.
   let function = || create_ident_expr(OWN_FUNCTION);
   let bin = bin_expr(BinaryOp::Sub, create_number_expr(1.0), function());
 
@@ -828,8 +676,6 @@ fn a_right_operand_with_no_number_is_refused_where_it_fails() {
   );
 }
 
-/// A right side that answered nothing at all refuses before any coercion, which
-/// is the third way and the one that names the side rather than the reading.
 #[test]
 fn a_right_operand_that_answered_nothing_is_refused() {
   let bin = bin_expr(
@@ -841,12 +687,6 @@ fn a_right_operand_that_answered_nothing_is_refused() {
   assert_refuses_with(num_or_str_path(&bin), RIGHT_NOT_A_NUMBER);
 }
 
-/// Asserts a path refused, and that the sentence is the one `expected`.
-///
-/// The sentence rather than only the refusal: which side had no reading, and
-/// which of the two readings asked for it, are the whole of what these cases
-/// are about -- and a refusal from the other side reads to a caller exactly
-/// like the right one.
 #[track_caller]
 fn assert_refuses_with(result: Result<BinaryExprType, anyhow::Error>, expected: &str) {
   match result {
@@ -864,15 +704,6 @@ fn assert_refuses_with(result: Result<BinaryExprType, anyhow::Error>, expected: 
   }
 }
 
-// ==================== a comparison answers a boolean ====================
-
-/// The eight comparison operators answer `true` or `false`, which is what the
-/// language and the reference implementation answer.
-///
-/// They used to answer `1` and `0`, and the number reached two places an author
-/// can see: a computed key named the property `0` where the reference
-/// implementation names it `false`, and a comparison written as a whole style
-/// value wrote `1px` where the reference implementation stops the build.
 #[test]
 fn a_comparison_answers_a_boolean() {
   for (source, expected) in [
@@ -883,11 +714,7 @@ fn a_comparison_answers_a_boolean() {
     ("1 === 1", true),
     ("1 !== 2", true),
     ("1 == '1'", true),
-    // `!=` is the negation of `==`, as the language reads it: `node` answers
-    // `false` here and for `null != undefined`. The reference implementation
-    // answers `true` for both, because its `!=` arm returns `left !== right`
-    // (`lib/index.js:6830-6831`, built `@stylexjs/babel-plugin` 0.19.1) -- a
-    // defect this compiler does not reproduce (owner decision: JS-correct `!=`).
+    // JS-correct `!=` differs from Babel 0.19.1's `left !== right` (`lib/index.js:6830-6831`).
     ("1 != '1'", false),
     ("null != undefined", false),
     ("'10' < '9'", true),
@@ -901,8 +728,6 @@ fn a_comparison_answers_a_boolean() {
   }
 }
 
-/// A comparison still reads as a number where a number is what the surrounding
-/// expression asks for, because that is `ToNumber` of the boolean it answers.
 #[test]
 fn a_comparison_reads_as_a_number_where_one_is_asked_for() {
   assert_folds_to_number("(1 < 2) + 1", 2.0);
@@ -911,8 +736,6 @@ fn a_comparison_reads_as_a_number_where_one_is_asked_for() {
   assert_folds_to_number("-(1 < 2)", -1.0);
 }
 
-/// It reads as its own text where a string is what is asked for, which is the
-/// word rather than the digit.
 #[test]
 fn a_comparison_reads_as_its_word_where_a_string_is_asked_for() {
   assert_folds_to_string("`x${1 < 2}y`", "xtruey");
@@ -920,7 +743,6 @@ fn a_comparison_reads_as_its_word_where_a_string_is_asked_for() {
   assert_folds_to_string("'x' + (1 < 2)", "xtrue");
 }
 
-/// A comparison is still a condition, and the branch it picks does not change.
 #[test]
 fn a_comparison_still_decides_a_condition() {
   assert_folds_to_string("1 < 2 ? 'a' : 'b'", "a");
@@ -929,19 +751,6 @@ fn a_comparison_still_decides_a_condition() {
   assert_folds_to_string("(1 < 2) && 'a'", "a");
 }
 
-/// A comparison with a primitive on one side and an object on the other
-/// answers what the language answers, whichever operator it is and whichever
-/// side the object is on: the object is reduced through `ToPrimitive` and the
-/// result compared, and a strict comparison is false on the types alone. The
-/// values are `node`'s own for each source, and the reference implementation
-/// folds the same values with the language's own operators
-/// (`lib/index.js:6802-6855`, built `@stylexjs/babel-plugin` 0.19.1; executed).
-///
-/// Two objects compare by reference, and that comparison still refuses: the
-/// language answers `o == o` true and `({}) == ({})` false, and refusing both
-/// is what keeps a reading that lost identity from writing a wrong `true` or
-/// `false`. `node` and the reference implementation answer `false` for the row
-/// below (executed); the refusal is this compiler's guard, kept.
 #[test]
 fn a_comparison_with_an_object_on_either_side_answers_what_the_language_answers() {
   for (source, expected) in [
@@ -956,15 +765,9 @@ fn a_comparison_with_an_object_on_either_side_answers_what_the_language_answers(
     assert_folds_to_boolean(source, expected);
   }
 
-  // Parent-approved JS identity: two written object allocations are distinct.
-  // Executed Node and unchanged Babel both answer false; only unknown alias
-  // identity keeps the refusal guard (pinned below in the dedicated test).
   assert_folds_to_boolean("({}) == ({})", false);
 }
 
-/// An array or an object under an operator that reads each side as a number.
-/// `ToNumber` reads it through its primitive, as the unary operators do. The
-/// reference implementation folds each row to the same value.
 #[test]
 fn an_array_or_an_object_is_read_as_a_number_by_each_numeric_operator() {
   for (source, expected) in [
@@ -984,7 +787,6 @@ fn an_array_or_an_object_is_read_as_a_number_by_each_numeric_operator() {
     ("[5] ^ 1", 4.0),
     ("({ valueOf: () => 2 }) * 3", 6.0),
     ("({ toString: () => '7' }) - 1", 6.0),
-    // A method that gives no primitive is skipped, and the other one answers.
     ("({ valueOf: () => ({}), toString: () => '3' }) * 1", 3.0),
     ("({ valueOf: 'x', toString: () => '4' }) * 2", 8.0),
   ] {
@@ -1003,21 +805,13 @@ fn an_array_or_an_object_is_read_as_a_number_by_each_numeric_operator() {
     assert_folds_to_nan(source);
   }
 
-  // An array holding a function reads through its join, which is the
-  // function's source text: `node` answers `NaN` from it. This compiler does
-  // not rebuild a function's source, so it refuses rather than guess at it.
+  // Function source text is unavailable, so array-to-number coercion refuses rather than guesses.
   assert_deopt_reason_contains(
     "[() => 1] * 2",
     "Cannot convert a function to a compile-time primitive.",
   );
 }
 
-/// The operators that do not read each side as a number keep their own
-/// reading. `+` concatenates an array, because its primitive is a string. A
-/// relational comparison reads the array's primitive (`'2'`) and then its
-/// number, and a strict comparison is false on the types alone -- `node` and the
-/// reference implementation (`lib/index.js:6802-6855`) both answer `true` and
-/// `false`.
 #[test]
 fn the_other_operators_do_not_read_an_array_or_an_object_as_a_number() {
   assert_folds_to_string("[2] + 1", "21");
@@ -1026,9 +820,6 @@ fn the_other_operators_do_not_read_an_array_or_an_object_as_a_number() {
   assert_folds_to_boolean("[2] === 2", false);
 }
 
-/// The number of an array is read off its join, and that join is measured
-/// against the character ceiling as it grows. Past the ceiling the operator
-/// refuses, and the refusal names the conversion, as under a unary operator.
 #[test]
 fn a_numeric_operator_refuses_an_array_whose_text_passes_the_ceiling() {
   let bin = bin_expr(
@@ -1050,46 +841,31 @@ fn a_numeric_operator_refuses_an_array_whose_text_passes_the_ceiling() {
   );
 }
 
-/// An own conversion method whose body is a BigInt literal has no
-/// compile-time value. The conversion runs that method as an expression arrow,
-/// so its body's refusal arrives as a throw rather than a deopt: the reference
-/// implementation folds the arrow into a closure, the operator calls it, and
-/// the closure throws `Unsupported expression: BigIntLiteral` out of
-/// `lib/index.js:6451` (built `@stylexjs/babel-plugin` 0.19.1; executed for
-/// each row). `node` throws a `TypeError` for each row (a BigInt never mixes
-/// with a number). One case per row, because each is a throw.
+/// Babel closures throw unsupported BigInt errors (`lib/index.js:6451`).
 #[test]
 #[should_panic(expected = "Unsupported expression: BigIntLiteral")]
 fn a_numeric_operator_over_an_object_that_converts_to_a_big_integer_throws() {
   evaluate_source("({ valueOf: () => 2n }) * 3");
 }
 
-/// The same throw under `**`.
 #[test]
 #[should_panic(expected = "Unsupported expression: BigIntLiteral")]
 fn a_power_over_an_object_that_converts_to_a_big_integer_throws() {
   evaluate_source("({ valueOf: () => 2n }) ** 2");
 }
 
-/// The same throw with the object on the right.
 #[test]
 #[should_panic(expected = "Unsupported expression: BigIntLiteral")]
 fn a_subtraction_from_an_object_that_converts_to_a_big_integer_throws() {
   evaluate_source("3 - ({ valueOf: () => 2n })");
 }
 
-/// The same throw through `toString`, which a number hint reaches once the
-/// inherited `valueOf` answers an object.
 #[test]
 #[should_panic(expected = "Unsupported expression: BigIntLiteral")]
 fn a_to_string_that_converts_to_a_big_integer_throws() {
   evaluate_source("({ toString: () => 2n }) - 1");
 }
 
-/// `in` asks whether an object has a key, and the answer is the language's:
-/// `node` and the reference implementation (`lib/index.js:6848-6849`, `left in
-/// right`) answer `true`, `false`, `true`. The source is in parentheses,
-/// because the case parser does not read `in` at the top level.
 #[test]
 fn in_over_an_object_answers_what_the_language_answers() {
   for (source, expected) in [
@@ -1101,9 +877,6 @@ fn in_over_an_object_answers_what_the_language_answers() {
   }
 }
 
-/// No conversion method gives a primitive, so the language throws a
-/// `TypeError`, and the fold refuses. The reference implementation refuses
-/// each row too.
 #[test]
 fn a_numeric_operator_refuses_an_object_with_no_primitive() {
   for source in [
@@ -1115,10 +888,6 @@ fn a_numeric_operator_refuses_an_object_with_no_primitive() {
   }
 }
 
-/// `+` reads an object through `ToPrimitive` with no hint, which asks `valueOf`
-/// first. A method that gives no primitive is skipped, so the default text
-/// concatenates. Where no method gives a primitive, the fold refuses. The
-/// reference implementation gives the same answer for each row.
 #[test]
 fn an_addition_skips_a_conversion_method_that_gives_no_primitive() {
   assert_folds_to_string("({ valueOf: () => ({}) }) + ''", "[object Object]");
@@ -1130,9 +899,6 @@ fn an_addition_skips_a_conversion_method_that_gives_no_primitive() {
 
 #[test]
 fn reference_equality_uses_fresh_literals_and_guarded_binding_identity() {
-  // Node and unchanged Babel: reference/reference equality never coerces. Two
-  // written literal allocations differ; the same initialized lexical binding
-  // denotes the same allocation. No structural-object equality is substituted.
   for source in [
     "({}) == ({})",
     "({}) === ({})",
@@ -1159,8 +925,7 @@ fn reference_equality_uses_fresh_literals_and_guarded_binding_identity() {
       result.value
     );
   }
-  // The legacy expression carrier cannot certify alias identity through a
-  // returned value. Refuse rather than claim the alias is a distinct object.
+  // The legacy expression carrier cannot certify alias identity through a returned value.
   let alias = crate::evaluate::source_evaluation::evaluated_in_a_module_binding(
     "object",
     "{}",

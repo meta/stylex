@@ -1,4 +1,3 @@
-//! A non-callee source site should not pay for hashing a whole member chain.
 use super::CallExpressionState;
 use stylex_ast::ast::factories::{create_ident, create_ident_name};
 use swc_core::{

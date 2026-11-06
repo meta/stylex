@@ -443,8 +443,7 @@ impl Context<'_> {
       Value::Function(function) => self.callbacks.call(function, args)?,
       _ => return None,
     };
-    // Account before the array method retains the callback output. A callback
-    // returning a large value per element cannot build an unmetered result.
+    // Enforce callback-result limits before an array method retains the value.
     enforce_result_limits(&value)?;
     self.budget.allocate(value_size(&value))?;
     Some(value)
@@ -644,8 +643,7 @@ pub fn scoped_read_observer<T: 'static>() -> Option<Rc<T>> {
   })
 }
 
-/// Configured per-result ceilings remain distinct from cumulative operation
-/// work/allocation counters. Installing them cannot replenish spent work.
+/// Sets per-result character/entry ceilings without resetting cumulative work counters.
 pub fn set_result_limits(characters: usize, entries: usize) {
   ACTIVE.with(|slot| {
     if let Some(budget) = slot.borrow().as_ref() {
@@ -690,9 +688,7 @@ pub fn entry_limit() -> usize {
       .map_or(output_limit(), |limits| limits.1)
   })
 }
-/// Count nested containers as they become successful callback results. The
-/// output array's own known slots are included by the caller. This is a guard
-/// on the actual result prefix, never a scan of callback code or future reads.
+/// Counts nested entries in a successful callback result; caller includes the outer array slots.
 fn check_array_result_entries(value: &Value, mut entries: usize) -> Option<usize> {
   if !matches!(
     value,
@@ -786,8 +782,7 @@ pub fn enforce_result_limits(value: &Value) -> Option<()> {
   Some(())
 }
 
-/// Capability refusals are not author exceptions. The epoch also prevents a
-/// cached refusal from losing its classification in a later callback frame.
+/// Capability-refusal epoch used to preserve classification across cached callback refusals.
 pub fn model_refusal_epoch() -> u64 {
   ACTIVE.with(|slot| {
     slot
@@ -806,8 +801,7 @@ pub fn observe_model_refusal() {
   })
 }
 
-/// Per-result data depth is distinct from runtime call nesting and spent work.
-/// Re-installing a ceiling cannot reset the ledger or relax an existing root.
+/// Tightens per-result data depth without resetting work or runtime call nesting.
 pub fn set_result_depth_limit(limit: usize) {
   let limit = limit.clamp(1, ABSOLUTE_MAX_DEPTH);
   ACTIVE.with(|slot| {

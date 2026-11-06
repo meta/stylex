@@ -1,4 +1,3 @@
-// Import error handling macros from shared utilities
 use stylex_macros::{
   as_expr_or_panic, stylex_bail, stylex_panic, stylex_unimplemented, unwrap_or_panic,
 };
@@ -22,23 +21,11 @@ pub fn expr_to_num(
   fns: &FunctionMap,
 ) -> Result<f64, anyhow::Error> {
   let result = match &expr_num {
-    // `undefined`, `NaN` and `Infinity` are ordinary identifiers rather than
-    // literals, and the evaluator now hands two of them back as values in their
-    // own right — `void x`, and a key an object does not carry. Asked of the
-    // binding table instead, they resolve to no declaration and fail the build,
-    // where JavaScript answers `NaN`, `NaN` and `Infinity`. The shared coercion
-    // names exactly those three and refuses every other identifier, so an
-    // ordinary binding still reads its declaration below.
     Expr::Ident(ident) => match coercions::to_js_number(expr_num) {
       Some(number) => number,
       None => ident_to_number(ident, state, traversal_state, &FunctionMap::default()),
     },
-    // A string's number is `StringToNumber`, not Rust's float grammar: Rust
-    // accepts `inf` and `nan`, which the language does not, and rejects the
-    // radix prefixes and the surrounding whitespace, which it does. The first
-    // disagreement puts a wrong number in a stylesheet and the second refuses a
-    // fold the reference implementation makes. `null` is nought for the same
-    // reason: the literal grammar has no reading of it and the language does.
+
     Expr::Lit(Lit::Str(_) | Lit::Null(_)) => match coercions::to_js_number(expr_num) {
       Some(number) => number,
       None => stylex_bail!("{}", ILLEGAL_PROP_VALUE),
@@ -56,10 +43,7 @@ pub fn expr_to_num(
         ),
       }
     },
-    // An expression with no numeric reading is reported rather than fatal:
-    // `-{}` and `Math.abs([])` are ordinary JavaScript, and this returns a
-    // `Result` precisely so the evaluator can refuse to fold them instead of
-    // aborting the build from inside an evaluation allowed to fail.
+
     _ => stylex_bail!(
       "Expression is not a number: {}",
       get_expr_node_kind(expr_num)

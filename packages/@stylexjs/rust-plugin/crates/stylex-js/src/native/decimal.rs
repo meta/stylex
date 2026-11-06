@@ -1,6 +1,4 @@
-//! Exact binary64 decimal rounding for explicit Number precision. The coefficient
-//! is expanded with small integer arithmetic, so halfway cases round toward the
-//! larger decimal coefficient as ECMAScript requires (not Rust's ties-to-even).
+//! Binary64 decimal formatting with ECMAScript's larger-coefficient tie rounding.
 use super::{Budget, value::number_string};
 fn multiply(digits: &mut Vec<u8>, by: u16) {
   let mut carry = 0;

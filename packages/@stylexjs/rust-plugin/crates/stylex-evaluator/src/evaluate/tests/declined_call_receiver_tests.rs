@@ -1,14 +1,4 @@
-//! How the dispatch below the engine reads the receiver of a call.
-//!
-//! A call the engine folded never reaches this dispatch, so every case here has
-//! to make the engine decline first and leave the receiver exactly as it was
-//! written. Two shapes do that: an argument nothing binds, and a value with no
-//! JavaScript form -- one of the compiler's own functions -- sitting beside the
-//! receiver's own properties.
-//!
-//! What the dispatch then reads is the receiver's *value*, and the three ways
-//! that reading can go are the subject: a value it can apply, a value it can
-//! name but not call, and no value at all while the walk is still confident.
+//! Tests receiver lookup and refusal propagation in fallback call dispatch.
 
 use super::source_evaluation::*;
 use std::rc::Rc;
@@ -18,21 +8,10 @@ use stylex_constants::constants::messages::OBJECT_KEY_MUST_BE_IDENT;
 use stylex_state::functions::{FunctionConfigType, FunctionMap, FunctionType};
 use stylex_state::types::FunctionConfigMap;
 
-/// The namespace name every case here reads, holding one entry whose name is
-/// not a valid identifier.
-///
-/// A key an author cannot spell as an identifier is the one way a property of
-/// an *evaluated* object arrives quoted: the object node the evaluator writes
-/// spells every key of its own as an identifier, and only the function fold's
-/// bridge, which reads entry names, can hand one over that needs quotes.
+/// Uses a non-identifier key so the evaluated object must retain a quoted property.
 const QUOTED_ENTRY: &str = "a-b";
 
-/// A namespace holding [`QUOTED_ENTRY`] alone.
-///
-/// Keyed on [`FOLD_NAMESPACE`], like every namespace the suites here build, so
-/// the name the map holds and the name a source spreads cannot come apart. It is
-/// not [`a_function_fold`]: that one holds the entry under a name an identifier
-/// can spell, which is the whole difference a case here turns on.
+/// Binds the quoted entry under `FOLD_NAMESPACE`.
 fn a_namespace_with_a_quoted_entry() -> FunctionMap {
   let mut entries = FunctionConfigMap::default();
 
@@ -48,13 +27,6 @@ fn a_namespace_with_a_quoted_entry() -> FunctionMap {
   fns
 }
 
-/// A name the module bound to one of the compiler's own functions is applied
-/// where the call is, rather than handed back as the function it names.
-///
-/// The name resolves through the member read that names the entry, so what the
-/// call has in hand is a function config and not a map -- the one shape a bare
-/// callee can resolve to that is neither an entry of the injected map nor an
-/// arrow the author wrote.
 #[test]
 fn a_name_bound_to_one_of_the_compilers_functions_is_applied_where_it_is_named() {
   let source = "named('red')";
@@ -72,19 +44,6 @@ fn a_name_bound_to_one_of_the_compilers_functions_is_applied_where_it_is_named()
   assert_eq!(folded_text_of(result, source), "red");
 }
 
-/// A receiver the memo already refused refuses again with the reason it was
-/// refused for.
-///
-/// The memo used to remember a refused subtree without its reason, and these
-/// cases pinned the sentence that stood in for it. The memo now replays the
-/// recorded reason (eb1efe6, "preserve deopt reasons"), so a second read of
-/// `(() => 1) + 1` answers what the first did: an arrow has no primitive this
-/// compiler will spell, and the `+` refuses as
-/// `Unsupported expression: BinaryExpression`. The reference implementation is
-/// no oracle for the value -- it folds the arrow to the source text of its own
-/// wrapper closure (`lib/index.js:6440-6457`, `+` at `:6806-6807`; executed) --
-/// so the refusal is this compiler's, and the warm is kept so the memo is what
-/// answers.
 #[test]
 fn a_receiver_the_memo_refused_replays_its_reason() {
   let source = "((() => 1) + 1).foo(unknownName)";
@@ -96,7 +55,6 @@ fn a_receiver_the_memo_refused_replays_its_reason() {
   );
 }
 
-/// The same receiver reached through a computed key replays the same reason.
 #[test]
 fn a_computed_call_over_such_a_receiver_replays_its_reason() {
   let source = "((() => 1) + 1)['foo'](unknownName)";
@@ -108,14 +66,6 @@ fn a_computed_call_over_such_a_receiver_replays_its_reason() {
   );
 }
 
-/// A receiver whose kind carries no method refuses the call before its
-/// argument is read. `null` and `undefined` are the two such values, and
-/// neither has a method to find, so the call has no function and refuses with
-/// the terminal `Unsupported expression: CallExpression` -- the reference
-/// implementation's sentence for a call it found no function for
-/// (`lib/index.js:6942`). The reference implementation itself throws reading
-/// `null.foo` (`TypeError`; executed), which this compiler turns into the
-/// refusal; the node-kind sentences were the optional engine's.
 #[test]
 fn a_receiver_whose_kind_carries_no_methods_refuses_the_call() {
   let fns = FunctionMap::default();
@@ -129,13 +79,6 @@ fn a_receiver_whose_kind_carries_no_methods_refuses_the_call() {
   }
 }
 
-/// A method the receiver carries is the arrow under that key, applied where the
-/// call is.
-///
-/// The engine declines because one of the object's *other* properties holds a
-/// function of the compiler's own, which has no JavaScript form -- so the
-/// dispatch reads a receiver whose properties are otherwise ordinary, and the
-/// arrow under the called key is what answers.
 #[test]
 fn a_method_the_receiver_carries_is_the_arrow_under_that_key() {
   let mut fns = FunctionMap::default();
@@ -152,21 +95,6 @@ fn a_method_the_receiver_carries_is_the_arrow_under_that_key() {
   );
 }
 
-/// A key the receiver spells with quotes does not hide the keys beside it.
-///
-/// The first assertion is the whole of what this pins, and what it pins is the
-/// walk: a method beside the quoted key is still found, and the case fails when
-/// the walk drops a property it should keep. Proved by making the walk yield
-/// nothing and watching the case fail.
-///
-/// The second assertion says the quoted key is there at all, which is what makes
-/// the first one mean anything. What it does *not* do is pin how the key is
-/// read, and no case can. The name comes from a dot, so it is always an
-/// identifier, and a quoted key can never equal one however the key is read --
-/// reading the key as an identifier and comparing its text give the same answer
-/// for every input. Where a quoted key is an answer of its own is the type
-/// function, which refuses one by name, and
-/// `a_type_function_refuses_a_key_that_is_not_an_identifier` is the case for it.
 #[test]
 fn a_key_the_receiver_spells_with_quotes_does_not_hide_the_keys_beside_it() {
   let fns = a_namespace_with_a_quoted_entry();
@@ -178,22 +106,11 @@ fn a_key_the_receiver_spells_with_quotes_does_not_hide_the_keys_beside_it() {
     "red"
   );
 
-  // The call follows the language's order -- read the callee, evaluate every
-  // argument, then ask whether the callee is callable -- so the receiver's
-  // missing key is read as `undefined` and the argument nothing binds refuses
-  // first, as `node` throws its `ReferenceError` for `unknownName` (executed;
-  // parent decision: JS call order). The property-not-found sentence was the
-  // optional engine's.
   let source = format!("({{ ...{FOLD_NAMESPACE} }}).missing(unknownName)");
 
   assert_refused_with(&evaluated_against(&fns, &source), &source, UNDEFINED_CONST);
 }
 
-/// A type function reads its entries off the object it was handed, and a key
-/// that is not an identifier is not one it can name.
-///
-/// The same quoted key as above, in the one other position that reads an
-/// evaluated object's keys.
 #[test]
 fn a_type_function_refuses_a_key_that_is_not_an_identifier() {
   let mut fns = a_namespace_with_a_quoted_entry();

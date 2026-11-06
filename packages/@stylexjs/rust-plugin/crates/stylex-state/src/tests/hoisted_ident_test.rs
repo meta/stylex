@@ -1,10 +1,3 @@
-//! The module-level names the compiler generates for the expressions it lifts
-//! out of a `stylex.create` call.
-//!
-//! Two properties matter. The name is a function of the file alone, so the same
-//! input always gives the same output whatever the compiler did before it. And
-//! the name is free, so it cannot take a name the module already uses.
-
 use crate::tests::prelude::test_state as state;
 
 #[test]
@@ -26,9 +19,6 @@ fn counts_each_stem_on_its_own() {
   assert_eq!(state.next_hoisted_ident("styles").sym.as_str(), "_styles2");
 }
 
-/// The property the whole change is for. One file must not see the names
-/// another file took, or the output of a file depends on the order the compiler
-/// read the files in.
 #[test]
 fn starts_again_for_the_next_file() {
   let mut first = state();
@@ -61,8 +51,6 @@ fn passes_over_a_run_of_names_the_module_already_uses() {
   assert_eq!(state.next_hoisted_ident("temp").sym.as_str(), "_temp5");
 }
 
-/// A name taken in the middle of the run is passed over, and the count goes on
-/// from where it stopped.
 #[test]
 fn passes_over_a_name_taken_in_the_middle_of_the_run() {
   let mut state = state();
@@ -72,8 +60,6 @@ fn passes_over_a_name_taken_in_the_middle_of_the_run() {
   assert_eq!(state.next_hoisted_ident("temp").sym.as_str(), "_temp3");
 }
 
-/// A module can hold a great many hoisted expressions. The names stay unique
-/// and in order.
 #[test]
 fn gives_a_unique_name_for_every_one_of_many_expressions() {
   let mut state = state();
@@ -90,8 +76,6 @@ fn gives_a_unique_name_for_every_one_of_many_expressions() {
   assert_eq!(names[4_999], "_temp4998");
 }
 
-/// The name goes on a `const` declaration of the module, so it is a binding
-/// like any other and every later question about the name sees it.
 #[test]
 fn records_the_name_it_gave_as_a_binding() {
   let mut state = state();

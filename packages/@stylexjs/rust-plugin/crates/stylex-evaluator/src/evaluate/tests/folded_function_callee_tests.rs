@@ -1,21 +1,4 @@
-//! Calling one of the compiler's own functions.
-//!
-//! The [folded function map](../../../../../CONTEXT.md#folded-function-map)
-//! binds `create`, `keyframes`, the `when` markers and the `env` option to
-//! names before the fold starts, and a call on one of those names is applied
-//! here rather than in the engine: the entries are Rust functions and most of
-//! them write into the build, so none of them has a JavaScript form to cross.
-//!
-//! Each entry kind takes its arguments differently -- some take the expressions
-//! the author wrote, some take what those expressions folded to, and one takes
-//! a map read out of an object literal -- so each is applied by its own arm.
-//! An arm that read the wrong argument shape would not refuse; it would call
-//! the compiler's own function with the wrong value, so every kind is pinned
-//! here.
-//!
-//! Both spellings of the call are covered, because the same entry is reachable
-//! as a bare name and as a member of the namespace it was imported under, and
-//! the two lookups are separate code.
+//! Tests calls through injected function maps, argument forms and memo isolation.
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -45,13 +28,10 @@ use swc_core::ecma::ast::Expr;
 
 use stylex_ast::ast::convertors::{convert_atom_to_string, create_string_expr};
 
-/// The name every case calls the entry under, and the namespace it is also
-/// reachable through.
 const CALLED: &str = "make";
 const NAMESPACE: &str = "sx";
 
-/// A map holding `entry` under both spellings: as the bare name a named import
-/// binds, and as a property of the namespace a star import binds.
+/// Registers `entry` as both a bare name and a namespace property.
 fn map_holding(entry: FunctionConfigType) -> FunctionMap {
   let mut fns = FunctionMap::default();
 
@@ -71,9 +51,6 @@ fn map_holding(entry: FunctionConfigType) -> FunctionMap {
   fns
 }
 
-/// The text `source` folds to, called under both spellings, which have to
-/// answer the same thing: an author who imported the name and an author who
-/// imported the namespace wrote the same call.
 #[track_caller]
 fn folded_both_ways(entry: FunctionConfigType, arguments: &str) -> String {
   let fns = map_holding(entry);
@@ -106,8 +83,6 @@ fn assert_refuses_both_ways(entry: FunctionConfigType, arguments: &str, reason: 
   }
 }
 
-/// A function of the arguments' own count, so a case can tell a call that read
-/// its arguments from one that read none.
 fn joined(args: Vec<Expr>) -> Expr {
   let parts = args
     .iter()
@@ -120,9 +95,6 @@ fn joined(args: Vec<Expr>) -> Expr {
   create_string_expr(&parts.join("-"))
 }
 
-// ==================== the kinds that take evaluated arguments ====================
-
-/// A list-taking function reads every argument, in order.
 #[test]
 fn a_list_taking_function_reads_every_argument() {
   assert_eq!(
@@ -134,9 +106,6 @@ fn a_list_taking_function_reads_every_argument() {
   );
 }
 
-/// The same function registered to take the expressions the author wrote rather
-/// than what they folded to. The arguments arrive unfolded, so an expression
-/// that is not a literal reaches the function itself.
 #[test]
 fn a_list_taking_function_can_take_the_written_arguments() {
   assert_eq!(
@@ -155,7 +124,6 @@ fn a_list_taking_function_can_take_the_written_arguments() {
   );
 }
 
-/// A one-expression function reads the first argument and nothing else.
 #[test]
 fn a_one_expression_function_reads_the_first_argument() {
   assert_eq!(
@@ -174,9 +142,6 @@ fn a_one_expression_function_reads_the_first_argument() {
   );
 }
 
-/// A one-expression function with no argument at all has nothing to read, and
-/// says so rather than calling the compiler's own function with a value it
-/// invented.
 #[test]
 fn a_one_expression_function_with_no_argument_refuses() {
   assert_refuses_both_ways(
@@ -191,8 +156,6 @@ fn a_one_expression_function_with_no_argument_refuses() {
   );
 }
 
-/// A `when` function takes a selector and an optional marker, so the second
-/// argument is not required and its absence is not a refusal.
 #[test]
 fn a_when_function_takes_a_selector_and_an_optional_marker() {
   let entry = || {
@@ -211,8 +174,6 @@ fn a_when_function_takes_a_selector_and_an_optional_marker() {
   assert_eq!(folded_both_ways(entry(), "':hover', 'own'"), ":hover/own");
 }
 
-/// A `when` function with no selector at all refuses, because the selector is
-/// the argument the function exists to read.
 #[test]
 fn a_when_function_with_no_selector_refuses() {
   assert_refuses_both_ways(
@@ -225,10 +186,6 @@ fn a_when_function_with_no_selector_refuses() {
   );
 }
 
-/// A type function reads a map out of the object literal it was handed, and a
-/// bare literal is read as that map's `default` entry -- the two spellings
-/// `stylex.types.length('1px')` and `stylex.types.length({ default: '1px' })`
-/// have.
 #[test]
 fn a_type_function_reads_an_object_or_a_bare_literal() {
   let entry = || {
@@ -247,8 +204,6 @@ fn a_type_function_reads_an_object_or_a_bare_literal() {
   assert_eq!(folded_both_ways(entry(), "'1px'"), "default=1px");
 }
 
-/// An `env` function takes the arguments as expressions, which is what the
-/// option's own closure is written against.
 #[test]
 fn an_env_function_takes_its_arguments_as_expressions() {
   assert_eq!(
@@ -260,8 +215,6 @@ fn an_env_function_takes_its_arguments_as_expressions() {
   );
 }
 
-/// A callback entry is an arrow the module wrote, applied to the call's
-/// arguments exactly as a call on the name that holds it would be.
 #[test]
 fn a_callback_entry_is_applied_to_the_calls_arguments() {
   assert_eq!(
@@ -276,11 +229,6 @@ fn a_callback_entry_is_applied_to_the_calls_arguments() {
   );
 }
 
-// ==================== the kinds no call can apply ====================
-
-/// The remaining kinds take evaluated arguments, so registering one to take the
-/// written arguments instead is a call this position cannot make. It refuses
-/// rather than calling the function with the wrong shape.
 #[test]
 fn a_kind_that_cannot_take_the_written_arguments_refuses() {
   for fn_ptr in [
@@ -295,9 +243,6 @@ fn a_kind_that_cannot_take_the_written_arguments_refuses() {
   }
 }
 
-/// An entry that is not a function at all -- a namespace, a marker map, the
-/// `env` object -- is reached through a member read rather than called, so a
-/// call on one refuses.
 #[test]
 fn an_entry_that_is_not_a_function_refuses_a_call() {
   for entry in [
@@ -309,11 +254,6 @@ fn an_entry_that_is_not_a_function_refuses_a_call() {
   }
 }
 
-// ==================== reading the values a case asserts on ====================
-
-/// The text a folded value holds, or `fallback` where it holds none, so a case
-/// can describe what a function was handed without also saying how each value
-/// is represented.
 fn folded_or(value: &EvaluateResultValue, fallback: &str) -> String {
   match value
     .as_expr()
@@ -325,7 +265,6 @@ fn folded_or(value: &EvaluateResultValue, fallback: &str) -> String {
   }
 }
 
-/// The map a type function was handed, written out so a case can compare it.
 fn describe_value_with_default(value: &ValueWithDefault) -> String {
   match value {
     ValueWithDefault::Map(map) => map
@@ -338,26 +277,12 @@ fn describe_value_with_default(value: &ValueWithDefault) -> String {
   }
 }
 
-// ==================== the receiver a member callee is read off ====================
-//
-// A `receiver.method()` callee is looked up twice, in order: the injected map
-// by the receiver's own name, and then the receiver's *value*. What the second
-// lookup finds decides which of three answers the callee is -- a function, a
-// value, or nothing at all -- and each shape of receiver is answered by an arm
-// of its own.
-
-/// The `env` option's object holds both values and functions, and which one a
-/// name holds decides whether the member is called or read. A function is
-/// applied to the call's arguments; a value is the answer itself, and the call
-/// around it is what the position above then refuses.
 #[test]
 fn an_env_member_is_called_where_it_holds_a_function_and_read_where_it_holds_a_value() {
   let fns = map_holding_an_env_object();
 
   assert_eq!(folded_call(&fns, "env.spacing('a', 'b')"), "a-b");
 
-  // The value entry answers itself. The call is not what produced it, so the
-  // answer is the same object the read alone would have given.
   let read = evaluated_against(&fns, "env.breakpoint()");
 
   assert!(
@@ -367,8 +292,6 @@ fn an_env_member_is_called_where_it_holds_a_function_and_read_where_it_holds_a_v
   );
 }
 
-/// A name the `env` object does not carry names no callee. The refusal says so
-/// in the author's own terms -- the property and the option it is missing from.
 #[test]
 fn an_env_member_the_option_does_not_carry_refuses() {
   assert_refused_with(
@@ -378,8 +301,6 @@ fn an_env_member_the_option_does_not_carry_refuses() {
   );
 }
 
-/// A factory entry answers a type function per property, so `types.length(…)`
-/// is the factory applied to the property name and then to the argument.
 #[test]
 fn a_factory_member_answers_a_type_function_for_the_property() {
   let mut fns = FunctionMap::default();
@@ -405,9 +326,6 @@ fn a_factory_member_answers_a_type_function_for_the_property() {
   );
 }
 
-/// A marker map answers a `when` function per marker name, and a name it does
-/// not carry names no callee at all -- so the terminal refusal names the call
-/// rather than the marker.
 #[test]
 fn a_marker_member_answers_a_when_function_for_the_marker_it_names() {
   let mut markers: IndexMap<String, StylexWhenFn> = IndexMap::default();
@@ -435,17 +353,6 @@ fn a_marker_member_answers_a_when_function_for_the_marker_it_names() {
   );
 }
 
-/// A method on an object the author wrote is the arrow under that key, applied
-/// where the call is. A key the object does not carry names no method.
-///
-/// In the language's order the missing key reads as `undefined`, the argument
-/// is evaluated next, and only then is the callee found not callable -- so an
-/// argument nothing binds refuses first, as `node` throws its `ReferenceError`
-/// for `unknownName` (executed; parent decision: JS call order). With an
-/// argument that folds, the call refuses at the callable check. The reference
-/// implementation checks for a function before the arguments
-/// (`Unsupported expression: CallExpression`, `lib/index.js:6942`); the
-/// property-not-found sentence was the optional engine's.
 #[test]
 fn a_method_on_an_object_is_the_arrow_under_that_key() {
   let fns = FunctionMap::default();
@@ -468,8 +375,6 @@ fn a_method_on_an_object_is_the_arrow_under_that_key() {
   );
 }
 
-/// A mutating method is refused before the receiver is even read, because no
-/// receiver could make one safe to fold.
 #[test]
 fn a_mutating_method_is_refused_whatever_the_receiver_is() {
   let fns = map_holding_an_env_object();
@@ -483,9 +388,6 @@ fn a_mutating_method_is_refused_whatever_the_receiver_is() {
   }
 }
 
-/// A namespace reached through a computed key is not applied. The map is looked
-/// up by the key the author wrote, and a call on what it holds is a call this
-/// dispatch does not make.
 #[test]
 fn a_namespace_member_reached_through_a_computed_key_refuses() {
   let fns = map_holding(a_folded_function());
@@ -494,8 +396,6 @@ fn a_namespace_member_reached_through_a_computed_key_refuses() {
   assert_refused_with(&evaluated_against(&fns, &source), &source, NON_CONSTANT);
 }
 
-/// An `env` object holding one function and one value, which is what the option
-/// is configured with.
 fn map_holding_an_env_object() -> FunctionMap {
   let mut env: IndexMap<String, EnvEntry> = IndexMap::default();
 
@@ -518,12 +418,6 @@ fn map_holding_an_env_object() -> FunctionMap {
   fns
 }
 
-// ==================== the argument shapes each kind reads ====================
-
-/// A type function reads a map out of the object it was handed, and the object
-/// it reads is the *evaluated* one -- which carries every key as an identifier
-/// however the author spelled it. So the spelling of a key changes nothing
-/// here, which is the reason there is no arm refusing one.
 #[test]
 fn a_type_function_reads_a_key_however_it_was_spelled() {
   for written in [
@@ -539,8 +433,6 @@ fn a_type_function_reads_a_key_however_it_was_spelled() {
   }
 }
 
-/// A value that is not a literal has no string to put in the map, and is
-/// refused rather than written as the empty string.
 #[test]
 fn a_type_function_refuses_a_value_that_is_not_a_literal() {
   assert_refuses_both_ways(
@@ -550,18 +442,11 @@ fn a_type_function_refuses_a_value_that_is_not_a_literal() {
   );
 }
 
-/// An argument that is an expression but neither an object nor a literal
-/// contributes no entries at all, which is the empty map -- not a refusal,
-/// because a call with nothing in it is a call the reference implementation
-/// answers too.
 #[test]
 fn a_type_function_reads_no_entries_out_of_any_other_expression() {
   assert_eq!(folded_both_ways(a_type_function(), "undefined"), "");
 }
 
-/// Every kind that takes evaluated arguments refuses one with no expression
-/// form. The compiler's own function fold is that argument: it stands for an
-/// object upstream, but there is no expression this side that writes it down.
 #[test]
 fn every_kind_refuses_an_argument_with_no_expression_form() {
   for (entry, reason) in [
@@ -591,15 +476,7 @@ fn every_kind_refuses_an_argument_with_no_expression_form() {
   }
 }
 
-/// Every kind that takes evaluated arguments reads a spread the evaluator can
-/// iterate as the arguments it contributes, and each reads it the same way:
-/// the argument evaluation is shared, so the spread is resolved there rather
-/// than once per kind.
-///
-/// `node` applies `make(...['a'])` as `make('a')`, which is what each kind
-/// below then answers for. The count a spread contributes is the operand's
-/// own, so nothing is guessed -- which is what the old refusal was protecting
-/// against when no operand could be iterated.
+/// Bounded argument spread extends Babel's evaluator, which refuses `SpreadElement`.
 #[test]
 fn every_kind_reads_a_spread_argument_it_can_iterate() {
   for entry in [
@@ -631,13 +508,6 @@ fn every_kind_reads_a_spread_argument_it_can_iterate() {
   }
 }
 
-/// A spread whose operand the evaluator cannot iterate still refuses, under
-/// the sentence it always read.
-///
-/// The guard the case above used to carry, kept: a number is not iterable in
-/// the language either, and an unresolved name is an operand no iteration here
-/// can read. One element standing for however many such an operand holds is a
-/// count no walk can make.
 #[test]
 fn every_kind_refuses_a_spread_argument_it_cannot_iterate() {
   for operand in ["...1", "...unknownThing"] {
@@ -651,9 +521,6 @@ fn every_kind_refuses_a_spread_argument_it_cannot_iterate() {
   }
 }
 
-/// A marker map reached as a bare name is a value rather than a call: the
-/// reference implementation registers it as a function, so a reference to it
-/// folds to the function itself and the call around it answers that.
 #[test]
 fn a_marker_map_called_as_a_bare_name_answers_the_marker_map() {
   let fns = map_holding(folded_entry(
@@ -672,8 +539,6 @@ fn a_marker_map_called_as_a_bare_name_answers_the_marker_map() {
   );
 }
 
-/// A type function that writes out the map it was handed, so a case can read
-/// what the argument became.
 fn a_type_function() -> FunctionConfigType {
   folded_entry(
     FunctionType::StylexTypeFn(Rc::new(|value| {
@@ -683,8 +548,6 @@ fn a_type_function() -> FunctionConfigType {
   )
 }
 
-/// The namespace the fold binds, for the cases whose argument is a value with
-/// no expression form.
 fn a_namespace() -> FunctionConfigType {
   let mut entries = FunctionConfigMap::default();
 
@@ -693,17 +556,8 @@ fn a_namespace() -> FunctionConfigType {
   FunctionConfigType::Map(entries)
 }
 
-// ==================== the memo and the map ====================
-
-/// What the identifier the cases below call folds to where it is registered.
 const FOLDED: &str = "folded";
 
-/// The memo lives for the module and is read by every fold of it, whatever map
-/// the fold carries. A call on a registered helper folds to the helper's value;
-/// the same call under a map that does not register the helper is not a call
-/// the fold can read, and the reference implementation leaves it to the
-/// runtime. The two maps here share an import mode, so the import mode alone
-/// cannot tell them apart; the map's fingerprint does.
 #[test]
 fn a_value_folded_under_a_map_with_the_helper_is_not_answered_under_a_map_without_it() {
   let with_helper = map_holding(folded_entry(
@@ -724,17 +578,11 @@ fn a_value_folded_under_a_map_with_the_helper_is_not_answered_under_a_map_withou
     let second = evaluate(&parse_expr(&source), &mut traversal_state, &without_helper);
     assert_refused(&second, &source);
 
-    // And back: the refusal recorded under the bare map does not hide the
-    // helper from a later fold that registers it.
     let third = evaluate(&parse_expr(&source), &mut traversal_state, &with_helper);
     assert_eq!(folded_text_of(third, &source), FOLDED);
   });
 }
 
-/// Two maps registering the same names, built in different orders, read the
-/// same to the memo; a map registering one more name, or the same name as
-/// another kind of entry, or the same names under the other import mode, does
-/// not.
 #[test]
 fn the_fingerprint_reads_the_registered_names_their_kinds_and_the_import_mode() {
   let entry = || folded_entry(FunctionType::StylexExprFn(|expr, _| expr), false);
@@ -790,8 +638,6 @@ fn the_fingerprint_reads_the_registered_names_their_kinds_and_the_import_mode() 
     "a name bound as a member of a namespace is not the bare name"
   );
 
-  // A namespace bound by a named import source (`import { x as sx } from
-  // '...'`) is read by the name the module calls it, as a plain one is.
   let mut named_members = FunctionMapIdentifiers::default();
   named_members.insert("a".into(), Box::new(entry()));
 

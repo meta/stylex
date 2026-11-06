@@ -1,7 +1,6 @@
 use super::*;
 use stylex_structures::stylex_env::{HostError, HostResult, HostValue};
-/// Expand one already-evaluated value by JavaScript iteration. All containers
-/// keep full ordering and undefined holes; structural getters are not read.
+/// Expand one already-evaluated value by JavaScript iteration.
 pub(super) fn iterable_values(
   value: &EvaluateResultValue,
   state: &StateManager,

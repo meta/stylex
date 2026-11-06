@@ -1,11 +1,3 @@
-//! What the state knows about the bindings a module declares and writes to.
-//!
-//! Every question here is asked of a *reference*, not of a name: the identifier
-//! carries the scope it was resolved in, so a global and a local that spell the
-//! same word are two bindings. The one exception is [`StateManager::has_binding`],
-//! which is asked of a name on purpose -- it decides whether a name is free to
-//! generate, and a name taken in any scope is not free.
-
 use rustc_hash::FxHashSet;
 use swc_core::{
   common::{BytePos, DUMMY_SP, Span},
@@ -19,7 +11,6 @@ fn span(lo: u32, hi: u32) -> Span {
   Span::new(BytePos(lo), BytePos(hi))
 }
 
-/// The four sets one pre-scan produced, each holding the bindings named.
 fn writes(
   reassigned: &[Ident],
   mutated: &[Ident],
@@ -38,7 +29,6 @@ fn writes(
   }
 }
 
-/// A state that has taken nothing knows of no writes at all.
 #[test]
 fn a_state_that_took_no_pre_scan_knows_of_no_writes() {
   let state = state();
@@ -50,8 +40,6 @@ fn a_state_that_took_no_pre_scan_knows_of_no_writes() {
   assert!(!state.declares_binding(&subject));
 }
 
-/// The four sets are taken together and read back apart: a binding in one of
-/// them answers for that question alone.
 #[test]
 fn each_set_answers_only_its_own_question() {
   let mut state = state();
@@ -76,8 +64,6 @@ fn each_set_answers_only_its_own_question() {
   assert!(!state.has_deep_binding_mutation(&ident("declared")));
 }
 
-/// The scope is part of the question. A name written in one scope says nothing
-/// about the same name in another.
 #[test]
 fn a_write_in_one_scope_says_nothing_about_another() {
   let mut state = state();
@@ -96,8 +82,6 @@ fn a_write_in_one_scope_says_nothing_about_another() {
   assert!(!state.declares_binding(&ident_at("styles", 2)));
 }
 
-/// Taking a second pre-scan replaces the first, rather than adding to it: one
-/// walk of the module produces the whole answer.
 #[test]
 fn a_second_pre_scan_replaces_the_first() {
   let mut state = state();
@@ -109,8 +93,6 @@ fn a_second_pre_scan_replaces_the_first() {
   assert!(!state.has_binding_reassignment(&ident("first")));
 }
 
-/// Whether a name is taken anywhere in the module, asked of the name and not of
-/// a reference, because a generated name must avoid every scope.
 #[test]
 fn a_name_taken_anywhere_is_taken() {
   let mut state = state();
@@ -123,8 +105,6 @@ fn a_name_taken_anywhere_is_taken() {
   assert!(!state.has_binding("style"));
 }
 
-/// A name re-bound locally blocks reuse only where the re-binding covers the
-/// site asking. A binding written elsewhere in the module leaves the site free.
 #[test]
 fn a_local_rebinding_blocks_only_the_sites_it_covers() {
   let mut state = state();
@@ -140,7 +120,6 @@ fn a_local_rebinding_blocks_only_the_sites_it_covers() {
   assert!(!state.is_locally_rebound_at("other", span(120, 180)));
 }
 
-/// One name re-bound in two places is blocked at either of them.
 #[test]
 fn a_name_rebound_twice_blocks_both_places() {
   let mut state = state();
@@ -154,8 +133,6 @@ fn a_name_rebound_twice_blocks_both_places() {
   assert!(!state.is_locally_rebound_at("stylex", span(50, 60)));
 }
 
-/// A name recorded with no scopes covering it blocks nothing, which is the
-/// answer an empty list has to give.
 #[test]
 fn a_name_recorded_with_no_scopes_blocks_nothing() {
   let mut state = state();
@@ -167,9 +144,6 @@ fn a_name_recorded_with_no_scopes_blocks_nothing() {
   assert!(!state.is_locally_rebound_at("stylex", span(0, 10)));
 }
 
-/// A declarator bound to a pattern declares no single name, so nothing is
-/// indexed for it -- but the declarator is still recorded, because its position
-/// is what marks the call in it as program level.
 #[test]
 fn a_declarator_bound_to_a_pattern_is_recorded_and_indexed_by_nothing() {
   use swc_core::ecma::ast::{Expr, Lit, ObjectPat, Pat, Str, VarDeclarator};
