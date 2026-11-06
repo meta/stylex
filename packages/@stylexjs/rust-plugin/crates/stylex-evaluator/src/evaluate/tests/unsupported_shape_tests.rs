@@ -914,11 +914,9 @@ fn the_label_is_unaffected_by_hostile_source_text() {
     UNEXPECTED_MEMBER_LOOKUP,
   );
 
-  crate::tests::scaffolding::on_a_stack_for(204, 64 * 1024, || {
-    let nested = format!("{}new Date(){}", "(".repeat(200), ")".repeat(200));
+  let nested = format!("{}new Date(){}", "(".repeat(200), ")".repeat(200));
 
-    assert_unsupported_expression(&nested, "NewExpression");
-  });
+  assert_unsupported_expression(&nested, "NewExpression");
 }
 
 /// The folds these labels sit next to. A label is only worth anything if the

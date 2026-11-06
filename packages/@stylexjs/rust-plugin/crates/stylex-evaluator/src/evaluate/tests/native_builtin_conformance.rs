@@ -670,32 +670,23 @@ fn an_array_result_longer_than_a_declaration_could_use_refuses() {
 #[test]
 fn nesting_past_the_bound_refuses_rather_than_overflowing_a_stack() {
   for levels in [33, 100, 400, 900] {
-    crate::tests::scaffolding::on_a_stack_for(levels + 4, 64 * 1024, || {
-      let nested = format!("{}[\"a\"]{}", "[".repeat(levels), "]".repeat(levels));
+    let nested = format!("{}[\"a\"]{}", "[".repeat(levels), "]".repeat(levels));
 
-      assert_deopts(&nested);
-    });
+    assert_deopts(&nested);
   }
 
   // Depth reached through the other nesting shapes the walk accepts, not only
   // through an array: a chain of calls, a chain of member reads, and nested
   // objects. Each counts the same, because each is a level the printed source
-  // makes the engine's parser descend through. Fixture parsing is separately
-  // sized; the evaluator still applies its original configured bound.
-  crate::tests::scaffolding::on_a_stack_for(804, 64 * 1024, || {
-    assert_deopts(&format!("\"a\"{}", ".concat(\"b\")".repeat(400)));
-  });
-  crate::tests::scaffolding::on_a_stack_for(84, 64 * 1024, || {
-    assert_deopts(&format!(
-      "({}\"x\"{}){}.toUpperCase()",
-      "{ a: ".repeat(40),
-      " }".repeat(40),
-      ".a".repeat(40)
-    ));
-  });
-  crate::tests::scaffolding::on_a_stack_for(404, 64 * 1024, || {
-    assert_deopts(&format!("(1{}).toFixed(1)", " + 1".repeat(400)));
-  });
+  // makes the engine's parser descend through.
+  assert_deopts(&format!("\"a\"{}", ".concat(\"b\")".repeat(400)));
+  assert_deopts(&format!(
+    "({}\"x\"{}){}.toUpperCase()",
+    "{ a: ".repeat(40),
+    " }".repeat(40),
+    ".a".repeat(40)
+  ));
+  assert_deopts(&format!("(1{}).toFixed(1)", " + 1".repeat(400)));
 
   // Just inside the bound still folds, so the refusals above are the depth and
   // not the shape.
@@ -1025,15 +1016,10 @@ fn a_raised_ceiling_raises_the_nesting_the_fold_accepts() {
     )
   };
 
-  // The fixture parser is unchecked recursive setup. Claim room for these
-  // 200 array levels plus call/receiver syntax before parsing, just as the
-  // production frontend does; the evaluator's 200-level bound stays exact.
-  crate::tests::scaffolding::on_a_stack_for(204, 64 * 1024, || {
-    // Two levels go to the call and its receiver, so a ceiling of 200 admits 198
-    // levels of array and refuses the 199th.
-    assert_folds_to_string_with_ceiling(&nest(198), "a", 200);
-    assert_deopts_with_ceiling(&nest(199), 200);
-  });
+  // Two levels go to the call and its receiver, so a ceiling of 200 admits 198
+  // levels of array and refuses the 199th.
+  assert_folds_to_string_with_ceiling(&nest(198), "a", 200);
+  assert_deopts_with_ceiling(&nest(199), 200);
 
   // The same shapes under the default ceiling, where the fold's old bound and
   // the configured one happened to carry the same number, so nothing about a

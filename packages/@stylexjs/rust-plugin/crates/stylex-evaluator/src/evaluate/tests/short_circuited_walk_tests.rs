@@ -180,14 +180,12 @@ fn brackets_written_inside_a_dead_string_claim_nothing() {
 /// and this case is only that measuring the dead side did not move it.
 #[test]
 fn a_live_operand_deeper_than_the_ceiling_still_refuses() {
-  crate::tests::scaffolding::on_a_stack_for(308, 64 * 1024, || {
-    let deep = nested_literal(300);
+  let deep = nested_literal(300);
 
-    assert_deopt_reason_contains(
-      &format!("['a', true && {}].join('-')", deep),
-      "too deeply nested",
-    );
-  });
+  assert_deopt_reason_contains(
+    &format!("['a', true && {}].join('-')", deep),
+    "too deeply nested",
+  );
 }
 
 /// This defensive root bound keeps whole-tree memo hashing/cloning within the

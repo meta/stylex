@@ -109,7 +109,10 @@ pub(crate) fn parse_ts_expr(source: &str) -> Expr {
 const FIXTURE_PARSE_STACK: usize = 256 * 1024 * 1024;
 
 fn fixture_parser_on_stack<R>(work: impl FnOnce() -> R) -> R {
-  crate::growable_stack::grown_per_level(work)
+  // Use the parser's whole-stage allowance as both red zone and segment size.
+  // A 1 MiB per-level check can leave an unchecked parser on a small caller
+  // stack; it cannot ask for growth while recursively parsing the fixture.
+  stacker::maybe_grow(FIXTURE_PARSE_STACK, FIXTURE_PARSE_STACK, work)
 }
 
 fn parse_expr_under(source: &str, syntax: Syntax) -> Expr {
