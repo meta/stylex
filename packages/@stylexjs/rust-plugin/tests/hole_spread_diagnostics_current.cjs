@@ -77,7 +77,8 @@ for (const [label, prelude, value] of [
 for (const [label, prelude, value] of [
   ['literal', '', '[...[1, 2], , 3].length'],
   ['binding', 'const lit = [1, 2];\n', '[...lit, , 3].length'],
-  ['index', '', '[...[1, 2], , 3][1]'],
+  ['wrapped length', 'const lit = [1, 2];\n', 'String([...lit, , 3].length)'],
+  ['index', 'const lit = [1, 2];\n', '[...lit, , 3][1]'],
 ]) {
   for (const engine of ['direct', 'facade']) {
     test(`spread-first ${label} source hole matches Babel (${engine})`, () => {
@@ -85,6 +86,40 @@ for (const [label, prelude, value] of [
       assert.equal(expected.kind, 'SyntaxError');
       assert.equal(expected.code, 'BABEL_TRANSFORM_ERROR');
       assert.ok(expected.message.startsWith(`${filename}: Unsupported expression: SpreadElement\n`));
+      assert.deepEqual(failure(engine, prelude, value), expected);
+    });
+  }
+}
+
+// Approved spread support may reach an operand hole Babel never evaluates.
+// These cells keep refusing with SyntaxError; their exact baseline/hole message
+// alternatives are checked by the independent per-cell matrix.
+test('spread-operand holes remain refused', () => {
+  const prelude = "const holey = ['x', , 'y'];\n";
+  for (const value of ['[...holey].length', "[...holey].join('-')", '[...holey][1]']) {
+    for (const engine of ['direct', 'facade']) {
+      const actual = failure(engine, prelude, value);
+      assert.equal(actual.kind, 'SyntaxError');
+      assert.equal(actual.code, 'BABEL_TRANSFORM_ERROR');
+    }
+  }
+});
+
+for (const [label, prelude, value] of [
+  ['leading join', '', "[, 'a'].join('-')"],
+  ['middle join', '', "[1, , 2].join('-')"],
+  ['leading spread join', '', "[, ...['a']].join('')"],
+  ['map length', '', '[, 1].map(x => x * 2).length'],
+  ['concat length', '', '[, 1].concat([2]).length'],
+  ['bound join', "const d = [, 'a'];\n", "d.join('-')"],
+  ['map index', '', '[1, , 2].map(x => x)[0]'],
+]) {
+  for (const engine of ['direct', 'facade']) {
+    test(`call-wrapped source hole ${label} matches Babel (${engine})`, () => {
+      const expected = failure('babel', prelude, value);
+      assert.equal(expected.kind, 'SyntaxError');
+      assert.equal(expected.code, 'BABEL_TRANSFORM_ERROR');
+      assert.ok(expected.message.startsWith(`${filename}: Unsupported expression: CallExpression\n`));
       assert.deepEqual(failure(engine, prelude, value), expected);
     });
   }
