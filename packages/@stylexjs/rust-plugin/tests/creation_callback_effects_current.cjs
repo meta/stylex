@@ -56,8 +56,7 @@ for (const [name, value, env, keyframeCount] of [
     }).metadata.stylex;
     assert.equal(expected.filter(rule => rule[1].ltr.startsWith('@keyframes ')).length, keyframeCount);
     const actual = transformSync(source, options).metadata.stylex;
-    // Keep rule order, priorities and duplicates; CSS-text-only comparison
-    // would miss callback effects that were computed but never filed.
+    // Compare whole rules: CSS text alone misses effects that were never filed.
     assert.deepEqual(actual, expected);
   });
 }

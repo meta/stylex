@@ -26,8 +26,7 @@ function transformed(plugin, code) {
   });
 }
 function assertExistingRefusal(error) {
-  // Parent approved keeping the exact PR #2008 6fc3a507/native refusal.
-  // Babel's RangeError is intentionally not a second kind mechanism here.
+  // Deliberately a plain Error, unlike Babel's RangeError.
   assert.equal(error.name, "Error");
   assert.equal(
     error.message,
@@ -40,8 +39,7 @@ test("negative repeat callback keeps the direct PR-head thrown refusal", () => {
   assert.equal(runtimeCountError.name, "RangeError");
   const oracle = thrown(() => transformed(original, source));
   assert.equal(oracle.name, runtimeCountError.name);
-  // V8's message differs between supported Node versions; match this runtime
-  // exactly, including Babel's resolved filename prefix.
+  // V8's message varies across Node versions, so compare with this runtime's.
   assert.equal(oracle.message, `${filename}: ${runtimeCountError.message}`);
   assertExistingRefusal(
     thrown(() => native.transformSync(source, { filename, ...options })),

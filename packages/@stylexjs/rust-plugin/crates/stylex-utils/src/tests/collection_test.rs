@@ -22,7 +22,6 @@ mod find_and_swap_remove_tests {
   fn removes_first_match_only() {
     let mut v = vec![1, 2, 2, 3];
     find_and_swap_remove(&mut v, |&x| x == 2);
-    // One 2 should remain
     assert_eq!(v.iter().filter(|&&x| x == 2).count(), 1);
   }
 
@@ -81,8 +80,6 @@ mod get_hash_map_difference_tests {
     let mut b = FxHashMap::default();
     b.insert("key", 2);
     let diff = get_hash_map_difference(&a, &b);
-    // Both maps have "key" with different values, so "key" appears (with orig
-    // value)
     assert!(diff.contains_key("key"));
   }
 

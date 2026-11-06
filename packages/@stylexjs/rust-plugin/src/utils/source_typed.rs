@@ -1,5 +1,4 @@
-//! Typed lexical planning and source-owned region emission. ASTs stay typed for
-//! provenance, comparison, changed-region rendering, and final postflight.
+//! Typed lexical planning and emission of source-owned regions.
 use super::source_compare::{expressions_equivalent, items_equivalent};
 use super::*;
 use swc_core::common::{
@@ -186,8 +185,7 @@ impl Visit for TypedAnchors<'_> {
     }
 }
 
-/// Pair only retained keyword wrappers. The operand is either generated or
-/// the same authored node kind/span; an arbitrary snippet span is not an origin.
+/// Pairs retained keyword wrappers whose operand is generated or the same authored node.
 fn keyword_operands<'a, 'b>(
     before: &'a Expr,
     after: &'b Expr,
@@ -213,8 +211,7 @@ fn keyword_operands<'a, 'b>(
 }
 
 fn arrow_header(arrow: &ArrowExpr) -> ArrowExpr {
-    // Explicit construction checks every AST29 header field and never clones
-    // the body just to discard it. A new upstream field requires a port here.
+    // Lists every header field, so a new upstream field fails to compile here.
     ArrowExpr {
         span: arrow.span,
         ctxt: arrow.ctxt,
@@ -234,9 +231,7 @@ fn import_literal_only_changed(before: &ImportDecl, after: &ImportDecl) -> bool 
     if before.src.span.is_dummy() || before.src.span != after.src.span {
         return false;
     }
-    // Compare every declaration field, including future AST fields, after
-    // substituting only the literal being edited. No declaration reprint is
-    // needed when the resolver retained its authored container and bindings.
+    // Compares every field after substituting only the edited literal.
     let mut header = before.clone();
     header.src = after.src.clone();
     header == *after
@@ -346,9 +341,7 @@ pub(super) fn emit(
     let after: Vec<_> = transformed.body.iter().map(Root::Module).collect();
     let edits = planner.list(&before, &after, file.src.len())?;
     if planner.used.len() != authored.len() {
-        // An unchanged ancestor can contain regenerated no-op expressions.
-        // Validate only the outstanding original expressions, without serializing
-        // the whole module or trusting generated coincident spans.
+        // Validates only the outstanding original expressions.
         planner.mark_unchanged_module(original, transformed)?;
     }
     if planner.used.len() != authored.len() {
@@ -863,9 +856,7 @@ impl TypedPlanner<'_> {
                     new_text: format!("({})", code),
                 }]);
             }
-            // Refine only this explicitly registered, subsequently mutated
-            // snippet. Rare structural refinements retain the strict legacy
-            // region planner and typed final postflight.
+            // Refines only a registered snippet that was mutated later.
             let value = serde_json::to_value(after)?;
             let null = Value::Null;
             let index_values = SourceIndex::new(&null);
@@ -882,8 +873,7 @@ impl TypedPlanner<'_> {
             }]);
         }
         if let Some((_, _, old, new)) = keyword_operands(before, after) {
-            // Retain yield/await, delegation `*`, grouping and all trivia in
-            // their original positions. Only the paired operand is rewritten.
+            // Rewrites only the operand, keeping the keyword and trivia.
             return self.expr(old, new);
         }
         match (before, after) {
@@ -935,8 +925,7 @@ impl TypedPlanner<'_> {
                         .zip(&new.args)
                         .all(|(old, new)| old.spread == new.spread) =>
             {
-                // Keep argument separators and their comments in the authored
-                // call. Rewrite only the paired argument expression boundaries.
+                // Rewrites only the argument, keeping separators and comments.
                 let mut edits = Vec::new();
                 for (old, new) in old.args.iter().zip(&new.args) {
                     edits.extend(self.expr(&old.expr, &new.expr)?);
@@ -1041,8 +1030,7 @@ impl TypedPlanner<'_> {
             .iter()
             .any(|edit| range.start <= edit.start && edit.end <= range.end)
         {
-            // Compatibility for an explicitly authored textual replacement;
-            // the public-core pipeline supplies no such registry.
+            // An authored textual replacement; the core pipeline supplies none.
             return self.region(
                 serde_json::to_value(before)?,
                 serde_json::to_value(after)?,
@@ -1107,8 +1095,7 @@ impl TypedPlanner<'_> {
         if self.used.len() == self.authored.len() {
             return Ok(());
         }
-        // Traverse only the unchanged subtree, store exact requested Expr clones
-        // (not each ancestor) to avoid quadratic AST/JSON duplication.
+        // Clones only the requested expressions, not each ancestor.
         struct Find<'a> {
             file: &'a SourceFile,
             wanted: &'a HashMap<(usize, usize), usize>,
@@ -1201,7 +1188,6 @@ impl TypedPlanner<'_> {
         if literal.start < declaration.start || literal.end > declaration.end {
             bail!("import specifier literal is not owned by its declaration");
         }
-        // Untouched values retain their original quote spelling and trivia.
         if before.src.value == after.src.value {
             return Ok(Vec::new());
         }
@@ -1232,8 +1218,7 @@ impl TypedPlanner<'_> {
                         == new.raw.as_ref().is_some_and(|raw| raw.contains('\\'))
             })
         {
-            // Do not turn an authored directive into a grouped expression just
-            // because the core replaced raw/location metadata on its literal.
+            // An authored directive stays a directive.
             self.noop_root(before)?;
             return Ok(Vec::new());
         }
@@ -1355,9 +1340,7 @@ impl TypedPlanner<'_> {
                     let container = source_range(self.file, old.span)?;
                     let wrapper = source_range(self.file, span)?;
                     let argument = source_range(self.file, operand.span())?;
-                    // The parsed before-AST owns the keyword and operand. A
-                    // generated operand may remove every old identifier anchor
-                    // without changing the retained statement's provenance.
+                    // A generated operand keeps the statement's provenance.
                     return Ok(container.start <= wrapper.start
                         && wrapper.end <= container.end
                         && wrapper.start <= argument.start
@@ -1366,10 +1349,7 @@ impl TypedPlanner<'_> {
                 }
             }
             if old.span == new.span && new.expr.span().is_dummy() {
-                // The caller supplies the trusted original AST. A retained
-                // source-owned statement container can contain a generated
-                // expression; its DUMMY root claims no snippet provenance.
-                // A fabricated real-span snippet does not qualify here.
+                // A retained statement may contain a generated (DUMMY root) expression.
                 let container = source_range(self.file, old.span)?;
                 let expression = source_range(self.file, old.expr.span())?;
                 return Ok(container.start <= expression.start && expression.end <= container.end);
@@ -1379,10 +1359,7 @@ impl TypedPlanner<'_> {
             if old.span == new.span && old.ctxt == new.ctxt {
                 let range = source_range(self.file, old.span)?;
                 let source = &self.file.src[range];
-                // A retained braced statement is an owned container even when
-                // every former leaf was replaced by a generated hoist reference.
-                // Its statement list is still recursively paired and postflight
-                // checks the complete transformed module without exemptions.
+                // A retained block stays owned even when every leaf was replaced.
                 return Ok(source.starts_with('{') && source.ends_with('}'));
             }
         }
@@ -1411,9 +1388,7 @@ impl TypedPlanner<'_> {
         {
             return Ok(true);
         }
-        // Anchors are typed, source-owned leaf identities, not serialized AST
-        // fields or coincident snippet spans. The paired root still owns the
-        // exact original range and final postflight checks every field.
+        // Anchors are typed source-owned leaves, not coincident spans.
         let mut before_anchors = TypedAnchors::new(self.file);
         before.visit(&mut before_anchors);
         let mut after_anchors = TypedAnchors::new(self.file);
@@ -1498,8 +1473,7 @@ impl TypedPlanner<'_> {
             }
             let key = (span.lo.0, span.hi.0, item.kind());
             if !self.used_source_roots.insert(key) {
-                // Additional copies of a proven source-owned root are printed
-                // as generated nodes, never claiming its lexical origin twice.
+                // Further copies of a source-owned root print as generated.
                 matched.push(None);
                 continue;
             }
@@ -1520,9 +1494,7 @@ impl TypedPlanner<'_> {
                 let Some(literal) = item.directive() else {
                     return false;
                 };
-                // A generated string replacing a source-owned non-directive
-                // expression statement is printed as `(string)`, so it cannot
-                // promote either itself or later authored strings to directives.
+                // Printed as `(string)` so it cannot become a directive.
                 !(!item.span().is_dummy()
                     && literal.span.is_dummy()
                     && matched[*index]
@@ -1657,8 +1629,7 @@ impl TypedPlanner<'_> {
                 .trivia_planner(&index)
                 .emit_authored_item(saved, &serde_json::to_value(after)?);
         }
-        // Generated module items are pure-Rust ASTs. Mixed original Flow-bearing
-        // hoists must be explicitly registered, not guessed from snippet spans.
+        // Hoists that carry original Flow code must be registered explicitly.
         struct Types(bool);
         impl Visit for Types {
             fn visit_ts_type(&mut self, _: &TsType) {

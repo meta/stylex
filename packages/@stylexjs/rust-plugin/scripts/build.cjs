@@ -16,8 +16,7 @@ const root = path.resolve(__dirname, '..');
 const repository = path.resolve(root, '..', '..', '..');
 const cargoHome = process.env.CARGO_HOME || path.join(os.homedir(), '.cargo');
 
-// Release binaries name sources relative to the repository and the Cargo home,
-// never by the absolute paths of the machine that built them.
+// Remap source paths so release binaries embed no build-machine paths.
 const flags = process.env.CARGO_ENCODED_RUSTFLAGS
   ? process.env.CARGO_ENCODED_RUSTFLAGS.split('\x1f')
   : (process.env.RUSTFLAGS || '').split(/\s+/).filter(Boolean);
@@ -27,9 +26,7 @@ flags.push(
 );
 const env = { ...process.env, CARGO_ENCODED_RUSTFLAGS: flags.join('\x1f') };
 delete env.RUSTFLAGS;
-// C dependencies embed __DATE__/__TIME__ (mimalloc's verbose banner); compilers
-// take them from SOURCE_DATE_EPOCH, here the last commit's time, so the same
-// source builds the same addon.
+// Compilers take C __DATE__/__TIME__ from SOURCE_DATE_EPOCH: use the commit time.
 if (env.SOURCE_DATE_EPOCH == null) {
   const commit = spawnSync('git', ['log', '-1', '--format=%ct'], {
     cwd: root,
@@ -46,8 +43,7 @@ const linkArgs =
     ? ['--', '-C', `link-arg=-Wl,-install_name,@rpath/${filename}`]
     : [];
 
-// The addon alone, as a final cdylib: rustc runs the release profile's LTO only
-// for final artifacts, and the package also declares an `rlib` for its Rust API.
+// Build only the cdylib: rustc runs release LTO only for final artifacts.
 const result = spawnSync(
   'cargo',
   [
@@ -59,7 +55,7 @@ const result = spawnSync(
     '--crate-type',
     'cdylib',
     '--features',
-    // Test-only diagnostics, for CI's test builds; never in npm builds.
+    // Test-only diagnostics for CI test builds, never in npm builds.
     process.env.STYLEX_NATIVE_TEST_HOOKS === '1' ? 'node,test-hooks' : 'node',
     '--release',
     '--message-format=json',
@@ -73,7 +69,6 @@ const result = spawnSync(
   },
 );
 if (result.error) {
-  // For example cargo is not installed or not on PATH.
   console.error(`Could not run cargo: ${result.error.message}`);
   process.exit(1);
 }

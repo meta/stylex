@@ -1,7 +1,4 @@
-//! The JavaScript host bridge without Node: host services answered by a Rust
-//! stand-in, so conversions, owner checks and the compiler-function registry
-//! are exercised in the library's own tests (the N-API layer is not built
-//! for them).
+//! The JavaScript host bridge against a Rust stand-in for the host.
 use super::*;
 use crate::utils::host::{
     call_closure, isolated_operation, set_closure_ledger, with_callback, ClosureLedger,
@@ -56,9 +53,7 @@ fn host_values_convert_losslessly_and_stay_with_their_owner() {
         assert!(
             matches!(&object, V::Ref(r) if r.kind == HostKind::PlainObject && r.owner == host.owner())
         );
-        // One value, one id: identity needs no round trip.
         assert!(host.same_value(&object, &object).unwrap());
-        // A reference another host issued is refused, never resolved here.
         let foreign = HostRef {
             owner: host.owner() + 1000,
             id: "p7".into(),
@@ -204,8 +199,7 @@ fn released_compiler_functions_are_collected_when_the_next_operation_starts() {
             register_closure(Rc::new(|_this, _args| Ok(HostValue::Null)))
         })
     };
-    // JavaScript wraps (retains) each function it receives before its next
-    // operation; one is released later, one never reaches JavaScript.
+    // One function is released later; one never reaches JavaScript.
     let kept = register();
     ledger.retain(&kept);
     let dropped = register();

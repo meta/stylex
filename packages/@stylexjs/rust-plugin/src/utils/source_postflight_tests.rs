@@ -158,8 +158,7 @@ mod tests {
         }
     }
     fn replace(code: &str, range: Range<usize>, text: &str) -> String {
-        // The same byte-offset TextEdit shape the source emitter returns. Do not
-        // run annotation repair or the planner on deliberately wrong edits.
+        // Deliberately wrong edits skip annotation repair and the planner.
         let edit = TextEdit {
             start: range.start,
             end: range.end,
@@ -278,17 +277,12 @@ mod tests {
                 verify(record, &record.expected, &record.code, false).is_ok(),
                 "baseline repeat {ordinal}"
             );
-            // Add a separately parsed, inert probe only so empty/import-only
-            // records also exercise all six mutation classes. Prefer an
-            // original output target whenever one exists, and report that
-            // count. The real captured transformed module is kept intact.
+            // An inert probe, so empty and import-only records exercise every mutation.
             let mut prefix = "__postflight_mutation_probe".to_owned();
             while record.code.contains(&prefix) {
                 prefix.push('_');
             }
-            // A new-line function declaration cannot continue the previous
-            // expression. Do not prefix it with a semicolon: that token can
-            // terminate an EOF statement instead of adding an EmptyStmt.
+            // No leading semicolon: it would end an EOF statement, not add an empty one.
             let probe = format!(
                 "\nfunction {prefix}(){{const n=17;return \"postflight-probe\";}} /* {prefix} */\n"
             );

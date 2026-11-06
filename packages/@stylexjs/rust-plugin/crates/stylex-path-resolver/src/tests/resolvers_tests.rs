@@ -24,8 +24,7 @@ fn get_root_dir(test_path: &Path) -> PathBuf {
   new_cwd
 }
 
-/// `path` without the trailing directories `dirs` names (`/apps/web`), read by
-/// component so it holds whatever separator the platform writes.
+/// `path` without its trailing `dirs` (such as `/apps/web`), using the platform's separator.
 #[allow(dead_code)]
 fn without_trailing_dirs(path: impl Into<PathBuf>, dirs: &str) -> String {
   let mut path = path.into();
@@ -679,7 +678,7 @@ mod resolve_path_exports_tests {
     let source_file_path = format!("{}/test.js", root_path);
     let aliases = FxHashMap::default();
 
-    // Test root entry point (. -> ./src/index.ts)
+    // Root entry point: `.` -> `./src/index.ts`.
     let expected_root = format!(
       "{}/{}",
       root_path, "node_modules/stylex-lib-dist-exports-with-wildcard/src/index.ts"
@@ -697,7 +696,7 @@ mod resolve_path_exports_tests {
       PathBuf::from(expected_root)
     );
 
-    // Test wildcard export (./* -> ./src/*.ts)
+    // Wildcard export: `./*` -> `./src/*.ts`.
     let expected_colors = format!(
       "{}/{}",
       root_path, "node_modules/stylex-lib-dist-exports-with-wildcard/src/colors.stylex.ts"
@@ -715,7 +714,7 @@ mod resolve_path_exports_tests {
       PathBuf::from(expected_colors)
     );
 
-    // Test nested wildcard export (./icons/* -> ./src/icons/*.tsx)
+    // Nested wildcard export: `./icons/*` -> `./src/icons/*.tsx`.
     let expected_icon = format!(
       "{}/{}",
       root_path, "node_modules/stylex-lib-dist-exports-with-wildcard/src/icons/arrow-right.tsx"
@@ -1791,7 +1790,7 @@ mod resolve_file_path_aliases_tests {
   fn resolve_aliased_import_with_stylex_extension() {
     let test_path = PathBuf::from("application-pnpm");
 
-    // Import like @/colors.stylex should resolve to src/colors.stylex.js
+    // `@/colors.stylex` should resolve to `src/colors.stylex.js`.
     let import_path_str = "@/colors.stylex";
     let source_file_path = format!(
       "{}/src/pages/home.js",
@@ -1852,7 +1851,7 @@ mod resolve_file_path_aliases_tests {
   fn resolve_aliased_import_without_extension() {
     let test_path = PathBuf::from("application-pnpm");
 
-    // Import without extension should try to add extensions
+    // An import without an extension should try each extension.
     let import_path_str = "@/components/button";
     let source_file_path = format!(
       "{}/src/pages/home.js",

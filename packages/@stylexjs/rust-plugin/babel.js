@@ -33,9 +33,7 @@ function parserOverrides(state) {
   );
 }
 
-// Babel-generated text needs Babel's parser with the syntax the AST contains,
-// even when an override (whose plugins Babel does not list) produced the AST.
-// Exactly the node types `t.isFlow` and `t.isTypeScript` accept.
+// Node types that need the flow or typescript parser plugin to reparse.
 const FLOW_TYPES = new Set(t.FLIPPED_ALIAS_KEYS.Flow);
 const TYPESCRIPT_TYPES = new Set(t.FLIPPED_ALIAS_KEYS.TypeScript);
 
@@ -144,8 +142,7 @@ function diagnosticError(diagnostic, input, state) {
             : start;
       }
     }
-    // Exactly the standard Babel File.buildCodeFrameError behavior: a multiline
-    // node highlights its start only, not every line through its end.
+    // Like Babel's buildCodeFrameError, a multiline node frames only its start.
     message +=
       '\n' +
       codeFrameColumns(
@@ -164,9 +161,7 @@ function diagnosticError(diagnostic, input, state) {
   return error;
 }
 
-// The input node whose Babel printing is the text the compiler's diagnostic
-// range covered, among the nodes starting at the traced position (outermost
-// first; indentation is the only difference between nested and lone prints).
+// The outermost input node at `position` whose Babel printing spans `covered`.
 function originalNodeAt(state, position, covered) {
   const candidates = [];
   t.traverseFast(state.file.ast.program, (node) => {
@@ -265,13 +260,8 @@ function isRequireOf(node, sources) {
   );
 }
 
-// Whether source text provably spells no StyleX import source and no sx
-// attribute, so no import, require or sx element can name one. A JSX attribute
-// name spells itself. A string value spells its source unless an escape stands
-// in for some of its characters: one that can stand for any character (\u, \x,
-// an octal or digit escape, a line continuation) gives up, and so does an
-// identity escape of a character some source contains or a control escape
-// when a source holds a control character.
+// Whether source text provably spells no StyleX import source or sx attribute.
+// An escape that could stand for a character of one makes it give up.
 const CONTROL_ESCAPES = 'nrtbfv';
 function cannotSpellStyleX(code, s) {
   if (s.sx != null && code.includes(s.sx)) return false;
@@ -289,8 +279,7 @@ function cannotSpellStyleX(code, s) {
   return true;
 }
 
-// Also collects the program's syntax into `syntax`, and with `declarations`
-// the local declarations by name, in the same walk.
+// Also collects the program's syntax and, optionally, its local declarations.
 function mayUseStyleX(
   program,
   options,
@@ -351,9 +340,7 @@ function indexDeclaration(node, declarations) {
   }
 }
 
-// The local declarations a subtree may read, transitively, by name: a
-// superset of the bindings the compiler resolved (shadowing is ignored, which
-// only adds declarations to check).
+// Local declarations a subtree may transitively read, ignoring shadowing.
 function dependencies(root, declarations) {
   const found = new Set();
   const seen = new Set();
@@ -475,10 +462,8 @@ function sxAttribute(node, sx) {
 }
 
 // ---------------------------------------------------------------------------
-// Structural equality of ASTs, ignoring positions, comments, parser extras and
-// the field-presence differences between parsers (an absent `optional` and
-// `optional: false` describe the same program). Hashes only reject: every
-// subtree kept on a hash match is first confirmed equal.
+// Structural equality of ASTs, ignoring positions, comments and parser extras.
+// A hash match is always confirmed structurally.
 
 const IGNORED_FIELDS = new Set([
   'type',
@@ -542,9 +527,8 @@ function mix(hash, value) {
   return Math.imul(hash ^ value, 0x01000193) >>> 0;
 }
 
-// Strings hash by an interned id: V8 hashes and compares them natively, which
-// is far cheaper than mixing every character. Ids are only stable within one
-// table, so every hash compared with another comes from the same `Shapes`.
+// Strings hash by an interned id, which V8 handles far faster than mixing
+// characters. Ids are only stable within one `Shapes` table.
 function hashString(hash, text, strings) {
   let id = strings.get(text);
   if (id === undefined) {
@@ -607,17 +591,12 @@ function equalTrees(a, b, comments, opaque = null) {
   return true;
 }
 
-// A compact exact record of a subtree's structure, as `equalTrees` compares
-// it: node types, field contents and list lengths in a fixed walk order. A
-// subtree matches its record only if it is structurally equal to the subtree
-// recorded, whatever an in-place edit changed (the record shares no nodes).
-// Scalars are a numeric tag then the value, so no scalar can align with a
-// node type (a string) after a structural change.
+// Compact exact records of a subtree's structure, as `equalTrees` compares it.
+// Scalars are a numeric tag then the value, so they never align with a type.
 const ABSENT = 0;
 const SCALAR = 1;
 const OBJECT = 2;
-// A node recorded as opaque: any subtree matches there (definitions StyleX
-// itself replaces at their visit, which carry records of their own).
+// Matches any subtree: used for definitions StyleX replaces at their visit.
 const OPAQUE = 3;
 
 function shapeRecord(node, record = [], opaque = null) {
@@ -649,10 +628,7 @@ function recordScalar(value, record) {
   else record.push(SCALAR, value);
 }
 
-// Whether another plugin of this pass can change a definition before StyleX
-// visits it: any visitor of it may run first at the definition or an ancestor,
-// and a Program.enter of a later plugin runs before the program's children.
-// Program.exit runs after every visit.
+// Whether another plugin may edit a definition before StyleX visits it.
 function othersMayEditDefinitions(state) {
   const opts = state.file.opts;
   const passes = [
@@ -693,9 +669,7 @@ const visitorKeys = (plugin) =>
     (key) => key !== '_exploded' && key !== '_verified',
   );
 
-// Whether StyleX is the only plugin of its pass that sees the program: no
-// other plugin of the pass has a visitor or a `pre` hook, so nothing but StyleX
-// changes the program during the traversal.
+// Whether no other plugin of the pass has a visitor or a `pre` hook.
 function aloneInPass(state) {
   // A visitor wrapper runs code around every visitor, StyleX's included.
   if (state.file.opts.wrapPluginVisitorMethod != null) return false;
@@ -710,20 +684,13 @@ function aloneInPass(state) {
   );
 }
 
-// The prototype of the nodes Babel's own parser makes (the parser Babel core
-// itself resolves): an input AST is cloned into plain objects.
+// Prototype of Babel-parsed nodes (Babel clones input ASTs to plain objects).
 const PARSED = Object.getPrototypeOf(babelParser.parse(''));
 
-// Whether the program is still exactly Babel's parse of the file's text, so the
-// text describes it without a second parse to compare: Babel parsed it (rather
-// than being handed an AST), in the first pass, and no plugin before StyleX's
-// Program.enter could have changed it -- no other plugin of the pass has a
-// `pre` hook, and none before StyleX enters the program.
+// Whether the program is still Babel's untouched first-pass parse of the file.
 function parsedAndUntouched(state, program) {
   const opts = state.file.opts;
-  // An AST handed to `transformFromAst` is deep-cloned into plain objects
-  // unless `cloneInputAst` is off: with it off, the caller's own (possibly
-  // edited) parser nodes reach the plugins, so their prototype proves nothing.
+  // With `cloneInputAst` off, plugins receive the caller's own nodes.
   if (opts.cloneInputAst !== true) return false;
   // A visitor wrapper can change the program before StyleX's Program.enter.
   if (opts.wrapPluginVisitorMethod != null) return false;
@@ -840,8 +807,7 @@ class Shapes {
     return isNode(item) ? this.hash(item) : hashScalar(1, item, this.strings);
   }
 
-  // A key equal for equal subtrees from the node's type and own scalars only:
-  // items whose shallow keys differ cannot match, so they need no full hash.
+  // A key from the node's type and own scalars only; equal subtrees share it.
   shallowKey(item) {
     if (!isNode(item)) return hashScalar(1, item, this.strings);
     const strings = this.strings;
@@ -877,10 +843,7 @@ class Shapes {
     return hash;
   }
 
-  // Full keys for the items of two lists, computed only where an equal item
-  // can exist on the other side; every other item gets a key matching nothing.
-  // The filter looks a few levels deep: statements of one kind usually differ
-  // just below their top (an export of a call vs. of an object).
+  // Full keys only where the other list may hold an equal item.
   listKeys(before, after) {
     const shallowBefore = before.map((item) => this.boundedKey(item, 4));
     const shallowAfter = after.map((item) => this.boundedKey(item, 4));
@@ -922,12 +885,9 @@ class Shapes {
 }
 
 // ---------------------------------------------------------------------------
-// Grafting: apply a compiler result to the live AST by replacing only the
-// subtrees whose structure changed. Every unchanged node keeps its identity,
-// so other plugins' node-keyed state and unrelated comments survive.
+// Grafting a compiler result onto the live AST.
 
-// The outer bindings a declaration statement declares, as one key; null for
-// anything else (and for declarations of no name).
+// The outer bindings a declaration statement declares, as one key, or null.
 const DECLARATIONS = new Set([
   'VariableDeclaration',
   'FunctionDeclaration',
@@ -938,8 +898,7 @@ const DECLARATIONS = new Set([
 ]);
 function declaredKey(node) {
   if (!isNode(node) || !DECLARATIONS.has(node.type)) return null;
-  // The common shapes directly: one declarator of a name, a named function or
-  // class, or an export of one of those.
+  // Common shapes: a single named declarator, function or class, or its export.
   const declaration =
     node.type === 'ExportNamedDeclaration' ? node.declaration : node;
   if (declaration != null) {
@@ -972,8 +931,7 @@ class Graft {
     // Items the compile dropped that must stay until the traversal ends.
     this.defer = defer;
     this.deferred = [];
-    // Nodes that keep their place until the traversal visits them; their
-    // replacement waits in `held`.
+    // Nodes kept in place until visited; their replacements wait in `held`.
     this.hold = hold;
     this.held = [];
     this.edits = [];
@@ -1002,8 +960,7 @@ class Graft {
       return isNode(next) ? this.replace(previous, next) : next;
     if (!this.shapes.sameScalars(previous, next))
       return this.replace(previous, next);
-    // Descending compares the children (lists by direct equality first), so
-    // an equal subtree is walked once and an edited one is never hashed whole.
+    // Compare children directly, so an edited subtree is never hashed whole.
     this.children(previous, next);
     return previous;
   }
@@ -1056,12 +1013,10 @@ class Graft {
           removed.push({ item, at: result.length });
         return;
       }
-      // A declaration the compile re-emitted elsewhere in this list was
-      // rewritten, not removed: its new form is where the definition went.
+      // A declaration re-emitted elsewhere in this list was rewritten, not removed.
       if (declared == null) {
         declared = new Map();
-        // Outer bindings only: a function's parameters are not declarations
-        // of its scope (`function C(s)` does not declare the program's `s`).
+        // Outer bindings only: `function C(s)` does not declare the program's `s`.
         for (const other of after)
           if (isNode(other))
             for (const name of Object.keys(
@@ -1083,9 +1038,7 @@ class Graft {
     let i = 0;
     let j = 0;
     const gap = (iEnd, jEnd) => {
-      // With `record`, the items a gap drops and adopts whole are kept as one
-      // region: the adopted items are what the compile made of the dropped.
-      // Items paired and grafted within keep their own, finer regions.
+      // With `record`, a gap's dropped and adopted items form one region.
       const region = this.record ? { removed: [], added: [] } : null;
       const adopted = (next) => {
         if (region != null && isNode(next)) region.added.push(next);
@@ -1096,8 +1049,6 @@ class Graft {
         drop(item);
       };
       // Unmatched runs: pair same-typed items in order and graft within them.
-      // Types still ahead in the run, counted once (a lookahead scan per item
-      // would be quadratic in long runs such as arrays of definitions).
       const ahead = new Map();
       for (let k = j; k < jEnd; k++) {
         const type = isNode(after[k]) ? after[k].type : null;
@@ -1124,9 +1075,7 @@ class Graft {
           if (key != null) aheadKeys.set(key, aheadKeys.get(key) - 1);
         }
       };
-      // Declarations of different bindings never pair: the compiled `const u`
-      // is not what became of an unused `const s` before it. Names declared
-      // by the items still unmatched in the run are counted on first need.
+      // Declarations of different bindings never pair.
       let remaining = null;
       const remainingOf = (key) => {
         if (remaining == null) {
@@ -1158,8 +1107,7 @@ class Graft {
           // No compiled declaration of these bindings ahead: removed.
           dropped(left(before[i++]));
         } else if (sameType && previousKey !== nextKey) {
-          // The compiled declaration's own source comes later in the run:
-          // this item is gone. Otherwise the compiled one is new here.
+          // Gone if the compiled declaration's source is later in the run; else new.
           if (
             nextKey != null &&
             previousKey == null &&
@@ -1183,8 +1131,7 @@ class Graft {
           this.hold != null &&
           this.hold(previous)
         ) {
-          // A definition the compile replaced in place (an array element, an
-          // argument): it stays until visited, like any other definition.
+          // A definition replaced in place stays until visited, like any other.
           passed(after[j++]);
           result.push(this.replace(left(previous), next));
           i++;
@@ -1231,12 +1178,8 @@ class Graft {
   }
 }
 
-// Applies a compiled program to a live Babel program, in place: only the
-// subtrees whose structure differs are replaced, so every unchanged node keeps
-// its identity (and its comments). Internal and frontend-agnostic: the
-// compiled program is any compiler's output parsed to a Babel AST. `adopted` holds the replacement subtrees, whose
-// locations the caller traces to the input; `edits` (with `record`) undo the
-// graft through `revert`.
+// Grafts a compiled program onto a live Babel program in place, replacing only
+// changed subtrees. `adopted` gets the replacements; `edits` feed `revert`.
 function graftProgram(
   program,
   compiled,
@@ -1257,9 +1200,7 @@ function graftProgram(
   };
 }
 
-// Equal items of two lists, as index pairs in order. Equal prefixes and
-// suffixes are compared directly (a difference ends the comparison early, so
-// an edited subtree is never hashed whole); only the changed middle is keyed.
+// Index pairs of equal items in two lists, in order.
 function matchItems(before, after, shapes) {
   const pairs = [];
   let start = 0;
@@ -1287,8 +1228,7 @@ function matchItems(before, after, shapes) {
   const m = endAfter - start;
   let aligned;
   if (n > 0 && m > 0 && n * m <= 64) {
-    // A short changed run (typically one edited statement): compare its
-    // items directly rather than hashing whole subtrees.
+    // A short changed run: compare items directly instead of hashing subtrees.
     const shallow = (item) => shapes.shallowKey(item);
     const keysAfter = after.slice(start, endAfter).map(shallow);
     const equal = [];
@@ -1324,9 +1264,7 @@ function matchItems(before, after, shapes) {
     n === m &&
     (aligned = positional(before, after, start, n, shapes)) != null
   ) {
-    // Items replaced in place (an array of definitions): the equal items at
-    // equal positions are the whole common subsequence, since no remaining
-    // item could equal any remaining item on the other side.
+    // Replaced in place: the aligned pairs are the whole common subsequence.
     for (const x of aligned) pairs.push([x, x]);
   } else if (n > 0 && m > 0) {
     const middleBefore = before.slice(start, endBefore);
@@ -1345,9 +1283,7 @@ function equalItem(a, b, shapes) {
   );
 }
 
-// The equal positions of two equally long runs, when matching them is optimal:
-// once those pairs are taken, no unmatched item shares even a shallow key with
-// an unmatched item on the other side. Null otherwise.
+// Equal positions of two same-length runs if that matching is optimal, or null.
 function positional(before, after, start, length, shapes) {
   const equal = [];
   const unmatchedBefore = new Set();
@@ -1362,8 +1298,7 @@ function positional(before, after, start, length, shapes) {
   return unmatchedAfter.some((key) => unmatchedBefore.has(key)) ? null : equal;
 }
 
-// Longest common subsequence of two key lists, as index pairs. Edits are
-// sparse, so equal prefixes and suffixes are matched first.
+// Longest common subsequence of two key lists, as index pairs.
 function matchLists(a, b) {
   const pairs = [];
   let start = 0;
@@ -1430,8 +1365,8 @@ function matchLists(a, b) {
   return pairs.concat(suffix.reverse());
 }
 
-// Undo recorded edits that are still in place, newest first. Lists keep items
-// other plugins have since added, at their positions relative to ours.
+// Undoes recorded edits that are still in place, newest first.
+// Items other plugins added since keep their relative positions.
 function revert(edits) {
   const restored = new Set();
   for (let index = edits.length - 1; index >= 0; index--) {
@@ -1450,8 +1385,7 @@ function revert(edits) {
     const ours = new Set(edit.after);
     const inserted = new Set(edit.after.filter((item) => !kept.has(item)));
     const present = new Set(current);
-    // Only items this graft removed come back: an item the graft kept and a
-    // later plugin removed (or moved) stays where that plugin left it.
+    // Only items this graft removed come back; later plugins' removals stand.
     const removed = edit.before.filter(
       (item) => !present.has(item) && !ours.has(item),
     );
@@ -1521,9 +1455,7 @@ function locator(nativeMap, priorMap, source) {
       delete node.end;
       return;
     }
-    // Locations belong to this Babel input file. Leave filename unset so the
-    // generator uses its configured sourceFileName instead of registering the
-    // native compiler's absolute parse filename as a second source.
+    // No filename: the generator then uses its sourceFileName as the source.
     node.loc = { start, end, identifierName: node.loc.identifierName };
     node.start = start.index;
     node.end = end.index;
@@ -1532,10 +1464,8 @@ function locator(nativeMap, priorMap, source) {
 
 const COMMENT_FIELDS = ['leadingComments', 'innerComments', 'trailingComments'];
 
-// Remap grafted subtrees and drop their copies of comments that unchanged
-// nodes still carry (the compiler reprints comments next to its edits).
-// `visit` sees every node of the result. Returns every attached comment, for
-// `file.ast.comments`.
+// Remaps grafted subtrees and drops comment copies unchanged nodes still carry.
+// Returns every attached comment, for `file.ast.comments`.
 function settle(program, adopted, remap, visit, previousOf) {
   const kept = new Set();
   const keptStarts = new Set();
@@ -1560,8 +1490,7 @@ function settle(program, adopted, remap, visit, previousOf) {
   walk(program);
   const all = new Set(kept);
   for (const root of adopted) {
-    // A replacement spans the node it replaced: the compiler's map anchors
-    // tokens, so a traced end can collapse onto the start.
+    // Span the replaced node, since a traced end can collapse onto the start.
     const previous = previousOf.get(root);
     const spans = previous?.loc != null && previous.start != null;
     if (spans) {
@@ -1599,13 +1528,11 @@ function settle(program, adopted, remap, visit, previousOf) {
 // ---------------------------------------------------------------------------
 // Compilation.
 
-// The diagnostics `compile` raised, so callers recognize them without reading
-// properties of values user code threw.
+// Diagnostics `compile` raised, so callers needn't inspect user-thrown values.
 const compileDiagnostics = new WeakSet();
 
 function compile(input, state, filename) {
-  // Babel wraps an exception escaping this plugin exactly once, so the
-  // compiler rethrows user exceptions unwrapped here and says which they are.
+  // Babel wraps an escaping exception once, so user exceptions stay unwrapped.
   const errors = { userThrew: false };
   try {
     return compiler.transformSync(input.code, {
@@ -1633,8 +1560,7 @@ function compile(input, state, filename) {
 }
 
 function generated(program, state, filename) {
-  // `retainLines` keeps each node on its input line, which the compiler's
-  // debug data (`file:line`) reports.
+  // `retainLines` keeps input lines for the debug data's `file:line`.
   const output = generate(
     program,
     {
@@ -1662,10 +1588,7 @@ function apply(
     throw new Error(
       'The native StyleX compiler did not provide a source map for changed code',
     );
-  // The compiler's output keeps its input's syntax: the file's own grammar for
-  // the file's text, Babel's for its printing.
-  // The entry compile runs on the program `mayUseStyleX` just walked, whose
-  // syntax it collected; later compiles see a changed program.
+  // The output keeps its input's syntax; the entry compile knows it from its walk.
   const parsed = babelParser.parse(
     result.code,
     grammarOptions(state, record ? state.stylexFacade.syntax : null),
@@ -1682,8 +1605,7 @@ function apply(
   const remap = locator(result.map, input.map, state.file.code);
   const s = state.stylexFacade;
   s.names = stylexNames(program.node, s.sources);
-  // With StyleX alone in its pass, every StyleX node the traversal meets is
-  // one the program holds now or StyleX itself places: nothing arrives late.
+  // With StyleX alone in its pass, no StyleX node reaches the traversal late.
   const everything = record && s.alone;
   const known = everything ? EVERY_NODE : new WeakSet();
   state.file.ast.comments = settle(
@@ -1698,9 +1620,7 @@ function apply(
     new Map(graft.replaced.map(([previous, node]) => [node, previous])),
   );
   dropCommentCopies(program.node.body, graft.adopted);
-  // Recompiled output: what the compile removed hands its comments to its
-  // siblings, as Babel's `path.remove()` does. (Entry output keeps unused
-  // definitions in place until exit, and removes them there the same way.)
+  // Removals share comments with siblings, like Babel's `path.remove()`.
   if (!record && graft.removed.length > 0) {
     const all = new Set(state.file.ast.comments);
     for (const { item, previous, next } of graft.removed) {
@@ -1713,8 +1633,6 @@ function apply(
     );
   }
   s.known = known;
-  // Scope information is rebuilt only where the tree changed: definitions
-  // waiting for their visit leave it as it was.
   if (graft.changed) program.scope.crawl();
   return graft;
 }
@@ -1726,11 +1644,10 @@ function styleXNode(node, s) {
   );
 }
 
-// Every StyleX call (and sx element) the program now contains: calls the
-// compiler deliberately left for the runtime are not new work.
-// The known set of a traversal no other plugin takes part in.
+// The known set when no other plugin takes part in the traversal.
 const EVERY_NODE = Object.freeze({ has: () => true, add() {} });
 
+// StyleX already in the program; calls left for the runtime are not new work.
 function knownStyleX(program, s) {
   const known = new WeakSet();
   if (s.names.empty && s.sx == null) return known;
@@ -1756,8 +1673,7 @@ function enter(program, state) {
     holds: new Map(),
     // Unused definitions' calls, with what they read as compiled.
     unusedForms: new Map(),
-    // Every definition's recorded input, and records of the declarations
-    // they read (shared).
+    // Every definition's recorded input, with shared records of what they read.
     inputs: [],
     dependencyShapes: new Map(),
     // Compiled replacements of other StyleX (props, attrs), and the calls.
@@ -1767,8 +1683,7 @@ function enter(program, state) {
     // Program-level references, to their declarations (with records).
     references: null,
     sxElements: null,
-    // The consumers as written, every node the entry graft adopted, and the
-    // compiled replacement of each replaced source.
+    // Consumers as written, entry-adopted nodes, and replacements by source.
     consumerCalls: null,
     adopted: null,
     outputs: null,
@@ -1778,8 +1693,7 @@ function enter(program, state) {
     program: null,
     // A provisionally compiled definition changed before its visit.
     stale: false,
-    // Whether definitions are recorded to detect such changes (only another
-    // plugin of the pass can make them).
+    // Whether definitions are recorded to detect such changes.
     recordShapes: false,
     // StyleX is the only plugin of its pass that sees the program.
     alone: false,
@@ -1798,26 +1712,19 @@ function enter(program, state) {
   };
   state.stylexFacade = s;
   s.names = stylexNames(program.node, s.sources);
-  // No compile for unrelated files. Their original locations and syntax-plugin
-  // AST stay intact for subsequent Babel passes.
-  // Another plugin of this pass may edit definitions, or what they read,
-  // before StyleX visits them: then the entry compile stays provisional until
-  // each definition's visit confirms its input.
+  // If others may edit definitions first, the entry compile stays provisional.
   s.recordShapes = othersMayEditDefinitions(state);
   s.alone = aloneInPass(state);
   const declarations = s.recordShapes ? new Map() : null;
   const syntax = { jsx: false, flow: false, typescript: false };
-  // With records, the consumers (props-like calls and sx elements) as written,
-  // to tell which compiled output read a definition found stale later.
+  // Consumers as written, to find output that read a definition found stale.
   const consumerCalls = s.recordShapes ? [] : null;
-  // sx elements as written: the entry graft keeps them (renaming the
-  // attribute), and an exit recompile that undoes it finds them as written.
+  // sx elements as written; the entry graft keeps them and renames the attribute.
   const sxElements = [];
   s.sxElements = sxElements;
-  // Babel's untouched parse of the file's text (see below) holds an sx
-  // attribute only where the text spells its name.
   const overrides = parserOverrides(state);
   s.pristine = overrides.length === 0 && parsedAndUntouched(state, program);
+  // An untouched parse holds an sx attribute only where the text spells its name.
   const sxPossible =
     s.sx != null && !(s.pristine && !state.file.code.includes(s.sx));
   const visit =
@@ -1847,14 +1754,10 @@ function enter(program, state) {
               )
                 consumerCalls.push(attribute);
         };
-  // A program Babel parsed from the file's text, untouched since, holds no
-  // StyleX import, require or sx attribute when the text cannot spell one:
-  // the walk below could only answer no.
+  // An untouched parse cannot hold StyleX the text cannot spell: skip the walk.
   if (s.pristine && s.names.empty && cannotSpellStyleX(state.file.code, s))
     return;
-  // A program Babel parsed from the file's text, untouched since, needs no walk
-  // when it imports StyleX at the top and nothing else is collected: its
-  // grammar is the file's own parser options, which hold every syntax it has.
+  // An untouched parse needs no walk if nothing beyond its imports is collected.
   const walkFree =
     s.pristine &&
     !s.names.empty &&
@@ -1867,16 +1770,13 @@ function enter(program, state) {
   )
     return;
   s.consumerCalls = consumerCalls;
-  // The program-level binding each reference resolves to, from Babel's scope
-  // of the program as StyleX's traversal started (by identity: shadowing and
-  // nested scopes are Babel's own).
+  // The program-level binding of each reference, by Babel's scope at entry.
   if (s.recordShapes) {
     s.references = new Map();
     for (const binding of Object.values(program.scope.bindings))
       for (const reference of binding.referencePaths)
         s.references.set(reference.node, binding.path.node);
-    // Each consumer as written (the compile replaces parts of it in place):
-    // its nodes, and the program-level declarations it references.
+    // Each consumer's nodes and the program-level declarations it references.
     s.consumerCalls = consumerCalls.map((call) => {
       const nodes = [];
       const declarations = new Set();
@@ -1891,11 +1791,7 @@ function enter(program, state) {
   s.syntax = syntax;
   s.program = program;
   const filename = state.file.opts.filename || 'unknown.js';
-  // Compile the file's own text when the AST still is exactly that text (its
-  // positions are the user's); otherwise compile Babel's printing of the
-  // current AST and compose the maps. A parser override (Hermes) produced an
-  // AST in Babel's grammar from syntax the compiler need not read: compile its
-  // printing too, so the override runs only for Babel's own parse of the file.
+  // Compile the file's text if the AST still matches it, else Babel's printing.
   let unchanged = false;
   if (overrides.length === 0) {
     if (s.pristine) unchanged = true;
@@ -1926,10 +1822,7 @@ function enter(program, state) {
       error.stylexDiagnostic.kind === 'parse'
     )
       throw error;
-    // The original plugin compiles each definition when it visits it, after
-    // earlier plugins' visitors (macros) ran there; a definition may depend on
-    // values they produce. Report the error on exit unless the traversal
-    // changed what this compile saw.
+    // Report at exit unless visitors that run first change what this compile saw.
     s.deferred = { error, program: t.cloneNode(program.node, true, true) };
     return;
   }
@@ -1939,16 +1832,11 @@ function enter(program, state) {
   s.errors = result.errors || [];
   for (const warning of s.warnings) logDiagnostic('warn', warning);
   for (const error of s.errors) logDiagnostic('error', error);
-  // Even a relevant import can be type-only, unused or contain no StyleX DSL.
-  // Never touch a no-op AST merely to refresh its printed source.
+  // Never touch a no-op AST just to refresh its printed source.
   if (result.code !== input.code) {
-    // The original plugin compiles a definition only if the traversal still
-    // reaches it, so the entry compile is provisional where it consumed one:
-    // a later or earlier plugin may detach it (dead-branch elimination), and
-    // then neither its output, its hoists nor its rules may remain.
+    // Provisional: a plugin may still detach a definition this compile consumed.
     const names = s.names;
-    // Whether a subtree contains a definition call: the nodes `traverseFast`
-    // visits, stopping at the first one (usually the subtree's own init).
+    // Whether a subtree contains a definition call (stops at the first one).
     const defines = (node) => {
       if (node == null || typeof node.type !== 'string') return false;
       if (node.type === 'CallExpression') {
@@ -1963,12 +1851,7 @@ function enter(program, state) {
       }
       return false;
     };
-    // Definitions the compile removed as unused stay in place, untouched by
-    // later plugins, until exit: the original plugin removes them there.
-    // A definition keeps its source form, and the references in it, until
-    // the traversal visits it: plugins that run first (TypeScript import
-    // elision) see what they see with the original plugin. Its compiled form
-    // replaces it then.
+    // Definitions keep their source form until visited, and unused ones until exit.
     const definition = (node) => {
       if (node.type !== 'CallExpression') return false;
       const api = stylexCall(node, names);
@@ -1995,8 +1878,7 @@ function enter(program, state) {
       ];
     }
     const held = new Map(graft.held);
-    // Declarations the compile hoisted to the program for a held definition
-    // arrive with it, as the original plugin hoists when it visits one.
+    // Hoists for a held definition arrive with it, as the original plugin does.
     const hoistsFor = new Map();
     const owners = new Map();
     for (const [previous, node] of graft.held)
@@ -2033,9 +1915,7 @@ function enter(program, state) {
       ...body.filter((_, index) => owned[index] == null),
     );
 
-    // What each definition read, recorded so its visit can confirm it. Other
-    // definitions among what it read are checked at their own visits (and
-    // replaced there by StyleX itself).
+    // What each definition read, recorded so its visit can confirm it.
     const definitionCalls = new Set();
     if (s.recordShapes) {
       for (const [previous] of graft.held) definitionCalls.add(previous);
@@ -2073,8 +1953,7 @@ function enter(program, state) {
     s.unusedLists = graft.deferredIn;
     for (const node of graft.deferred) {
       s.sites.push({ node });
-      // A declaration is checked by its initializers' identity; anything
-      // else by structure, against a copy.
+      // Declarations are checked by initializer identity, others by structure.
       const declaration = node.type === 'VariableDeclaration';
       s.unused.push({
         node,
@@ -2108,9 +1987,7 @@ function unchangedInputs(record, s) {
   );
 }
 
-// The entry compile no longer describes what the traversal reaches. Undo its
-// output now, before other plugins visit and transform it, and compile the
-// program at exit, as the deferred and dead-branch cases do.
+// Undoes the stale entry output before other plugins visit it; exit recompiles.
 function markStale(s) {
   if (s.stale) return;
   s.stale = true;
@@ -2119,9 +1996,7 @@ function markStale(s) {
   s.edits = [];
 }
 
-// The compiled StyleX calls (props, attrs) that read a definition whose input
-// changed: they reference, by name, a binding of a changed definition or of
-// one reading it. Rare path: computed only when a compile turns stale.
+// Compiled consumers (props, attrs) that read a definition whose input changed.
 function staleConsumers(s) {
   if ((s.consumerCalls || []).length === 0 || s.references == null) return [];
   // The declarator each recorded definition initializes.
@@ -2142,8 +2017,7 @@ function staleConsumers(s) {
     });
     return found;
   };
-  // Changed definitions (or a declaration a definition read that changed),
-  // then every definition referencing an affected declaration.
+  // Changed definitions and declarations, then every definition referencing one.
   const affected = new Map();
   for (const record of s.inputs) {
     if (unchangedInputs(record, s)) continue;
@@ -2186,17 +2060,11 @@ function locationOf(node) {
     : `${start.line}:${start.column + 1}`;
 }
 
-// A compiled consumer of a stale definition that other plugins already
-// transformed cannot be undone or recompiled: its stale class names would
-// reach the output without CSS. Fail the build instead.
-// The entry graft's output for a stale consumer: what replaced the source
-// node or list run containing it.
+// Throws if other plugins already transformed a stale consumer's output.
 function assertNoStaleConsumers(program, state, s) {
   const stale = s.staleConsumers || [];
   if (stale.length === 0 || s.outputs == null) return;
-  // Every node of a stale consumer as written: what the compile replaced at
-  // or inside it is its output (an sx attribute keeps its node and gets new
-  // children).
+  // Every node of a stale consumer as written; its output lies at or inside them.
   const consumerOf = new Map();
   for (const entry of stale)
     for (const node of entry.nodes)
@@ -2242,18 +2110,14 @@ function assertNoStaleConsumers(program, state, s) {
   );
 }
 
-// Plugins later in the pass edit the program in their Program.enter, after
-// StyleX's: check every recorded input once, at the first node visited.
+// Checks every recorded input at the first visit, after all Program.enter hooks.
 function checkProgram(s) {
   if (s.checkedProgram || !s.recordShapes) return;
   s.checkedProgram = true;
   if (s.inputs.some((record) => !unchangedInputs(record, s))) markStale(s);
 }
 
-// Program statements the graft adopted whole (hoists) may carry copies of
-// comments that the kept statements around them still own: the compiler
-// reprints a neighbour's comments next to what it inserts. Positions do not
-// always trace onto the original, so copies are also recognized by text.
+// Drops copies of kept statements' comments from adopted program statements.
 function dropCommentCopies(body, adopted) {
   for (let index = 0; index < body.length; index++) {
     const statement = body[index];
@@ -2285,11 +2149,7 @@ function dropCommentCopies(body, adopted) {
   }
 }
 
-// A StyleX call that earlier plugins created after entry. The original plugin
-// compiles definitions (`create`, `keyframes`, ...) when it visits them: no
-// plugin visits their original arguments, later plugins visit only the
-// compiled replacement. Keep the definition as visited and leave its subtree
-// to the exit compile, whose output is queued for every plugin.
+// A definition earlier plugins created after entry: left for the exit compile.
 function created(path, state) {
   const s = state.stylexFacade;
   if (s == null || s.names.empty) return;
@@ -2297,11 +2157,7 @@ function created(path, state) {
   const hold = s.holds.get(node);
   if (hold != null) {
     s.holds.delete(node);
-    // An earlier plugin's visitor that rewrote the call here makes it a
-    // different definition: the exit compile handles it.
-    // An earlier plugin's visitor may also have changed the definition in
-    // place, deep inside its arguments: the entry compile then read another
-    // definition than the one the traversal reached.
+    // A call rewritten here or edited in place by an earlier visitor is stale.
     checkProgram(s);
     const same =
       !s.stale &&
@@ -2312,8 +2168,7 @@ function created(path, state) {
       ) &&
       (hold.inputs == null || unchangedInputs(hold.inputs, s));
     if (!same) {
-      // Compiled at exit from the program the traversal leaves, as visited
-      // here (later plugins see the compiled form, as with the original).
+      // Compiled at exit, as visited here; later plugins see the compiled form.
       markStale(s);
       s.dirty = true;
       s.pending.push({ path, node, copy: t.cloneNode(node, true) });
@@ -2366,10 +2221,7 @@ function created(path, state) {
   path.skip();
 }
 
-// Hoists inserted with a definition at its visit are declared at the program
-// and referenced by the replacement (and by each other). Babel's insertion
-// does not count those references, and no whole-program crawl follows, so
-// register them: plugins that remove unreferenced bindings must keep them.
+// Counts hoist references that Babel's insertion misses, so they are not removed.
 function registerHoists(hoists, replaced) {
   const scope = replaced.scope.getProgramParent();
   const names = new Set();
@@ -2393,10 +2245,8 @@ function registerHoists(hoists, replaced) {
   }
 }
 
-// StyleX the program gained after entry, classified as the original plugin
-// would treat it on exit: `props`-like calls and sx elements it visited are
-// compiled; definitions and sx elements that appeared after its visit (from
-// later plugins or on exit) are never compiled by it and stay as they are.
+// StyleX the program gained after entry, classified as the original plugin's
+// exit would: visited consumers compile; late definitions and sx elements stay.
 function lateStyleX(program, s, skip) {
   const found = { compile: false, hidden: [], positions: new Map() };
   const sites = new Set(s.sites.map((site) => site.node));
@@ -2428,8 +2278,7 @@ function lateStyleX(program, s, skip) {
     }
   };
   walk(program, null, null, null);
-  // A detached definition site, or one the traversal never visited: rebuild
-  // from the definitions that survive, as the original plugin compiled them.
+  // Rebuild detached or unvisited definition sites from the surviving definitions.
   for (const site of s.sites) {
     const applied = found.positions.has(site.node);
     const waiting = site.held != null && found.positions.has(site.held);
@@ -2439,8 +2288,7 @@ function lateStyleX(program, s, skip) {
   return found;
 }
 
-// Keep constructs the exit compile must not touch out of its sight, behind
-// placeholders the compiler treats as opaque values; `restore` puts them back.
+// Hides constructs from the exit compile behind placeholders, until `restore`.
 function hide(hidden) {
   const placeholders = new Map();
   for (const [position, entry] of hidden.entries()) {
@@ -2472,9 +2320,7 @@ function restore(program, placeholders) {
   walk(program);
 }
 
-// Removes the unused definitions the entry compile dropped, wherever the
-// traversal left them, as the original plugin removes unused style variables
-// on exit.
+// Removes unused definitions the entry compile dropped, wherever they are now.
 function removeUnused(program, unused, positions) {
   const byList = new Map();
   let nested = false;
@@ -2496,8 +2342,7 @@ function removeUnused(program, unused, positions) {
   if (nested) program.scope.crawl();
 }
 
-// Removed statements hand their comments to their siblings, as Babel's
-// `path.remove()` does (one removal after another, in list order).
+// Removed statements share comments with siblings like Babel's `path.remove()`.
 function shareRemovedComments(list, nodes) {
   for (let index = 0; index < list.length; index++) {
     const node = list[index];
@@ -2554,12 +2399,7 @@ function exit(program, state) {
     s.sites.length === 0
   )
     return;
-  // An unused definition whose initializer another plugin replaced (coverage
-  // instrumentation wraps it) is no longer the one the compile removed.
-  // Rewrites around it (block scoping turning `const` into `var`) or inside
-  // the definition call (module lowering renaming its callee) are not.
-  // With StyleX alone in its pass nothing else ran: no StyleX arrived late, no
-  // definition moved, and each unused one is still in the list it was left in.
+  // With StyleX alone in its pass, unused definitions are where it left them.
   if (
     s.alone &&
     s.pending.length === 0 &&
@@ -2577,6 +2417,7 @@ function exit(program, state) {
     return;
   }
   const late = lateStyleX(program.node, s, new Set());
+  // A replaced initializer (coverage instrumentation) is a different definition.
   const changed = s.unused.some(
     ({ node, copy, inits }) =>
       late.positions.has(node) &&
@@ -2592,22 +2433,16 @@ function exit(program, state) {
     removeUnused(program, s.unused, late.positions);
     return;
   }
-  // Earlier plugins added StyleX the original plugin compiles. Recompile once,
-  // from the program as it would see it: StyleX's own entry output undone and
-  // new definitions as they were when first visited.
+  // Earlier plugins added StyleX the original plugin compiles: recompile once.
   const restored = revert(s.edits);
   for (const node of s.restored) restored.add(node);
-  // sx elements as written are restored by the revert in place (the graft
-  // keeps them and renames their attribute): they are source, not late.
+  // The revert restores sx elements as written: they are source, not late.
   for (const element of s.sxElements || []) restored.add(element);
   s.restored = new Set();
   s.edits = [];
-  // A live definition another plugin moved or wrapped returns at its place;
-  // so do StyleX calls compiled from a stale input, wherever they are now.
+  // Definitions other plugins moved, and stale consumers, return to their places.
   const moved = lateStyleX(program.node, s, new Set()).positions;
-  // A consumer's output returns to its call only where an expression stood:
-  // another plugin may have moved its parts anywhere (a JSX attribute value
-  // into an object), where the call cannot go.
+  // A consumer's output can return only where an expression stood.
   const returning = s.stale
     ? [
         ...s.sites,
@@ -2672,8 +2507,7 @@ function exit(program, state) {
   } finally {
     for (const name of sxNames) name.name = s.sx;
   }
-  // The entry compile was provisional: rules come from the definitions the
-  // traversal left in the program.
+  // The entry compile was provisional: rules come from the surviving definitions.
   s.rules = metadataRules(result.metadata?.stylex || []);
   state.file.metadata.stylex = s.rules;
   for (const warning of multisetDifference(result.warnings || [], s.warnings))
@@ -2693,12 +2527,10 @@ function exit(program, state) {
   requeue(program, fresh);
 }
 
-// Nodes placed on exit have not been visited by the plugins of this pass:
-// queue them on the file's traversal, as Babel does for inserted nodes.
+// Queues nodes placed on exit on the file's traversal, as Babel does for inserts.
 function requeue(program, nodes) {
   if (nodes.size === 0) return;
-  // Paths are created along the walk, one per visited node: resolving each
-  // key path from the program would map whole sibling lists every time.
+  // Create paths while walking, rather than resolving each from the program.
   const walk = (path) => {
     if (nodes.has(path.node)) {
       program.requeue(path);
@@ -2733,10 +2565,8 @@ function requeue(program, nodes) {
   walk(program);
 }
 
-// An sx element an earlier plugin created after entry. The original plugin
-// rewrites it when visited, before later plugins lower the JSX, into a spread
-// of `props(...)` through the StyleX namespace in scope; the exit compile then
-// compiles that call. Without a visible namespace it stays for the exit compile.
+// Rewrites an sx element created after entry into a `props(...)` spread, as
+// the original plugin does; without a StyleX namespace in scope it waits for exit.
 function sxElement(path, state) {
   const s = state.stylexFacade;
   if (s == null || s.known.has(path.node) || !sxAttribute(path.node, s.sx))

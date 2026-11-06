@@ -1,33 +1,17 @@
-//! What a diagnostic remembers about the file it is writing about.
+//! The per-file memo of spans and declarations that diagnostics have already resolved.
 //!
-//! Both maps are the diagnostics' own, so they live here rather than in the
-//! compilation state that stores them. The state holds one of these as a field
-//! and hands it back through [`DiagnosticState`](crate::state::DiagnosticState);
-//! it never reads or writes either map itself.
-//!
-//! Both are keyed by 128 bits, because the read side acts on a hit alone: a
-//! cached span is turned straight into a `file:line`. A collision is directly
-//! observable -- a style annotated with another style's line number -- so the
+//! Keys are 128-bit hashes because a hit is used without verification, so a collision would
+//! show the wrong line.
 //! width is the only thing standing behind it.
 
 use rustc_hash::FxHashMap;
 use swc_core::{atoms::Atom, common::Span};
 
-/// The positions a diagnostic already resolved in this file, and the bindings
-/// its refusals are about.
-///
-/// One per file being transformed, because every key indexes a position in that
-/// file.
+/// The spans and framed declarations that diagnostics resolved for one file.
 #[derive(Clone, Debug, Default)]
 pub struct DiagnosticMemo {
   spans: FxHashMap<u128, Span>,
-  /// Per refused expression, the binding whose declaration its code frame
-  /// should point at instead of the expression itself.
-  ///
-  /// Keyed by the expression, not held as one slot, because a refusal is not
-  /// always the end of the build: a dynamic style's value falls through to an
-  /// inline style, so a later, unrelated diagnostic must not inherit an earlier
-  /// refusal's declaration.
+  /// Per refused expression, the binding whose declaration its code frame should point at.
   framed_declarations: FxHashMap<u128, Atom>,
 }
 
@@ -53,9 +37,6 @@ impl DiagnosticMemo {
   }
 
   /// Whether any refusal recorded a declaration to frame.
-  ///
-  /// False for every build that refuses nothing, which lets the annotation path
-  /// answer without hashing an expression.
   pub fn has_framed_declarations(&self) -> bool {
     !self.framed_declarations.is_empty()
   }

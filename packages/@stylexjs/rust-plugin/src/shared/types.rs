@@ -128,10 +128,6 @@ pub struct TransformOutput {
     pub source_map: Option<serde_json::Value>,
     pub errors: Vec<String>,
     /// The warnings the Babel plugin prints with `console.warn`, in order.
-    ///
-    /// The compiler core reports them through the `log` facade, and this crate
-    /// installs the logger that routes them here the first time it compiles.
-    /// An embedder that installed its own `log` logger before that receives
-    /// them through its logger instead, and this list stays empty.
+    /// Empty if the embedder installed its own `log` logger first.
     pub warnings: Vec<String>,
 }

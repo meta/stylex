@@ -14,10 +14,7 @@ const url = require('node:url');
 const EXTENSIONS = ['.js', '.ts', '.tsx', '.jsx', '.mjs', '.cjs'];
 
 const { isProxy } = require('node:util').types;
-// A handle id starts with a one-letter kind: f for a function, s for a symbol,
-// b for a bigint, a for an array, p for a plain object, x for a proxy (decided
-// when read) and o for any other object. Classifying never runs user code (no
-// proxy traps, no getters).
+// The kind letter that starts a handle id; never runs user code (traps, getters).
 function handleKind(value) {
   switch (typeof value) {
     case 'function':
@@ -54,8 +51,7 @@ function fromCodeUnits(units) {
   }
   return result;
 }
-// The native side reports a JavaScript-thread stack too shallow to continue
-// with this marker; it surfaces as the RangeError JavaScript itself throws.
+// Turns the native too-shallow-stack marker into JavaScript's own RangeError.
 function stackOverflow(error) {
   return (
     error != null &&
@@ -64,8 +60,7 @@ function stackOverflow(error) {
   );
 }
 
-// Binary operators the compiler may apply to host values; a fixed table, never
-// evaluated source text.
+// Binary operators the compiler may apply to host values (never evaluated text).
 const BINARY = {
   '+': (a, b) => a + b,
   '-': (a, b) => a - b,
@@ -177,13 +172,8 @@ function aliasedPaths(source, aliases) {
   return result;
 }
 
-// The specifier `rewriteAliases` writes for a resolved theme file, exactly as
-// the Babel plugin computes it: its program-exit ImportDeclaration visitor
-// (babel-plugin/src/index.js) takes `getRelativePath(filename, resolved)`
-// (babel-plugin/src/utils/state-manager.js: `path.relative` from the file's
-// directory, separators converted with `split(path.sep).join('/')`, `./`
-// prefixed unless it starts with `.`), then strips a code extension. `pathImpl`
-// is the platform's `path` (`path.win32` in tests).
+// The specifier `rewriteAliases` writes for a resolved theme file, matching the
+// Babel plugin's getRelativePath (state-manager.js) minus the code extension.
 function rewrittenImportPath(from, resolved, pathImpl = path) {
   let result = pathImpl
     .relative(pathImpl.parse(from).dir, resolved)
@@ -195,15 +185,8 @@ function rewrittenImportPath(from, resolved, pathImpl = path) {
   return result;
 }
 
-// The canonical name of a theme file, which its variables are hashed under,
-// exactly as the Babel plugin computes it (babel-plugin/src/utils/
-// state-manager.js, getCanonicalFilePath and getPackageNameAndPath): the
-// nearest package.json, walking up from the file's directory and checking the
-// root too, gives `<name>:<path from that directory>` (`undefined:` for a
-// nameless package; a manifest that does not parse is reported and ends the
-// search); otherwise the path from `rootDir`, or `_unknown_path_:<file>`.
-// Separators are the platform's. `pathImpl` and `files` let tests stand in for
-// another platform and file system.
+// The canonical name a theme file's variables hash under, as the Babel plugin's
+// getCanonicalFilePath computes it; an unparsable package.json is reported.
 function canonicalFilePath(
   file,
   rootDir,
@@ -276,8 +259,7 @@ function resolveFile(source, filename, aliases, rootDir) {
   return undefined;
 }
 
-// A compiler function stays callable for as long as JavaScript holds its
-// wrapper; the native side keeps its state until the wrapper is collected.
+// Native state of a compiler function lives until its JS wrapper is collected.
 const releases =
   typeof FinalizationRegistry === 'function'
     ? new FinalizationRegistry(({ binding, id }) => {
@@ -290,11 +272,8 @@ const releases =
     : null;
 
 function createHost(options, filename, binding) {
-  // Every object, array, function, symbol and bigint the compiler sees stays
-  // a live JavaScript value here and is read lazily by id, exactly as Babel's
-  // evaluator reads the real value: identity, receivers, getters, proxies,
-  // holes and later mutations are all preserved. The same value always has
-  // the same id; the id's first letter is its kind (see handleKind).
+  // Non-primitive values stay live here and are read lazily by id, as Babel's
+  // evaluator reads them; the same value always has the same id.
   const handles = new Map();
   const handleIds = new Map();
   function handle(value) {
@@ -306,9 +285,7 @@ function createHost(options, filename, binding) {
     }
     return { type: 'handle', value: id };
   }
-  // Across the boundary a primitive travels as itself: the addon reads strings
-  // as UTF-16 (lone surrogates included) and numbers as doubles. Objects are
-  // `{ type, value }` records.
+  // Primitives cross as themselves; objects become `{ type, value }` records.
   function encode(value) {
     const kind = typeof value;
     return kind === 'string' ||
@@ -318,8 +295,7 @@ function createHost(options, filename, binding) {
       ? value
       : handle(value);
   }
-  // In the serialized options (JSON-like data), every value is a record:
-  // numbers as their text, strings with lone surrogates as code units.
+  // Option data as records: numbers as text, lone-surrogate strings as code units.
   function encodeData(value) {
     if (value === undefined) return { type: 'undefined' };
     if (value === null) return { type: 'null' };
@@ -337,9 +313,7 @@ function createHost(options, filename, binding) {
     }
     return handle(value);
   }
-  // A shallow structural view of a value the compiler must traverse (a style
-  // object, a spread): fresh containers are copied one level, their contents
-  // stay live values. Reads happen now, in JavaScript order, once.
+  // One-level views of values the compiler traverses, read once in JS order.
   const MAX_ENTRIES = 262144;
   function entriesOf(value) {
     const keys = Object.keys(value);
@@ -362,8 +336,7 @@ function createHost(options, filename, binding) {
     }
     return { type: 'array', value: result };
   }
-  // For the compiler's result values: arrays and plain objects become data,
-  // anything else (class instances, Map, functions) stays a live value.
+  // Result values: arrays and plain objects become data; anything else stays live.
   function materialize(value) {
     if (value === null || typeof value !== 'object') return { type: 'null' };
     if (Array.isArray(value)) {
@@ -391,11 +364,8 @@ function createHost(options, filename, binding) {
       ],
     };
   }
-  // An object or array literal the compiler evaluated, created once as the
-  // live value it stands for: own data properties in order (an own
-  // `__proto__` key stays an own data property), its prototype
-  // (`Object.prototype` or none) and holes. A fixed operation on data;
-  // nothing is evaluated.
+  // Creates the live value of an evaluated object or array literal from data;
+  // an own `__proto__` key stays a data property and nothing is evaluated.
   function adopt(kind, contents, holes = []) {
     if (kind === 'array') {
       if (!Array.isArray(contents)) {
@@ -422,8 +392,7 @@ function createHost(options, filename, binding) {
     }
     return result;
   }
-  // The pure, allowlisted Object/Array statics the evaluator may apply to a
-  // live value, run as the real built-ins.
+  // Pure, allowlisted Object/Array statics the evaluator may run on live values.
   const STATIC_BUILTINS = {
     Object: {
       keys: 'array',
@@ -465,12 +434,9 @@ function createHost(options, filename, binding) {
         return encode(result);
     }
   }
-  // Compiler functions passed to JavaScript run back on the compiler thread,
-  // with this host answering their requests: the function belongs to the
-  // transform that created it, during any later transform or after it ended.
+  // Compiler functions run back on the compiler thread, even after their transform.
   const compilerFunctions = new Map();
-  // Exceptions this host raised for compiler failures, with the failure's id:
-  // when one escapes a later request unchanged, the compiler learns its cause.
+  // Failure ids of exceptions this host raised, recognized when they come back.
   const compilerFailures = new WeakMap();
   function compilerFunction(id) {
     let wrapper = compilerFunctions.get(id);
@@ -488,24 +454,19 @@ function createHost(options, filename, binding) {
           if (stackOverflow(error)) {
             throw new RangeError('Maximum call stack size exceeded');
           }
-          // The compiler function failed because user code it called threw:
-          // that exception now propagates through the caller, which may catch it.
+          // User code the compiler function called threw: propagate that exception.
           if (state.hasThrown) {
             const thrown = state.thrown;
             state.hasThrown = false;
             state.thrown = undefined;
             throw thrown;
           }
-          // The compiler's own failure (an addon error, which carries the
-          // N-API status as its code), as a plain Error (see below). Anything
-          // else is a JavaScript exception the addon rethrew unchanged.
+          // Addon errors carry the N-API status as `code`; anything else is user JS.
           if (typeof error?.code === 'string') throw new Error(error.message);
           throw error;
         }
         if (result?.type === 'failed') {
-          // A compiler failure: a plain Error with the compiler's message, as
-          // the Babel plugin's evaluated arrow throws it, unless user code the
-          // function called threw first.
+          // A plain Error with the compiler's message, as the Babel plugin throws it.
           if (state.hasThrown) {
             const thrown = state.thrown;
             state.hasThrown = false;
@@ -556,23 +517,17 @@ function createHost(options, filename, binding) {
     }
   }
   const functions = new Map();
-  // One id per (function, receiver): the same function value read from two
-  // objects is called with each of them as `this`, and `@callbackValue` still
-  // returns the one function (identity is preserved).
+  // One id per (function, receiver), so each read calls it with its own `this`.
   const functionsByIdentity = new Map();
   const seen = new Set();
-  // Callbacks and non-JSON numbers in options are tagged in-band, so option
-  // data must never be able to spell a tag. `env` is not serialized at all:
-  // compiled code reads the live object, so its data is never interpreted.
+  // Option data must never spell an in-band tag; `env` is never serialized.
   const RESERVED = [
     '__stylexCallback',
     '__stylexUndefined',
     '__stylexNumber',
     '__stylexHandle',
   ];
-  // Like Babel's options, `env` is a frozen shallow copy taken once per
-  // transform; the values inside stay the live objects (an array or a
-  // non-object is reported by option validation, as Babel does).
+  // Like Babel, `env` becomes a frozen shallow copy once per transform.
   function isEnvObject(value) {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
   }
@@ -683,11 +638,7 @@ function createHost(options, filename, binding) {
   }
   function debugFile(file) {
     if (typeof options.debugFilePath === 'function') {
-      // Babel calls the author's function once and interpolates its result
-      // into `${name}:${line}` only when it is not '' and the style has a
-      // line. Strings (the documented return type) cross unchanged; any other
-      // value is converted here, when it is returned, so its `toString`
-      // runs even where Babel would not interpolate it (documented limit).
+      // Called once, as in Babel; a non-string result is always stringified here.
       const name = options.debugFilePath(file);
       return typeof name === 'string' ? name : `${name}`;
     }
@@ -715,8 +666,7 @@ function createHost(options, filename, binding) {
     }
     return mode.type === 'haste' ? path.basename(file) : short;
   }
-  // The first exception thrown by user code; the facade rethrows it unchanged
-  // once the native call returns, exactly as Babel would have propagated it.
+  // The first user exception, which the facade rethrows unchanged, as Babel would.
   const state = { thrown: undefined, hasThrown: false };
   function run(id, args) {
     if (id === '@callbackArity') {
@@ -752,19 +702,13 @@ function createHost(options, filename, binding) {
     if (id === '@binary') return binary(args[0], args[1], args[2]);
     if (id === '@unary') return unary(args[0], args[1]);
     if (id === '@debugFile') return debugFile(args[0]);
-    // Babel only tests the resolver's result for truthiness and later uses the
-    // canonical path in string concatenation, so custom resolvers may return
-    // any value.
+    // Babel only tests a resolver's result for truthiness, so any value is allowed.
     if (id === '@resolveImport') {
       const resolved = resolve(args[0], args[1]);
       return resolved ? `${canonical(resolved)}` : undefined;
     }
     if (id === '@canonicalFile') return `${canonical(args[0])}`;
-    // `rewriteAliases`, as the Babel plugin's program exit rewrites a theme
-    // import: always through its commonJS resolver with the configured aliases
-    // (never a custom resolver, and without `rootDir`), then the POSIX path
-    // relative to the file's directory, `./`-prefixed, without a code
-    // extension.
+    // Like the Babel plugin: aliases via its commonJS resolver, never a custom one.
     if (id === '@rewriteImport') {
       const [source, from] = args;
       const resolved = resolveFile(source, from, options.aliases);

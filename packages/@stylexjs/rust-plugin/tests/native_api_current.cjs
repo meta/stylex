@@ -78,8 +78,7 @@ test('unframed validation errors use Babel error constructors', () => {
   for (const engine of ['direct', 'facade']) {
     assert.deepEqual(capture(engine, framed, {}), expected, `${engine}: framed diagnostic`);
   }
-  // The native parser is SWC, not Babel. Its text differs independently of
-  // validation error kinds; retain the SyntaxError/code and real-frame checks.
+  // The native parser is SWC, so only the SyntaxError, code and frame are compared.
   const parsed = capture('direct', 'const = ;', {});
   assert.equal(parsed.kind, 'SyntaxError');
   assert.equal(parsed.code, 'BABEL_PARSE_ERROR');
@@ -98,10 +97,7 @@ test('a named env import reports the same unframed style-value error as Babel wh
       return { kind: error.constructor.name, code: error.code, message: error.message };
     }
   };
-  // `env` imported by name, under its own name or an alias, is the namespace's
-  // `env` object: unconfigured, a read off it is `undefined`, which the style
-  // validator refuses with Babel's unframed sentence -- never a theme-file
-  // resolution error.
+  // An unconfigured named `env` reads undefined, refused as Babel does, unframed.
   const named = [
     ["import { create, env } from '@stylexjs/stylex';\n", 'env.brand'],
     ["import { create, env } from '@stylexjs/stylex';\n", "env['brand']"],
@@ -137,11 +133,7 @@ test('a binding that shadows the named env import is never the configured env (n
   const filename = appFile('shadowed-named-env.js');
   const rules = (engine, source, options) =>
     runEngine(engine, source, filename, options).metadata.stylex.map((rule) => rule[1].ltr);
-  // Deliberate native policy, not an oracle comparison: the reference
-  // implementation matches function-map names by spelling, so a dynamic
-  // style's own `env` parameter reads its configured object there. Here the
-  // import is recognised by its binding, so the parameter keeps its own value
-  // and the declaration stays dynamic.
+  // Deliberately unlike the reference, which matches `env` by spelling, not binding.
   for (const [imports, param] of [
     ["import { create, env } from '@stylexjs/stylex';\n", 'env'],
     ["import { create, env as runtime } from '@stylexjs/stylex';\n", 'runtime'],
@@ -200,8 +192,7 @@ test('errors name the file exactly as Babel names it', () => {
     parse: 'const = ;',
     transform: `${header}export const s = stylex.create(1);`,
   };
-  // The label Babel puts before an error's message; the message itself is
-  // the compiler's.
+  // The label Babel puts before the compiler's error message.
   const label = (engine, source, filename) => {
     try {
       runEngine(engine, source, filename, {});
@@ -236,9 +227,7 @@ test('compiler functions kept past their transform throw as in Babel', () => {
   const { runEngine, describe } = require('./support/babel_errors.cjs');
   const owner = `${header}export const s = stylex.create({ a: { color: stylex.env.keep((v) => stylex.env.inner(v)) } });`;
   const later = `${header}export const s = stylex.create({ a: { color: stylex.env.use('x') } });`;
-  // One kept function per engine, called with no transform running (the raw
-  // exception), from a callback of a later transform (wrapped once by that
-  // transform), then outside again: the ended owner never changes either.
+  // A kept function called with no transform, from a later transform, then again.
   const sequence = (engine) => {
     let thrown;
     let kept;
@@ -377,9 +366,7 @@ test('debugFilePath names debug labels and aborts exactly as in Babel', () => {
 
 test('failures inside nested transforms print nothing to stderr', () => {
   const { spawnSync } = require('node:child_process');
-  // Each case runs in its own process, so its stderr is exactly the
-  // compiler's. A transform run from a callback ends before its caller fails:
-  // after a user exception, after a StyleX error, and after success.
+  // One process per case, so stderr is exactly the compiler's.
   const script = `
 const { transformSync } = require(${JSON.stringify(path.resolve(__dirname, '..'))});
 const header = ${JSON.stringify(header)};
@@ -732,7 +719,7 @@ test('errors carry the code fields of Babel errors', () => {
 test('an input source map composes the output map back to the original file', () => {
   const babel = require('@babel/core');
   const original = `${header}\n\nexport const s = stylex.create({ a: { color: 'red' } });\n`;
-  // A Babel-produced map (its \`file\` and \`sourceRoot\` are undefined).
+  // A Babel-produced map (its `file` and `sourceRoot` are undefined).
   const first = babel.transformSync(original, {
     filename: '/app/original.js',
     sourceFileName: 'original.js',
@@ -805,8 +792,7 @@ test('compiler errors name the file as Babel resolves the filename', () => {
     }
     return null;
   };
-  // An empty string is a filename too: Babel resolves it against the working
-  // directory. Only an absent filename is "unknown file".
+  // Babel resolves an empty filename too; only an absent one is "unknown file".
   for (const options of [{ filename: '' }, {}, { filename: 'rel/a.js' }]) {
     const expected = firstLine(() =>
       babel.transformSync(source, {
@@ -829,14 +815,11 @@ test('compiler errors name the file as Babel resolves the filename', () => {
   );
 });
 
-// A theme package on disk for the resolution tests: the tokens file is
-// compiled and imported exactly as an application would.
+// A theme package on disk, compiled and imported as an application would.
 function themeFixture() {
   const fs = require('node:fs');
   const os = require('node:os');
-  // The real path: the Babel plugin resolves relative imports through
-  // import-meta-resolve, which follows symlinks, and macOS's tmpdir sits behind
-  // one (/var -> /private/var).
+  // Real path: import-meta-resolve follows symlinks such as macOS's /var.
   const root = fs.realpathSync(
     fs.mkdtempSync(path.join(os.tmpdir(), 'stylex-resolve-')),
   );
@@ -1085,8 +1068,7 @@ test('custom resolution names theme variables with the author canonical paths', 
     const expected = compile('babel');
     const rules = expected.metadata.flat();
     const css = rules.map((rule) => rule[1].ltr).join(' ');
-    // Producers and consumer agree in the oracle itself: every variable the
-    // consumer reads is a defined variable or a constant.
+    // Sanity-check the oracle: every variable the consumer reads is defined.
     const defined = [
       ...(css.match(/--x[a-z0-9]+(?=:)/g) ?? []),
       ...rules
@@ -1142,8 +1124,7 @@ test('a throwing getCanonicalFilePath reaches the caller as in Babel', () => {
 
 test('rewritten theme specifiers take the form Babel writes on every platform', () => {
   const { rewrittenImportPath } = require('../host');
-  // Babel: babel-plugin/src/index.js (program exit, ImportDeclaration) and
-  // getRelativePath in babel-plugin/src/utils/state-manager.js.
+  // Transcribed from the Babel plugin's getRelativePath (state-manager.js).
   const babelForm = (from, resolved, pathImpl) => {
     const relative = pathImpl
       .relative(pathImpl.parse(from).dir, resolved)
@@ -1235,10 +1216,7 @@ test('experimental_crossFileParsing imports compile as commonJS ones do', () => 
     });
   const crossFile = compile('experimental_crossFileParsing');
   const commonJS = compile('commonJS');
-  // The Babel plugin's own cross-file read rejects every file it parses (it
-  // tests the parsed file's empty `errors` array for truthiness), so this mode
-  // follows the `commonJS` reading: the consumer references the variables the
-  // theme file defines.
+  // Babel's cross-file read rejects every file (an empty `errors` array is truthy).
   assert.deepEqual(crossFile.metadata, commonJS.metadata);
   assert.equal(crossFile.code, commonJS.code);
   assert.match(JSON.stringify(crossFile.metadata), /var\(--x/);
@@ -1282,8 +1260,7 @@ test('commonJS theme names match Babel for a package without a name', () => {
     });
     const actual = transformSync(source, { ...options, filename });
     assert.deepEqual(actual.metadata, expected.metadata, filename);
-    // Code is compared as Babel prints it: the names, not the layout, are
-    // what this test is about.
+    // Compare Babel's reprint: names, not layout, are what this test is about.
     const reprint = (code) =>
       babel.transformSync(code, { babelrc: false, configFile: false }).code;
     assert.equal(reprint(actual.code), reprint(expected.code), filename);
@@ -1298,8 +1275,7 @@ test('commonJS theme names match Babel for a package without a name', () => {
 
 test('theme files are named as Babel names them on every platform', () => {
   const { canonicalFilePath } = require('../host');
-  // Babel: babel-plugin/src/utils/state-manager.js, getCanonicalFilePath and
-  // getPackageNameAndPath, transcribed over the same file system stand-in.
+  // Transcribed from the Babel plugin's getCanonicalFilePath (state-manager.js).
   const babelForm = (file, rootDir, pathImpl, files) => {
     const packageOf = (filepath) => {
       const folder = pathImpl.dirname(filepath);
@@ -1415,15 +1391,8 @@ test('theme files are named as Babel names them on every platform', () => {
   }
 });
 
-// A mutating array method named on a binding. The module's write tracker
-// disqualifies `a` for the mutation, so reading the receiver answers "not
-// constant"; Babel never reads it, and labels the call instead. One refusal,
-// and before the fix two different sentences and two different frames.
-//
-// The folding half of this is a separate question: Babel folds the same
-// methods on a receiver nothing can name afterwards (`[3, 1].sort()[0]`),
-// which this compiler does not yet do. That is recorded as the A10 follow-up
-// and is deliberately not what this row asserts.
+// Babel refuses at the call, never reading the receiver the write tracker taints.
+// Not asserted: Babel also folds `[3, 1].sort()[0]`, which is the A10 follow-up.
 test('a mutating array method on a named array reports Babel\'s call refusal', () => {
   const { runEngine } = require('./support/babel_errors.cjs');
   const filename = appFile('named-array-mutator.js');
@@ -1452,8 +1421,7 @@ test('a mutating array method on a named array reports Babel\'s call refusal', (
       expected.message.includes('Unsupported expression: CallExpression'),
       `babel must label the call, got: ${expected.message}`,
     );
-    // The frame is part of the comparison: `deepEqual` on the whole message
-    // pins the code frame Babel printed, not only its first line.
+    // `deepEqual` on the whole message pins Babel's code frame too.
     for (const engine of ['direct', 'facade']) {
       assert.deepEqual(capture(engine, source), expected, `${engine}: ${body}`);
     }
@@ -1517,10 +1485,7 @@ test('an input source map leaves the debug label as Babel writes it', () => {
   const babel = require('@babel/core');
   const filename = appFile('src/Card.js');
   const source = `${header}export const styles = stylex.create({\n  root: { color: 'red' },\n});\n`;
-  // Every generated line maps to Original.js line 42 onward. The Babel plugin
-  // never consults it (its addSourceMapData reads hub.file.codeMap, which
-  // @babel/core 7 does not define), so the label is the compiled file and the
-  // generated line.
+  // Babel's plugin ignores this map: @babel/core 7 defines no hub.file.codeMap.
   const inputSourceMap = {
     version: 3,
     sources: ['Original.js'],

@@ -8,9 +8,7 @@ use crate::utils::parser::ParsedModule;
 pub(crate) mod source_edits;
 pub(super) use source_edits::{AuthoredModuleItem, SourcePreservingOutput, TextEdit};
 
-/// The caller must prove that the core has no possible source mutations.
-/// This is not a postflight bypass for changed programs. Mapping delegates to
-/// the same empty-edit writer so filenames, UTF-16 positions and bytes match.
+/// Output for a module the core cannot change; the caller must prove that.
 pub(super) fn emit_verbatim(
     file: &swc_core::common::SourceFile,
     with_map: bool,
@@ -26,7 +24,7 @@ pub(super) fn emit_verbatim(
     }
 }
 
-/// The authored module is cloned after resolver and before StyleXTransform.
+/// `authored` is cloned after the resolver and before StyleXTransform.
 pub(super) fn emit_module_with_origins(
     parsed: &ParsedModule,
     original: &Module,
@@ -47,8 +45,7 @@ pub(super) fn emit_module_with_origins(
     )
 }
 
-/// Bridge parser-original coordinates through intermediate sourcesContent
-/// before standard V3 upstream segment lookup. Code and edit ranges are intact.
+/// Maps parser coordinates through the intermediate text before upstream lookup.
 pub(super) fn compose_input_source_map(
     mut output: SourcePreservingOutput,
     input: Option<&serde_json::Value>,

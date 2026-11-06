@@ -22,7 +22,6 @@ fn cleanup(path: &Path) {
   let _ = fs::remove_dir_all(path);
 }
 
-/// Finds the nearest ancestor folder matching the requested name.
 #[test]
 fn find_closest_path_returns_nearest_match() {
   let root = temp_dir("find-closest-path-hit");
@@ -38,7 +37,6 @@ fn find_closest_path_returns_nearest_match() {
   cleanup(&root);
 }
 
-/// Returns None after recursive search reaches filesystem root.
 #[test]
 fn find_closest_path_returns_none_when_target_missing() {
   let root = temp_dir("find-closest-path-miss");

@@ -11,13 +11,8 @@ use serde_json::Value;
 use crate::utils::host::{self, HostCallback, HostValue};
 use crate::{ProcessStylexRulesConfig, RuleEntry, TransformOutput};
 
-/// The addon's allocator is mimalloc wherever `swc_malloc` selects it (see
-/// Cargo.toml). Tuned at load for a compiler that lives in a build process:
-/// freed pages return to the OS after 100 ms (not at once, so consecutive
-/// transforms reuse them instead of faulting them back in) and arenas commit
-/// memory on demand. Measured against the system allocator, transforms run
-/// 17-28% faster; the steady-state footprint of a small-file workload is about
-/// 15-23 MB larger, while peak memory on large files is equal or lower.
+/// Tunes mimalloc (selected by `swc_malloc`) at load: freed pages return to the
+/// OS after 100 ms, so consecutive transforms reuse them, and arenas commit on demand.
 #[cfg(any(
     all(not(target_os = "linux"), not(target_family = "wasm")),
     all(
@@ -30,8 +25,7 @@ mod allocator_tuning {
     extern "C" {
         fn mi_option_set(option: i32, value: std::os::raw::c_long);
     }
-    // `mi_option_e` of mimalloc v3, as built by libmimalloc-sys 0.1.49
-    // (Cargo.lock pins it).
+    // `mi_option_e` values of mimalloc v3 (libmimalloc-sys 0.1.49, pinned in Cargo.lock).
     const MI_OPTION_ARENA_EAGER_COMMIT: i32 = 4;
     const MI_OPTION_PURGE_DELAY: i32 = 15;
 
@@ -56,9 +50,8 @@ fn compiler_error(error: anyhow::Error) -> Error {
     )
 }
 
-/// The compiled program travels as a plain string; everything else is one JSON
-/// document, which V8 parses far faster than per-property N-API object creation
-/// (metadata for large files holds hundreds of thousands of rules).
+/// The code as a string and everything else as one JSON document, which V8
+/// parses far faster than per-property N-API object creation.
 #[napi(object)]
 pub struct NativeTransformOutput {
     pub code: String,
@@ -105,10 +98,8 @@ fn ordered_rule(rule: &RuleEntry) -> OrderedRule<'_> {
     )
 }
 
-/// Compiler passes recurse over the syntax tree, so deeply nested input needs
-/// more stack than a JavaScript thread (or a 4 MiB worker thread) provides. The
-/// compiler runs on its own thread with this much reserved, uncommitted stack;
-/// JavaScript callbacks are always executed back on the calling JS thread.
+/// Reserved (uncommitted) stack of the compiler thread: compiler passes recurse
+/// over the syntax tree deeper than a JavaScript thread's stack allows.
 const COMPILER_STACK_SIZE: usize = 512 * 1024 * 1024;
 
 /// Compiler thread -> JS thread, on the channel of one operation.
@@ -123,22 +114,15 @@ enum CompilerMessage {
 /// JS thread -> compiler thread, while the compiler waits for a host operation.
 enum HostReply {
     Value(std::result::Result<HostValue, host::WireFailure>),
-    /// JavaScript started another operation (a nested transform, or a call of
-    /// a compiler function) while the compiler waits: run it re-entrantly on
-    /// the compiler thread, then keep waiting for the original reply.
+    /// An operation JavaScript started meanwhile, run re-entrantly before the reply.
     Nested(Job),
 }
 
-/// The host function; `call_host` calls it and reads its reply (a value, or a
-/// thrown exception) with N-API directly.
+/// The host's request handler; `call_host` calls it with raw N-API.
 type HostFunction = FunctionRef<FnArgs<(String, WireArgs)>, Unknown<'static>>;
 
-/// Native frames between two JavaScript frames (N-API conversion, the host
-/// pump, error construction) are not covered by V8's stack check, which only
-/// keeps a small reserve below its own limit. A transform or compiler-function
-/// call is refused, as a catchable RangeError, unless this much of the calling
-/// thread's real stack remains, so nested work on small worker stacks fails
-/// cleanly instead of overflowing.
+/// Stack an operation needs left on the calling thread, or it is refused as a
+/// catchable RangeError: V8's stack check does not cover native frames.
 const MIN_JS_THREAD_STACK: usize = 256 * 1024;
 
 fn ensure_js_stack() -> Result<()> {
@@ -151,11 +135,8 @@ fn ensure_js_stack() -> Result<()> {
     }
 }
 
-/// Host calls bounce between the JS thread and the compiler thread; parking a
-/// thread and waking it costs tens of microseconds, longer than most replies
-/// take, so spin briefly first. Spinning only pays off when the other thread
-/// has a core of its own; with one or two cores it would hold the CPU the
-/// reply needs.
+/// Spins briefly before parking, which costs more than most replies take; only
+/// with at least four cores, where the other thread has a core of its own.
 fn recv_spinning<T>(receiver: &mpsc::Receiver<T>) -> std::result::Result<T, mpsc::RecvError> {
     static SPIN: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     let spin = *SPIN
@@ -173,13 +154,12 @@ fn recv_spinning<T>(receiver: &mpsc::Receiver<T>) -> std::result::Result<T, mpsc
     receiver.recv()
 }
 
-/// One operation for the compiler thread. Each has its own message channel;
-/// host requests it makes are answered by the JavaScript host that started it.
+/// One operation for the compiler thread, with its own message channel.
 enum Job {
     Transform {
         source: String,
         filename: String,
-        /// The serialized options, as the host produced them.
+        /// The serialized options.
         options: Value,
         has_callback: bool,
         sender: mpsc::Sender<CompilerMessage>,
@@ -193,11 +173,8 @@ enum Job {
     },
 }
 
-/// One long-lived compiler thread per JS thread. Every operation of that JS
-/// thread runs on it: nested transforms and compiler functions re-entrantly,
-/// inside the host request they were started from, so compiler functions stay
-/// on the thread that owns them and are routed to the operation waiting for
-/// them, never to whichever transform happens to be innermost.
+/// One long-lived compiler thread per JS thread. Nested operations run
+/// re-entrantly inside the host request that started them.
 struct CompilerThread {
     jobs: mpsc::Sender<Job>,
     ledger: Arc<host::ClosureLedger>,
@@ -223,8 +200,7 @@ impl CompilerThread {
 
 thread_local! {
     static WORKER: RefCell<Option<Rc<CompilerThread>>> = const { RefCell::new(None) };
-    /// Reply channels of the host requests the JS thread is serving, innermost
-    /// last. The compiler thread is always waiting on the innermost one.
+    /// Reply channels of the host requests being served, innermost last.
     static PENDING: RefCell<Vec<mpsc::Sender<HostReply>>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -245,8 +221,7 @@ fn worker() -> Result<Rc<CompilerThread>> {
     })
 }
 
-/// Hands `job` to the compiler thread: to the request it is waiting on when an
-/// operation is in progress, otherwise to its idle queue.
+/// Hands `job` to the compiler thread: to the request it waits on, if any.
 fn submit(job: Job) -> Result<()> {
     let gone = || Error::new(Status::GenericFailure, "the StyleX compiler thread is gone");
     match PENDING.with(|pending| pending.borrow().last().cloned()) {
@@ -255,8 +230,7 @@ fn submit(job: Job) -> Result<()> {
     }
 }
 
-/// A host callback for one operation: requests travel on `sender`; while
-/// waiting, the compiler thread runs operations JavaScript nests inside them.
+/// A host callback for one operation; runs nested operations while it waits.
 fn host_handler(sender: mpsc::Sender<CompilerMessage>) -> Rc<HostCallback> {
     Rc::new(move |id: &str, arguments: &[HostValue]| {
         let gone = || anyhow::anyhow!("the JavaScript host is gone");
@@ -271,8 +245,7 @@ fn host_handler(sender: mpsc::Sender<CompilerMessage>) -> Rc<HostCallback> {
         loop {
             match recv_spinning(&response).map_err(|_| gone())? {
                 HostReply::Value(result) => return result.map_err(anyhow::Error::new),
-                // A separate operation: its evaluation budget must not mix
-                // with the one suspended here.
+                // A separate evaluation budget from the suspended operation.
                 HostReply::Nested(job) => {
                     if matches!(&job, Job::Closure { .. }) {
                         host::compiler_callback_operation(|| run(job));
@@ -294,16 +267,9 @@ fn run(job: Job) {
             has_callback,
             sender,
         } => {
-            // The transform's JavaScript host (a fresh owner) and its `env`,
-            // built inside the operation so host requests reach its callback.
             let operation = || {
                 let (host, env) = crate::utils::js_host::js_host_environment(&options);
-                // `custom` resolves through the author's callbacks; `commonJS`
-                // (and `experimental_crossFileParsing`, which resolves as it)
-                // resolves natively and asks the host only when native
-                // resolution cannot (package specifiers, paths not on disk);
-                // `haste` and no mode resolve nothing. `rewriteAliases`
-                // rewrites theme imports with the host's resolver in any mode.
+                // `commonJS` asks the host only when native resolution cannot.
                 let resolves = matches!(
                     options
                         .pointer("/unstable_moduleResolution/type")
@@ -332,7 +298,6 @@ fn run(job: Job) {
             // A panic must not take the shared thread down with it.
             let output = std::panic::catch_unwind(std::panic::AssertUnwindSafe(compile))
                 .unwrap_or_else(|_| Err(anyhow::anyhow!("the StyleX compiler panicked")));
-            // The receiver only disappears if the JS thread already failed.
             let _ = sender.send(CompilerMessage::Done(Box::new(output)));
         }
         Job::Closure {
@@ -354,15 +319,12 @@ fn run(job: Job) {
     }
 }
 
-/// One operation as the JS thread sees it: its message channel and the
-/// JavaScript host that answers its requests.
+/// One operation as the JS thread sees it.
 struct Session {
     receiver: mpsc::Receiver<CompilerMessage>,
     callback: Option<HostFunction>,
-    /// A JavaScript exception that escaped the host's own handler (V8 threw
-    /// it on entry, out of stack): kept by reference, never converted (that
-    /// would run JavaScript again at the stack limit), and rethrown unchanged
-    /// when the operation returns.
+    /// An exception that escaped the host's handler, rethrown when the
+    /// operation returns; never converted, which would run JavaScript.
     escaped: RefCell<Option<(sys::napi_env, sys::napi_ref)>>,
 }
 
@@ -375,8 +337,7 @@ impl Session {
         }
     }
 
-    /// Takes the pending exception and keeps the first one, running no
-    /// JavaScript.
+    /// Takes the pending exception, keeping the first, without running JavaScript.
     unsafe fn keep_escaped(&self, env: sys::napi_env) {
         let mut exception = std::ptr::null_mut();
         if sys::napi_get_and_clear_last_exception(env, &mut exception) != sys::Status::napi_ok
@@ -536,11 +497,7 @@ fn call_host(
         if status == sys::Status::napi_ok {
             return js_to_host(raw, result).map_err(plain)?;
         }
-        // The host catches every exception of the user code it runs, so one
-        // escapes only when V8 throws before the host's handler runs: a stack
-        // overflow on entry. It is not converted here (napi-rs would call
-        // its `toString`, running JavaScript at the same exhausted stack, and
-        // recurse until V8 itself fails); the operation rethrows it.
+        // A stack overflow on entry: napi-rs would run its `toString`, so keep it raw.
         let mut pending = false;
         if sys::napi_is_exception_pending(raw, &mut pending) == sys::Status::napi_ok && pending {
             session.keep_escaped(raw);
@@ -552,11 +509,7 @@ fn call_host(
     }
 }
 
-// Host values cross the boundary as JavaScript values, built and read with
-// N-API directly (no intermediate JSON): primitives as themselves (a string
-// with lone surrogates exactly, through UTF-16; a number as a double, so -0,
-// NaN and the infinities need no text), and containers, live values and
-// compiler functions as `{ type, value }` records.
+// Host values: primitives cross as themselves, the rest as `{ type, value }` records.
 fn napi_check(status: sys::napi_status) -> Result<()> {
     if status == sys::Status::napi_ok {
         Ok(())
@@ -875,8 +828,7 @@ impl FromNapiValue for WireValues {
     }
 }
 
-/// What a compiler function called from JavaScript returns: its value, or a
-/// compiler failure with a cause, as data the host raises itself.
+/// A compiler function's value, or a failure with a cause for the host to raise.
 pub enum ClosureReply {
     Value(HostValue),
     Failed { message: String, cause: u64 },
@@ -917,10 +869,8 @@ impl ToNapiValue for ClosureReply {
     }
 }
 
-/// Called by the host when JavaScript invokes a compiler function it received.
-/// `callback` is the host of the transform that created the function: its
-/// host requests (user callbacks, handles) go there, whichever transform is
-/// running now, and it works after that transform finished.
+/// Runs compiler function `id`; its host requests go to `callback`, the host
+/// of the transform that created it, even after that transform finished.
 #[napi(js_name = "callCompilerFunction")]
 pub fn call_compiler_function(
     env: Env,
@@ -943,8 +893,7 @@ pub fn call_compiler_function(
     session.rethrow_escaped()?;
     match end {
         PumpEnd::Closure(Ok(value)) => Ok(ClosureReply::Value(value)),
-        // A compiler failure with a cause comes back as data: the host raises
-        // the exception for it, so it can recognize that exception later.
+        // The host raises it, so it can recognize the exception later.
         PumpEnd::Closure(Err(host::WireFailure {
             message,
             cause: Some(cause),
@@ -974,8 +923,7 @@ pub fn release_compiler_function(id: String) {
     });
 }
 
-/// Compiler functions held for this JS thread (leak diagnostics for tests;
-/// built only with the `test-hooks` feature).
+/// Compiler functions held for this JS thread, for leak tests.
 #[cfg(feature = "test-hooks")]
 #[napi(js_name = "compilerFunctionCount")]
 pub fn compiler_function_count() -> u32 {

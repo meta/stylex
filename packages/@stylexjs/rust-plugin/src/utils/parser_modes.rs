@@ -30,8 +30,7 @@ impl From<Syntax> for ParseOptions {
     }
 }
 
-/// Enable grammar already supported by this pinned SWC parser. No source text
-/// rewriting or type erasure is used; custom filename syntax stays authoritative.
+/// The SWC syntax for a mode; custom filename syntax takes precedence.
 pub(crate) fn supported_syntax(mut syntax: Syntax) -> Syntax {
     match &mut syntax {
         Syntax::Es(es) => {
@@ -49,9 +48,7 @@ pub(crate) fn supported_syntax(mut syntax: Syntax) -> Syntax {
     syntax
 }
 
-// SWC's Flow parser intentionally exempts `await` identifiers from its module
-// check (parser/ident.rs). Babel and ECMAScript do not: reject reserved binding,
-// reference and declaration names, but not property/export/JSX name positions.
+// SWC's Flow parser allows `await` as an identifier in modules; Babel does not.
 #[derive(Default)]
 struct ModuleNames(Option<Span>);
 impl ModuleNames {
@@ -142,8 +139,6 @@ impl Visit for ModuleNames {
 }
 
 /// Private names are expressions only as the direct left operand of `in`.
-/// Keep lexical class environments: methods, accessors, arrows and nested
-/// classes may capture the enclosing class's private names.
 #[derive(Default)]
 struct PrivateBrands {
     scopes: Vec<Vec<PrivateName>>,

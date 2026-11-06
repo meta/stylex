@@ -1,10 +1,6 @@
-//! A stand-in for the transform's state manager, so the diagnostics can be
-//! tested without the crate they are extracted from.
+//! A stand-in for the transform's state manager, for testing the diagnostics in isolation.
 //!
-//! It answers [`DiagnosticState`] the way the state manager answers it, and
-//! nothing else. The one part that carries a rule rather than a field is the key
-//! span index: it is built from the memoized module, so replacing that module
-//! has to drop it.
+//! Replacing the memoized module drops the key span index built from it.
 
 use std::{cell::OnceCell, sync::Arc};
 
@@ -20,13 +16,11 @@ pub(crate) struct StateDouble {
   seen_module: Option<Module>,
   seen_source_file: Option<Arc<SourceFile>>,
   input_source: Option<String>,
-  /// False by default, as `useRealFileForSource` defaults to on. A case sets
-  /// it to keep the frame away from the disk.
+  /// False by default, because `useRealFileForSource` defaults to on.
   disk_reads_off: bool,
   key_span_index: OnceCell<KeySpanIndex>,
   memo: DiagnosticMemo,
-  /// Drops the module as soon as it is stored, so the caller reads back the
-  /// nothing a state that failed to memoize would hand it.
+  /// Drops the module as soon as it is stored, like a state that failed to memoize it.
   forgets_the_module: bool,
 }
 

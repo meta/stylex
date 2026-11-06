@@ -15,9 +15,8 @@ const { stripVTControlCharacters } = require('node:util');
 const packageRoot = path.resolve(__dirname, '..');
 const repository = path.resolve(packageRoot, '../../..');
 const babelRoot = path.join(repository, 'packages/@stylexjs/babel-plugin');
-// `compare` runs both engines and requires the native compiler to reproduce
-// the JS compiler test for test, including any failures the unchanged suite
-// has on this platform (for example Windows path separators in snapshots).
+// `compare` requires both engines to agree test for test, including the suite's
+// own failures on this platform (e.g. Windows path separators in snapshots).
 const mode = process.argv[2] || 'rust';
 if (!['rust', 'babel', 'compare'].includes(mode))
   throw new Error('Expected rust, babel or compare');
@@ -81,8 +80,7 @@ function run(engine, coverage) {
   return { status: result.status == null ? 1 : result.status, results };
 }
 
-// Failure text without colours, stack frames and the code frame Jest prints
-// for the throwing line, which point into each compiler's own source.
+// Strips colours, stack frames and Jest's code frame, which differ per compiler.
 function normalizeFailure(message) {
   return stripVTControlCharacters(message)
     .split(/\r?\n/)

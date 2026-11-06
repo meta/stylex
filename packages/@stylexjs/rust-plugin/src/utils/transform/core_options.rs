@@ -5,12 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-// Builds the vendored core's options from the Babel plugin's options.
-//
-// Every option is set explicitly with the Babel plugin's default and
-// derivation (`debug` defaults to `dev`, `enableDebugDataProp` to `debug`,
-// `enableDevClassNames` to `dev`, `importSources` always starts with
-// `@stylexjs/stylex` and `stylex`), so the core's own defaults never apply.
+// The core's options from the Babel plugin's, with Babel's defaults set explicitly.
 
 use anyhow::{anyhow, Result};
 use indexmap::IndexMap;
@@ -34,8 +29,7 @@ fn flag(options: &StyleXTransformOptions, key: &str, default: bool) -> Option<bo
     Some(options.bool_option(key, default))
 }
 
-/// `options` must already be normalized (`options::normalize_options`), so
-/// every value has the type the Babel plugin validated it to.
+/// `options` must already be normalized (`options::normalize_options`).
 pub(super) fn core_params(
     options: &StyleXTransformOptions,
     host: Option<HostEnvironment>,

@@ -91,8 +91,7 @@ fn actual_public_core_keyword_operands_keep_comment_gaps_and_match_babel() {
         }
         cases.push(serde_json::json!({"source":source,"code":output.code,"metadata":output.metadata_stylex}));
     }
-    // A line comment immediately after return/yield intentionally ends their
-    // operand. Preserve that authored ASI; never turn it into a returned value.
+    // A line comment right after `return` ends the statement (ASI).
     for (prefix, keyword) in [("function", "return"), ("function*", "yield")] {
         let source=format!("{header}export {prefix} f(){{{keyword} // operand line\n/* block */ stylex.props(styles.a);}}\n");
         let output = match crate::utils::transform_source(

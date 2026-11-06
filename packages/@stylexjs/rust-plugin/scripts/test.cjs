@@ -75,9 +75,7 @@ const steps = [
     process.execPath,
     ['--test', path.join(root, 'tests/benchmark_current.cjs')],
   ],
-  // `compare` (used on Windows) requires the native compiler to reproduce the
-  // JS compiler's results there, including the unchanged suite's own
-  // platform-specific failures; elsewhere every test must pass.
+  // `compare` (used on Windows) tolerates the suite's own platform failures.
   [
     process.execPath,
     [
@@ -91,9 +89,7 @@ let failed = 0;
 for (const [command, args] of steps) {
   const result = spawnSync(command, args, {
     cwd: root,
-    // The vendored crates' deep-nesting unit tests expect the 8 MiB thread
-    // their upstream test runner gives each test; cargo test's default test
-    // threads have 2 MiB.
+    // Vendored deep-nesting tests need more than cargo test's 2 MiB thread stacks.
     env: { RUST_MIN_STACK: String(16 * 1024 * 1024), ...process.env },
     stdio: 'inherit',
   });

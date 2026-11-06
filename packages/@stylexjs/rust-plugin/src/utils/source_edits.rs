@@ -1,9 +1,7 @@
 //! Lexical emission for an AST transformed from a source-backed module.
 //!
-//! Original container spans must be retained. Newly inserted statements/module
-//! items must have DUMMY_SP root spans: snippet SourceMaps are not provenance.
-//! Unsupported structural edits fail closed; output is reparsed and checked
-//! against the transformed AST before it is returned.
+//! Callers must keep original container spans and give inserted items DUMMY_SP
+//! root spans. Unsupported edits fail; output is reparsed and checked.
 
 use crate::utils::parser::parser_limits;
 use crate::utils::parser::parser_modes::{self, ParseOptions, SourceType};
@@ -55,8 +53,7 @@ pub struct TextEdit {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AuthoredModuleItem {
-    /// Generated, typed AST snapshot taken when `code` was parsed. Its root
-    /// must be DUMMY_SP; declaration binding identities match the final item.
+    /// Typed AST of `code`; its root must be DUMMY_SP.
     pub item: ModuleItem,
     pub code: String,
     /// Original source range that produced this hoist/insertion, if known.
@@ -83,9 +80,7 @@ pub fn source_range(file: &SourceFile, span: Span) -> Result<Range<usize>> {
     Ok(start..end)
 }
 
-/// Explicit lexical expression replacements authored by the transforming pass.
-/// Snippet provenance and typed postflight validation remain independent of
-/// numeric generated source spans.
+/// Lexical expression replacements registered by the transforming pass.
 pub fn emit_source_preserving_with_syntax(
     file: &SourceFile,
     original: &Module,
@@ -244,9 +239,7 @@ impl<'a> SourceIndex<'a> {
                 }
                 let jsx_attribute = tag(value) == Some("JSXAttribute");
                 for (key, value) in object {
-                    // JSX quoted values do not use JavaScript escape semantics.
-                    // Never transplant such a literal as a JS expression merely
-                    // because generated snippet numbers/value happen to collide.
+                    // JSX quoted values do not use JavaScript escapes.
                     if !(metadata(key)
                         || jsx_attribute && key == "value" && tag(value) == Some("StringLiteral"))
                     {
@@ -388,8 +381,7 @@ impl Planner<'_, '_> {
                     {
                         let _: Expr = serde_json::from_value(before.clone())
                             .context("authored edit is not an expression")?;
-                        // An outer authored replacement subsumes inner edits;
-                        // postflight still checks the final full transformed AST.
+                        // An outer replacement subsumes inner edits.
                         for (covered, nested) in self.authored.iter().enumerate() {
                             if edit.start <= nested.start && nested.end <= edit.end {
                                 self.used_authored.borrow_mut().insert(covered);
@@ -615,9 +607,7 @@ impl Planner<'_, '_> {
         if tag(root(&before)) != tag(root(after)) {
             bail!("authored expression does not match the transformed AST kind; refresh its recorded text");
         }
-        // Runtime/usage passes may prune or refine a rendered create object.
-        // Make lexical edits to that explicitly registered snippet rather than
-        // treating its coincident numeric spans as origins in the main file.
+        // Later passes may refine a registered snippet: edit the snippet, not the main file.
         let index = SourceIndex::new(&before);
         let (leading, trailing) = comments.borrow_all();
         let mut ranges = leading
@@ -725,8 +715,7 @@ impl Planner<'_, '_> {
             if previous.is_some_and(|previous| index <= previous) {
                 bail!("source-preserving emission does not reorder original statements/attributes");
             }
-            // A matching number is insufficient: a modified container must
-            // retain a source-backed identifier/header or child subtree.
+            // A modified container must retain a source-backed header or child.
             if !equivalent(&before[index], value)
                 && tag(value) != Some("SpreadElement")
                 && !shared_anchor(&before[index], value)
@@ -851,8 +840,7 @@ impl Planner<'_, '_> {
         }
         let mut edits = Vec::new();
         let mut terminators = HashSet::new();
-        // Attach a necessary ASI terminator to the preceding surviving statement,
-        // never invent a new EmptyStatement as a deletion/insertion placeholder.
+        // Attach a needed ASI terminator to the preceding statement.
         for position in 0..after.len().saturating_sub(1) {
             let Some(previous) = matched[position] else {
                 continue;
@@ -1237,9 +1225,7 @@ impl Planner<'_, '_> {
                     .any(|source| source.start <= comment.start && comment.end <= source.end)
         });
         let text = self.retain_comments(range, reused, text)?;
-        // Retention may prepend a line comment or a multi-line block comment.
-        // Put it inside an expression boundary, never between `return`/`throw`
-        // and their first argument token. No-orphan output stays byte-identical.
+        // A retained comment goes inside the expression, never after `return`/`throw`.
         Ok(if has_orphan {
             format!("({text})")
         } else {
@@ -1267,7 +1253,6 @@ impl Planner<'_, '_> {
             })
             .copied()
             .collect();
-        // We never silently shuffle comment sequences around reused source.
         let mut emitted_order: Vec<_> = orphaned.iter().map(|range| range.start).collect();
         for reused in reused {
             emitted_order.extend(
@@ -1402,9 +1387,7 @@ impl VisitMut for Reuse<'_, '_> {
         self.optional_continuation = false;
         if let Some(marker) = self.remember(expr) {
             let identifier = Expr::Ident(Ident::new_no_ctxt(marker.into(), DUMMY_SP));
-            // Grouping an inner optional chain would terminate continuation:
-            // a?.b(1) must not become (a?.b)(1). Other expressions retain
-            // conservative precedence/reference grouping.
+            // Grouping would end an optional chain: `a?.b(1)` is not `(a?.b)(1)`.
             *expr = if continuation && matches!(expr, Expr::OptChain(_)) {
                 identifier
             } else {
@@ -1450,7 +1433,6 @@ impl VisitMut for Reuse<'_, '_> {
         if let Some(marker) = self.remember(pat) {
             let last = self.fragments.last_mut().unwrap();
             // A typed placeholder forces parentheses in single-parameter arrows.
-            // Replace the entire name+annotation, retaining the actual pattern.
             last.marker = format!("{}: any", marker);
             *pat = Pat::Ident(BindingIdent {
                 id: Ident::new_no_ctxt(marker.into(), DUMMY_SP),
@@ -1542,8 +1524,7 @@ impl VisitMut for GeneratedStrings {
     fn visit_mut_arrow_expr(&mut self, arrow: &mut ArrowExpr) {
         arrow.visit_mut_children_with(self);
         if let ArrowFunctionBody::Expr(expression) = &mut *arrow.body {
-            // `{}` after `=>` is a block, not an implicitly returned object;
-            // comma expressions also need a boundary to remain the arrow body.
+            // `{}` after `=>` is a block, and a comma ends the arrow body.
             if matches!(&**expression, Expr::Object(_) | Expr::Seq(_)) {
                 group_generated_expression(expression);
             }
@@ -1590,17 +1571,13 @@ impl VisitMut for GeneratedStrings {
             if generated_expression_precedence(callee) < 14
                 || matches!(&**callee, Expr::Fn(_) | Expr::Object(_) | Expr::Class(_))
             {
-                // Fix only the printed clone where JS precedence requires a
-                // boundary. Optional-chain structure and source containers are
-                // never normalized or erased by this visitor.
+                // Parenthesize only where JavaScript precedence requires it.
                 group_generated_expression(callee);
             }
         }
     }
     fn visit_mut_str(&mut self, literal: &mut Str) {
-        // Public StyleXTransform emits brand-new literal nodes with dummy spans
-        // and no raw spelling. Original surviving literals retain real spans
-        // and raw text. Never re-quote those source-backed nodes.
+        // Only generated literals (dummy span, no raw) are quoted here.
         if literal.span.is_dummy() && literal.raw.is_none() {
             if let Some(value) = literal.value.as_str() {
                 literal.raw = Some(js_literal::string_literal(value).into());
@@ -1617,8 +1594,7 @@ impl VisitMut for GeneratedStrings {
                 }
             }
         }
-        // Quoted JSX uses the explicit generated-attribute text contract, not
-        // the ordinary JS-string visitor. Preserve authored attributes exactly.
+        // Authored JSX attributes are kept exactly.
         attr.name.visit_mut_with(self);
         if let Some(value) = &mut attr.value {
             if !matches!(value, JSXAttrValue::Str(_)) {
@@ -1639,8 +1615,7 @@ fn emit_owned_node<N>(mut node: N) -> Result<String>
 where
     N: Node + VisitMutWith<GeneratedStrings>,
 {
-    // No original comments/source map are given to SWC: numeric generated spans
-    // cannot accidentally pull trivia or source text from the original file.
+    // No original comments or source map, so generated spans pull no original text.
     node.visit_mut_with(&mut GeneratedStrings);
     let source_map = Lrc::new(SourceMap::default());
     let mut output = Vec::new();
@@ -1746,8 +1721,7 @@ fn strip_optimizer_markers(text: &str) -> String {
         cursor = range.end;
     }
     output.push_str(&text[cursor..]);
-    // Keep ordinary comment text/license notices byte-for-byte, removing only
-    // the optimization token. An otherwise empty annotation needs no comment.
+    // Removes only the annotation token; an otherwise empty comment goes.
     let content = output
         .strip_prefix("/*")
         .and_then(|value| value.strip_suffix("*/"))
@@ -1772,8 +1746,7 @@ fn annotation_changes(
     if annotations.is_empty() || edits.is_empty() {
         return Vec::new();
     }
-    // An annotation belongs to the next expression/declaration through trivia
-    // and grouping parentheses, not simply to the next surviving statement.
+    // An annotation belongs to the next expression, through trivia and parentheses.
     let mut gaps = Vec::new();
     for range in &annotations {
         let mut end = range.end;
@@ -1924,8 +1897,7 @@ fn finish_source_output(
         .collect::<Result<Vec<_>>>()?;
     emitted.sort_by_key(|range| (range.start, range.end));
     emitted.dedup();
-    // Locate copies by the existing ordered source-comment contract, never by
-    // rewriting strings/templates containing annotation-looking text.
+    // Find copies through the ordered source comments, never by scanning strings.
     let mut cursor = 0;
     let mut generated_changes = Vec::new();
     for original_comment in original_comments {
@@ -2146,9 +2118,7 @@ fn apply_source_edits_with_origins(
         }
         previous_end = edit.end;
     }
-    // One source scan, but retain positions only at edit/origin boundaries.
-    // Storing a Position for all seven million source bytes was needless memory
-    // churn; identity chunks advance their UTF-16 positions while writing.
+    // Keep positions only at edit boundaries; identity chunks advance their own.
     let mut needed = vec![0, file.src.len()];
     for edit in &edits {
         needed.extend([edit.start, edit.end]);

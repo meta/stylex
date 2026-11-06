@@ -5,8 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 'use strict';
-// Raw current-contract regression tests through the actual native Babel facade.
-// No original StyleX compiler, mock transform, snapshot normalization or skip.
+// Current-contract regression tests run through the native Babel facade.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
@@ -242,8 +241,7 @@ test('keyframes arity errors highlight the variable declarator', () => {
 });
 
 test('producer error frames match the original plugin', () => {
-  // The original visitors frame these at the declarator, the call or the
-  // argument; native frames must agree.
+  // The original visitors frame these at the declarator, call or argument.
   const original = require('@stylexjs/babel-plugin');
   const cases = [
     'const k = stylex.keyframes();',
@@ -661,8 +659,7 @@ test('multiline diagnostics highlight only the start, as Babel does', () => {
   );
 });
 
-// Integration with other Babel plugins: the facade grafts only the subtrees the
-// native compiler changed, so other plugins' node identities and state survive.
+// Integration with other Babel plugins: unchanged nodes keep their identity.
 
 const refreshSource = `import * as stylex from '@stylexjs/stylex';
 import {useState} from 'react';
@@ -790,8 +787,7 @@ export const s = stylex.props(styles.root);
   assert.deepEqual(appended.metadata.stylex, direct.metadata.stylex);
 });
 
-// Hermes supplies the AST (`as` casts, hooks, match, component syntax, modern
-// type syntax); the facade must not reparse the file with Babel's Flow parser.
+// Hermes supplies the AST; the facade must not reparse with Babel's Flow parser.
 const hermesSource = `import * as stylex from '@stylexjs/stylex';
 const styles = stylex.create({root: {color: 'red'}, pad: {padding: 4}});
 hook useTheme(dark: boolean): string { return dark ? 'a' : 'b'; }
@@ -908,8 +904,7 @@ stylex.create({red: {color: 'red'}});
 });
 
 test('definitions created by an earlier visitor register rules in Babel traversal order', () => {
-  // `fade` is a keyframes definition only once the macro has visited it; the
-  // original plugin then evaluates it inside the later create().
+  // `fade` becomes a keyframes definition only once the macro visits it.
   const source = `import * as stylex from '@stylexjs/stylex';
 const fade = makeKeyframes({from: {opacity: 0}});
 const a = stylex.create({x: {color: 'red', animationName: fade}});
@@ -1086,9 +1081,7 @@ export component App() { return <div {...stylex.props(s.a, b.x)} />; }
       created.result.metadata.stylex,
       direct.result.metadata.stylex,
     );
-    // A definition that depends on a macro-created one: the entry compile
-    // fails (reported only if the traversal changes nothing), the exit
-    // compile succeeds.
+    // Needs a macro-created definition: entry compile fails, exit compile succeeds.
     const keyframes = () => ({
       visitor: {
         CallExpression(path) {
@@ -1259,9 +1252,7 @@ test('debug data reports input lines after earlier Program.enter edits', () => {
   assert.ok(result.code.includes(`"data-style-src": ${label}`));
 });
 
-// A dead-branch eliminating plugin (inline __DEV__) decides which definitions
-// the traversal reaches; only those keep compiled output, hoists and rules,
-// whether it runs before or after StyleX.
+// The dead-branch plugin (inline __DEV__) runs both before and after StyleX.
 test('definitions detached by dead-branch elimination leave no output or rules', () => {
   const t = babel.types;
   const strip = (value) => () => ({
@@ -1385,9 +1376,7 @@ export const keep = {
 });
 
 test('coverage instrumentation counts unused definitions in either plugin order', () => {
-  // Outside the tests directory, which istanbul excludes by default. Resolved,
-  // because istanbul's exclusion on Windows matches the file against
-  // `<cwd>\**`, and a drive-less `/repo` never matches `D:\repo\...`.
+  // Outside tests/ (excluded by istanbul) and resolved, for istanbul's Windows check.
   const istanbul = [
     require.resolve('babel-plugin-istanbul'),
     { cwd: path.resolve('/repo') },
@@ -1556,9 +1545,7 @@ test('coverage after StyleX spans the source of compiled and hoisted definitions
   }
 });
 
-// TypeScript elides imports without value references when it enters the
-// program, before StyleX visits anything. A theme imported only for StyleX
-// definitions must stay in the module graph, or its variables' CSS is lost.
+// TypeScript elides imports without value references when it enters the program.
 test('theme modules used only by definitions stay in a TypeScript module graph', async () => {
   const fs = require('node:fs');
   const os = require('node:os');
@@ -1688,9 +1675,7 @@ test('a direct transform nested in a facade callback wraps as nested Babel does'
   }
 });
 
-// Definitions replaced at their visit insert program-level hoists. A later
-// plugin that removes unreferenced bindings must see them referenced, or it
-// deletes the declaration and leaves a dangling reference.
+// Babel's insertion leaves new references uncounted for unused-binding removal.
 test('hoists inserted at a definition visit stay referenced for later plugins', () => {
   const removeUnused = () => ({
     visitor: {
@@ -1841,9 +1826,6 @@ test('hoisted definitions survive unused-binding removers in every order and sha
   }
 });
 
-// Definitions compiled at entry are provisional: an earlier plugin's visitor
-// that rewrites one in place, deep inside its arguments, before StyleX visits
-// it changes what the original plugin compiles there.
 test('definitions an earlier visitor rewrote in place compile as rewritten', () => {
   const t = babel.types;
   const recolor = (at) => () => ({
@@ -1920,8 +1902,7 @@ test('definitions an earlier visitor rewrote in place compile as rewritten', () 
       `const label = "changed";\nexport const s = ${styles('x1prwzq3')};`,
       green,
     ],
-    // A descendant visitor runs after the definition compiled, as with the
-    // original plugin: it sees only the compiled object.
+    // A descendant visitor runs after the definition compiled, as in the original.
     [
       "export const s = stylex.create({a: {color: 'red'}});\n",
       [recolorLater],
@@ -1947,9 +1928,6 @@ test('definitions an earlier visitor rewrote in place compile as rewritten', () 
   assert.deepEqual(result.metadata.stylex, metadata);
 });
 
-// When a provisional definition turns out stale, everything compiled from it
-// (props output, hoists, metadata) comes from the rebuilt compile, and the
-// inputs it read include the declarations it resolved.
 test('stale definitions rebuild their consumers and track what they read', () => {
   const t = babel.types;
   const recolorOnEnter = () => ({
@@ -2059,10 +2037,7 @@ export const C = () => <div {...stylex.props(anim.a)} />;
   }
 });
 
-// A consumer above its definition is compiled and lowered by other plugins
-// before the traversal reaches the definition. If another plugin then rewrites
-// that definition (or a value it reads) in place, the consumer can no longer
-// be recompiled: fail the build instead of emitting class names without CSS.
+// A lowered consumer cannot be recompiled, and stale class names would lack CSS.
 test('a definition rewritten after its consumer was lowered fails the build', () => {
   const t = babel.types;
   const recolor = (name) => () => ({
@@ -2204,8 +2179,7 @@ test('lowered consumers above their definitions compile normally otherwise', () 
       [recolor('other')],
       [],
     ],
-    // Another definition, consumed below it, is rewritten: the consumer above
-    // reads only the unchanged one.
+    // Another definition, consumed below it, is rewritten; this one is unchanged.
     [
       `${head}export function C(){ return <div {...stylex.props(s.a)} />; }\nconst s = stylex.create({a: {color: 'blue'}});\nconst u = stylex.create({b: {color: 'red'}});\nexport const U = stylex.props(u.b);\n`,
       [react],
@@ -2243,8 +2217,7 @@ test('lowered consumers above their definitions compile normally otherwise', () 
   }
 });
 
-// Consumers are linked to definitions by Babel's bindings, not names: a
-// parameter named like a definition neither hides its rewrite nor links it.
+// Consumers link to definitions by Babel's bindings, not by name.
 test('a parameter named like a rewritten definition does not hide it', () => {
   const t = babel.types;
   const recolor = () => ({
@@ -2281,9 +2254,6 @@ export const D = stylex.props(s.a);
   ]);
 });
 
-// The entry graft never repurposes a declaration of one binding as another's:
-// an unused definition stays itself until exit, and later plugins visit every
-// definition as the original plugin shows them.
 test('declarations of different bindings are never paired by the graft', () => {
   const t = babel.types;
   const original = require('../../babel-plugin/lib/index.js');
@@ -2359,10 +2329,7 @@ test('declarations of different bindings are never paired by the graft', () => {
   }
 });
 
-// The facade trusts the file's text as the program only when Babel parsed it
-// and nothing could have run since. Any other origin or earlier plugin hook
-// keeps the comparison against a fresh parse, so these all compile what the
-// program holds, as the original plugin does.
+// Any other origin or earlier plugin hook compiles the program, not the text.
 test('only an untouched parse of the file skips the comparison with its text', () => {
   const t = babel.types;
   const parser = require('@babel/parser');
@@ -2425,9 +2392,7 @@ export const D = stylex.props(styles.root);
         ...options,
         plugins: [[plugin, {}]],
       }),
-    // A parser AST the caller edited before the call, cloned (the default)
-    // and handed over as is: Babel prints the AST, so the facade must compile
-    // the AST rather than the text beside it.
+    // A caller-edited parser AST, cloned or not: Babel prints the AST, not text.
     ...[true, false].map((cloneInputAst) => (plugin) => {
       const ast = parse(source);
       recolor(ast);
@@ -2445,8 +2410,7 @@ export const D = stylex.props(styles.root);
         plugins: [[plugin, {}]],
       }),
   ];
-  // The default clone leaves none of the parser's own node prototype behind,
-  // which is what the facade's guard relies on for a cloned input.
+  // The default clone leaves no parser prototype behind, as the facade assumes.
   const prototypeOf = (ast) => Object.getPrototypeOf(ast.program);
   const parsed = prototypeOf(parse(source));
   let seen = null;
@@ -2464,9 +2428,7 @@ export const D = stylex.props(styles.root);
   });
   assert.notEqual(parsed, Object.prototype);
   assert.equal(seen, Object.prototype);
-  // The reviewed repros, each against unchanged Babel. An earlier tool's
-  // edits to a parser AST handed over without a clone: statements injected,
-  // a value changed, StyleX added -- and the text omitted or empty.
+  // Edited parser ASTs handed over without a clone, text omitted or empty.
   const handedOver =
     (edit, code = source) =>
     (plugin) => {
@@ -2493,9 +2455,7 @@ export const D = stylex.props(styles.root);
     handedOver(() => {}, undefined),
     handedOver(() => {}, ''),
   );
-  // A visitor wrapper runs code around every visitor, StyleX's included: one
-  // that edits the program before StyleX's Program.enter, and one that adds
-  // StyleX right after it.
+  // Wrappers that edit before StyleX's Program.enter or add StyleX right after it.
   const wrapped = (wrap) => (plugin) =>
     babel.transformSync(source, {
       ...options,
@@ -2536,9 +2496,6 @@ export const D = stylex.props(styles.root);
   }
 });
 
-// A file whose text spells no StyleX source is skipped without a walk only when
-// its text provably cannot spell one; an escaped source still compiles, and a
-// StyleX import another plugin adds during the pass is still compiled.
 test('StyleX-free text is skipped only where it cannot spell a source', () => {
   const t = babel.types;
   const original = require('../../babel-plugin/lib/index.js');
@@ -2569,8 +2526,7 @@ test('StyleX-free text is skipped only where it cannot spell a source', () => {
   for (const source of sources)
     assert.deepEqual(run(plugin, source), run(original, source));
 
-  // Another plugin of the pass adds the import and a definition at the end of
-  // the traversal, before or after StyleX's own exit.
+  // Another plugin adds StyleX at the end of the traversal, before or after ours.
   const addStyleX = () => ({
     visitor: {
       Program: {

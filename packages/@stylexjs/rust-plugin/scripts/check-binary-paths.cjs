@@ -5,9 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-// Fails if the built addon embeds a build-machine path (the checkout, Cargo's
-// home, the user's home), which build.cjs remaps. rustc's `/rustc/<hash>/`
-// paths are fine.
+// Fails if the built addon embeds a build-machine path that build.cjs remaps.
+// rustc's own `/rustc/<hash>/` paths are allowed.
 'use strict';
 
 const fs = require('node:fs');

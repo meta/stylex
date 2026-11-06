@@ -11,7 +11,6 @@ pub fn process_stylex_rules(
 ) -> String {
     process_stylex_rules_checked(rules, config).unwrap_or_else(|error| panic!("{error}"))
 }
-/// Host adapters should map this error into a JS Error, not unwind over FFI.
 pub fn process_stylex_rules_checked(
     rules: &[RuleEntry],
     config: Option<&ProcessStylexRulesConfig>,
@@ -66,8 +65,7 @@ pub fn process_stylex_rules_checked(
         width_keys.entry(rule.1.ltr.clone()).or_insert(key);
     }
     processed.sort_by(|a, b| {
-        // Mirrors the JS comparator: a NaN priority difference ends the
-        // comparison as "equal" rather than falling through to the tie-breaks.
+        // As in JavaScript, a NaN priority difference compares equal, skipping the tie-breaks.
         let Some(priority) = a.2.partial_cmp(&b.2) else {
             return Ordering::Equal;
         };
@@ -284,9 +282,7 @@ fn collect(
         .join("\n")
 }
 
-/// Babel's default localeCompare contracts use English variant collation,
-/// punctuation significant, numeric sorting off and no case-first override.
-/// Compiled ICU data is immutable; initialize the collator once per process.
+/// The collation of Babel's default `localeCompare` (English, punctuation significant).
 pub(crate) fn locale_compare(a: &str, b: &str) -> Ordering {
     use icu_collator::{
         options::{AlternateHandling, CaseLevel, CollatorOptions, Strength},

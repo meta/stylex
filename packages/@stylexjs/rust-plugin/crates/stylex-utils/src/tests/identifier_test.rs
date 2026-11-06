@@ -27,9 +27,6 @@ mod gen_file_based_identifier_tests {
     assert_eq!(result, "file.js//");
   }
 
-  /// A key that is present but empty still spells the separator, because the
-  /// name says "one member of this export" and an empty member name is not the
-  /// same thing as no member at all.
   #[test]
   fn keeps_the_separator_for_an_empty_key() {
     let result = gen_file_based_identifier("file.js", "styles", Some(""));
@@ -48,8 +45,6 @@ mod gen_file_based_identifier_tests {
     assert_eq!(result, "файл.js//стили.цвет");
   }
 
-  /// A path far longer than any real one, to show that nothing here has a
-  /// length bound of its own.
   #[test]
   fn handles_a_name_far_longer_than_any_real_path() {
     let file_name = "d/".repeat(100_000);

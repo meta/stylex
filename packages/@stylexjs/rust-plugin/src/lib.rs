@@ -1,10 +1,9 @@
-//! Native StyleX compiler. The JavaScript Babel plugin remains the compatibility oracle.
+//! Native StyleX compiler, matching the JavaScript Babel plugin.
 
 mod shared;
 mod stylesheet;
 mod utils;
 
-// N-API registrations only exist in the cdylib; unit tests exercise the compiler directly.
 #[cfg(all(feature = "node", not(test)))]
 mod node;
 // The addon's global allocator (see `swc_malloc` in Cargo.toml).

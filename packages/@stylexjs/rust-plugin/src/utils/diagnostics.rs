@@ -1,4 +1,4 @@
-//! Structured native compiler diagnostics. Rendering code frames belongs to the host.
+//! Structured compiler diagnostics; the host renders code frames.
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use swc_core::common::Span;

@@ -97,10 +97,7 @@ pub fn find_closest_node_modules(path: &Path) -> Option<PathBuf> {
   find_closest_path(path, "node_modules")
 }
 
-/// Recursively locates `node_modules` directories from `path` up to the
-/// repository root. All branches depend on real filesystem state (`exists()`,
-/// `find_closest_path`) that cannot be reproduced deterministically in unit
-/// tests without an in-memory FS shim.
+/// Collects `node_modules` directories from `path` up to the repository root.
 #[cfg_attr(coverage_nightly, coverage(off))]
 pub fn recursive_find_node_modules(
   path: &Path,
@@ -109,8 +106,6 @@ pub fn recursive_find_node_modules(
   let mut node_modules_paths = IndexSet::new();
 
   if path.eq(Path::new("/")) {
-    // Root-level `node_modules` lookup is environment-dependent and excluded from
-    // coverage.
     let root_node_modules = path.join("node_modules");
 
     if root_node_modules.exists() {

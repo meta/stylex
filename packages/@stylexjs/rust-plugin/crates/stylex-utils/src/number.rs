@@ -1,13 +1,7 @@
 use std::fmt;
 
-/// Reads a leading number out of `input` exactly as JS `parseFloat` does,
-/// returning `None` where JS returns `NaN`. See `CONTEXT.md` for why the
-/// spelling has to match JS rather than merely round-trip.
-///
-/// Rust's `str::parse::<f64>` is not a substitute: it rejects any string with
-/// trailing characters, where this reads as much of a leading number as it can
-/// and ignores the rest — which is the whole point for CSS, where `"10px"` has
-/// to yield `10`. [`to_js_string`] is the complement.
+/// Reads the leading number in `input` like JS `parseFloat`, returning `None` where JS gives `NaN`.
+/// Unlike `str::parse`, trailing characters are ignored, so `"10px"` yields `10`.
 pub fn parse_js_float(input: &str) -> Option<f64> {
   let rest = input.trim_start_matches(is_js_whitespace);
   let bytes = rest.as_bytes();
@@ -44,8 +38,7 @@ pub fn parse_js_float(input: &str) -> Option<f64> {
     return None;
   }
 
-  // An exponent joins the literal only once it is complete: `1e` and `1e+` are
-  // the longest-prefix rule at work, and both read back as `1`.
+  // An incomplete exponent is left out, so `1e` and `1e+` read as `1`.
   if matches!(bytes.get(end), Some(b'e' | b'E')) {
     let mut exponent_start = end + 1;
 
@@ -60,21 +53,12 @@ pub fn parse_js_float(input: &str) -> Option<f64> {
     }
   }
 
-  // The prefix is a decimal literal by construction, and every spelling this
-  // scan admits is one `f64` also accepts, so the error arm never fires in
-  // practice — reported as failure rather than unwrapped, per the crate rules.
+  // The scanned prefix is always a valid `f64` literal, so this never fails in practice.
   rest[..end].parse::<f64>().ok()
 }
 
-/// The whitespace the language skips around a numeric literal: ECMA-262's
-/// `StrWhiteSpace`, which is the Unicode space separators plus the line
-/// terminators and the byte-order mark.
-///
-/// Hand-rolled rather than `char::is_whitespace`, which disagrees at both ends:
-/// it admits U+0085, which JS does not skip, and omits U+FEFF, which JS does.
-///
-/// One home for the set, because `parseFloat` and `StringToNumber` skip the
-/// same characters and two copies of one reading are what let the two drift.
+/// ECMA-262 `StrWhiteSpace`, the whitespace JS skips around a numeric literal.
+/// Unlike `char::is_whitespace`, this excludes U+0085 and includes U+FEFF.
 pub fn is_js_whitespace(ch: char) -> bool {
   match ch {
     // Space separators (Unicode `Zs`).
@@ -100,28 +84,7 @@ fn skip_ascii_digits(bytes: &[u8], from: usize) -> usize {
 }
 
 /// Writes an `f64` into `out` exactly as JS `String(Number)` spells it.
-///
-/// The primitive; [`to_js_string`] is this with a `String` to write into. Two
-/// forms rather than one because the callers want different things: a `Display`
-/// impl already holds a formatter, and `write!(f, "{}", to_js_string(x))` builds
-/// a `String` only to copy it out and drop it on the next line. A `matrix3d()`
-/// carries sixteen numbers, so that was sixteen allocations plus the `Vec` and
-/// the `join` holding them.
-///
-/// Not allocation-free, and worth being exact about: the digit decomposition
-/// below still allocates, because it reads the shortest round-tripping digits
-/// back out of Rust's own `LowerExp`. What this removes is the allocation per
-/// number *at the call site*, which is the one a formatter does not need. The
-/// remaining two are inside the one function in this crate whose output feeds
-/// the class-name hash directly, and rewriting it around a stack buffer would
-/// put that at risk to save an allocation nobody has measured -- which
-/// `guidelines/PERFORMANCE.md` is explicit about not doing.
-///
-/// Rust's `f64` `Display` is not a substitute: it never switches to
-/// exponential form, so `1e21` would render as `"1000000000000000000000"` where
-/// JS renders `"1e+21"`. Since this rendering reaches both generated code and
-/// the class-name hash, the spelling itself is observable and has to match, not
-/// merely round-trip to the same `f64`.
+/// The exact spelling matters because it reaches generated code and the class-name hash.
 pub fn write_js_number(out: &mut impl fmt::Write, value: f64) -> fmt::Result {
   if value.is_nan() {
     return out.write_str("NaN");
@@ -134,8 +97,7 @@ pub fn write_js_number(out: &mut impl fmt::Write, value: f64) -> fmt::Result {
     return out.write_str("0");
   }
 
-  // An integer below 2^53 is exact, and JS prints it as its decimal digits:
-  // the general path below would arrive at the same text through `{:e}`.
+  // Integers below 2^53 are exact, so their decimal digits can be written directly.
   if value.fract() == 0.0 && value.abs() < 9_007_199_254_740_992.0 {
     let mut digits = [0u8; 20];
     let mut cursor = digits.len();
@@ -158,9 +120,7 @@ pub fn write_js_number(out: &mut impl fmt::Write, value: f64) -> fmt::Result {
     out.write_char('-')?;
   }
 
-  // `s` and `n` are ECMA-262's `Number::toString` variables: `s` is the shortest
-  // digit string that round-trips, and the value is `s × 10^(n - k)` where `k`
-  // is the digit count. Rust's `LowerExp` emits both, as `d.ddde±x`.
+  // ECMA-262 `Number::toString`: the value is `s × 10^(n - k)`, where `k` is the digit count.
   let (s, n) = shortest_digits_and_exponent(value.abs());
   let k = s.len() as i32;
 
@@ -195,19 +155,7 @@ pub fn write_js_number(out: &mut impl fmt::Write, value: f64) -> fmt::Result {
   Ok(())
 }
 
-/// Writes `values` into `out` as a comma-separated list, each spelled as JS
-/// spells it.
-///
-/// One writer because three `Display` impls needed the same list and each spelled
-/// it differently -- `matrix()` as six positional format arguments, `matrix3d()`
-/// and `linear()` each as a `Vec<String>` and a `join`. The list is what they
-/// have in common, and the two `join` forms were also the two that allocated once
-/// per number and once more for the result.
-///
-/// The separator is `", "` and not a parameter. Every caller is a CSS function's
-/// argument list, which is the only shape this is for, and a parameter with one
-/// value across every call site is a choice a reader has to check rather than a
-/// choice anything makes. Give it one when a second separator turns up.
+/// Writes `values` into `out` as a `", "`-separated list, each spelled as JS spells it.
 pub fn write_js_number_list(
   out: &mut impl fmt::Write,
   values: impl IntoIterator<Item = f64>,
@@ -224,37 +172,17 @@ pub fn write_js_number_list(
 }
 
 /// Renders an `f64` exactly as JS `String(Number)` does.
-///
-/// [`write_js_number`] with a `String` to write into, and the form most callers
-/// want. Use the other one from a `Display` impl, where the formatter is already
-/// to hand.
 pub fn to_js_string(value: f64) -> String {
   let mut result = String::with_capacity(24);
 
-  // Discarded rather than matched. `fmt::Write for String` returns `Ok`
-  // unconditionally -- pushing onto a `String` has no failure mode -- so an
-  // `Err` arm here is a branch no test can reach, and this repo does not exclude
-  // code from coverage. A `match` was tried for the letter of `RUST.md`'s
-  // "handle all cases" rule and reverted: the rule is about `.unwrap()` and
-  // `.expect()`, neither of which this is, and trading an unreachable arm for it
-  // makes the coverage gate the thing that is wrong rather than the code.
-  //
-  // The propagation itself *is* tested, one level down:
-  // `write_js_number` is driven with a writer that refuses at each position in
-  // turn, so every `?` in it is exercised.
+  // Writing to a `String` cannot fail.
   let _ = write_js_number(&mut result, value);
 
   result
 }
 
-/// Decomposes a finite, strictly positive `f64` into ECMA-262's `s` (the
-/// shortest round-tripping digit string) and `n` (the decimal exponent, such
-/// that the value is `s × 10^(n - s.len())`).
-///
-/// Rust's `LowerExp` already picks the same shortest digits as JS, so this only
-/// has to re-read them out of `d.ddde±x`. The scan is hand-rolled rather than
-/// `split_once` + `parse` so that every branch is reachable for some input and
-/// no unreachable error path is left behind.
+/// Splits a finite, positive `f64` into ECMA-262's shortest digits `s` and exponent `n`.
+/// Rust's `LowerExp` picks the same shortest digits as JS, so this re-reads `d.ddde±x`.
 fn shortest_digits_and_exponent(value: f64) -> (String, i32) {
   let formatted = format!("{:e}", value);
 
@@ -268,22 +196,7 @@ fn shortest_digits_and_exponent(value: f64) -> (String, i32) {
       'e' => in_exponent = true,
       '.' => {},
       '-' => exponent_is_negative = true,
-      // `to_digit` rather than `ch as u8 - b'0'`: the subtraction underflows,
-      // and so panics in a debug build, for any non-digit that reaches this
-      // arm. Nothing `LowerExp` emits today would, but the guarantee that it
-      // never will is not this crate's to make.
-      //
-      // Reading a non-digit as a zero is the release behaviour, because a class
-      // name spelled from a slightly wrong exponent beats aborting a compile.
-      // The `debug_assert` is what keeps that from being silent: this function
-      // exists to match `Number.prototype.toString` exactly, so a wrong
-      // exponent is a wrong class name, and the test suite should say so
-      // rather than the divergence being found in a stylesheet.
-      //
-      // Asserted on the character rather than written as a second match arm,
-      // and carrying no formatted message, for the reason `hash::to_radix`
-      // gives: both would leave regions behind that no input can reach and no
-      // test can cover.
+      // A non-digit reads as zero in release builds rather than panicking.
       _ if in_exponent => {
         debug_assert!(ch.is_ascii_digit());
 

@@ -1,8 +1,7 @@
 use crate::shared::StyleXTransformOptions;
 use serde_json::{json, Value};
 
-/// Option errors are reported the way the Babel plugin's `logAndDefault`
-/// reports them; the transform continues with the documented fallback.
+/// An option error, reported like the Babel plugin's `logAndDefault`.
 pub(super) struct TransformState {
     pub errors: Vec<String>,
 }
@@ -20,8 +19,7 @@ enum Check {
     Function,
 }
 impl Check {
-    /// Acceptance is allocation-free. A union may reject early alternatives
-    /// while succeeding later; those speculative failures need no diagnostic.
+    /// Allocation-free acceptance, for union alternatives that may fail.
     fn accepts(&self, value: &Value) -> bool {
         match self {
             Self::Boolean => value.is_boolean(),
@@ -35,7 +33,6 @@ impl Check {
             Self::Array(check) => value
                 .as_array()
                 .is_some_and(|array| array.iter().all(|value| check.accepts(value))),
-            // Preserve the existing object validator's array/missing-key rules.
             Self::Object(shape) => {
                 (value.is_object() || value.is_array())
                     && shape
@@ -213,7 +210,7 @@ fn literals(values: &[&str]) -> Check {
     )
 }
 
-/// Mirrors current Babel's log-and-default semantics instead of ignoring invalid values.
+/// Mirrors Babel's log-and-default handling of invalid values.
 pub(super) fn normalize_options(
     options: &StyleXTransformOptions,
     state: &mut TransformState,

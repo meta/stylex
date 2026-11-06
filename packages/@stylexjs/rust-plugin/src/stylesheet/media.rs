@@ -1,5 +1,4 @@
-//! Media-query syntax tree used by responsive cancellation and final CSS sorting.
-//! Numeric interval and media-type behavior follows style-value-parser/at-queries.
+//! Media-query syntax tree, following style-value-parser's at-queries.
 use super::numbers::{dimension, js_number};
 use indexmap::IndexMap;
 use regex::Regex;
@@ -255,8 +254,7 @@ fn normalize(q: Query) -> Query {
         q => q,
     }
 }
-/// Mirrors style-value-parser `mergeIntervalsForAnd`: returns the rule list an
-/// `and` should hold (empty when the ranges cannot intersect).
+/// style-value-parser's `mergeIntervalsForAnd`; empty when the ranges cannot intersect.
 fn merge_intervals(q: Vec<Query>) -> Vec<Query> {
     for (i, rule) in q.iter().enumerate() {
         if let Query::Not(inner) = rule {
@@ -584,8 +582,7 @@ pub(crate) fn width_key(rule: &str) -> Option<WidthKey> {
         return None;
     }
     let i = media[0];
-    // Babel's parser constructs a MediaQuery, so width inspection sees the
-    // parser's normalized/media-type-resolved AST, not the raw syntax tree.
+    // As in Babel, widths are read from the parsed, normalized query.
     let parsed = parse(&preludes[i]).ok()?;
     let found = bounds(&parsed)?;
     if found.len() != 1 {

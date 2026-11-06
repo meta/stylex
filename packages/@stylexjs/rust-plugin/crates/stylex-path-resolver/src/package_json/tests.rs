@@ -25,7 +25,6 @@ fn cleanup(path: &Path) {
   let _ = fs::remove_dir_all(path);
 }
 
-/// package.json lookup should resolve both file path and parent folder.
 #[test]
 fn finds_closest_package_json_and_folder() {
   let root = temp_dir("package-json-lookup");
@@ -44,7 +43,6 @@ fn finds_closest_package_json_and_folder() {
   cleanup(&root);
 }
 
-/// Missing node_modules should return an empty set.
 #[test]
 fn recursive_find_node_modules_returns_empty_when_absent() {
   let root = temp_dir("node-modules-empty");
@@ -57,8 +55,6 @@ fn recursive_find_node_modules_returns_empty_when_absent() {
   cleanup(&root);
 }
 
-/// Explicit known `.git` should collect nested, intermediate, and
-/// repository-root node_modules.
 #[test]
 fn recursive_find_node_modules_collects_known_git_tree() {
   let root = temp_dir("node-modules-known-git");
@@ -84,8 +80,6 @@ fn recursive_find_node_modules_collects_known_git_tree() {
   cleanup(&root);
 }
 
-/// When known_git_dir is omitted, resolver should discover `.git` in parent
-/// directories.
 #[test]
 fn recursive_find_node_modules_discovers_git_from_path() {
   let root = temp_dir("node-modules-discover-git");
@@ -111,7 +105,6 @@ fn recursive_find_node_modules_discovers_git_from_path() {
   cleanup(&root);
 }
 
-/// Root-path input should be handled without panics.
 #[test]
 fn recursive_find_node_modules_handles_filesystem_root() {
   let result = recursive_find_node_modules(Path::new("/"), None);

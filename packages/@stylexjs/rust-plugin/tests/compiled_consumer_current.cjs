@@ -24,8 +24,7 @@ function compare(source, options) {
     ...syntaxOptions,
     plugins: [[stylex, options]],
   });
-  // The actual Node API configures the host: Rust-only fixtures cannot expose
-  // regressions caused specifically by promoted host-backed object carriers.
+  // Through the Node API, so regressions in host-backed object carriers show up.
   const actual = native.transformSync(source, { ...options, filename });
   const printed = babel.transformSync(actual.code, syntaxOptions).code;
   assert.equal(printed, expected.code, source);

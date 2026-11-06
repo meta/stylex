@@ -7,16 +7,14 @@
 
 'use strict';
 
-// Keep the clock before loading the benchmark module and compiler, so cold
-// samples still include module loading as well as the first transform.
+// Start the clock first, so cold samples include module loading.
 const start = process.hrtime.bigint();
 const [engine, name] = process.argv.slice(2);
 if (engine !== 'babel' && engine !== 'rust') {
   throw new Error('Expected babel or rust benchmark engine');
 }
 
-// Both the module path and the entry point are static. Arguments select a
-// compiler and a known fixture; they are never interpreted as JavaScript.
+// Arguments only select a compiler and a known fixture; nothing is evaluated.
 const { cases, loadEngine } = require('./benchmark.cjs');
 const run = loadEngine(engine);
 const entry = cases().find((item) => item.name === name);

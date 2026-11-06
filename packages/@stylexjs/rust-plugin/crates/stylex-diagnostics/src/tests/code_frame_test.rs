@@ -31,10 +31,7 @@ use stylex_ast::ast::{
 static TEST_FILE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 /// A fixture file and the directory holding it, removed when the test ends.
-///
-/// The directories are collision-free across processes and threads, but nothing
-/// used to remove them, so a full run left one behind per fixture case. Derefs
-/// to the path so a caller reads as though it held one.
+/// Derefs to the file's path.
 struct TempFixture {
   dir: PathBuf,
   path: PathBuf,
@@ -50,15 +47,12 @@ impl std::ops::Deref for TempFixture {
 
 impl Drop for TempFixture {
   fn drop(&mut self) {
-    // Best effort: a fixture left behind is untidy, not a failure, and panicking
-    // here would replace a real assertion message with this one.
+    // Best effort: panicking here would replace the real assertion message.
     let _ = fs::remove_dir_all(&self.dir);
   }
 }
 
-/// Writes a fixture whose content contains multi-byte characters, so any byte
-/// offset taken from a foreign source map is likely to land inside a character
-/// instead of on a char boundary.
+/// Writes a fixture with multi-byte characters, so foreign byte offsets land mid-character.
 fn write_multibyte_fixture(name: &str) -> TempFixture {
   let id = TEST_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
   let dir = std::env::temp_dir().join(format!(
@@ -70,8 +64,7 @@ fn write_multibyte_fixture(name: &str) -> TempFixture {
     panic!("failed to create temp fixture directory: {error}");
   }
 
-  // Two-byte characters ("λ" is U+03BB) after the 3-byte "// " prefix, so
-  // every even offset >= 4 falls inside a character.
+  // Two-byte "λ" after the three-byte "// " prefix puts every even offset >= 4 mid-character.
   let source = format!(
     "// {}\nexport const styles = {{ root: {{ color: 'red' }} }};\n",
     "λ".repeat(700)
@@ -106,9 +99,7 @@ fn write_fixture(name: &str, source: &str) -> TempFixture {
   TempFixture { dir, path }
 }
 
-/// The text a state memoizes, as the source file the frame hands it. Registered
-/// in a map of its own, so a case can memoize a text the shared map has never
-/// seen.
+/// The text a state memoizes, registered in its own source map rather than the shared one.
 fn memoized_source_file(source: &str) -> Arc<SourceFile> {
   let source_map = SourceMap::default();
 
@@ -147,9 +138,7 @@ fn state_for_fixture(path: &Path) -> StateDouble {
   StateDouble::for_file(path.to_string_lossy())
 }
 
-/// An expression that does not exist in the fixture, carrying a span from a
-/// foreign source map (e.g. the compiler's own parse) whose byte offsets are
-/// meaningless for the code-frame source map.
+/// An expression absent from the fixture, with a span from a foreign source map.
 fn unmatched_expression_with_foreign_span() -> Expr {
   Expr::Ident(Ident::new(
     "identifier_not_present_in_fixture".into(),
@@ -180,28 +169,20 @@ fn unmatched_expression_yields_dummy_span() {
   );
 }
 
-/// Recreates the production failure: the shared code-frame source map holds a
-/// multi-byte source, and a module carrying spans from the compiler's own
-/// source map gets printed against it. The codegen samples snippets for
-/// non-dummy list spans (`span_to_snippet`), so a foreign span whose offsets
-/// land inside a multi-byte character panics unless spans are dropped first.
+/// Printing a module with foreign spans against a multi-byte source must not panic.
+/// The codegen samples snippets for non-dummy list spans, so spans must be dropped first.
 #[test]
 fn print_module_ignores_foreign_spans_over_multibyte_sources() {
   let code_frame = CodeFrame::new();
 
-  // A large single-character run so mid-character offsets are dense: after the
-  // 2-byte "//" prefix every character occupies two bytes, meaning one of any
-  // two consecutive offsets is not a char boundary wherever the file lands in
-  // the shared source map.
+  // After the two-byte "//" prefix, one of any two consecutive offsets is mid-character.
   let multibyte_source = format!("//{}", "λ".repeat(300_000));
   code_frame.source_map.new_source_file(
     Arc::new(FileName::Custom("foreign_span_fixture.tsx".to_string())),
     multibyte_source,
   );
 
-  // Named import/export specifier lists are the codegen's trailing-comma
-  // snippet-sampling case (`ListFormat::NamedImportsOrExportsElements`), with
-  // the import declaration's own span as the sampled range.
+  // Named specifier lists are where the codegen samples a snippet for a trailing comma.
   let import_with_span = |lo: u32, hi: u32| {
     ModuleItem::ModuleDecl(ModuleDecl::Import(ImportDecl {
       span: Span::new(BytePos(lo), BytePos(hi)),
@@ -222,8 +203,7 @@ fn print_module_ignores_foreign_spans_over_multibyte_sources() {
     }))
   };
 
-  // Two consecutive parities: whichever the fixture's start position is, one
-  // of these spans starts or ends inside a character.
+  // Consecutive parities, so one of these spans starts or ends mid-character.
   let module = Module {
     span: DUMMY_SP,
     body: vec![
@@ -242,23 +222,17 @@ fn print_module_ignores_foreign_spans_over_multibyte_sources() {
   );
 }
 
-/// `get_key_span_from_source_code` over a freshly built [`CallLookup`], which is
-/// what the production caller hoists out of its namespace loop.
+/// `get_key_span_from_source_code` over a freshly built [`CallLookup`].
 fn key_span_for(
   call_expr: &CallExpr,
   namespace_key: &str,
   state: &mut StateDouble,
 ) -> Result<(CodeFrame, Span), anyhow::Error> {
-  // The double parses nothing itself, so it records no module base and the
-  // proximity tie-break has nothing to measure against.
+  // The double parses nothing, so there is no module base for the proximity tie-break.
   get_key_span_from_source_code(&CallLookup::new(call_expr, None), namespace_key, state)
 }
 
-/// When an earlier loader rewrites style values (e.g. compile-time macros),
-/// the compiled AST no longer textually matches the file on disk, so
-/// value-expression matching cannot locate a source position. Namespace keys
-/// are untouched by such transforms, so the key-based lookup must still
-/// resolve the real line number.
+/// Loaders that rewrite style values leave namespace keys intact, so the key lookup still works.
 #[test]
 fn key_lookup_finds_line_when_values_differ_from_source() {
   let source = "\
@@ -425,14 +399,7 @@ fn framed_line(target: &Expr, state: &mut StateDouble) -> Option<usize> {
   }
 }
 
-/// A refusal about a binding is framed at the binding's declaration, which is
-/// the line the author has to go and change and the line
-/// `@stylexjs/babel-plugin` prints. Measured on 0.19.0: for a reassigned
-/// `let c = 'red'` on line 1, upstream frames line 1 and not the read on line 3.
-///
-/// This is the whole point of the plumbing, and the only assertion that can see
-/// it: a `stylex_test_panic!` matches the message, and the position is written
-/// separately.
+/// Babel 0.19.0 frames a reassigned `let c = 'red'` on line 1, not at the read on line 3.
 #[test]
 fn a_refusal_about_a_binding_is_framed_at_its_declaration() {
   let source = "\
@@ -460,10 +427,7 @@ export const styles = create({ x: { color: c } });
   );
 }
 
-/// The two answers about one expression are cached apart. Asking for the read's
-/// own position after a refusal recorded a declaration — the order the debug
-/// path and a refusal can arrive in within one module — must not hand back the
-/// declaration's line, or a style would be annotated with another line's number.
+/// Asking for the read's position after a declaration was recorded must not return its line.
 #[test]
 fn the_declaration_and_the_read_are_cached_apart() {
   let source = "\
@@ -478,7 +442,6 @@ export const styles = create({ x: { color: c } });
   frame_declaration_of(&Atom::from("c"), &target, &mut state);
 
   assert_eq!(framed_line(&target, &mut state), Some(1));
-  // Cached now, and asked again the same way.
   assert_eq!(framed_line(&target, &mut state), Some(1));
 
   let other = reference("unrelated");
@@ -490,10 +453,6 @@ export const styles = create({ x: { color: c } });
   );
 }
 
-/// The declaration search reads the module the frame re-parsed, which is not
-/// always the module the reference was resolved against. A name it does not
-/// declare falls back to locating the expression, rather than reporting no
-/// position at all.
 #[test]
 fn a_name_the_source_does_not_declare_falls_back_to_the_read() {
   let source = "export const styles = create({ x: { color: c } });\n";
@@ -510,10 +469,7 @@ fn a_name_the_source_does_not_declare_falls_back_to_the_read() {
   );
 }
 
-/// Recording one refusal's declaration must not move an unrelated diagnostic. A
-/// dynamic style's refused value falls through to an inline style rather than
-/// stopping the build, so a second, unrelated position can be asked for
-/// afterwards.
+/// A dynamic style's refused value falls back to an inline style, so later lookups still happen.
 #[test]
 fn a_recorded_declaration_does_not_move_an_unrelated_diagnostic() {
   let source = "\
@@ -534,9 +490,6 @@ export const styles = create({ x: { color: c, background: other } });
   );
 }
 
-/// A source the parser cannot read at all: the declaration search never gets a
-/// module to look in, and the lookup has to degrade to "location unknown"
-/// instead of aborting a build that is already failing for another reason.
 #[test]
 fn an_unparseable_source_frames_nothing_and_does_not_abort() {
   let path = write_fixture(
@@ -552,8 +505,7 @@ fn an_unparseable_source_frames_nothing_and_does_not_abort() {
     get_span_from_source_code(&target, &target, &mut state)
   });
 
-  // Either answer is acceptable -- an error, or no position -- and what is not
-  // is a panic, or a span whose offsets belong to a module that failed to parse.
+  // An error or no position are both fine; a panic or a span from the failed parse is not.
   if let Ok((_code_frame, span)) = result {
     assert!(
       span.is_dummy(),
@@ -562,13 +514,8 @@ fn an_unparseable_source_frames_nothing_and_does_not_abort() {
   }
 }
 
-/// The frame reads the module with the syntax the compiler parsed it under
-/// (`syntax_for_file`). A `.ts` module is TypeScript without JSX, so a generic
-/// arrow in it is an arrow and the refusal keeps its frame; read as TSX,
-/// `<T>(value: T) =>` is an unclosed JSX tag, the module fails to parse, and the
-/// refusal is reported with no position. The `.tsx` twin of the same text is
-/// the control: there the generic arrow is a parse error on either side, and
-/// the frame is lost as the unparseable case above says.
+/// The frame parses with the compiler's syntax, and a `.ts` module is TypeScript without JSX.
+/// The `.tsx` twin is the control, where the generic arrow fails to parse.
 #[test]
 fn a_refusal_in_a_ts_module_with_a_generic_arrow_keeps_its_frame() {
   let source = "\
@@ -606,11 +553,7 @@ export const styles = create({ x: { color: c, width: px(1) } });
   }
 }
 
-/// A file the compiler was told about but which is not on disk. There is no
-/// module to search, so the frame registers a synthesized one holding just the
-/// expression it was handed — and the declaration lookup finds no declaration in
-/// it and falls back to that expression, rather than reporting a position from a
-/// file nobody read.
+/// The frame synthesizes a module holding just the expression, which has no declaration.
 #[test]
 fn a_missing_source_file_falls_back_to_the_expression_it_was_handed() {
   let mut state = StateDouble::for_file("/nonexistent/framed_declaration.tsx");
@@ -625,8 +568,6 @@ fn a_missing_source_file_falls_back_to_the_expression_it_was_handed() {
   );
 }
 
-/// Windows line endings, because a line number is a count of `\n` and a `\r`
-/// left in front of one is the classic off-by-one.
 #[test]
 fn a_declaration_in_a_crlf_source_is_framed_on_its_own_line() {
   let path = write_fixture(
@@ -641,9 +582,6 @@ fn a_declaration_in_a_crlf_source_is_framed_on_its_own_line() {
   assert_eq!(framed_line(&target, &mut state), Some(1));
 }
 
-/// A byte-order mark ahead of the first declaration: it is one to three bytes of
-/// nothing, and a position that counted it as source text would land a column
-/// early.
 #[test]
 fn a_declaration_after_a_byte_order_mark_is_framed_on_its_own_line() {
   let path = write_fixture(
@@ -658,14 +596,7 @@ fn a_declaration_after_a_byte_order_mark_is_framed_on_its_own_line() {
   assert_eq!(framed_line(&target, &mut state), Some(1));
 }
 
-/// A declaration preceded by a character outside the Basic Multilingual Plane,
-/// which is the one that separates the three counts a position can be kept in.
-///
-/// An astral character is four bytes of UTF-8, two UTF-16 code units and one
-/// Rust character, so a column counted in bytes and one counted in units land
-/// in three different places. The run above is all in the plane -- `λ` is two
-/// bytes and one unit -- so it separates bytes from characters and nothing
-/// else.
+/// An astral character is four UTF-8 bytes, two UTF-16 units and one `char`.
 #[test]
 fn a_declaration_after_an_astral_character_is_framed_on_its_own_line() {
   let path = write_fixture(
@@ -680,9 +611,7 @@ fn a_declaration_after_an_astral_character_is_framed_on_its_own_line() {
   assert_eq!(framed_line(&target, &mut state), Some(2));
 }
 
-/// A declaration past a long run of multi-byte characters, which is where a byte
-/// offset used as a character offset lands inside a character and panics the
-/// source-map lookup. The frame catches that panic; this asserts it never has to.
+/// The frame catches a panic from a mid-character offset; this asserts it never needs to.
 #[test]
 fn a_declaration_after_multibyte_text_is_framed_on_its_own_line() {
   let source = format!(
@@ -698,8 +627,6 @@ fn a_declaration_after_multibyte_text_is_framed_on_its_own_line() {
   assert_eq!(framed_line(&target, &mut state), Some(2));
 }
 
-/// A module long enough that the walk passes thousands of unrelated
-/// declarations before the one being asked about.
 #[test]
 fn a_declaration_at_the_end_of_a_long_source_is_framed() {
   let mut source = String::new();
@@ -718,8 +645,6 @@ fn a_declaration_at_the_end_of_a_long_source_is_framed() {
   assert_eq!(framed_line(&target, &mut state), Some(3_001));
 }
 
-/// A name that appears in the source only inside a string or a comment declares
-/// nothing, so the lookup falls back to the read rather than pointing at prose.
 #[test]
 fn a_name_only_mentioned_in_text_falls_back_to_the_read() {
   let source = "\
@@ -740,11 +665,7 @@ export const styles = create({ x: { color: c } });
   );
 }
 
-/// The record belongs to the expression the refusal was raised on, span
-/// included, because that is what the key hashes. A copy of the same identifier
-/// carrying a different position does not inherit it — which is a no-op rather
-/// than a wrong answer, and the reason the production path hands the frame the
-/// node the refusal stored rather than rebuilding one.
+/// The record is keyed by the expression and its span, so a copy elsewhere does not inherit it.
 #[test]
 fn a_recorded_declaration_belongs_to_the_expression_it_was_raised_on() {
   let source = "\
@@ -776,8 +697,6 @@ export const styles = create({ x: { color: c } });
 
 // ── the entry points and the paths that are only taken when something fails ──
 
-/// The message the caller passed is what it gets back, whether or not a frame
-/// could be drawn for it, so a refusal reads the same either way.
 #[test]
 fn the_error_message_is_returned_whether_or_not_a_frame_is_drawn() {
   let path = write_fixture("returned_message.tsx", "const c = 'red';\n");
@@ -790,8 +709,6 @@ fn the_error_message_is_returned_whether_or_not_a_frame_is_drawn() {
 
   assert_eq!(framed, "A style value must be static");
 
-  // A state that forgets the module it is handed cannot produce a frame, and
-  // the message still comes back unchanged.
   let mut forgetful = StateDouble::forgetful();
 
   let unframed = GLOBALS.set(&Globals::default(), || {
@@ -806,8 +723,6 @@ fn the_error_message_is_returned_whether_or_not_a_frame_is_drawn() {
   assert_eq!(unframed, "A style value must be static");
 }
 
-/// A message carrying a documentation link keeps it in the frame's note, so the
-/// reader is not left to search for the page the message names.
 #[test]
 fn a_link_in_the_message_is_repeated_as_a_note() {
   let path = write_fixture("linked_message.tsx", "const c = 'red';\n");
@@ -824,8 +739,7 @@ fn a_link_in_the_message_is_repeated_as_a_note() {
   });
 }
 
-/// `build_code_frame_error_and_panic_at` frames one expression as both the
-/// context and the fault, which is the common case.
+/// `build_code_frame_error_and_panic_at` frames one expression as both context and fault.
 #[test]
 fn framing_one_expression_reports_it_as_both_context_and_fault() {
   let path = write_fixture("panic_at.tsx", "const c = 'red';\n");
@@ -841,8 +755,7 @@ fn framing_one_expression_reports_it_as_both_context_and_fault() {
   assert!(panicked.is_err(), "the reporter has to diverge");
 }
 
-/// The read side of `frame_declaration_of`. A build that refused nothing
-/// answers without hashing the expression at all.
+/// The read side of `frame_declaration_of`.
 #[test]
 fn the_binding_a_refusal_was_recorded_against_is_read_back() {
   let mut state = StateDouble::for_file("framed_declaration.tsx");
@@ -859,8 +772,7 @@ fn the_binding_a_refusal_was_recorded_against_is_read_back() {
   assert_eq!(framed_declaration_of(&reference("other"), &state), None);
 }
 
-/// The second lookup of the same expression is answered from the span cache,
-/// which re-registers nothing with the shared source map.
+/// A cache hit registers nothing new with the shared source map.
 #[test]
 fn a_second_lookup_of_one_expression_is_answered_from_the_cache() {
   let path = write_fixture(
@@ -876,8 +788,6 @@ fn a_second_lookup_of_one_expression_is_answered_from_the_cache() {
   );
 }
 
-/// And the same for a namespace key, whose cache key is built from the call
-/// rather than from an expression.
 #[test]
 fn a_second_key_lookup_of_one_namespace_is_answered_from_the_cache() {
   let source = "\
@@ -910,8 +820,6 @@ export const styles = create({
   assert!(!first.is_dummy());
 }
 
-/// A state that never remembers the module it parsed cannot be asked where a
-/// key is written, and the lookup says so instead of aborting.
 #[test]
 fn a_state_that_forgets_the_module_reports_no_key_span() {
   let mut state = StateDouble::forgetful();
@@ -924,7 +832,6 @@ fn a_state_that_forgets_the_module_reports_no_key_span() {
   assert!(located.is_err());
 }
 
-/// The same for an expression lookup.
 #[test]
 fn a_state_that_forgets_the_module_reports_no_expression_span() {
   let mut state = StateDouble::forgetful();
@@ -937,8 +844,6 @@ fn a_state_that_forgets_the_module_reports_no_expression_span() {
   assert!(located.is_err());
 }
 
-/// A module memoized without its text is printed back out to give the frame
-/// something to quote.
 #[test]
 fn a_module_memoized_without_its_text_is_printed_back_out() {
   let mut state = StateDouble::for_file("printed_back.tsx");
@@ -950,9 +855,7 @@ fn a_module_memoized_without_its_text_is_printed_back_out() {
   assert_eq!(framed_line(&target, &mut state), Some(1));
 }
 
-/// Memoizes `source` the way a debug build does at module entry: parsed, and
-/// without its text. Must run inside the globals, because the parse mints
-/// marks.
+/// Memoizes `source` parsed but without its text; must run inside the globals.
 fn memoize_without_text(state: &mut StateDouble, source: &str) {
   let frame = CodeFrame::new();
   let source_file = frame
@@ -967,11 +870,7 @@ fn memoize_without_text(state: &mut StateDouble, source: &str) {
   state.set_seen_module_source_code(expect_module(&program), None);
 }
 
-/// The authored text wins over a module printed back out. A debug build
-/// memoizes the module without its text at module entry, and the printer lays a
-/// one-line namespace out over three lines, so every key after it moved to a
-/// later line than the one the author wrote it on. The compiler was given the
-/// text, and that text is what a `file:line` has to be measured against.
+/// A debug build memoizes the module without text, and printing it moves keys to later lines.
 #[test]
 fn a_key_is_framed_on_the_authored_line_when_the_module_is_memoized_without_text() {
   let source = "\
@@ -995,9 +894,7 @@ export const styles = create({
   assert_eq!(line, Some(3));
 }
 
-/// The file on disk wins over the given text while `useRealFileForSource` is
-/// on, which is what the option promises: the text a bundler hands in may have
-/// been rewritten by an earlier loader, and the file is what the author sees.
+/// With `useRealFileForSource` on, the disk wins because a loader may have rewritten the text.
 #[test]
 fn the_file_on_disk_is_quoted_before_the_given_text_when_the_option_is_on() {
   // The same module, with a comment line before it on disk only.
@@ -1021,11 +918,7 @@ export const styles = create({
   assert_eq!(line, Some(4));
 }
 
-/// With `useRealFileForSource` off, the frame opens no file and quotes the
-/// module it holds, printed back out, as the option documents. The three
-/// sources put the key on three different lines, so the answer names the one
-/// that was read: the file on disk says 4, the given text 3, the printed module
-/// 5.
+/// The disk, given text and printed module put the key on lines 4, 3 and 5 respectively.
 #[test]
 fn a_memoized_module_is_printed_when_the_option_is_off() {
   let source = "\
@@ -1053,10 +946,7 @@ export const styles = create({
   assert_eq!(line, Some(5));
 }
 
-/// Runs `locate` behind the panic boundary and answers the detail the refusal
-/// carries, having checked the sentence around it. The sentence is one string
-/// in `code_frame.rs`, so the three cases below state only the part that
-/// differs between them.
+/// Runs `locate` behind the panic boundary, checks the shared sentence, and returns the detail.
 fn detail_of_a_panic(locate: impl FnOnce() -> Result<(CodeFrame, Span), Error>) -> String {
   const PREFIX: &str = "Panicked while locating the source span for a diagnostic: ";
 
@@ -1073,9 +963,7 @@ fn detail_of_a_panic(locate: impl FnOnce() -> Result<(CodeFrame, Span), Error>) 
   }
 }
 
-/// The panic boundary every span lookup sits behind: a panic inside it is an
-/// ordinary "no code frame", never the end of the compilation. The words the
-/// panic carried are kept, because they are the only trace of what went wrong.
+/// The panic's words are kept, because they are the only trace of what went wrong.
 #[test]
 fn a_panic_while_locating_a_span_becomes_an_ordinary_failure() {
   let detail = detail_of_a_panic(|| panic!("while locating a span"));
@@ -1083,8 +971,6 @@ fn a_panic_while_locating_a_span_becomes_an_ordinary_failure() {
   assert_eq!(detail, "while locating a span");
 }
 
-/// A panic message built at the moment it is raised is carried as a `String`,
-/// not as the static text above, and the boundary reads both.
 #[test]
 fn a_panic_carrying_built_words_keeps_them() {
   let name = "styles";
@@ -1093,8 +979,6 @@ fn a_panic_carrying_built_words_keeps_them() {
   assert_eq!(detail, "while locating styles");
 }
 
-/// A panic can carry any value, not only text. The boundary says so in place of
-/// the words it has none of, rather than answering a message built from nothing.
 #[test]
 fn a_panic_carrying_no_text_is_reported_without_words() {
   let detail = detail_of_a_panic(|| std::panic::panic_any(7u32));
@@ -1102,8 +986,6 @@ fn a_panic_carrying_no_text_is_reported_without_words() {
   assert_eq!(detail, "<no message>");
 }
 
-/// The hook the boundary installs suppresses only its own panics. Anything else
-/// panicking in the same process still reaches the hook that was there before.
 #[test]
 fn a_panic_outside_the_boundary_still_reaches_the_previous_hook() {
   install_diagnostic_panic_hook();
@@ -1113,8 +995,6 @@ fn a_panic_outside_the_boundary_still_reaches_the_previous_hook() {
   assert!(panicked.is_err());
 }
 
-/// Emitting against a span the registered source cannot place must not replace
-/// the error being reported with a panic about the frame.
 #[test]
 fn emitting_against_an_unplaceable_span_is_survivable() {
   let code_frame = CodeFrame::new();
@@ -1125,8 +1005,6 @@ fn emitting_against_an_unplaceable_span_is_survivable() {
   );
 }
 
-/// Where the frame reads a file from, for each way a file can be named. Anything
-/// else is not a file this compiler can open.
 #[test]
 fn a_source_file_is_read_from_every_name_that_points_at_one() {
   let fixture = write_fixture("named_source.tsx", "const c = 'red';\n");
@@ -1144,12 +1022,7 @@ fn a_source_file_is_read_from_every_name_that_points_at_one() {
   assert!(read_source_file(&FileName::Anon).is_err());
 }
 
-/// A `file:` URL is read from the path it names, not from its raw URL path:
-/// that path is percent-escaped everywhere (a space is `%20`) and, on Windows,
-/// spells the drive as `/D:/` with forward slashes. A name with a space and a
-/// percent sign shows the decoding on every platform. A URL of another scheme
-/// names no local file, and is refused rather than read from somewhere it does
-/// not point.
+/// A `file:` URL's path is percent-decoded, including `/D:/` on Windows; other schemes are refused.
 #[test]
 fn a_file_url_is_read_from_the_path_it_names() {
   let fixture = write_fixture("named source 100%.tsx", "const c = 'red';\n");
@@ -1171,9 +1044,7 @@ fn a_file_url_is_read_from_the_path_it_names() {
   assert!(read_source_file(&FileName::Url(other)).is_err());
 }
 
-/// Registering the same file twice registers it once: the shared source map is
-/// never cleared, so a second copy would be a second copy for the life of the
-/// process.
+/// The shared source map is never cleared, so a duplicate would live for the whole process.
 #[test]
 fn one_file_is_registered_with_the_shared_source_map_only_once() {
   let code_frame = CodeFrame::new();
@@ -1181,8 +1052,7 @@ fn one_file_is_registered_with_the_shared_source_map_only_once() {
 
   code_frame.register_source_once(&file_name, "const c = 'red';\n");
 
-  // The producing closure is only called on a miss, which is what keeps a
-  // module's text from being cloned once per lookup.
+  // The closure only runs on a miss, so a module's text is not cloned per lookup.
   let produced = code_frame.register_produced_source_once(&file_name, || {
     panic!("the source is only produced on a miss")
   });
@@ -1190,8 +1060,6 @@ fn one_file_is_registered_with_the_shared_source_map_only_once() {
   assert!(produced.is_ok());
 }
 
-/// A source that cannot be produced is reported rather than registered, and the
-/// lookup that asked for it degrades to no code frame.
 #[test]
 fn a_source_that_cannot_be_produced_is_reported() {
   let code_frame = CodeFrame::new();
@@ -1203,13 +1071,9 @@ fn a_source_that_cannot_be_produced_is_reported() {
   assert!(produced.is_err());
 }
 
-// ── The order the cache key hashes a namespace's value keys in ─────
-//
-// The keys arrive from a hash set, so the key would otherwise depend on an
-// iteration order that is not part of what a namespace spells.
+// ── the order the cache key hashes a namespace's value keys in ─────
 
-/// Two namespaces spelling the same properties are the same namespace, so the
-/// order they reached the set in must not reach the key.
+/// The keys come from a hash set, so their iteration order must not reach the cache key.
 #[test]
 fn the_value_keys_of_a_namespace_are_ordered_before_they_are_hashed() {
   let written_one_way = [Atom::from("marginTop"), Atom::from("color")];
@@ -1241,8 +1105,6 @@ fn value_keys_are_ordered_by_their_text() {
   );
 }
 
-/// A namespace with more properties than the inline buffer holds still orders
-/// them, on the heap. Nothing about the key changes at the boundary.
 #[test]
 fn a_namespace_larger_than_the_inline_buffer_is_still_ordered() {
   let names: Vec<Atom> = (0..INLINE_VALUE_KEYS * 4)
@@ -1267,8 +1129,7 @@ fn a_namespace_with_no_value_keys_orders_nothing() {
   assert!(sorted_value_keys([].iter()).is_empty());
 }
 
-/// A cached answer still needs the file registered before it can be quoted, so
-/// a file that has since become unreadable turns a cache hit into no frame.
+/// A cache hit still has to register the file, so an unreadable file yields no frame.
 #[test]
 fn a_cached_answer_for_an_unreadable_file_yields_no_frame() {
   let mut state = StateDouble::for_file("/nonexistent/cached_unreadable.tsx");
@@ -1285,7 +1146,6 @@ fn a_cached_answer_for_an_unreadable_file_yields_no_frame() {
   assert!(located.is_err());
 }
 
-/// The same for a cached namespace key.
 #[test]
 fn a_cached_key_answer_for_an_unreadable_file_yields_no_frame() {
   let mut state = StateDouble::for_file("/nonexistent/cached_key_unreadable.tsx");
@@ -1304,8 +1164,6 @@ fn a_cached_key_answer_for_an_unreadable_file_yields_no_frame() {
   assert!(located.is_err());
 }
 
-/// A key lookup against a source that does not parse degrades the same way an
-/// expression lookup does.
 #[test]
 fn a_key_lookup_over_an_unparseable_source_frames_nothing() {
   let path = write_fixture(
@@ -1322,8 +1180,7 @@ fn a_key_lookup_over_an_unparseable_source_frames_nothing() {
   assert!(located.is_err());
 }
 
-/// The reporting panic still diverges when no frame could be drawn for it, and
-/// reports the file it knows even without a line.
+/// The panic still reports the file it knows, even without a line.
 #[test]
 fn a_reporting_panic_without_a_frame_still_diverges() {
   let mut state = StateDouble::forgetful();
@@ -1338,8 +1195,6 @@ fn a_reporting_panic_without_a_frame_still_diverges() {
   assert!(panicked.is_err(), "the reporter has to diverge");
 }
 
-/// A target that binds names of its own is normalized before it is searched
-/// for, so a binding written with a type annotation still matches the same
 /// binding written without one.
 #[test]
 fn a_target_that_binds_names_is_matched_across_type_annotations() {
@@ -1368,8 +1223,6 @@ fn a_target_that_binds_names_is_matched_across_type_annotations() {
   assert_eq!(framed_line(&target, &mut state), Some(1));
 }
 
-/// The search stops at the first match rather than walking the rest of the
-/// module, which is what keeps a long file from being walked whole per style.
 #[test]
 fn the_search_stops_at_the_first_match() {
   let source = "\
@@ -1383,11 +1236,7 @@ export const more = create({ y: { color: c } });
   assert_eq!(framed_line(&reference("c"), &mut state), Some(2));
 }
 
-/// A cached answer about a file the shared source map has not seen is quoted
-/// from the text the state memoized, without re-reading the file.
-///
-/// This is the whole point of memoizing it: the debug path asks once per style,
-/// and reading the file each time was the largest single cost in a `dev` build.
+/// The debug path asks once per style, so re-reading the file each time would be costly.
 #[test]
 fn a_cached_answer_is_quoted_from_the_memoized_text() {
   let id = TEST_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -1412,9 +1261,7 @@ fn a_cached_answer_is_quoted_from_the_memoized_text() {
 
 // ── what a failure to build a frame reports ─────────────────────────────────
 
-/// A frame that could not be built is reported, not swallowed. The full
-/// expression is only worth printing to somebody who asked for debug logging;
-/// everyone else gets the file and a pointer to that switch.
+/// The full expression is logged only at debug level; otherwise the file and how to enable it.
 #[test]
 fn a_frame_that_cannot_be_built_is_reported_at_both_log_levels() {
   let target = reference("c");
@@ -1446,8 +1293,6 @@ fn a_frame_that_cannot_be_built_is_reported_at_both_log_levels() {
   );
 }
 
-/// The same split for a module whose own source will not parse, which is the
-/// other way a lookup gives up.
 #[test]
 fn an_unparseable_source_is_reported_at_both_log_levels() {
   let source = "export const styles = create({ x: { color: 'red' }\n";
@@ -1484,9 +1329,6 @@ fn an_unparseable_source_is_reported_at_both_log_levels() {
   );
 }
 
-/// A print that fails leaves an empty quote rather than a half-written one. The
-/// caller is only printing to quote a module back, so there is nothing else it
-/// could usefully say.
 #[test]
 fn a_print_that_fails_leaves_an_empty_quote() {
   let printed = nothing_printed(anyhow::anyhow!("the printer gave up"));
@@ -1495,9 +1337,7 @@ fn a_print_that_fails_leaves_an_empty_quote() {
   assert!(printed.map.is_none());
 }
 
-/// The invariant `parse_and_normalize_program` guarantees. It parses with
-/// `IsModule::Bool(true)`, so a successful parse is always a module; anything
-/// else means that call learned a second mode and this is where it should stop.
+/// `parse_and_normalize_program` parses with `IsModule::Bool(true)`, so a parse is always a module.
 #[test]
 #[should_panic(expected = "Expected a module program")]
 fn a_program_that_is_not_a_module_stops_the_memoization() {
@@ -1508,10 +1348,7 @@ fn a_program_that_is_not_a_module_stops_the_memoization() {
   }));
 }
 
-/// A `filename` that names a host file whose content is not the JavaScript the
-/// compiler was fed -- a single-file component, an `.mdx`, a stale watch-mode
-/// read. The disk text is preferred but does not parse, so the frame keeps the
-/// text the compiler was given instead of losing the frame completely.
+/// The disk file may not be the JavaScript the compiler was fed, such as an `.mdx` or stale read.
 #[test]
 fn a_file_that_does_not_parse_falls_back_to_the_given_text() {
   let given = "\

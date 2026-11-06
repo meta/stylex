@@ -32,9 +32,7 @@ function sourcePosition(source, offset) {
   return { line: lines.length, column: lines[lines.length - 1].length + 1 };
 }
 
-// `file` is the absolute filename Babel would report, or undefined for a file
-// without one, which Babel's parser calls 'unknown' and its transform
-// 'unknown file'.
+// `file` is the absolute filename, or undefined for Babel's 'unknown' label.
 function rethrowDiagnostic(cause, source, file) {
   const prefix = 'STYLEX_DIAGNOSTIC:';
   if (!cause.message?.startsWith(prefix)) throw cause;
@@ -55,7 +53,7 @@ function rethrowDiagnostic(cause, source, file) {
   const Constructor =
     parse || diagnostic.name === 'SyntaxError' ? SyntaxError : Error;
   const error = new Constructor(`${filename}: ${message}`, { cause });
-  // The fields tooling (bundler overlays, Jest) reads from Babel's errors.
+  // The error fields tooling (bundler overlays, Jest) reads from Babel's errors.
   error.code = parse ? 'BABEL_PARSE_ERROR' : 'BABEL_TRANSFORM_ERROR';
   if (parse && start != null) {
     error.loc = {
@@ -71,8 +69,7 @@ function rethrowDiagnostic(cause, source, file) {
   throw error;
 }
 
-// The host outlives the transform when compiler functions were retained, so
-// an exception is reported once and does not linger for their later calls.
+// Report an exception once; retained compiler functions outlive the transform.
 function takeThrown(host) {
   const { thrown } = host.state;
   host.state.hasThrown = false;
@@ -80,10 +77,8 @@ function takeThrown(host) {
   return thrown;
 }
 
-// Babel's `run` wraps an exception escaping a plugin in place: the same value,
-// its message prefixed with the file and a code added when it has none. The
-// statements are Babel's own, in strict mode, so a thrown string, null or
-// frozen error fails with exactly the TypeError Babel raises for it.
+// Wraps an escaping exception in place, in strict mode, as Babel's `run` does,
+// so a thrown string, null or frozen error fails with Babel's own TypeError.
 function babelTransformError(e, label) {
   e.message = `${label}: ${e.message}`;
   if (!e.code) {
@@ -101,24 +96,20 @@ function transformSync(source, options = {}) {
   }
   const {
     filename: givenFilename,
-    // Internal: set by the Babel facade (babel.js) on every compile, whose
-    // exceptions Babel itself wraps once. Never forwarded to the compiler.
+    // Internal, set by babel.js, whose exceptions Babel wraps; never forwarded.
     __errorsHandledByBabel: handledByBabel,
     ...rest
   } = options;
   const unnamed = givenFilename === undefined;
   const filename = unnamed ? 'unknown.js' : givenFilename;
-  // A file without a name compiles as Babel's plugin compiles one: with the
-  // empty name the facade passes for it (no import resolution, no file label).
+  // A nameless file compiles with an empty name, as Babel's plugin does.
   const pluginOptions = unnamed
     ? { ...rest, __sourceFileName: '' }
     : { ...rest };
-  // Babel resolves `filename` against the working directory when it loads the
-  // options.
+  // Babel resolves `filename` against the working directory.
   const file =
     typeof givenFilename === 'string' ? path.resolve(givenFilename) : undefined;
   const label = file ?? 'unknown file';
-  // A user exception escapes this transform: rethrown as Babel would.
   const userThrow = (host) => {
     const thrown = takeThrown(host);
     if (handledByBabel != null && typeof handledByBabel === 'object') {
@@ -127,9 +118,7 @@ function transformSync(source, options = {}) {
     }
     return babelTransformError(thrown, label);
   };
-  // Babel's own map objects carry `file`/`sourceRoot` as `undefined`; an absent
-  // field means the same, so only those are left out. Every other value is
-  // passed through unchanged for the compiler to validate.
+  // Babel's maps carry `file`/`sourceRoot` as undefined, so drop only those.
   const { inputSourceMap } = pluginOptions;
   if (
     inputSourceMap != null &&
@@ -145,8 +134,7 @@ function transformSync(source, options = {}) {
     filename,
     getBinding(),
   );
-  // A transform started from a callback of another one nests native frames on
-  // the JS stack; past this depth V8 could not report the overflow safely.
+  // Past this native nesting depth V8 could not report a stack overflow safely.
   if (depth >= MAX_NESTED_TRANSFORMS) {
     throw new RangeError('Maximum call stack size exceeded');
   }
@@ -160,8 +148,7 @@ function transformSync(source, options = {}) {
       host.invoke,
     );
   } catch (cause) {
-    // A user callback threw: propagate that exception, as Babel does, rather
-    // than the compiler error it caused.
+    // A user callback threw: propagate its exception, as Babel does.
     if (host.state.hasThrown) throw userThrow(host);
     if (require('./host').stackOverflow(cause)) {
       throw new RangeError('Maximum call stack size exceeded');
@@ -180,8 +167,7 @@ async function transform(source, options = {}) {
 }
 
 function processStylexRules(rules, options = {}) {
-  // Mirror the JS compiler's tolerance: it reads only the first three entries
-  // of a rule and coerces the priority with JavaScript number semantics.
+  // Mirror the JS compiler's tolerance of extra entries and odd priorities.
   const normalized = Array.from(rules, (rule) => {
     const priority = Number(rule[2]);
     return [

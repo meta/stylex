@@ -50,10 +50,7 @@ fn parse_file<T>(
         &mut errors,
         |parser| {
             let value = op(parser)?;
-            // SWC's current token type is behind its `unstable` feature. Its
-            // lexer represents EOF by a zero-width span at the source end;
-            // checking the buffered token (not the lexer cursor) also catches
-            // trailing tokens already consumed by lookahead.
+            // EOF is a zero-width span at the end; the buffered token also catches lookahead.
             let span = parser.input().cur_span();
             if span.lo != file.end_pos || span.hi != file.end_pos {
                 return Err(Error::new(
@@ -76,9 +73,7 @@ fn parse_file<T>(
         }
     };
     if let Some(error) = errors.first() {
-        // Preserve the parser's first readable message and byte range. The host
-        // adds its filename/code frame; this is a parse error, not a StyleX
-        // validation error, and recovered diagnostics are still fatal.
+        // The first message and range; recovered diagnostics are still fatal.
         let span = error.span();
         let relative = |position: swc_core::common::BytePos| {
             position
@@ -397,7 +392,6 @@ mod tests {
         let diagnostic = from_error(&error);
         assert_eq!(diagnostic.range.as_ref().unwrap().start, 6);
         assert!(diagnostic.message.contains("end of input"));
-        // Source-file origins are arbitrary, and all offsets remain UTF-8 bytes.
         let map = SourceMap::default();
         map.new_source_file(
             FileName::Custom("padding".into()).into(),

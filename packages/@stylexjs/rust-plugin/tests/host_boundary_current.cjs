@@ -7,9 +7,8 @@
 
 'use strict';
 
-// The host boundary: JavaScript values, callbacks and compiler functions that
-// cross between the JavaScript thread and the native compiler must behave
-// exactly like the live values Babel's evaluator works with.
+// Values, callbacks and compiler functions crossing the native boundary must
+// behave exactly like the live values Babel's evaluator sees.
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
@@ -47,8 +46,7 @@ function babel(code, options, filename = '/app/a.js') {
 function native(code, options, filename = '/app/a.js') {
   return transformSync(code, { filename, ...options }).metadata.stylex;
 }
-// Runs the same scenario through Babel and the native compiler with fresh
-// options for each, and requires identical results.
+// Runs a scenario through Babel and the native compiler, requiring equal results.
 function same(name, code, makeOptions) {
   const expected = outcome(() => babel(code, makeOptions()));
   const actual = outcome(() => native(code, makeOptions()));
@@ -224,11 +222,7 @@ test('an outer compiler function called from a nested transform runs in the oute
 });
 
 test('transforms nested in a callback behave exactly as when run alone', () => {
-  // Each transform's per-thread state (warnings, error spans) must be its
-  // own: a nested transform that fails, warns or retains a compiler function
-  // changes nothing about the transform it interrupts, and later transforms
-  // see no trace of either. (Evaluation-budget exhaustion is not covered
-  // here: it needs a cheap input that deterministically reaches the budget.)
+  // A nested transform's failures, warnings and retained functions stay its own.
   const shared = {
     runtimeInjection: true,
     unstable_moduleResolution: { type: 'haste' },
@@ -315,7 +309,6 @@ export const b = stylex.create({ y: { marginInlineStart: 4 }, d: (p) => ({ width
   assert.equal(kept('x'), aloneKept);
   assert.equal(aloneKept, 'inner-x');
   assert.deepEqual(later(), aloneLater);
-  // The scenario exercises what it claims to.
   assert.ok(alone.failing.error, 'the failing transform fails');
   assert.ok(alone.warning.warnings.length > 0, 'the warning transform warns');
   assert.ok(aloneOuter.warnings.length > 0, 'the outer transform warns');
@@ -629,8 +622,7 @@ test('callback results keep their identity, receiver and laziness', () => {
 });
 
 test('array spread of a live sparse array follows JavaScript iteration', () => {
-  // Babel's evaluator does not support array spread at all; the expected value
-  // is plain JavaScript semantics (holes iterate as undefined).
+  // Babel's evaluator rejects array spread, so expect plain JS (holes as undefined).
   const result = outcome(() =>
     native(
       make(
@@ -826,8 +818,7 @@ test('strings with lone UTF-16 surrogates cross the host boundary intact', () =>
 });
 
 test('a wide callback result is decoded with bounded memory', () => {
-  // Each member used to receive its own copy of the whole receiver object
-  // (4000 members: ~2.5GB, ~3.5s). Measured in a child with a deadline.
+  // A child with a deadline guards against copying the receiver per member.
   const { spawnSync } = require('node:child_process');
   const script = `
     const { transformSync } = require(${JSON.stringify(path.join(__dirname, '..'))});
@@ -1039,7 +1030,6 @@ test('the host creates an adopted literal once, as the live value it stands for'
   assert.deepEqual(get(object, 'x'), '\ud800');
   assert.deepEqual(host.invoke('@binary', ['in', 'toString', object]), false);
   assert.deepEqual(host.invoke('@binary', ['in', 'toString', plain]), true);
-  // One value, one identity: the same reply names the same object.
   assert.deepEqual(host.invoke('@sameValue', [plain, plain]), true);
   assert.notDeepEqual(plain, object);
   // Anything but data is refused.
@@ -1048,10 +1038,7 @@ test('the host creates an adopted literal once, as the live value it stands for'
   });
 });
 
-// A compiler function's own failure (an arrow the compiler evaluated, called
-// by user code) is the plain Error the Babel plugin's evaluated arrow throws.
-// Whether it reaches the transform depends only on what user code does with
-// that very exception.
+// A failing compiler-evaluated arrow throws the plain Error Babel's arrow throws.
 function arrowFailure(engine, env, file = '/app/arrow.js') {
   const { runEngine, describe } = require('./support/babel_errors.cjs');
   const source = `import * as stylex from '@stylexjs/stylex';
@@ -1110,9 +1097,7 @@ test('a failing compiler arrow reaches the transform only if user code lets it',
       );
     }
   }
-  // The oracle: Babel's arrow throws a plain Error, wrapped once, prefixed with
-  // the filename Babel resolved against the working directory (`D:\app\...`
-  // on Windows).
+  // Babel wraps the arrow's Error once, prefixed with its resolved filename.
   assert.deepEqual(arrowFailure('babel', scenarios.uncaught()).caught, {
     kind: 'Error',
     message: `${path.resolve('/app/arrow.js')}: Referenced constant is not defined.`,
@@ -1224,12 +1209,7 @@ test('failing compiler arrows in workers behave as on the main thread', async ()
   }
 });
 
-// V8 treats a frame more than its small slack below its own stack limit as
-// not on its stack at all, and fails (a crash, or on Windows a fatal check)
-// if it ever unwinds there. So a JavaScript exception thrown at the stack
-// limit inside a host request must reach the caller without the addon running
-// JavaScript again. Main-thread V8 limits well below the OS stack, at many
-// sizes, put the overflow at every point of the nested call path.
+// V8 crashes unwinding frames past its stack limit; no JS may run after overflow.
 test('nested transforms and compiler functions at the V8 stack limit fail catchably', () => {
   const { spawnSync } = require('node:child_process');
   const script = `

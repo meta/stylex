@@ -26,22 +26,18 @@ pub const EXTENSIONS: [&str; 8] = [".tsx", ".ts", ".jsx", ".js", ".mjs", ".cjs",
 pub static FILE_PATTERN: Lazy<Regex> =
   Lazy::new(|| Regex::new(r#"\.(jsx?|tsx?|mdx?|mjs|cjs)$"#).unwrap());
 
-/// The directory package.json lookups start from: the resolution's root
-/// directory. (Upstream used the literal relative path `cwd` outside its unit
-/// tests, which resolved against the process working directory.)
+/// The directory package.json lookups start from: the resolution's root directory.
+/// Upstream used the relative path `cwd` instead, resolved against the process directory.
 fn resolve_path_cwd(root_dir: &Path) -> PathBuf {
   root_dir.to_path_buf()
 }
 
-/// Paths returned by [`resolve_path`] use `/` on every platform. On Windows
-/// `Path` components are rebuilt with `\`, which would leak into module ids;
-/// elsewhere `\` is an ordinary file-name character and is left alone.
+/// Rewrites `\` to `/` on Windows so module ids use `/`; elsewhere `\` is a file-name character.
 fn to_forward_slashes(path: String) -> String {
   forward_slashes_on(path, cfg!(windows))
 }
 
-/// [`to_forward_slashes`] for a named platform, so the Windows reading of a
-/// path is exercised by the unit tests on every platform.
+/// [`to_forward_slashes`] for a named platform, so unit tests cover Windows on every platform.
 fn forward_slashes_on(path: String, windows: bool) -> String {
   if windows {
     path.replace('\\', "/")
@@ -50,9 +46,7 @@ fn forward_slashes_on(path: String, windows: bool) -> String {
   }
 }
 
-/// The part of a package-relative path after the package's directory name, or
-/// `None` when the path does not reach into that directory. Read from a path
-/// written with `/` separators (see [`to_forward_slashes`]).
+/// The part of a `/`-separated package-relative path after the package's directory, if any.
 fn package_subpath<'a>(relative_package_path: &'a str, package_dir: &str) -> Option<&'a str> {
   let subpath = relative_package_path
     .split(package_dir)
@@ -63,9 +57,7 @@ fn package_subpath<'a>(relative_package_path: &'a str, package_dir: &str) -> Opt
     .then_some(subpath)
 }
 
-/// The import specifiers tried for a file inside package `name`, the one with
-/// the file's extension first: a package import specifier is written with `/`
-/// on every platform, which `subpath` already is.
+/// The import specifiers tried for a file inside package `name`, with the file's extension first.
 fn package_import_specifiers(name: &str, subpath: &str) -> Vec<String> {
   if subpath.is_empty() {
     return vec![name.to_string()];
@@ -79,9 +71,7 @@ fn package_import_specifiers(name: &str, subpath: &str) -> Vec<String> {
   vec![path_with_ext, path_without_ext]
 }
 
-/// The `node_modules` directory a resolved path sits in, the package it names
-/// there (`@org/pkg` for a scoped one) and the rest of the path inside the
-/// package. Read from a path written with `/` separators.
+/// Splits a `/`-separated path into its `node_modules` directory, package name and inner path.
 fn node_modules_package(resolved: &str) -> Option<(&str, String, &str)> {
   let nm_idx = resolved.find("node_modules/")?;
   let after_nm = &resolved[nm_idx + "node_modules/".len()..];
@@ -127,10 +117,7 @@ pub fn resolve_path(
   }
 }
 
-/// [`resolve_path`], answering `Err` with the package path instead of
-/// panicking when that path names nothing on disk. Upstream checked this only
-/// with an assert in its unit tests; callers that can fall back (an import
-/// that is not on disk is left unresolved) use this form.
+/// Like [`resolve_path`], but returns `Err` instead of panicking when the package path is missing.
 pub(crate) fn try_resolve_path(
   processing_file: &Path,
   root_dir: &Path,
@@ -198,8 +185,7 @@ fn resolve_from_package_json(
       let processing_file_str = processing_file.to_string_lossy();
 
       if let Some(node_modules_index) = processing_file_str.rfind("node_modules") {
-        // NOTE: This is a workaround for the case when the file is located in the
-        // node_modules directory and pnpm is package manager
+        // Workaround for files inside `node_modules` when pnpm is the package manager.
 
         let resolved_path_from_node_modules = processing_file_str
           .split_at(node_modules_index)
@@ -234,30 +220,23 @@ fn get_package_path_by_package_json(
     let potential_path_section = name.split("/").last().unwrap_or_default();
 
     if contains_subpath(relative_package_path, Path::new(&potential_path_section)) {
-      // A package import specifier, built from a file-system path: written
-      // with `/` whatever the platform's separator, or the specifier
-      // `pkg\file.js` misses the package's `exports` on Windows.
+      // Specifiers always use `/`, since `pkg\file.js` misses the package's `exports` on Windows.
       let relative_package_path_str =
         to_forward_slashes(relative_package_path.display().to_string());
 
       if let Some(potential_file_path) =
         package_subpath(&relative_package_path_str, potential_path_section)
       {
-        // Try multiple import specifier variations to handle exports field matching.
-        // Prefer the version with an explicit extension first, to align with typical
-        // module resolution behavior when both extension-less and
-        // extension-qualified paths exist.
+        // Try each specifier variant until one matches the package's `exports` field.
         let import_specifiers = package_import_specifiers(name, potential_file_path);
 
         for import_specifier in import_specifiers {
           if let Ok(resolution) = RESOLVER.resolve(cwd, &import_specifier) {
             let resolved_path = resolution.full_path();
-            // Compute relative path from cwd to the resolved file
             if let Some(relative_resolved) = pathdiff::diff_paths(&resolved_path, cwd) {
-              // Use the relative path (which may start with ../ for parent directories)
               potential_package_path = relative_resolved;
             } else {
-              // Fallback: Convert to node_modules-relative path
+              // Fall back to a path relative to `node_modules`.
               let resolved_str = resolved_path.to_string_lossy();
               if let Some(node_modules_idx) = resolved_str.rfind("node_modules") {
                 potential_package_path = PathBuf::from(&resolved_str[node_modules_idx..]);
@@ -282,21 +261,11 @@ fn get_package_path_by_package_json(
   potential_package_path
 }
 
-/// Creates an oxc_resolver with the appropriate options for resolving import
-/// paths. Lazy static resolver instance - created once and reused for all
-/// resolution calls. This is thread-safe and avoids the overhead of creating a
-/// new resolver for each call.
+/// The shared `oxc_resolver` instance, created once and reused for every resolution.
 static RESOLVER: Lazy<Resolver> = Lazy::new(|| {
   let options = ResolveOptions {
     extensions: EXTENSIONS.iter().map(|e| e.to_string()).collect(),
-    // Condition names for package.json exports field resolution.
-    // Order matters: more specific conditions should come before general ones.
-    // Note: "types" is excluded because StyleX resolves runtime code, not type definitions.
-    // - "import": ESM imports (prioritized over CommonJS)
-    // - "require": CommonJS require
-    // - "node": Node.js environment (StyleX runs at build time in Node)
-    // - "development"/"production": Environment-specific exports
-    // - "default": Fallback condition
+    // Most specific first; `types` is omitted because StyleX resolves runtime code, not types.
     condition_names: vec![
       "import".to_string(),
       "require".to_string(),
@@ -305,7 +274,7 @@ static RESOLVER: Lazy<Resolver> = Lazy::new(|| {
       "production".to_string(),
       "default".to_string(),
     ],
-    // Resolve symlinks to their real paths (important for pnpm)
+    // Resolve symlinks to their real paths, which pnpm relies on.
     symlinks: true,
     ..Default::default()
   };
@@ -320,27 +289,8 @@ pub(crate) fn file_not_found_error(import_path: &str) -> std::io::Error {
   )
 }
 
-/// Resolves an import path to its filesystem location, consulting aliases,
-/// package.json, and `oxc_resolver`.
-///
-/// Many branches depend on real filesystem state (existence of files with
-/// particular extensions, node_modules layouts, symlinks, etc.) that cannot
-/// be reproduced deterministically in unit tests without an elaborate
-/// in-memory FS. Excluded from coverage instrumentation for that reason.
-///
-/// # Arguments
-///
-/// * `root_path` — the project root used as the base for module resolution.
-/// * `root_dir` — the optional `unstable_module_resolution.rootDir` option,
-///   used **only** to rewrite Turbopack's `/ROOT/` placeholder in aliased
-///   paths. Distinct from `root_path`; when `None`, `/ROOT/` aliases cannot be
-///   resolved.
-///
-/// # Errors
-///
-/// Returns an [`std::io::Error`] when the source file path has no parent
-/// directory, or [`std::io::ErrorKind::NotFound`] when the import cannot be
-/// resolved to an existing file through any alias, package, or resolver branch.
+/// Resolves an import path to a file through aliases, package.json and `oxc_resolver`.
+/// `root_dir` is used only to rewrite Turbopack's `/ROOT/` placeholder in aliased paths.
 #[cfg_attr(coverage_nightly, coverage(off))]
 pub fn resolve_file_path(
   import_path_str: &str,
@@ -362,7 +312,6 @@ pub fn resolve_file_path(
   })?;
   let root_path = Path::new(root_path);
 
-  // Handle relative imports
   if import_path_str.starts_with('.') {
     if FILE_PATTERN.is_match(import_path_str).unwrap_or(false) {
       if let Ok(resolved) = try_resolve_path(
@@ -398,25 +347,22 @@ pub fn resolve_file_path(
     return Err(file_not_found_error(import_path_str));
   }
 
-  // Handle absolute imports (starting with /)
   if import_path_str.starts_with('/') {
     let path_without_slash = import_path_str.trim_start_matches('/');
 
-    // First try aliased paths
     for aliased_path in possible_aliased_paths(import_path_str, aliases) {
       if let Some(resolved) = try_resolve_aliased_path(&aliased_path, root_dir) {
         return Ok(resolved);
       }
     }
 
-    // Then try root path
     let root_based_path = root_path.join(path_without_slash);
     if let Some(resolved) = try_resolve_with_extensions(&root_based_path) {
       return Ok(resolved);
     }
   }
 
-  // Handle aliased imports (skip the first one which is the original path)
+  // The first aliased path is the original import, so skip it.
   let aliased_paths = possible_aliased_paths(import_path_str, aliases);
   for aliased_path in aliased_paths.iter().skip(1) {
     if let Some(resolved) = try_resolve_aliased_path(aliased_path, root_dir) {
@@ -432,7 +378,7 @@ pub fn resolve_file_path(
     }
   }
 
-  // Use oxc_resolver for node_modules resolution
+  // Resolve through `node_modules` with `oxc_resolver`.
   debug!(
     "Resolving import '{}' from directory '{}'",
     import_path_str,
@@ -444,12 +390,10 @@ pub fn resolve_file_path(
 
     debug!("oxc_resolver resolved to: {}", resolved_path.display());
 
-    // Try to convert to pnpm path if applicable
     let pnpm_path = try_resolve_pnpm_path(&resolved_path);
     return Ok(pnpm_path.clean());
   }
 
-  // Fallback: try resolving from root path as well
   if let Ok(resolution) = RESOLVER.resolve(root_path, import_path_str) {
     let resolved_path = resolution.full_path();
 
@@ -457,7 +401,6 @@ pub fn resolve_file_path(
       "oxc_resolver resolved from root to: {}",
       resolved_path.display()
     );
-    // Try to convert to pnpm path if applicable
     let pnpm_path = try_resolve_pnpm_path(&resolved_path);
     return Ok(pnpm_path.clean());
   }
@@ -465,49 +408,39 @@ pub fn resolve_file_path(
   Err(file_not_found_error(import_path_str))
 }
 
-/// Tries to find the corresponding pnpm path for a resolved node_modules path.
-/// pnpm stores packages in
-/// node_modules/.pnpm/<package-name>@<version>/node_modules/<package-name> This
-/// function checks if such a path exists and returns it if found.
+/// The pnpm `.pnpm/<name>@<version>/node_modules/<name>` path for `resolved_path`, if it exists.
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn try_resolve_pnpm_path(resolved_path: &Path) -> PathBuf {
-  // Read with `/` separators, which the package-name parsing below splits on;
-  // on Windows the resolved path is written with `\`.
+  // The package-name parsing splits on `/`, but Windows paths use `\`.
   let resolved_str = to_forward_slashes(resolved_path.to_string_lossy().into_owned());
 
-  // Check if the path contains node_modules (but not .pnpm, which means it's
-  // already a pnpm path)
+  // Skip paths outside `node_modules` and paths already inside `.pnpm`.
   if !resolved_str.contains("node_modules") || resolved_str.contains(".pnpm") {
     return resolved_path.to_path_buf();
   }
 
-  // Find the node_modules directory, the package and the path inside it
-  // (scoped packages like @org/pkg included); a path already in .pnpm is kept.
   let Some((node_modules_base, package_name, rest_path)) = node_modules_package(&resolved_str)
   else {
     return resolved_path.to_path_buf();
   };
 
-  // Construct the package directory path in node_modules
   let package_dir = Path::new(node_modules_base).join(&package_name);
 
-  // Check if .pnpm directory exists (indicating pnpm is being used)
+  // A `.pnpm` directory means pnpm manages this `node_modules`.
   let pnpm_dir = Path::new(node_modules_base).join(".pnpm");
   if !pnpm_dir.exists() || !pnpm_dir.is_dir() {
     return resolved_path.to_path_buf();
   }
 
-  // Try to follow the symlink to get the real pnpm path
-  // pnpm creates: node_modules/<pkg> -> .pnpm/<pkg>@<version>/node_modules/<pkg>
+  // pnpm links `node_modules/<pkg>` to `.pnpm/<pkg>@<version>/node_modules/<pkg>`.
   if let Ok(real_package_dir) = fs::read_link(&package_dir) {
-    // The symlink target is relative, resolve it against the node_modules directory
+    // A relative symlink target resolves against the `node_modules` directory.
     let real_package_path = if real_package_dir.is_absolute() {
       real_package_dir
     } else {
       Path::new(node_modules_base).join(&real_package_dir).clean()
     };
 
-    // Append the rest of the path to the real package directory
     let pnpm_path = if rest_path.is_empty() {
       real_package_path
     } else {
@@ -524,12 +457,10 @@ fn try_resolve_pnpm_path(resolved_path: &Path) -> PathBuf {
     }
   }
 
-  // Fallback: try to find the package in .pnpm by constructing the expected path
-  // This handles cases where symlinks aren't available (e.g., some Windows
-  // configs)
+  // Without symlinks, as on some Windows setups, build the expected `.pnpm` path instead.
   let pnpm_pkg_name = package_name.replace('/', "+");
 
-  // Try to read the package.json to get the version for direct path construction
+  // Read the package version from package.json to build that path.
   let package_json_path = package_dir.join("package.json");
   if let Some(version) = fs::read_to_string(&package_json_path)
     .ok()
@@ -541,7 +472,6 @@ fn try_resolve_pnpm_path(resolved_path: &Path) -> PathBuf {
         .map(String::from)
     })
   {
-    // Construct the expected pnpm path: .pnpm/<pkg>@<version>/node_modules/<pkg>
     let pnpm_package_path = pnpm_dir
       .join(format!("{}@{}", pnpm_pkg_name, version))
       .join("node_modules")
@@ -569,22 +499,15 @@ fn try_resolve_as_module(import_path: &Path, base_dir: &Path) -> Option<PathBuf>
     .map(|resolution| try_resolve_pnpm_path(&resolution.full_path()).clean())
 }
 
-/// Resolves a single aliased candidate path against the filesystem.
-///
-/// Aliases that expand to absolute filesystem paths or to Turbopack's `/ROOT/`
-/// placeholder are resolved directly against the filesystem rather than going
-/// through module resolution, which expects relative or module-style paths.
+/// Resolves one aliased path directly against the filesystem, rewriting Turbopack's `/ROOT/`.
 fn try_resolve_aliased_path(aliased_path: &Path, root_dir: Option<&Path>) -> Option<PathBuf> {
   let aliased_str = aliased_path.to_string_lossy();
   let normalized_aliased_str = aliased_str.replace('\\', "/");
 
-  // Handle /ROOT/ placeholder paths (used by Turbopack).
-  // Replace /ROOT/ with the configured rootDir.
+  // Turbopack's `/ROOT/` placeholder stands for the configured `rootDir`.
   if let Some(rest) = normalized_aliased_str.strip_prefix("/ROOT/") {
     let Some(root_dir) = root_dir else {
-      // The placeholder cannot be rewritten without a configured `rootDir`. The
-      // literal `/ROOT/...` path will not exist on disk, so resolution fails;
-      // log it so the cause is visible rather than a silent NotFound.
+      // Without `rootDir` the literal `/ROOT/` path cannot exist, so log why resolution fails.
       debug!(
         "skipping /ROOT/ aliased path {}: no rootDir configured in \
          unstable_module_resolution",
@@ -609,17 +532,9 @@ fn try_resolve_aliased_path(aliased_path: &Path, root_dir: Option<&Path>) -> Opt
   None
 }
 
-/// Tries to resolve a path by checking various file extensions.
-/// Handles three cases:
-/// 1. Path already has a valid extension (e.g., `.js`, `.ts`) - use as-is
-/// 2. Path has a partial extension (e.g., `.stylex`) - append additional
-///    extensions
-/// 3. Path has no extension - try each extension
-///
-/// Returns `Some(path)` if a valid file is found, `None` otherwise.
+/// Finds an existing file for `base_path`, appending each extension unless it has a full one.
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn try_resolve_with_extensions(base_path: &Path) -> Option<PathBuf> {
-  // First check if the path exists as-is
   if fs::metadata(base_path).is_ok() {
     return Some(base_path.to_path_buf().clean());
   }
@@ -627,28 +542,24 @@ fn try_resolve_with_extensions(base_path: &Path) -> Option<PathBuf> {
   let path_str = base_path.to_string_lossy();
 
   for ext in EXTENSIONS.iter() {
-    // Skip if the path already ends with this extension (we already checked it
-    // above)
+    // This exact path was already checked above.
     if path_str.ends_with(ext) {
       continue;
     }
 
     let path_to_check = if let Some(existing_ext) = base_path.extension() {
       let existing_ext_str = existing_ext.to_string_lossy();
-      // Check if this is already a valid extension
       if EXTENSIONS
         .iter()
         .any(|e| e.ends_with(existing_ext_str.as_ref()))
       {
-        // Already has a valid extension and was checked above; no further resolution
-        // possible
+        // A full extension was already checked above, so nothing else can match.
         return None;
       } else {
-        // Has a partial extension like .stylex, append the new extension
+        // A partial extension such as `.stylex` gets the new extension appended.
         PathBuf::from(format!("{}{}", base_path.display(), ext))
       }
     } else {
-      // No extension, append one
       PathBuf::from(format!("{}{}", base_path.display(), ext))
     };
 

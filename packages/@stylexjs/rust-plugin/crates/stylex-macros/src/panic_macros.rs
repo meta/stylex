@@ -1,28 +1,11 @@
-//! Error handling macros for consistent error handling across the workspace.
-//!
-//! These macros provide standardized patterns for handling common error cases
-//! when working with expressions, conversions, and evaluations.
+//! Panic and error macros that produce `[StyleX]`-prefixed messages.
 
 use colored::Colorize;
 use std::borrow::Cow;
 
 use crate::stylex_error::StyleXError;
 
-/// Macro to unwrap a Result or panic with the error message.
-/// This is a cleaner replacement for `.unwrap_or_else(|error| panic!("{}",
-/// error))`.
-///
-/// # Usage
-/// ```ignore
-/// let value = unwrap_or_panic!(expr_to_num(&arg, state, traversal_state, fns));
-/// // Or with additional context:
-/// let value = unwrap_or_panic!(expr_to_num(&arg, state, traversal_state, fns), "Converting to number");
-/// ```
-///
-/// # Arguments
-/// - `$result`: A Result type to unwrap
-/// - `$context` (optional): Additional context string to prepend to the error
-///   message
+/// Unwraps a `Result` or panics with a `[StyleX]` error, optionally prefixed with `$context`.
 #[macro_export]
 macro_rules! unwrap_or_panic {
   ($result:expr) => {
@@ -39,10 +22,6 @@ macro_rules! unwrap_or_panic {
     })
   };
 }
-
-// ---------------------------------------------------------------------------
-// Constructor helpers
-// ---------------------------------------------------------------------------
 
 /// Create a simple `StyleXError` with just a message.
 pub fn stylex_err(message: impl Into<Cow<'static, str>>) -> StyleXError {
@@ -75,12 +54,7 @@ fn format_source_location(caller: &std::panic::Location<'_>) -> Cow<'static, str
   format!("{}:{}", caller.file(), caller.line()).into()
 }
 
-// ---------------------------------------------------------------------------
-// Internal diverging functions (called by macros — not for direct use)
-//
-// Macros must call these via `$crate::…` paths because Rust macros cannot
-// invoke other `#[macro_export]` macros by `$crate::macro_name!()`.
-// ---------------------------------------------------------------------------
+// Diverging helpers the macros reach through `$crate::` paths; not for direct use.
 
 #[cfg_attr(coverage_nightly, coverage(off))]
 #[doc(hidden)]
@@ -122,18 +96,7 @@ pub fn __stylex_unreachable(mut err: StyleXError) -> ! {
   panic!("{}", err)
 }
 
-// ---------------------------------------------------------------------------
-// Convenience macros
-// ---------------------------------------------------------------------------
-
 /// Like `panic!()` but produces `[StyleX] <message>`.
-///
-/// Usage:
-/// ```ignore
-/// stylex_panic!();
-/// stylex_panic!("border is not supported");
-/// stylex_panic!("Invalid value: {}", val);
-/// ```
 #[macro_export]
 macro_rules! stylex_panic {
   () => {
@@ -196,9 +159,7 @@ macro_rules! stylex_unreachable {
   };
 }
 
-/// Like `anyhow::bail!()` but wraps the error in `StyleXError`.
-///
-/// Returns `Err(anyhow::Error)` with the `[StyleX]` prefix.
+/// Like `anyhow::bail!()`, but returns a `StyleXError` with the `[StyleX]` prefix.
 #[macro_export]
 macro_rules! stylex_bail {
   ($($arg:tt)*) => {
@@ -208,9 +169,7 @@ macro_rules! stylex_bail {
   };
 }
 
-/// Like `anyhow::anyhow!()` but wraps in `StyleXError`.
-///
-/// Returns `anyhow::Error` (not `Result`).
+/// Like `anyhow::anyhow!()`, but wraps the message in a `StyleXError`.
 #[macro_export]
 macro_rules! stylex_anyhow {
   ($($arg:tt)*) => {
@@ -220,15 +179,7 @@ macro_rules! stylex_anyhow {
   };
 }
 
-/// Unwrap a `Result` or panic with a `[StyleX]` prefixed message.
-///
-/// Drop-in replacement for the existing `unwrap_or_panic!` macro.
-///
-/// Usage:
-/// ```ignore
-/// let val = stylex_unwrap!(result);
-/// let val = stylex_unwrap!(result, "Converting value");
-/// ```
+/// Unwraps a `Result` or panics with a `[StyleX]` error, optionally prefixed with a context.
 #[macro_export]
 macro_rules! stylex_unwrap {
   ($result:expr) => {

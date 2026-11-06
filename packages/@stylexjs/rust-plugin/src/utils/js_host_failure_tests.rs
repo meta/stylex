@@ -1,10 +1,8 @@
-//! Compiler-failure causes: attached by the compiler function that failed,
-//! reported only for the operation its own exception made fail.
+//! Compiler-failure causes are reported only for the operation their exception failed.
 use super::*;
 use crate::utils::host::{call_closure, with_callback, HOST_CALLBACK_THREW};
 
-/// A host whose `@call` lets the exception with `cause` escape (as JavaScript
-/// does when user code does not catch it), and whose `@get` fails plainly.
+/// A host whose `@call` lets the exception with `cause` escape and whose `@get` fails plainly.
 fn escaping(cause: Option<u64>) -> Rc<crate::utils::host::HostCallback> {
     Rc::new(
         move |id: &str, _: &[HostValue]| -> anyhow::Result<HostValue> {
@@ -55,14 +53,12 @@ fn the_exception_of_a_compiler_failure_carries_its_cause() {
         assert_eq!(failure.message, "evaluation failed");
         let cause = failure.cause.expect("a compiler failure has a cause");
 
-        // Its exception escaped the next operation: the cause comes back.
         with_callback(escaping(Some(cause)), || {
             assert!(host
                 .call(&callee(&host), &CoreValue::Undefined, &[])
                 .is_err());
             let found = host.failure_cause().expect("the escaped failure's cause");
             assert_eq!(found.downcast_ref::<u32>(), Some(&42));
-            // The next operation resets it, and a plain failure has none.
             assert!(host.get(&callee(&host), "x").is_err());
             assert!(host.failure_cause().is_none());
         });

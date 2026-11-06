@@ -1,5 +1,4 @@
-//! Canonical Babel/jsesc spelling for NEW JavaScript strings. Original literals
-//! retain their exact source/raw text. Callers choose JS vs JSX context explicitly.
+//! Babel's (jsesc) spelling for generated JavaScript and JSX strings.
 pub(crate) fn string_literal(value: &str) -> String {
     const HEX: &[u8; 16] = b"0123456789ABCDEF";
     let mut output = String::with_capacity(value.len() + 2);

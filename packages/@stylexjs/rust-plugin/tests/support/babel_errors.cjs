@@ -7,10 +7,9 @@
 
 'use strict';
 
-// How an exception thrown by user code reaches the caller, compared between
-// the original Babel plugin run by @babel/core, the native compiler's direct
-// API and its Babel facade. Every engine gets fresh options and a fresh
-// thrown value, since Babel mutates the value it rethrows.
+// Compares how an exception from user code reaches the caller through the Babel
+// plugin, the native API and the Babel facade. Each engine gets a fresh thrown
+// value, since Babel mutates the value it rethrows.
 
 const path = require('node:path');
 const babel = require('@babel/core');
@@ -126,8 +125,7 @@ const scenarios = {
     };
     return { thrown, reads: () => count };
   }),
-  // Without a filename Babel's plugin never calls the resolver: the import
-  // fails to resolve instead.
+  // Babel's plugin skips the resolver without a filename, so the import fails.
   'a module resolver throwing a string': () => {
     const thrown = 'resolver boom';
     return {
@@ -149,8 +147,7 @@ const scenarios = {
   },
 };
 
-// An absolute filename on this platform (a drive-rooted path on Windows),
-// as Babel resolves it.
+// An absolute filename on this platform, resolved as Babel does.
 const appFile = (name) => path.resolve('/app', name);
 
 const filenames = [appFile('a.js'), undefined, 'relative/a.js'];

@@ -7,11 +7,9 @@
 
 'use strict';
 
-// Compares whole-file transforms (parse, compile, print, CSS metadata) of the
-// current Babel plugin and the native compiler on the repository's benchmark
-// fixtures. A fixture only reports a ratio when both engines produce the same
-// StyleX metadata and the same program (compared after reprinting both outputs
-// with Babel), so the timings describe comparable work.
+// Benchmarks the Babel plugin against the native compiler on the repository's
+// fixtures. A fixture reports a ratio only when both produce the same program
+// and StyleX metadata.
 //
 // node scripts/benchmark.cjs [--iterations=N] [--json=out.json] [--only=name]
 

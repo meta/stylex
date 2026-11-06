@@ -1,7 +1,6 @@
-//! Typed postflight equality: ignore source locations, hygiene contexts, primitive
-//! literal spellings, and expression parentheses, but retain every other field.
-//! Callers provide the Rust stack budget and separately check lexical directives
-//! (including escapes/grouping), provenance, and non-finite-number validity.
+//! Typed AST equality ignoring locations, hygiene, literal spellings and parentheses.
+//!
+//! Callers provide the stack and check directives and provenance separately.
 
 use std::borrow::Cow;
 use swc_core::common::{util::take::Take, EqIgnoreSpan, SyntaxContext};
@@ -10,15 +9,13 @@ use swc_core::ecma::visit::{Visit, VisitMut, VisitMutWith, VisitWith};
 
 pub(crate) fn modules_equivalent(actual: &Module, expected: &Module) -> bool {
     if actual == expected {
-        // Strict equality includes Ident.optional; EqIgnoreSpan retains AST29's
-        // numeric value policy while ignoring locations and literal spelling.
+        // Strict equality includes `Ident.optional`.
         return actual.eq_ignore_span(expected) && !contains_nan(actual);
     }
     if actual.eq_ignore_span(expected) {
         return !contains_nan(actual) && optional_identifiers_equivalent(actual, expected);
     }
-    // Modules only contain a span, shebang, and ordered items. Normalize items
-    // independently: a single rewritten call must not clone the entire module.
+    // Normalize items independently, so one edit does not clone the module.
     actual.shebang == expected.shebang
         && actual.body.len() == expected.body.len()
         && actual
@@ -49,8 +46,6 @@ where
     if actual == expected {
         return actual.eq_ignore_span(expected) && !contains_nan(actual);
     }
-    // EqIgnoreSpan ignores primitive literal raw, but preserves AST29 numeric
-    // value semantics (including signed zero), typed WTF-8, and template fields.
     if actual.eq_ignore_span(expected) {
         return !contains_nan(actual) && optional_identifiers_equivalent(actual, expected);
     }
@@ -72,8 +67,7 @@ where
         && optional_identifiers_equivalent(actual.as_ref(), expected.as_ref())
 }
 
-// AST29 canonicalizes NaN equality, but NaN cannot be an authored JS numeric
-// literal. Preserve the prior strict postflight contract without serializing.
+// SWC treats NaN literals as equal, but source cannot contain one.
 #[derive(Default)]
 struct NumericValidity(bool);
 impl Visit for NumericValidity {
@@ -141,17 +135,13 @@ impl VisitMut for Normalize {
             };
             *expression = *parenthesized.expr;
         }
-        // In particular, do not unwrap TS/Flow casts or optional-chain nodes.
-        // Grouping-sensitive optional chains retain distinct Call/Member vs
-        // OptChain structure after expression parentheses are removed.
+        // Casts and optional chains are not unwrapped.
         expression.visit_mut_children_with(self);
     }
 
     fn visit_mut_simple_assign_target(&mut self, target: &mut SimpleAssignTarget) {
         target.visit_mut_children_with(self);
         if let SimpleAssignTarget::Paren(parenthesized) = target {
-            // The expression visitor already removed nested parentheses and
-            // normalized its children. TryFrom retains all TS target variants.
             let span = parenthesized.span;
             let expression = parenthesized.expr.take();
             *target = match SimpleAssignTarget::try_from(expression) {
@@ -165,9 +155,7 @@ impl VisitMut for Normalize {
     }
 }
 
-// SWC Ident::eq_ignore_span compares only sym/ctxt, omitting the TS optional
-// parameter flag. Compare its positions in the identical typed traversal too.
-// Ordinary trees (no optional identifiers) allocate nothing for this guard.
+// SWC's `Ident::eq_ignore_span` skips the TypeScript optional flag; compare it too.
 #[derive(Default)]
 struct OptionalIdentifiers {
     index: usize,

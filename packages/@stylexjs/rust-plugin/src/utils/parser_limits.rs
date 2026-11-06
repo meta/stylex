@@ -1,5 +1,4 @@
-//! Parser-side limits, applied to the real context-sensitive SWC token stream.
-//! This runs before recursive descent, on normal production/test thread stacks.
+//! Nesting limits checked on SWC's token stream before recursive descent.
 
 use swc_core::common::{comments::Comments, BytePos, SourceFile, Span};
 use swc_core::ecma::ast::EsVersion;
@@ -38,8 +37,7 @@ pub(crate) const MAX_SYNTAX_COMPLEXITY: usize = 2048;
 pub(crate) const MAX_RECURSIVE_DEPTH: usize = 1024;
 // Statement controls and braced code blocks must not consume expression depth.
 pub(crate) const MAX_STATEMENT_DEPTH: usize = 8192;
-// Require the complete pure-parser budget before entering recursive descent.
-// Host callbacks and all later compiler passes remain on their owner's thread.
+// Stack the parser needs before entering recursive descent.
 pub(crate) const PARSER_STACK_RED_ZONE: usize = PARSER_STACK_SIZE;
 pub(crate) const PARSER_STACK_SIZE: usize = 256 * 1024 * 1024;
 
@@ -247,9 +245,7 @@ impl Statements {
                 return;
             }
         }
-        // A leaf's ASI boundary precedes any pending else resolution. Reserved
-        // statement starts cannot continue a completed expression (even for
-        // semicolon-free compound declarations on the same source line).
+        // A reserved statement start cannot continue a completed expression.
         let strong = matches!(
             kind,
             Token::If
@@ -461,8 +457,7 @@ impl BoundedLexer<'_> {
     fn observe(&mut self, mut token: TokenAndSpan, jsx_scan: bool) -> TokenAndSpan {
         if let Some(error) = &self.limits.resource_error {
             if jsx_scan {
-                // SWC's JSX child scanner accepts EOF, not Error; its JSX-name
-                // rescan additionally promises JSXName to Buffer's debug check.
+                // SWC's JSX child scanner accepts EOF, not Error.
                 if token.token != Token::JSXName {
                     token.token = Token::Eof;
                 }
@@ -480,10 +475,7 @@ impl BoundedLexer<'_> {
         let kind = token.token;
         let frame_index = self.limits.frames.len() - 1;
         if !jsx_scan {
-            // Confirm the contextual declaration with its name and parameter
-            // opener. `hook()`, `component.as` and `component as T` are ordinary
-            // expressions, not function headers. Use the real token stream;
-            // never classify source text before lexing it.
+            // `hook()`, `component.as` and `component as T` are expressions, not headers.
             if let Some((frame, named)) = self.limits.flow_function_keyword.take() {
                 if frame == frame_index {
                     if !named && kind.is_word() {
@@ -526,9 +518,7 @@ impl BoundedLexer<'_> {
         }
         let header = self.jsx_header();
         let within_header = self.within_jsx_header();
-        // The parser may lex the next `as` while still leaving the preceding
-        // cast's InType context. Charge it in Flow as well as TypeScript; line
-        // breaks are not casts in this pinned grammar and still permit ASI.
+        // The parser may lex the next `as` before leaving the preceding cast's type context.
         let cast_word = self.lexer.syntax().typescript()
             && !token.had_line_break
             && matches!(kind, Token::As | Token::Satisfies)
@@ -549,8 +539,7 @@ impl BoundedLexer<'_> {
                 .leaf
                 .is_some_and(|leaf| !leaf.declaration && !leaf.clause)
         {
-            // A block after an ASI-ended expression is a statement, not an
-            // object/type delimiter charged to the expression budget.
+            // A block after an ASI-ended expression is a statement.
             let frame = &mut self.limits.frames[frame_index];
             frame.statements.complete();
             frame.statements.resolve_else(kind);
@@ -611,8 +600,7 @@ impl BoundedLexer<'_> {
                 starts_noncontinuation,
             );
         }
-        // Only non-continuation starts at statement-capable delimiter levels.
-        // Never reset for newline `(`, `[`, template starts, `.`, operators, etc.
+        // Only statement starts reset, never a continuation like `(`, `[` or `.`.
         if !header
             && !jsx_scan
             && statement_frame
@@ -629,8 +617,7 @@ impl BoundedLexer<'_> {
         }
         let function_parameters = kind == Token::LParen
             && self.limits.function_header == Some(frame_index)
-            // Lookahead can lex the parameter opener before leaving the
-            // preceding generic's InType context, unlike parens inside it.
+            // Lookahead can lex the parameter opener before leaving the generic's type context.
             && (!self.lexer.ctx().contains(Context::InType)
                 || (self.limits.type_depth == 0
                     && matches!(previous, Some(Token::Gt | Token::RShift | Token::ZeroFillRShift))));
@@ -675,9 +662,7 @@ impl BoundedLexer<'_> {
         {
             property.property_value = true;
         }
-        // Parser 45 no longer keeps InPropertyName while lexing a method's
-        // `(`. A key/parameter opener is distinct from a call in a property
-        // value (`key: f()` or `field = f()`).
+        // A method's `(` is not a call in a property value (`key: f()`).
         let method_parameters = kind == Token::LParen
             && self.limits.frames.last().unwrap().closing == Some(Token::RBrace)
             && !self.limits.frames.last().unwrap().statements.code
@@ -690,8 +675,7 @@ impl BoundedLexer<'_> {
                         Some(Token::Gt | Token::RShift | Token::ZeroFillRShift)
                     )));
         if method_parameters && previous == Some(Token::New) {
-            // `new` as a method name was lexed before the parser marked the
-            // property-name context; undo its tentative constructor cost.
+            // `new` as a method name: undo its tentative constructor cost.
             let frame = self.limits.frames.last_mut().unwrap();
             frame.operators = frame.operators.saturating_sub(1);
         }
@@ -724,8 +708,7 @@ impl BoundedLexer<'_> {
             || (kind == Token::New && !matches!(previous, Some(Token::Dot | Token::OptionalChain)))
             || (suffix_start && !function_parameters && !method_parameters);
         if within_header {
-            // JSX member-name/type subtrees have their own bounded cost, not
-            // expression-chain cost that survives into subsequent siblings.
+            // JSX name and type subtrees have their own cost.
             if kind == Token::Dot || (self.lexer.ctx().contains(Context::InType) && adds_operator) {
                 self.limits.jsx.last_mut().unwrap().operators += 1;
             }
@@ -857,8 +840,6 @@ impl BoundedLexer<'_> {
             || const_cast_end
             || (!header && !cast_word && can_end_expression(kind, self.lexer.ctx()));
         self.limits.last = Some((kind, token.span));
-        // One pass over the frames and one over the JSX frames for the four
-        // totals, each summed exactly as a separate pass would.
         let mut code_blocks = 0usize;
         let mut frame_operators = 0usize;
         let mut frame_arrows = 0usize;
@@ -934,9 +915,7 @@ impl BoundedLexer<'_> {
 impl<'a> Tokens for BoundedLexer<'a> {
     type Checkpoint = (<Lexer<'a> as Tokens>::Checkpoint, Limits);
     fn set_ctx(&mut self, ctx: Context) {
-        // Lookahead may lex a return-type `{` before InType is installed, or
-        // the real body `{` before InType is removed. Reclassify only braces
-        // already associated with a parsed function/method parameter list.
+        // Lookahead may lex a `{` in the wrong type context; reclassify those after parameters.
         let len = self.limits.frames.len();
         if len > 1 && self.limits.frames[len - 1].closing == Some(Token::RBrace) {
             let (parents, current) = self.limits.frames.split_at_mut(len - 1);
@@ -1018,8 +997,7 @@ impl<'a> Tokens for BoundedLexer<'a> {
         self.lexer.diagnostic_checkpoint_save()
     }
     fn diagnostic_checkpoint_load(&mut self, checkpoint: (usize, usize)) {
-        // Resource diagnostics live in Limits, restored with the token
-        // checkpoint; the lexer owns the recoverable diagnostic buffers.
+        // Restored with the token checkpoint.
         self.lexer.diagnostic_checkpoint_load(checkpoint);
     }
     fn set_defer_comments(&mut self, defer: bool) {
@@ -1098,8 +1076,7 @@ pub(crate) fn with_bounded_file_parser<T>(
     errors: &mut Vec<Error>,
     op: impl for<'a> FnOnce(&mut Parser<BoundedLexer<'a>>) -> PResult<T>,
 ) -> PResult<T> {
-    // The callback must remain pure Rust parser work. Never wrap a native
-    // JavaScript/Host callback in this stack switch (V8 has stack affinity).
+    // Never call JavaScript inside this stack switch: V8 has stack affinity.
     stacker::maybe_grow(PARSER_STACK_RED_ZONE, PARSER_STACK_SIZE, || {
         let lexer = Lexer::new(syntax, target, StringInput::from(file), comments);
         let mut parser = Parser::new_from(BoundedLexer::new(lexer));

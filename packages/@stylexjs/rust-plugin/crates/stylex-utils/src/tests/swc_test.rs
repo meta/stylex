@@ -1,15 +1,4 @@
-// ── get_expr_node_kind ─────────────────────────────────────────────
-//
-// The kind reaches an author inside a compiler diagnostic, so every name here
-// is checked against the syntax that produces it rather than against the SWC
-// variant it came from — a mapping written from the variant names would agree
-// with itself and still be wrong.
-
-/// Runs a deep fixture's parse, walk and drop with stack claimed for its
-/// nesting, as the compiler claims it around the parser and the transform
-/// (`stacker::maybe_grow`), rather than on whatever a test thread has left.
-/// The claim is per nesting level, the cost the evaluator's growable stack
-/// measures a parser level at (`BYTES_PER_LEVEL`, 64 KiB), plus a megabyte.
+/// Runs `work` on a stack sized for `levels` of nesting, as the compiler does with `stacker`.
 fn on_a_stack_for<R>(levels: usize, work: impl FnOnce() -> R) -> R {
   let claim = levels * 64 * 1024 + 1024 * 1024;
   stacker::maybe_grow(claim, claim, work)
@@ -93,11 +82,7 @@ mod node_kind {
     }
   }
 
-  /// A logical operator gets its own node kind. SWC keeps `&&`, `||` and `??`
-  /// in the same variant as `+`, and a diagnostic about `a && b` that says
-  /// `BinaryExpression` names a node the language does not have — which
-  /// matters because these three are exactly the operators that evaluate an
-  /// operand speculatively, so they are the ones a refusal is reported from.
+  /// ESTree gives `&&`, `||` and `??` their own node, while SWC keeps them in `Expr::Bin`.
   #[test]
   fn separates_a_logical_operator_from_an_arithmetic_one() {
     for source in ["a && b", "a || b", "a ?? b"] {
@@ -109,9 +94,6 @@ mod node_kind {
     }
   }
 
-  /// An optional chain is named by what it chains onto, because that is the
-  /// distinction an author can act on: `a?.b` reads a property and `a?.b()`
-  /// calls one. SWC wraps both in one variant.
   #[test]
   fn names_an_optional_chain_by_its_base() {
     assert_kind("a?.b.c", es_jsx(), "OptionalMemberExpression");
@@ -119,17 +101,12 @@ mod node_kind {
     assert_kind("a?.b().c", es_jsx(), "OptionalMemberExpression");
   }
 
-  /// `TsConstAssertion` is the one SWC variant with two ESTree spellings —
-  /// `x as const` is a `TSAsExpression` and `<const>x` a `TSTypeAssertion` —
-  /// so one of the two forms is named for the other. Pinned so the compromise
-  /// is a recorded choice rather than something a reader has to rediscover,
-  /// and so a future SWC split of the variant fails here.
+  /// SWC's `TsConstAssertion` covers both `x as const` and `<const>x`; both get the `as` name.
   #[test]
   fn names_both_const_assertion_spellings_after_the_as_form() {
     assert_kind("a as const", ts(), "TSAsExpression");
     assert_kind("<const>a", ts(), "TSAsExpression");
 
-    // The neighbouring form SWC does keep separate is unaffected.
     assert_kind("<number>a", ts(), "TSTypeAssertion");
   }
 
@@ -149,9 +126,6 @@ mod node_kind {
     }
   }
 
-  /// The kinds that only ever appear nested inside another node, so no source
-  /// text parses to one on its own. They are still reachable by an evaluator
-  /// walking into a subtree, and the function is total, so each is named.
   #[test]
   fn names_the_kinds_that_only_appear_nested() {
     let super_prop = Expr::SuperProp(SuperPropExpr {
@@ -199,10 +173,6 @@ mod node_kind {
     assert_eq!(get_expr_node_kind(&jsx_empty), "JSXEmptyExpression");
   }
 
-  /// A parse failure has no node at all, so there is no ESTree name to give
-  /// it. Naming it after the SWC variant beats an empty label or a panic: the
-  /// function is asked about whatever the parser produced, and a parser that
-  /// failed still produces something.
   #[test]
   fn names_a_node_that_failed_to_parse() {
     let invalid = Expr::Invalid(Invalid { span: DUMMY_SP });
@@ -210,10 +180,6 @@ mod node_kind {
     assert_eq!(get_expr_node_kind(&invalid), "Invalid");
   }
 
-  /// The kind describes the node, never the value it would produce. A member
-  /// access is a `MemberExpression` whether or not the receiver is foldable,
-  /// which is the whole point: the vague label this replaced came from asking
-  /// about the value.
   #[test]
   fn describes_the_node_and_not_its_value() {
     assert_kind("'abc'.length", es_jsx(), "MemberExpression");
@@ -222,8 +188,6 @@ mod node_kind {
     assert_kind("(() => 1)()", es_jsx(), "CallExpression");
   }
 
-  /// Two calls agree, and the answer borrows nothing from the expression, so a
-  /// label can be held past the node it describes.
   #[test]
   fn is_a_static_label() {
     let expr = parse_expr("a.b", es_jsx());
@@ -235,11 +199,7 @@ mod node_kind {
     assert_eq!(first, "MemberExpression");
   }
 
-  /// Deeply nested syntax is named by its outermost node and nothing else, so
-  /// the label costs one match arm regardless of depth — no recursion, and no
-  /// walk into the subtree. The depth is held well under the parser's own
-  /// recursion limit on purpose: past it the parser overflows before the label
-  /// is ever asked for, which would test the parser rather than this.
+  /// Depth stays below the parser's recursion limit, so this tests the label, not the parser.
   #[test]
   fn names_only_the_outermost_node_of_deep_syntax() {
     let depth = 500;
@@ -260,9 +220,6 @@ mod node_kind {
     });
   }
 
-  /// Non-ASCII and escaped identifiers are ordinary identifiers. The label is
-  /// a fixed string either way, so nothing in it can be malformed by the
-  /// source text it describes.
   #[test]
   fn names_unicode_and_escaped_syntax() {
     assert_kind("\u{4f60}\u{597d}", es_jsx(), "Identifier");
@@ -272,12 +229,6 @@ mod node_kind {
   }
 }
 
-// ── get_stmt_node_kind ─────────────────────────────────────────────
-//
-// The statement half, checked the same way and for the same reason: every name
-// is read back from the syntax that produces it, so a mapping copied from the
-// SWC variant names cannot agree with itself and still be wrong.
-
 mod stmt_kind {
   use crate::swc::get_stmt_node_kind;
   use swc_core::{
@@ -286,10 +237,7 @@ mod stmt_kind {
   };
   use swc_ecma_parser::{EsSyntax, Parser, StringInput, Syntax, TsSyntax, lexer::Lexer};
 
-  /// The first statement of `source`, parsed as a script.
-  ///
-  /// A script rather than a module because `with` is a syntax error under a
-  /// module's implicit strict mode, and it is one of the kinds this names.
+  /// Parses the first statement as a script, because `with` is an error in a module.
   fn parse_stmt(source: &str, syntax: Syntax) -> Stmt {
     let source_map: Lrc<SourceMap> = Default::default();
     let source_file = source_map.new_source_file(FileName::Anon.into(), source.to_string());
@@ -318,8 +266,7 @@ mod stmt_kind {
     Syntax::Typescript(TsSyntax::default())
   }
 
-  /// The first statement of the block `stmt` carries, for the kinds that are
-  /// only legal inside a loop or a function and so cannot be parsed alone.
+  /// The first statement in the body of a loop or function, for kinds that can't stand alone.
   fn first_in_body(stmt: &Stmt) -> Stmt {
     let body = match stmt {
       Stmt::While(while_stmt) => match while_stmt.body.as_ref() {
@@ -388,8 +335,6 @@ mod stmt_kind {
     }
   }
 
-  /// The three kinds a statement position alone cannot reach: each is a syntax
-  /// error outside the loop or the function that gives it meaning.
   #[test]
   fn names_the_kinds_only_a_loop_or_a_function_body_can_hold() {
     let in_loop = parse_stmt("while (a) { break; }", es());
@@ -410,15 +355,11 @@ mod stmt_kind {
       "ReturnStatement"
     );
 
-    // A bare `return` is the same statement, since the kind describes the node
-    // and not the value it carries.
     let bare = parse_stmt("function f() { return; }", es());
     assert_eq!(get_stmt_node_kind(&first_in_body(&bare)), "ReturnStatement");
   }
 
-  /// `using` is a declaration SWC keeps in its own variant, and ESTree spells
-  /// it as an ordinary `VariableDeclaration` — so the two share one name here.
-  /// Pinned so the compromise is a recorded choice rather than a rediscovery.
+  /// ESTree spells SWC's separate `using` declaration as a `VariableDeclaration`.
   #[test]
   fn names_a_using_declaration_after_the_variable_form() {
     assert_kind("using a = f();", es(), "VariableDeclaration");
@@ -445,10 +386,7 @@ mod stmt_kind {
     }
   }
 
-  /// The kind describes the outermost node and nothing it contains, so a body
-  /// of any depth costs the same single match arm — no recursion and no walk.
-  /// The depth stays well under the parser's own recursion limit, which would
-  /// otherwise overflow before the label was ever asked for.
+  /// Depth stays below the parser's recursion limit, so this tests the label, not the parser.
   #[test]
   fn names_only_the_outermost_statement_of_deep_syntax() {
     let depth = 200;
@@ -464,12 +402,9 @@ mod stmt_kind {
     );
     super::on_a_stack_for(depth, || assert_kind(&labels, es(), "LabeledStatement"));
 
-    // A statement whose *body* is a different kind is still named for itself.
     assert_kind("if (a) { for (;;) ; }", es(), "IfStatement");
   }
 
-  /// Two calls agree and the answer borrows nothing from the statement, so a
-  /// label can be held past the node it describes.
   #[test]
   fn is_a_static_label() {
     let stmt = parse_stmt("for (;;) ;", es());
@@ -481,9 +416,6 @@ mod stmt_kind {
     assert_eq!(first, "ForStatement");
   }
 
-  /// Every name is an ESTree kind, so none of them may leak an SWC spelling —
-  /// and the statement names never collide with a different statement's, which
-  /// is what makes the label worth putting in a diagnostic at all.
   #[test]
   fn every_name_is_an_estree_kind() {
     let sources = [
@@ -526,13 +458,6 @@ mod stmt_kind {
   }
 }
 
-// ── syntax_for_file ────────────────────────────────────────────────
-//
-// The answer decides whether a module parses at all, so every case parses a
-// source through the syntax the file name earns rather than inspecting the
-// flag: a `.ts` module holding a generic arrow has to parse, and a `.tsx`
-// module holding an element has to keep parsing.
-
 mod file_syntax {
   use std::path::Path;
 
@@ -540,16 +465,12 @@ mod file_syntax {
   use swc_core::common::{FileName, SourceMap, sync::Lrc};
   use swc_ecma_parser::{Parser, StringInput, Syntax, lexer::Lexer};
 
-  /// A generic arrow and an angle-bracket type assertion: the two forms a
-  /// TypeScript module without JSX reads as types, and a TSX module as the
-  /// start of an element.
+  /// A generic arrow and an angle-bracket assertion, which TSX would read as elements.
   const TYPESCRIPT_WITHOUT_JSX: &str =
     "const px = <T>(value: T) => `${value}px`;\nconst node = <HTMLElement>document.body;\n";
 
-  /// An element, which only a module admitting JSX reads.
   const JSX: &str = "const element = <div>{value}</div>;\n";
 
-  /// Whether `source` parses as a module under the syntax `file` earns.
   fn parses(file: &str, source: &str) -> bool {
     let cm: Lrc<SourceMap> = Default::default();
     let fm = cm.new_source_file(
@@ -570,8 +491,7 @@ mod file_syntax {
     match syntax_for_file(Path::new(file)) {
       Syntax::Typescript(syntax) => syntax.tsx,
       Syntax::Es(_) => panic!("{file} is parsed as plain ECMAScript"),
-      // The variant exists when the workspace enables the parser's `flow`
-      // feature; this crate never selects it.
+      // Reachable only when the workspace enables the parser's `flow` feature.
       #[allow(unreachable_patterns)]
       _ => panic!("{file} is parsed with another grammar"),
     }
@@ -628,10 +548,7 @@ mod file_syntax {
 
   #[test]
   fn an_unrecognised_extension_keeps_what_every_input_was_parsed_with() {
-    // The answer every input had before the extension was asked, so nothing
-    // that compiled stops compiling: JSX stays admitted. A name that is nothing
-    // but the extension has none (`Path::extension` reads `.ts` as a hidden
-    // file), and the `swcPlugins` pre-pass in `index.ts` reads it the same way.
+    // `Path::extension` reads a bare `.ts` as a hidden file, as the `swcPlugins` pre-pass does.
     for file in [
       "page",
       "page.",
@@ -651,8 +568,6 @@ mod file_syntax {
 
   #[test]
   fn every_answer_is_typescript() {
-    // The language is the superset and was never chosen per file; only the
-    // JSX flag follows the extension.
     for file in [
       "a.ts", "a.tsx", "a.js", "a.jsx", "a.mjs", "a.cjs", "a.mts", "a.cts", "a",
     ] {

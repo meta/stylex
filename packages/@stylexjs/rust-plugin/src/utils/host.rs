@@ -13,32 +13,25 @@ pub(crate) enum HostValue {
     Undefined,
     Null,
     Boolean(bool),
-    /// In serialized options a number is its JavaScript text (`-0`, `NaN`,
-    /// `Infinity` included); across the host boundary, a JavaScript number.
+    /// Serialized in options as its JavaScript text (`-0`, `NaN`, `Infinity` included).
     #[serde(with = "number_text")]
     Number(f64),
     String(String),
-    /// A JavaScript string that is not well-formed UTF-16 (it contains a lone
-    /// surrogate), carried as its exact code units so nothing is replaced.
+    /// A string with a lone surrogate, as its exact UTF-16 code units.
     Utf16(Vec<u16>),
     Array(Vec<HostValue>),
     Object(Vec<(String, HostValue)>),
-    /// A JavaScript value the host keeps for the current transform (functions,
-    /// class instances, `Map`/`Date`, cyclic objects, symbols). Operations on it
-    /// run as real JavaScript on the JS thread, lazily, when the compiler asks.
+    /// A live JavaScript value the host keeps; operations on it run lazily as JavaScript.
     Handle(String),
-    /// A compiler function passed to JavaScript; the host exposes it as a
-    /// callable that runs it back on the compiler thread.
+    /// A compiler function, callable from JavaScript.
     Closure(String),
 }
 
 /// A compiler function JavaScript may call: `(this, arguments) -> result`.
 pub(crate) type HostClosure = dyn Fn(&HostValue, &[HostValue]) -> Result<HostValue>;
 
-/// Lifetime facts about compiler functions that only the JavaScript thread
-/// observes: a function is retained while its JavaScript wrapper exists and
-/// released once that wrapper is garbage-collected. Shared by one JavaScript
-/// thread and its compiler thread.
+/// Which compiler functions JavaScript still holds a wrapper for, shared by a
+/// JavaScript thread and its compiler thread.
 #[cfg(feature = "node")]
 #[derive(Default)]
 pub(crate) struct ClosureLedger {
@@ -75,10 +68,8 @@ impl ClosureLedger {
     }
 }
 
-/// Compiler functions outlive the transform that created them, exactly like
-/// the JavaScript closures Babel's evaluator returns: each owns its lexical
-/// snapshot and its transform's host, and stays callable until JavaScript
-/// drops it. Ids are never reused, so a stale or foreign id can only fail.
+/// Compiler functions, which outlive their transform like the closures Babel's
+/// evaluator returns. Ids are never reused, so a stale id can only fail.
 #[derive(Default)]
 struct ClosureRegistry {
     next: u64,
@@ -88,10 +79,8 @@ struct ClosureRegistry {
 }
 #[cfg(feature = "node")]
 impl ClosureRegistry {
-    /// Drops functions JavaScript released, and functions that were never
-    /// handed to JavaScript (for example when encoding a later argument of
-    /// the same call failed). Runs when an operation starts: every function
-    /// sent to JavaScript has been wrapped (and retained) by then.
+    /// Drops functions JavaScript released or never received; run when an
+    /// operation starts, when every function sent has been wrapped.
     fn collect(&mut self) {
         let Some(ledger) = self.ledger.clone() else {
             return;
@@ -117,20 +106,15 @@ thread_local! {
     static CLOSURES: RefCell<ClosureRegistry> = RefCell::new(ClosureRegistry::default());
 }
 
-/// Runs a separate operation (a nested transform, or a compiler function
-/// called from JavaScript) re-entrantly on the compiler thread, inside the host
-/// request it interrupts, with the compiler's per-thread ambient state (panic
-/// span, warning collector, stderr suppression, evaluation budget) saved and
-/// restored around it.
+/// Runs a nested operation re-entrantly, saving and restoring the compiler's
+/// per-thread state around it.
 #[cfg(feature = "node")]
 pub(crate) fn isolated_operation(operation: impl FnOnce()) {
     crate::utils::isolated(operation)
 }
 
-/// A compiler callback belongs to the host operation that called it. Its
-/// factory restores the owning budget and lexical inputs; retain the caller's
-/// effect/warning sinks, isolating only error and panic bookkeeping.
-// Only the N-API layer calls it, and that layer is not built for unit tests.
+/// Runs a compiler callback for the host operation that called it, keeping
+/// the caller's effect and warning sinks.
 #[cfg(all(feature = "node", not(test)))]
 pub(crate) fn compiler_callback_operation(operation: impl FnOnce()) {
     stylex_macros::stylex_error::with_isolated_error_state(|| {
@@ -153,8 +137,7 @@ impl Drop for CallbackScope {
         CALLBACKS.with(|stack| {
             let mut stack = stack.borrow_mut();
             stack.pop();
-            // Without a ledger (direct Rust use) nothing can retain a
-            // function after the outermost operation.
+            // Without a ledger (direct Rust use) nothing outlives the outermost operation.
             if stack.is_empty() {
                 CLOSURES.with(|closures| {
                     let mut closures = closures.borrow_mut();
@@ -169,9 +152,7 @@ impl Drop for CallbackScope {
     }
 }
 
-/// Runs one host operation (a transform, or a compiler function called from
-/// JavaScript) with `callback` serving its host requests. Operations nest:
-/// the innermost callback serves requests until it returns.
+/// Runs one host operation with `callback` serving its host requests.
 #[cfg(any(test, feature = "node"))]
 pub(crate) fn with_callback<T>(callback: Rc<HostCallback>, operation: impl FnOnce() -> T) -> T {
     #[cfg(feature = "node")]
@@ -184,11 +165,8 @@ pub(crate) fn with_callback<T>(callback: Rc<HostCallback>, operation: impl FnOnc
 /// The error a host request fails with when the user code it ran threw.
 pub(crate) const HOST_CALLBACK_THREW: &str = "a JavaScript host callback threw";
 
-/// A failed host request or compiler function, as it crosses between the
-/// compiler and JavaScript threads. `cause` is the id of a compiler failure
-/// (see `HostEnv::compiler_failure`) of the host involved: for a request, the
-/// user code let the very exception raised for that failure escape; for a
-/// compiler function, the function failed with it.
+/// A failed host request or compiler function. `cause` is the id of the
+/// compiler failure whose exception it carries, if any.
 #[derive(Debug)]
 pub(crate) struct WireFailure {
     pub(crate) message: String,

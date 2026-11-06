@@ -1,9 +1,5 @@
-//! The public core's host interface: `JsHost` is the JavaScript host of one
-//! transform as the vendored StyleX core sees it
-//! (`stylex_structures::stylex_env::HostEnv`). Each operation is one fixed
-//! host service; requests go to whichever host callback serves the current
-//! operation, which for a compiler function called from JavaScript is the host
-//! of the transform that created it (see `callCompilerFunction`).
+//! `JsHost`, the JavaScript host of one transform, implementing the core's
+//! `HostEnv`. Requests go to the callback serving the current operation.
 use std::rc::Rc;
 
 use anyhow::anyhow;
@@ -36,13 +32,10 @@ fn host_error(error: anyhow::Error) -> HostError {
     }
 }
 
-/// How many compiler-failure causes a host remembers. A cause only matters
-/// to the operation that observes its exception, which follows the failure
-/// directly; older ones are dropped.
+/// How many compiler-failure causes a host remembers; older ones are dropped.
 const REMEMBERED_FAILURES: usize = 64;
 
-/// The compiler-failure causes of one host (shared by the transform and the
-/// compiler functions it created).
+/// The compiler-failure causes of one host and its compiler functions.
 #[derive(Default)]
 struct Failures {
     remembered: std::cell::RefCell<std::collections::VecDeque<(u64, HostFailureCause)>>,
@@ -146,8 +139,7 @@ impl JsHost {
             }
         })
     }
-    /// A reference this host issued; anything else is refused, never resolved
-    /// against another transform's values.
+    /// A reference this host issued; any other is refused.
     fn handle(&self, reference: &HostRef) -> HostResult<String> {
         if reference.owner != self.owner {
             return Err(HostError {
@@ -209,7 +201,6 @@ impl HostEnv for JsHost {
     }
     fn same_value(&self, left: &CoreValue, right: &CoreValue) -> HostResult<bool> {
         if let (CoreValue::Ref(left), CoreValue::Ref(right)) = (left, right) {
-            // One host gives one value one id.
             if left.owner == self.owner && right.owner == self.owner {
                 return Ok(left.id == right.id);
             }
@@ -409,9 +400,7 @@ impl HostEnv for JsHost {
     }
 }
 
-/// The host of a new transform and its `env`, from the serialized options:
-/// `env` arrives as the handle of Babel's per-transform frozen copy plus its
-/// top-level entries (read once, like Babel's `{ ...env }`).
+/// The host of a new transform and its `env`, read once like Babel's `{ ...env }`.
 pub(crate) fn js_host_environment(
     options: &serde_json::Value,
 ) -> (HostEnvironment, indexmap::IndexMap<String, EnvEntry>) {
@@ -454,17 +443,12 @@ pub(crate) fn js_host_environment(
     )
 }
 
-/// Theme import resolution by the JavaScript host: `@resolveImport` resolves
-/// as the Babel plugin does (`commonJS` with aliases and `rootDir`, or a
-/// `custom` `filePathResolver`) and answers the canonical path
-/// (`getCanonicalFilePath`). A host failure is an `Err`; the host rethrows the
-/// user's exception itself.
+/// Theme import resolution through the host, as the Babel plugin resolves.
 #[derive(Debug)]
 pub(crate) struct JsResolver;
 
 impl JsResolver {
-    /// One of the host's resolution services: a path, or `None` when it does
-    /// not resolve. A host exception is reported by the host itself.
+    /// A path, or `None` when it does not resolve.
     fn ask(&self, service: &str, arguments: &[&str]) -> Result<Option<String>, String> {
         let arguments: Vec<HostValue> = arguments
             .iter()
@@ -506,9 +490,7 @@ pub(crate) fn js_import_resolver() -> Rc<dyn stylex_structures::import_resolver:
     Rc::new(JsResolver)
 }
 
-/// The author's `debugFilePath(absolutePath)`, called through the host exactly
-/// as Babel's `createShortFilename` calls it; `''` means "no file label". A
-/// failure is an `Err`; the host rethrows the user's exception itself.
+/// Calls the author's `debugFilePath` as Babel's `createShortFilename` does; `''` means no label.
 #[derive(Debug)]
 pub(crate) struct JsDebugFileNamer;
 

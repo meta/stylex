@@ -26,8 +26,7 @@ mod round_f64_tests {
 
   #[test]
   fn rounds_negative_values() {
-    // `-1.555 * 100` is exactly `-155.5`, an exact tie: JS rounds it towards
-    // positive infinity, to `-155`.
+    // `-1.555 * 100` is exactly `-155.5`, which JS `Math.round` takes to `-155`.
     assert_eq!(round_f64(-1.555, 2), -1.55);
     assert_eq!(round_f64(-1.556, 2), -1.56);
   }
@@ -51,7 +50,6 @@ mod round_f64_tests {
   #[test]
   fn rounds_negative() {
     assert_eq!(round_f64(-2.345, 2), -2.35);
-    // An exact negative tie breaks towards positive infinity, as Math.round does.
     assert_eq!(round_f64(-1.555, 2), -1.55);
   }
 
@@ -71,7 +69,7 @@ mod round_f64_tests {
 mod js_math_round_tests {
   use crate::math::{js_math_round, round_f64};
 
-  /// Every expectation is the value JS `Math.round` returns for the same input.
+  /// Expectations are JS `Math.round` results.
   #[test]
   fn breaks_ties_towards_positive_infinity() {
     let cases: &[(f64, f64)] = &[
@@ -99,9 +97,7 @@ mod js_math_round_tests {
     assert_eq!(js_math_round(0.0), 0.0);
   }
 
-  /// The largest `f64` below `0.5`. Adding `0.5` to it rounds up to exactly
-  /// `1.0`, so a `(x + 0.5).floor()` implementation would answer `1` where JS
-  /// answers `0`.
+  /// `0.49999999999999994 + 0.5` rounds to `1.0`, so a naive `(x + 0.5).floor()` gets this wrong.
   #[test]
   fn rounds_down_just_below_a_tie() {
     assert_eq!(js_math_round(0.49999999999999994), 0.0);
@@ -110,7 +106,6 @@ mod js_math_round_tests {
 
   #[test]
   fn negative_half_step_matches_js_at_four_decimal_places() {
-    // `Math.round(-0.00005 * 10000) / 10000` is `-0`, not `-0.0001`.
     assert_eq!(round_f64(-0.00005, 4), 0.0);
     assert_eq!(round_f64(0.00005, 4), 0.0001);
     assert_eq!(round_f64(-0.000151, 4), -0.0002);

@@ -6,8 +6,7 @@
  */
 'use strict';
 
-// Visitor-specific validation contracts from the current Babel source. These
-// exercise the real native facade, without modifying the original Babel suite.
+// Babel visitor validation contracts, checked against the native facade.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
@@ -33,8 +32,7 @@ function transform(plugin, source) {
 function failure(plugin, source) {
   const originalBuildFrame = NodePath.prototype.buildCodeFrameError;
   let frame = null;
-  // Observe the actual Babel deopt path, not an inferred underline or a search
-  // for matching source text. Restore the hook after each synchronous transform.
+  // Record Babel's real deopt frames; restored after each synchronous transform.
   NodePath.prototype.buildCodeFrameError = function (message, ...rest) {
     frame = { start: this.node.start, end: this.node.end };
     return originalBuildFrame.call(this, message, ...rest);
@@ -44,8 +42,7 @@ function failure(plugin, source) {
     assert.fail(`Expected a validation error for ${source}`);
   } catch (error) {
     assert.notEqual(error.code, 'ERR_ASSERTION');
-    // Native diagnostics use UTF-8 byte offsets; Babel node positions use
-    // UTF-16 code units. Compare exact spans in the native public contract.
+    // Native offsets are UTF-8 bytes; Babel's positions are UTF-16 code units.
     const range =
       error.stylexDiagnostic != null
         ? (error.stylexDiagnostic.range ?? null)
@@ -72,8 +69,7 @@ function compareFailure(body, reason) {
   assert.deepEqual(failure(native, source), expected, source);
 }
 
-// parse-stylex-create-arg.js:65-66 deliberately discards only the namespace
-// key's evaluator reason; stylex-create.js:219-223 chooses its generic fallback.
+// Babel drops only the key's evaluator reason (parse-stylex-create-arg.js:65-66).
 test('create namespace-key deopt uses the visitor fallback and exact key frame', () => {
   compareFailure(
     "export const styles = stylex.create({[missing]: {color: 'red'}});",
@@ -81,8 +77,7 @@ test('create namespace-key deopt uses the visitor fallback and exact key frame',
   );
 });
 
-// Ordinary namespace values are returned as their complete evaluation result
-// (parse-stylex-create-arg.js:71-75), including the evaluator's reason.
+// Values keep their evaluator reason (parse-stylex-create-arg.js:71-75).
 test('create property and value deopts retain their evaluator reasons and frames', () => {
   for (const body of [
     "export const styles = stylex.create({root: {[missing]: 'red'}});",
@@ -93,13 +88,8 @@ test('create property and value deopts retain their evaluator reasons and frames
   }
 });
 
-// Ported from PR head 6fc3a507's diagnostic_review_tests.rs. Its 15 value
-// shapes and two enclosing-parameter controls were compared with live Babel.
-// Only the three pure local declaration/method/alias call cases are excluded:
-// README's documented local-function evaluation extension owns their output.
-// A closure with a mutating block body remains a diagnostic/safety control.
-// Current Babel evaluate-path.js:879-886 reports object-method faults at the
-// method, and its binding resolution reports the declaration/pattern node.
+// Babel reports object-method faults at the method and binding faults at their
+// declaration (evaluate-path.js:879-886).
 for (const [name, body, reason] of [
   [
     'JSON.stringify call',
@@ -192,8 +182,7 @@ test('createTheme keeps two-argument arity diagnostics', () => {
   }
 });
 
-// stylex-create-theme.js:146-164 evaluates first, then distinguishes a deopt
-// from a confidently evaluated non-object; both errors belong to the call.
+// Both errors belong to the call (stylex-create-theme.js:146-164).
 test('createTheme evaluates call-shaped overrides before reporting a deopt', () => {
   compareFailure(
     "const theme = stylex.createTheme({__varGroupHash__: 'xbase'}, makeOverrides());",

@@ -1,30 +1,16 @@
-//! Portable, flat Source Map v3 emission and composition.
+//! Flat Source Map v3 emission and composition with an upstream map.
 //!
-//! Generated positions count LF only and columns count UTF-16 code units (CR,
-//! U+2028 and U+2029 occupy columns). Original parser locations may instead use
-//! JavaScript line terminators: `Position::advance` deliberately retains that
-//! convention. `IntermediatePositions::JavaScript` explicitly bridges those
-//! original locations to an upstream map's LF-based generated locations using
-//! the intermediate source text; ordinary V3 composition never guesses.
+//! Generated lines count LF only and columns count UTF-16 code units; original
+//! parser locations use JavaScript line terminators.
 //!
-//! Composition supports one direct source, as produced by a single-file
-//! compiler, and flat upstream maps with any number of sources. Indexed maps,
-//! ambiguous file identities, malformed VLQs/indices and resource-limit
-//! violations are errors. Missing upstream coverage becomes an unmapped segment,
-//! never a fabricated intermediate URL or an extrapolated original column.
-//! Upstream `sources`, `sourceRoot` and `sourcesContent` are copied verbatim;
-//! source-index ignore lists are retained, but unknown generated extensions are
-//! not carried over. Limits: 64 MiB mappings/text, 8 million segments, 1 million
-//! lines/metadata entries and 30-bit nonnegative coordinates (compatible with
-//! legacy source-map's signed VLQ decoder as well as modern trace-mapping).
-//! No filesystem, network, SWC or host-specific dependency is required.
+//! Indexed maps, ambiguous sources, malformed mappings and maps over the limits
+//! (64 MiB text, 8 million segments, 1 million lines, 30-bit coordinates) are errors.
 
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fmt;
 
-/// Source-map 0.6 uses signed >> after adding the VLQ sign bit; 30-bit
-/// magnitudes therefore round-trip through both legacy and modern consumers.
+/// Largest coordinate that source-map 0.6's signed VLQ decoder round-trips.
 const MAX_COORDINATE: i64 = (1 << 30) - 1;
 const MAX_MAPPING_BYTES: usize = 64 * 1024 * 1024;
 const MAX_SEGMENTS: usize = 8_000_000;
@@ -50,7 +36,7 @@ fn error(message: impl Into<String>) -> SourceMapError {
 pub struct Position {
     pub line: usize,
     pub column: usize,
-    /// Retained across chunks so a split CRLF is one original JS line break.
+    /// Kept across chunks so a split CRLF is one line break.
     pub cr: bool,
 }
 impl Position {
@@ -86,9 +72,8 @@ impl Position {
     }
 }
 
-/// Single-source direct writer. Identity chunks map every UTF-16 code unit;
-/// constant-origin inserted chunks need only one segment per generated line.
-/// Calls to `text` may split a CRLF without changing either convention.
+/// Single-source map writer: identity chunks map every code unit, inserted
+/// chunks one segment per line.
 pub struct MappingWriter {
     mappings: String,
     generated: Position,
@@ -163,7 +148,7 @@ impl MappingWriter {
         }
     }
     pub fn finish(mut self) -> String {
-        // Include empty trailing generated lines even without an EOF mapping.
+        // Include empty trailing lines.
         while self.mapping_line < self.generated.line {
             self.mappings.push(';');
             self.mapping_line += 1;
@@ -329,8 +314,7 @@ impl<'a> FlatMap<'a> {
                         column: column as u32,
                         original,
                     };
-                    // GLB ties use the first segment, matching trace-mapping.
-                    // Reject conflicting ties rather than pick a consumer-dependent result.
+                    // Ties use the first segment, as trace-mapping does; conflicts are errors.
                     if let Some(last) = segments.last() {
                         let last: &Segment = last;
                         if last.column == point.column {
@@ -393,7 +377,6 @@ fn decode_vlq(segment: &str) -> Result<([i64; 5], usize)> {
     if segment.is_empty() {
         return Err(error("empty mapping segment"));
     }
-    // Fixed fields avoid a heap allocation per segment in dense identity maps.
     let mut fields = [0i64; 5];
     let mut field_count = 0;
     let mut value = 0u64;
@@ -478,9 +461,7 @@ fn encode_lines(lines: &[Vec<Segment>]) -> String {
     output
 }
 
-/// Validate structural fields, VLQ arithmetic and indices without composition.
-/// If output text is available, also validate LF/UTF-16 generated ranges.
-/// Original coordinates are opaque: V3 does not declare a parser convention.
+/// Validates a map, and its generated ranges against the output when given.
 #[cfg(test)]
 pub fn validate_source_map(map: &Value, generated_source: Option<&str>) -> Result<()> {
     let map = FlatMap::parse(map)?;
@@ -523,10 +504,8 @@ fn validate_generated(map: &FlatMap<'_>, text: &str) -> Result<()> {
     Ok(())
 }
 
-/// Compose a direct V3 map through an optional upstream `inputSourceMap`.
-/// No upstream is a validated identity operation (metadata remains exact).
-/// With upstream, direct must have one source; names prefer upstream names,
-/// falling back to direct names only where an upstream mapping has no name.
+/// Composes a direct map through an optional upstream `inputSourceMap`;
+/// names prefer the upstream's.
 #[cfg(test)]
 pub fn compose_source_maps(direct: &Value, input_source_map: Option<&Value>) -> Result<Value> {
     compose_source_maps_with_options(direct, input_source_map, ComposeOptions::default())
@@ -603,8 +582,7 @@ pub fn compose_source_maps_with_options(
                     ));
                 }
             }
-            // GLB is a point lookup, not a linear range. In particular, do not
-            // add lookup_column - upstream_segment.column to its original column.
+            // A point lookup: the original column is not extrapolated.
             segment.original = input_map
                 .lookup(lookup_line, lookup_column)
                 .map(|mut upstream| {
@@ -629,9 +607,7 @@ pub fn compose_source_maps_with_options(
     if names.len() > MAX_ENTRIES {
         return Err(error("composed names exceed entry limit"));
     }
-    // Retain only source metadata whose indices still refer to the unchanged
-    // upstream source array. Generated extensions (e.g. upstream debug IDs or
-    // offsets) cannot safely describe the newly generated output.
+    // Keep source metadata; generated extensions do not describe the new output.
     let mut output = serde_json::Map::new();
     for field in [
         "sources",
@@ -657,8 +633,6 @@ pub fn compose_source_maps_with_options(
 }
 
 /// Exact identities, or a basename paired with an unambiguous absolute path.
-/// Two distinct explicit paths are never treated as the same file. No URL/path
-/// normalization is used to rewrite output sources or sourceRoot metadata.
 fn same_file(source: &str, file: &str) -> bool {
     if source == file {
         return true;
@@ -680,8 +654,7 @@ struct JsLine {
     generated_column: u32,
     length: u32,
 }
-/// One entry per JS line, not per character/byte. Thus conversion costs one
-/// intermediate text scan and logarithmic map lookups, not repeated prefix scans.
+/// One entry per JavaScript line of the intermediate text.
 fn js_line_bridge(text: &str) -> Result<Vec<JsLine>> {
     if text.len() > MAX_TEXT_BYTES {
         return Err(error("intermediate text exceeds 64 MiB limit"));

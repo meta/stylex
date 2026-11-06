@@ -85,8 +85,7 @@ impl Calc<'_> {
             if !matches!(c, b'+' | b'-' | b'*' | b'/') {
                 return Err(error());
             }
-            // A sign adjacent to a number belongs to that number token, not a
-            // CSS delimiter. Media Calc rejects that unseparated second value.
+            // A sign next to a number belongs to it, so the second value is unseparated.
             if matches!(c, b'+' | b'-')
                 && self
                     .input

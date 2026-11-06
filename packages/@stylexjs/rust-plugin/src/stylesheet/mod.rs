@@ -1,5 +1,4 @@
-//! The stylesheet processor: `processStylexRules` over the rules the compiler
-//! collected. This is the only CSS StyleX computes outside the compiler core.
+//! `processStylexRules` over the rules the compiler collected.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -38,8 +37,7 @@ pub struct RuleEntry(
     #[serde(deserialize_with = "js_number_or_name")] pub f64,
 );
 
-/// Rule priorities arrive from JavaScript, where a non-finite number has no
-/// JSON form; the host sends those as "NaN", "Infinity" or "-Infinity".
+/// A rule priority; the host sends non-finite ones as "NaN", "Infinity" or "-Infinity".
 fn js_number_or_name<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<f64, D::Error> {
     #[derive(Deserialize)]
     #[serde(untagged)]
@@ -105,8 +103,7 @@ fn layer_name(index: usize, layer_prefix: &str) -> String {
 
 fn group_rules_by_priority(rules: Vec<RuleEntry>) -> Vec<Vec<RuleEntry>> {
     let mut grouped = Vec::<Vec<RuleEntry>>::new();
-    // JS `===` on `Math.floor(priority / 1000)`: a NaN level never matches,
-    // so every NaN-priority rule starts a group of its own.
+    // As in JavaScript, a NaN level never matches, so each NaN rule starts its own group.
     let mut current_level: Option<f64> = None;
 
     for rule in rules {

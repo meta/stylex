@@ -1,7 +1,5 @@
-//! Conservative preflight for modules the StyleX visitor cannot change.
-//!
-//! This is a no-change proof, not import classification: false positives use the
-//! ordinary compiler, preserving unused/type-only imports and source provenance.
+//! Conservative check for modules the StyleX visitor cannot change; anything
+//! it is unsure of goes through the ordinary compiler.
 use crate::shared::StyleXTransformOptions;
 use swc_core::ecma::{
     ast::{Ident, IdentName, Module, Str, TplElement},
@@ -41,8 +39,7 @@ impl Discovery<'_> {
 
 impl Visit for Discovery<'_> {
     fn visit_str(&mut self, value: &Str) {
-        // Imports with isolated surrogates can be refused by the core's import
-        // reader. Never bypass that behavior through lossy text conversion.
+        // The core may refuse imports with lone surrogates; never convert them lossily.
         match value.value.as_str() {
             Some(text) => self.text(text),
             None => self.relevant = true,
@@ -54,8 +51,7 @@ impl Visit for Discovery<'_> {
     }
 
     fn visit_ident_name(&mut self, value: &IdentName) {
-        // Includes JSX attributes and object keys, including shorthand/lowered
-        // JSX props. An sx-like non-intrinsic attribute is a safe false positive.
+        // Includes JSX attributes and object keys.
         self.relevant |= self.sx == Some(value.sym.as_ref());
     }
 

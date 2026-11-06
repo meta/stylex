@@ -1,6 +1,5 @@
-//! Babel's text contract applies only to explicitly generated quoted JSX strings.
-//! JSX parsers retain backslash sequences instead of unescaping them as JS. Check
-//! exact generated raw spelling first, then compare the rest of the AST normally.
+//! Checks generated quoted JSX strings, which JSX parsers do not unescape, by
+//! their exact spelling.
 use super::*;
 use swc_core::common::EqIgnoreSpan;
 use swc_core::ecma::ast::{JSXAttr, JSXAttrName, JSXAttrValue, Module, Str};
@@ -48,9 +47,7 @@ impl Visit for GeneratedAttributes {
                             self.error = Some("generated JSX attribute raw literal is not canonical Babel spelling".into());
                             return;
                         }
-                        // The public core produces DUMMY/raw=None literals;
-                        // codegen fills their spelling on a clone. Authorize
-                        // only this exact intended value and canonical spelling.
+                        // Only the intended value in its canonical spelling.
                         self.generated.push(GeneratedAttribute {
                             index,
                             name: attribute.name.clone(),
@@ -89,10 +86,7 @@ impl VisitMut for ValidateGenerated<'_> {
                             .as_ref()
                             .is_some_and(|raw| raw.as_ref() == expected.literal) =>
                 {
-                    // This is not a general JSX unescape: the exact text just
-                    // matched an explicitly authored generated literal. Keep
-                    // actual raw/span and every other node unchanged; only its
-                    // intended generated value participates in typed postflight.
+                    // Not a general unescape: the text matched a generated literal.
                     actual.value = expected.value.value.clone();
                 }
                 _ => self.error = Some(
@@ -176,8 +170,7 @@ mod tests {
         assert!(!source_compare::modules_equivalent(&actual, &expected));
         validate_generated_attribute_text(&mut actual, &expected).unwrap();
         assert!(source_compare::modules_equivalent(&actual, &expected));
-        // The unescaped spelling has the intended cooked value but is NOT the
-        // required generated text; it must not pass the narrow check.
+        // The right cooked value in the wrong spelling must fail.
         let mut wrong = parse_module(
             r#"const view=<Box original='a\b' generated="a\b"/>;"#,
             "jsx.jsx",

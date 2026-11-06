@@ -1,5 +1,4 @@
-//! Typed changed-region rendering. Source reuse requires exact paired typed
-//! subtrees and owned ranges; the final module postflight is never optional.
+//! Typed changed-region rendering; source is reused only for exactly paired subtrees.
 
 #[cfg(test)]
 mod tests {
@@ -419,8 +418,7 @@ fn substitute_source_placeholders(
     }
     let mut counts = vec![0u8; replacements.len()];
     let mut positions = vec![None; replacements.len()];
-    // The file-unique prefix cannot occur in any copied source replacement.
-    // Scan generated text once, then splice all proven markers in output order.
+    // The file-unique prefix cannot occur in copied source; scan once, then splice.
     for (start, _) in code.match_indices(prefix) {
         let digits_start = start + prefix.len();
         let digits = code.as_bytes()[digits_start..]
@@ -435,8 +433,7 @@ fn substitute_source_placeholders(
         let Some(&(index, offset)) = lookup.get(&code[start..end]) else {
             continue;
         };
-        // Statement/type-parameter markers include syntax outside the identifier
-        // (`marker;`, `<marker>`). Preserve their full old exact-match contract.
+        // Statement and type-parameter markers include `;` or `<>` around the name.
         let Some(full_start) = start.checked_sub(offset) else {
             continue;
         };
@@ -447,7 +444,6 @@ fn substitute_source_placeholders(
         counts[index] = counts[index].saturating_add(1);
         positions[index].get_or_insert((full_start, full_end, index));
     }
-    // Check in original replacement order, preserving missing/ambiguous errors.
     for count in counts {
         if count == 0 {
             bail!("source placeholder did not survive typed printing");
