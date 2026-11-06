@@ -87,6 +87,9 @@ Evaluator (`stylex-evaluator`, `stylex-js`)
   read data through it.
 - Results are memoized per evaluation, invalidated by source writes and host
   operations; host reads and calls are never cached.
+- Known follow-up: a Rust caller that writes bindings through `StateManager` or
+  `FunctionMap` directly, or shares a budget across state owners, can read a
+  stale memoized value; `transformSync` and the Babel facade cannot reach it.
 
 Host boundary (`stylex-structures`, `stylex-state`)
 - `env` values and callbacks are live host values (`HostEnv`), read and called
