@@ -1144,6 +1144,33 @@ fn a_source_file_is_read_from_every_name_that_points_at_one() {
   assert!(read_source_file(&FileName::Anon).is_err());
 }
 
+/// A `file:` URL is read from the path it names, not from its raw URL path:
+/// that path is percent-escaped everywhere (a space is `%20`) and, on Windows,
+/// spells the drive as `/D:/` with forward slashes. A name with a space and a
+/// percent sign shows the decoding on every platform. A URL of another scheme
+/// names no local file, and is refused rather than read from somewhere it does
+/// not point.
+#[test]
+fn a_file_url_is_read_from_the_path_it_names() {
+  let fixture = write_fixture("named source 100%.tsx", "const c = 'red';\n");
+
+  let url = match url::Url::from_file_path(&*fixture) {
+    Ok(url) => url,
+    Err(()) => panic!("the fixture path is not absolute"),
+  };
+  assert!(url.path().contains("%20"), "{url}");
+  assert_eq!(
+    read_source_file(&FileName::Url(url)).ok().as_deref(),
+    Some("const c = 'red';\n")
+  );
+
+  let other = match url::Url::parse("https://example.com/named_source.tsx") {
+    Ok(url) => url,
+    Err(error) => panic!("{error}"),
+  };
+  assert!(read_source_file(&FileName::Url(other)).is_err());
+}
+
 /// Registering the same file twice registers it once: the shared source map is
 /// never cleared, so a second copy would be a second copy for the life of the
 /// process.
