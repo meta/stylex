@@ -3,8 +3,7 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 use stylex_swc_plugin::RuleEntry;
 
-/// Batch oracle is the unchanged current Babel plugin. The production compiler
-/// under test is transform_source; no native addon or fallback is used here.
+/// Runs the unchanged Babel plugin as a batch oracle.
 fn oracle(cases: &[(String, String)]) -> Vec<Vec<RuleEntry>> {
     let script = r#"
 const fs=require('node:fs');

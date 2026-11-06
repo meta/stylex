@@ -1,11 +1,7 @@
-//! Executed differential creation tests against the unchanged current Babel
-//! compiler. Function fixtures below are trusted test callbacks, never strings
-//! from the corpus/options evaluated as JavaScript source.
+//! Differential creation tests against the unchanged Babel plugin.
 #[path = "creation/host_fixture.rs"]
 mod host_fixture;
 
-// Test adapters only re-export the single public compiler and its diagnostics.
-// Old source/core/evaluator modules are deliberately not compiled here.
 mod shared {
     pub use stylex_swc_plugin::TransformOutput;
 }
@@ -530,9 +526,7 @@ fn creation_current_import_compensation_tracks_confident_reads_and_exact_sites()
 }
 #[test]
 fn creation_current_dynamic_hoists_preserve_local_runtime_and_type_bindings() {
-    // Whole-object hoisting cannot move these captured bindings to module scope.
-    // Babel's syntax/type stripper is only a test runtime/printer adapter here;
-    // this executes the actual Rust-compiled output, never Babel StyleX fallback.
+    // Hoisting cannot move captured bindings; this runs the compiled output.
     for source in [
         "import * as stylex from '@stylexjs/stylex'; export function make<T: number>(offset: number) { const styles=stylex.create({root:(value:T)=>({width:offset+value})}); return styles; }",
         "import * as stylex from '@stylexjs/stylex'; export function make<T: number>(offset: number) { const styles=stylex.create({root:(value:T)=>({width:value})}); return styles; }",
@@ -551,10 +545,7 @@ fn creation_current_dynamic_hoists_preserve_local_runtime_and_type_bindings() {
 #[test]
 fn creation_current_review_diagnostics_match_babel_message_and_exact_range() {
     let import = "import * as stylex from '@stylexjs/stylex';\n";
-    // Native optional member reads are an intentional JS-correct extension.
-    // Executed unchanged Babel (2d42d72 evaluate-path) throws SyntaxError:
-    // "Unsupported expression: OptionalMemberExpression" for this same input.
-    // Compare native to the ordinary-read canonical value, not false parity.
+    // A deliberate extension: Babel rejects optional member reads here.
     let optional=format!("{import}const obj={{color:'red'}}; export const styles=stylex.create({{root:{{color:obj?.color}}}});");
     let canonical=format!("{import}const obj={{color:'red'}}; export const styles=stylex.create({{root:{{color:obj.color}}}});");
     let optional = with_callback(Rc::new(fixture_host), || {
@@ -762,9 +753,7 @@ fn creation_current_round_two_closure_ids_preserve_value_identity() {
 
 #[test]
 fn creation_current_round_two_callback_scope_keeps_the_same_binding_instance() {
-    // A second lexical frame must not reconstruct a const-bound function. Babel
-    // currently does so for this extra probe (and returns false); JavaScript
-    // function identity and the native callback snapshot require true.
+    // Babel rebuilds a const-bound function here (false); JavaScript identity says true.
     let source="import * as stylex from '@stylexjs/stylex';const a=()=>1;export const styles=stylex.create({root:{content:stylex.env.compareInside(other=>stylex.env.same(other,a),a)}});";
     let settings = json!({"env":{"same":{"__stylexCallback":"same"},"compareInside":{"__stylexCallback":"compareInside"}}});
     let native = with_callback(Rc::new(fixture_host), || {
@@ -830,8 +819,7 @@ fn creation_current_evaluated_arrow_errors_preserve_kind_and_absent_range() {
             let message = expected["error"].as_str().unwrap();
             assert_eq!(
                 actual.message,
-                // Babel prefixes the resolved filename, which on Windows is
-                // `D:\tmp\…` rather than the POSIX spelling passed in.
+                // Babel prefixes the resolved filename, `D:\tmp\…` on Windows.
                 message
                     .split_once("app.js: ")
                     .map_or(message, |(_, rest)| rest),

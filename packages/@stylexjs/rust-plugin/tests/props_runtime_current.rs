@@ -200,8 +200,7 @@ fn conditionals_preserve_argument_precedence_for_props_and_legacy() {
 }
 #[test]
 fn array_ternary_branches_are_not_reversed() {
-    // Babel leaves arrays in legacy calls for the runtime. Use a callable default
-    // import and verify the original consequent/alternate survive unchanged.
+    // Babel leaves arrays in legacy calls for the runtime.
     let styles = STYLES.replacen("import * as stylex", "import stylex", 1);
     let output = transform(&format!(
         "{styles} const c=stylex([flag?styles.red:styles.blue]);"
@@ -241,8 +240,7 @@ fn shadowed_styles_and_imports_are_not_inlined() {
         &StyleXTransformOptions::default(),
     )
     .unwrap();
-    // Babel currently compiles both shadowed names unsafely. Pin the requested
-    // Id-safe output through Babel's syntax-only printer, not that compiler bug.
+    // Babel compiles shadowed names unsafely; this pins the binding-safe output.
     current_babel::assert_authored(
     "import * as stylex from '@stylexjs/stylex';const styles={red:{kMwMTN:\"x1e2nbdu\",$$css:true}};function render(styles){return stylex.props(styles.red)}function unrelated(stylex){return stylex.props(styles.red)}",
     "fixture.js",

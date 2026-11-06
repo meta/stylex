@@ -98,8 +98,6 @@ fn commonjs_require_uses_typed_bindings_and_respects_shadowed_loader() {
 
 #[test]
 fn canonical_identity_is_consistent_for_multiple_specifiers_from_one_declaration() {
-    // The old compiler's __resolvedImports inventory was not a public contract.
-    // Exercise actual package resolution with an isolated package instead.
     struct Fixture(std::path::PathBuf);
     impl Drop for Fixture {
         fn drop(&mut self) {

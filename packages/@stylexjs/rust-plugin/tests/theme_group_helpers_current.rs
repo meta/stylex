@@ -1,12 +1,5 @@
-//! A theme variable group passed through an array or object helper, end to end.
-//!
-//! The group is imported from a real `.stylex` file. Each expectation is the
-//! unchanged Babel plugin's own for the same module (executed, commonJS
-//! resolution), which the rust-plugin PR (#2008) matches:
-//! - a token read off the group inside a callback compiles to the variable;
-//! - the group itself carried out of a helper is no style value, so
-//!   `stylex.create` fails with Babel's sentence;
-//! - a direct read is unchanged.
+//! A theme variable group from a `.stylex` file passed through array and object
+//! helpers, with the Babel plugin's results as expectations.
 use stylex_swc_plugin::{transform_source, StyleXTransformOptions};
 
 struct Fixture(std::path::PathBuf);
@@ -17,9 +10,7 @@ impl Drop for Fixture {
     }
 }
 
-/// A fixture directory of the test's own: named by the test, the process and a
-/// counter no two fixtures share, so tests running at once never meet in one
-/// directory (a clock reading alone can repeat between two threads).
+/// A fixture directory unique to the test, process and call.
 fn fixture(test: &str) -> Fixture {
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 

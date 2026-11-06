@@ -1,4 +1,4 @@
-//! Portable source-map contracts, checked with real independent JS consumers.
+//! Source-map output, checked with independent JavaScript consumers.
 #![allow(dead_code)]
 #[path = "../src/utils/source_maps.rs"]
 mod source_maps;
@@ -408,8 +408,7 @@ fn js_intermediate_coordinates_are_explicitly_bridged_to_lf_upstream() {
     for (probe, wanted) in probes(&composed, queries).iter().zip(&wanted) {
         both(probe, wanted);
     }
-    // Default mode never silently converts a conventional direct map. These JS
-    // coordinates exceed the real intermediate LF line range and are rejected.
+    // Coordinates past the intermediate text's lines are rejected, not converted.
     assert!(compose_source_maps(&direct, Some(&upstream)).is_err());
 }
 

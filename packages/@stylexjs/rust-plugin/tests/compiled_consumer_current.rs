@@ -57,7 +57,6 @@ fn compiled_style_runtime_prefix_retains_only_required_shorthand_nulls() {
 fn ordinary_missing_properties_and_explicit_null_values_keep_javascript_semantics() {
     let source = "import * as stylex from '@stylexjs/stylex';const data={};const absent=data.missing;const styles=stylex.create({root:{width:absent==null?1:2,color:null}});use(styles);";
     compare(source, json!({}));
-    // This is a deliberate Id-safe invariant, not a compiler output normalizer.
     let authored = "const data={};const absent=data.missing;export {absent};";
     let result = transform_source(
         authored,

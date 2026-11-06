@@ -1,6 +1,5 @@
-//! Whole-transform differential contracts against current-main Babel.
-//! The vendored engine is the only compiler under test. Ordered output fields,
-//! rule tuples, CSS strings and diagnostics are compared without rewriting.
+//! Whole-transform differential tests against current Babel, comparing output
+//! fields, rules, CSS and diagnostics unrewritten.
 use serde_json::{json, Value};
 use std::{
     io::Write,
@@ -132,8 +131,7 @@ fn oracle(requests: &[Value]) -> Vec<Value> {
 }
 fn js_json_equal(a: &Value, b: &Value) -> bool {
     match (a, b) {
-        // JavaScript/Jest has one IEEE754 Number type; JSON's integer versus
-        // float spelling is not a distinct value. No strings or ordering change.
+        // JavaScript has one number type, so `3000` and `3000.0` are the same value.
         (Value::Number(a), Value::Number(b)) => a.as_f64() == b.as_f64(),
         (Value::Array(a), Value::Array(b)) => {
             a.len() == b.len() && a.iter().zip(b).all(|(a, b)| js_json_equal(a, b))
@@ -243,8 +241,6 @@ fn compare_create(cases: Vec<(Value, Value)>) {
 
 #[test]
 fn process_rules_matches_reference_behavior_for_constants_and_layers() {
-    // Retained from the old core module's automatically included smoke test;
-    // exercise only the surviving public batch processor and live Babel oracle.
     let rules: Vec<RuleEntry> = serde_json::from_value(json!([
         ["constColor",{"ltr":"","rtl":null,"constKey":"constColor","constVal":"var(--brand-color)"},0],
         ["brand-color",{"ltr":"","rtl":null,"constKey":"brand-color","constVal":"#123456"},0],
@@ -283,9 +279,7 @@ fn dynamic_class_paths_and_units_are_preserved_by_whole_transform() {
 
 #[test]
 fn legacy_rtl_color_function_dividers_are_serialized_once() {
-    // Regression source: round-5 seed 0x5a17c3, CSS fuzz cases 289/308/518/
-    // 571/679/799/872/892/909/1082/1097/1208/1238. All had identical hashes,
-    // LTR CSS and priorities; nested RGB slash spacing differed only in RTL.
+    // From CSS fuzzing: nested RGB slash spacing differed only in RTL.
     let cases = [
         (
             json!({"a":{"boxShadow":{"default":"rgb(20 40 60 / 0.5)",":focus-visible":["red","blue"],"@container (width > 30rem)":1e21},"padding":0.25}}),
@@ -532,9 +526,7 @@ fn current_defaults_hashes_and_key_order() {
         "--é.😀",
         "ééééé",
     ];
-    // Each original UTF-16 hash input now crosses the real compiler rather than
-    // an unexported hash helper. Preserve empty content and Unicode value/key
-    // hashing, including astral characters and low-byte collision witnesses.
+    // UTF-16 hashing through the compiler, including astral characters and low-byte collisions.
     compare_create(
         texts
             .iter()

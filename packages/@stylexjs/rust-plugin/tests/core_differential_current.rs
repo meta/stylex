@@ -1,6 +1,4 @@
-//! Behavioral regressions from c486's unchanged-Babel differential.
-//! Oracle source is 2d42d72: index.js:267-289 and
-//! visitors/stylex-create-theme.js:185-202. No source/snapshot normalization.
+//! Regressions found by differential testing against the unchanged Babel plugin.
 use serde_json::{json, Value};
 use std::process::Command;
 use stylex_swc_plugin::{transform_source, StyleXTransformOptions};

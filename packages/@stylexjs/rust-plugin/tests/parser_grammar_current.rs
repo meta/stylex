@@ -1,4 +1,4 @@
-//! Current JavaScript/Flow grammar, checked against real out-of-process oracles.
+//! JavaScript and Flow grammar, checked against out-of-process parsers.
 #[path = "../src/utils/diagnostics.rs"]
 pub(crate) mod diagnostics;
 #[path = "../src/utils/parser.rs"]
@@ -13,7 +13,6 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 use swc_core::ecma::ast::*;
 
-/// Node/Babel/Hermes stay on their own process stack, never a Rust grown stack.
 fn oracle(source: &str, filename: &str, source_type: &str, hermes: bool) -> bool {
     let script = r#"
 const fs = require('node:fs');
@@ -439,8 +438,7 @@ fn grammar_flow_as_chains_remain_bounded() {
                     "{error}"
                 );
             }
-            // Contextual names in ordinary expressions and newline-separated
-            // ASI statements must not accumulate cast/function-header costs.
+            // Contextual names in expressions must not accumulate header costs.
             for source in [
                 "value\nas\n".repeat(3000),
                 "hook(); component(); object.as;\n".repeat(3000),
@@ -505,8 +503,7 @@ fn grammar_component_and_hook_bodies_keep_statement_not_expression_budget() {
     std::thread::Builder::new()
         .stack_size(512 * 1024 * 1024)
         .spawn(|| {
-            // These are statement chains, so 1,500 controls are valid even though
-            // the independent expression budget remains 1,024.
+            // Statement chains are not bound by the 1,024 expression budget.
             for (prefix, suffix) in [
                 ("function useX<T>(a: T): T {", "return a;}"),
                 ("hook useX(a: number): number {", "return a;}"),

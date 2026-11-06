@@ -1,5 +1,4 @@
-//! Real compiler entrypoint regressions: safety must be enforced by production
-//! collection/invalidation, not by a test-only evaluator wrapper.
+//! Evaluator regressions through the real compiler entry point.
 #[path = "support/evaluator_review.rs"]
 mod review_tests;
 use stylex_swc_plugin::{process_metadata_to_css, transform_source, StyleXTransformOptions};
@@ -246,11 +245,8 @@ fn tdz_identity_and_restricted_operations() {
     }
 }
 
-/// A folded string holding an unpaired surrogate is kept exactly by the
-/// evaluator, but no Rust string spells it, so the stylesheet boundary refuses
-/// it with the existing sentence instead of writing U+FFFD. The reference
-/// plugin writes the lone surrogate (its generator escapes it); this compiler
-/// cannot, and says so rather than writing a different character.
+/// A lone surrogate in a style value is refused rather than written as U+FFFD;
+/// Babel writes it escaped.
 #[test]
 fn a_folded_unpaired_surrogate_refuses_at_the_string_boundary() {
     for value in ["'\\u{1F600}a'.slice(1)", "'\\uD83D'.concat('')"] {

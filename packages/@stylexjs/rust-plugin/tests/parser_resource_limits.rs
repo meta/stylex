@@ -121,7 +121,6 @@ fn two_thousand_else_if_arms_match_swc_and_babel_acceptance() {
     on_driver_stack(|| {
         let source = elseif_source(2000);
         assert_accepted_and_walked(&source, "elseif.js");
-        // Babel runs in its own process; no JS callbacks enter a Rust stack.
         let test_file = std::path::PathBuf::from(file!());
         let test_file = if test_file.is_absolute() {
             test_file
@@ -129,9 +128,7 @@ fn two_thousand_else_if_arms_match_swc_and_babel_acceptance() {
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(test_file)
         };
         let package = test_file.parent().unwrap().parent().unwrap();
-        // Whether Babel's recursive parser fits 2000 arms in Node's default
-        // ~1 MB JS stack varies by Node version (22 overflows, 24 fits), so
-        // the oracle gets a fixed 4 MB stack, well within the 8 MB main thread.
+        // Node 22's default stack is too small for Babel here (24's fits), so use 4 MB.
         let mut child = std::process::Command::new("node")
             .arg("--stack-size=4000")
             .arg("-e")
@@ -173,8 +170,7 @@ fn statement_budget_boundaries_include_live_code_block_overhead() {
             "function f(){{{}return 1;}}",
             "if(a) ".repeat(MAX_STATEMENT_DEPTH)
         ));
-        // Else-if retains one control per arm, plus the function and the
-        // currently open arm's block, not two controls per arm.
+        // One control per arm, plus the function and the open arm's block.
         let parsed = parse(
             &elseif_source(MAX_STATEMENT_DEPTH - 2),
             "boundary.js",
@@ -439,9 +435,7 @@ fn ordinary_small_rust_callers_get_a_full_pure_parser_stack() {
         .spawn(|| {
             let source = format!("const x={}1{};", "`${".repeat(1000), "}`".repeat(1000));
             let result = parse(&source, "stack.js", false).unwrap();
-            // Returning an AST does not promise a budget for later recursive passes.
-            // Move it to the same large-stack policy used by the native driver for
-            // walking, resolving, and destruction; never involve JS callbacks here.
+            // Later passes over the AST need the native driver's large stack too.
             on_driver_stack(move || {
                 struct Walk;
                 impl Visit for Walk {}

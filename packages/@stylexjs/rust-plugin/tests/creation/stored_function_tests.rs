@@ -1,5 +1,4 @@
-//! Current Babel stored-function defineVars contracts. All native calls use
-//! the single public compiler and the closed HostEnv fixture in the parent.
+//! `defineVars` with stored functions, as current Babel compiles it.
 use super::*;
 
 const FILE: &str = "/tmp/creation-current/stored-functions.stylex.js";

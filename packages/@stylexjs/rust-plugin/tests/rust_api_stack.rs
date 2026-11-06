@@ -5,8 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-// The public Rust entry point must be safe to call from small threads:
-// deep inputs the parser accepts must not overflow later passes.
+// The public Rust entry point must not overflow small threads on deep input.
 
 use stylex_swc_plugin::{transform_source, StyleXTransformOptions};
 
@@ -38,10 +37,7 @@ fn deep_arrows_compile_on_a_2_mib_thread() {
     assert_eq!(run_on_small_thread(prefix, 2 * 1024 * 1024), Ok(1));
 }
 
-/// The nesting the crates' own deep fixtures use -- calls, member chains,
-/// destructuring patterns and blocks -- through the public entry point on a
-/// thread the size of a default test thread, so a depth the public parser
-/// accepts compiles rather than overflowing the caller.
+/// Deep calls, member chains, patterns and blocks on a default-size test thread.
 #[test]
 fn deep_calls_members_patterns_and_blocks_compile_on_a_2_mib_thread() {
     let stack = 2 * 1024 * 1024;

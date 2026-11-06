@@ -1,4 +1,4 @@
-//! Differential checks through the single production Rust engine and live Babel.
+//! Differential checks against live Babel.
 use serde_json::{json, Value};
 use std::{
     io::Write,
@@ -47,8 +47,7 @@ pub fn assert_babel(source: &str, filename: &str, options: Value, actual: &Trans
         expected["actualCode"], expected["expectedCode"],
         "raw Babel-generated output for {source}"
     );
-    // Both sides pass through JavaScript's JSON number boundary; serde_json
-    // distinguishes 3000.0 from 3000 even though both are the same JS number.
+    // serde_json tells 3000.0 from 3000; JavaScript does not.
     assert_eq!(
         expected["actualMetadata"], expected["metadata"],
         "ordered metadata for {source}"
@@ -56,8 +55,7 @@ pub fn assert_babel(source: &str, filename: &str, options: Value, actual: &Trans
 }
 
 pub fn assert_authored(expected_source: &str, filename: &str, actual: &TransformOutput) {
-    // Used only for explicit lexical-safety divergences: current Babel compiles
-    // shadowed StyleX/atoms names, while the native engine preserves the binding.
+    // For shadowed StyleX names, which Babel compiles and the native engine keeps.
     let request = json!({"source":expected_source,"expectedSource":expected_source,"filename":filename,"nativeCode":actual.code,"preserveAuthored":true,"metadata":actual.metadata_stylex});
     let mut child = Command::new("node")
         .arg("-e")

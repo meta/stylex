@@ -1,5 +1,4 @@
-//! Test-only adapter for fixed, trusted callback fixtures. This is a HostEnv,
-//! not a compiler: every transform runs the public single-engine entry point.
+//! A `HostEnv` for fixed, trusted callback fixtures.
 use anyhow::{anyhow, Result};
 use indexmap::IndexMap;
 use serde_json::Value;
@@ -19,8 +18,6 @@ use stylex_structures::{
 };
 use stylex_swc_plugin::{StyleXTransformOptions, TransformOutput};
 
-// The old fixture DTO is retained only to keep the fixed callback assertions
-// byte-for-byte. None of the old compiler modules is linked into this suite.
 #[derive(Clone, Debug)]
 pub enum HostValue {
     Undefined,
@@ -172,8 +169,7 @@ pub fn call_closure(id: &str, this: &HostValue, arguments: &[HostValue]) -> Resu
 struct FixtureHost {
     owner: u64,
     callback: Rc<Callback>,
-    // Keep the adoption payload intact: array absence is not undefined, and
-    // null-prototype objects are not ordinary-prototype objects.
+    // An array hole is not `undefined`, and a null-prototype object is not a plain one.
     data: RefCell<HashMap<String, Adoptable>>,
     closures: RefCell<HashMap<String, HostFunction>>,
     causal_closures: RefCell<HashMap<String, HostCausalFunction>>,
@@ -742,9 +738,7 @@ impl HostEnv for FixtureHost {
                 for (_, value) in &entries {
                     self.check_data_owners(value)?;
                 }
-                // Defining own data properties preserves __proto__ as data.
-                // Repeated keys replace their value without moving their slot;
-                // array-index keys enumerate before string keys, as in JS.
+                // As in JavaScript: `__proto__` is data and index keys enumerate first.
                 let mut unique: IndexMap<String, NativeValue> = entries.into_iter().collect();
                 unique.sort_by(|left, _, right, _| {
                     match (Self::array_index(left), Self::array_index(right)) {
@@ -796,8 +790,7 @@ impl HostEnv for FixtureHost {
 #[path = "adopt_tests.rs"]
 mod adopt_tests;
 
-/// Only this exact opaque token propagates a compiler failure through anyhow.
-/// Equal text on an unrelated error cannot acquire the original cause.
+/// The token that carries a compiler failure's cause through anyhow.
 #[derive(Debug)]
 struct FixtureCauseToken {
     owner: u64,
