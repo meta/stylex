@@ -37,6 +37,18 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// Trailing characters are trimmed with a loop rather than an end-anchored
+// regex such as `/[\\/]+$/`: the regex engine retries that pattern from every
+// separator in a run, so a long run that is not at the end takes quadratic
+// time.
+function trimTrailingSeparators(value) {
+  let end = value.length;
+  while (end > 0 && (value[end - 1] === '/' || value[end - 1] === '\\')) {
+    end--;
+  }
+  return value.slice(0, end);
+}
+
 function toPosixPath(value) {
   return value.split(path.win32.sep).join(path.posix.sep);
 }
@@ -56,7 +68,7 @@ function replacePathRoot(value, root, token) {
   let output = value;
 
   for (const variant of variants) {
-    const withoutTrailingSeparator = variant.replace(/[\\/]+$/, '');
+    const withoutTrailingSeparator = trimTrailingSeparators(variant);
     if (withoutTrailingSeparator === '') {
       continue;
     }
@@ -139,7 +151,7 @@ function normalizeDiagnostic(message, context) {
 function normalizeCss(css, context) {
   return normalizePaths(css, context)
     .split('\n')
-    .map((line) => line.replace(/\s+$/, ''))
+    .map((line) => line.trimEnd())
     .join('\n')
     .trim();
 }
