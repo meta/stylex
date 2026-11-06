@@ -387,6 +387,10 @@ fn memoized_fold<T: Memoized>(
 }
 
 #[cfg(test)]
+#[path = "tests/memo_parameter_identity_tests.rs"]
+mod memo_parameter_identity_tests;
+
+#[cfg(test)]
 #[path = "tests/memo_owner_tests.rs"]
 mod memo_owner_tests;
 
