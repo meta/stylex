@@ -230,12 +230,12 @@ fn a_holey_literals_length_composes_as_a_number() {
   assert_folds_to_number("[, 1].length * [1, , 2].length", 6.0);
 }
 
-/// A spread is still not countable, whatever else the array holds. One written
-/// element stands for however many the spread holds, so neither the written
-/// count nor the evaluated one is the language's answer.
+/// A spread is not countable. Keep the first offending element's diagnostic:
+/// Babel has no node for a hole, but names a spread reached before the hole.
 #[test]
 fn a_holey_literal_carrying_a_spread_refuses_the_count() {
-  assert_deopt_reason_is("[, ...[1, 2]].length", SPREAD_ELEMENT);
+  assert_deopt_reason_is("[, ...[1, 2]].length", PATH_WITHOUT_NODE);
+  assert_deopt_reason_is("[...[1, 2], , 3].length", SPREAD_ELEMENT);
 }
 
 /// Only `length`. Every other property of a holey literal is read off the

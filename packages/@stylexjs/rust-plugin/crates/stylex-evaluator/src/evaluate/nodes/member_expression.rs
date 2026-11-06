@@ -447,6 +447,18 @@ pub(in super::super) fn evaluate(
     {
       return match written_slot_count(elems) {
         Some(count) => Some(EvaluateResultValue::Expr(create_number_expr(count as f64))),
+        None
+          if elems
+            .iter()
+            .find(|elem| elem.as_ref().is_none_or(|elem| elem.spread.is_some()))
+            .is_some_and(Option::is_none) =>
+        {
+          deopt(
+            &stylex_diagnostics::code_frame::unlocated_hole_fault(),
+            state,
+            PATH_WITHOUT_NODE,
+          )
+        },
         None => deopt(path, state, SPREAD_ELEMENT),
       };
     }

@@ -396,7 +396,8 @@ fn core_error(
         })
         .filter(|span| !span.is_dummy());
     // The node the core reported the error at, when it named one.
-    let span = stylex_macros::stylex_error::take_panic_span()
+    let recorded_span = stylex_macros::stylex_error::take_panic_span();
+    let span = recorded_span
         .map(|(lo, hi)| {
             swc_core::common::Span::new(
                 swc_core::common::BytePos(lo),
@@ -405,7 +406,7 @@ fn core_error(
         })
         .unwrap_or(swc_core::common::DUMMY_SP);
     let span = declaration.unwrap_or(span);
-    if span.is_dummy() {
+    if span.is_dummy() && recorded_span.is_none() {
         return crate::utils::diagnostics::Diagnostic::plain(message.to_owned()).into_error();
     }
     crate::utils::diagnostics::Diagnostic::syntax(message.to_owned(), span).into_error()
@@ -546,6 +547,49 @@ mod isolation_tests {
     use super::{isolated, warnings};
 
     const REPORTED: &str = "stylex_transform::shared::utils::core::flat_map_expanded_shorthands";
+
+    #[test]
+    fn only_the_unlocated_hole_frame_changes_dummy_fault_error_kind() {
+        use stylex_diagnostics::code_frame::{build_code_frame_error, unlocated_hole_fault};
+        use swc_core::{
+            common::{SyntaxContext, DUMMY_SP},
+            ecma::ast::{Expr, Ident, Invalid, Module},
+        };
+        for (fault, kind) in [
+            (unlocated_hole_fault(), "SyntaxError"),
+            (Expr::Invalid(Invalid { span: DUMMY_SP }), "Error"),
+            (
+                Expr::Ident(Ident::new(
+                    "missing".into(),
+                    DUMMY_SP,
+                    SyntaxContext::empty(),
+                )),
+                "Error",
+            ),
+        ] {
+            isolated(|| {
+                let mut state = stylex_state::state_manager::StateManager::default();
+                let _quiet = stylex_macros::stylex_error::SuppressPanicStderr::new();
+                let payload = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    stylex_macros::stylex_panic!(
+                        "{}",
+                        build_code_frame_error(&fault, &fault, "unlocated diagnostic", &mut state)
+                    );
+                }))
+                .unwrap_err();
+                let module = Module {
+                    span: DUMMY_SP,
+                    body: Vec::new(),
+                    shebang: None,
+                };
+                let error = super::core_error(&payload, &module);
+                let diagnostic = crate::utils::diagnostics::from_error(&error);
+                assert_eq!(diagnostic.name, kind);
+                assert_eq!(diagnostic.message, "unlocated diagnostic");
+                assert!(diagnostic.range.is_none());
+            });
+        }
+    }
 
     #[test]
     fn a_nested_operation_keeps_the_outer_warnings_and_error_span() {

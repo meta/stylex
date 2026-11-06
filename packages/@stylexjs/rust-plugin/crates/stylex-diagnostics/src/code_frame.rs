@@ -229,12 +229,25 @@ fn read_source_file(file_name: &FileName) -> Result<String, std::io::Error> {
   }
 }
 
+/// Diagnostic-only sentinel for Babel's absent array-element path. An empty
+/// sequence cannot be an authored expression and never becomes an evaluated value.
+pub fn unlocated_hole_fault() -> Expr {
+  Expr::Seq(SeqExpr {
+    span: DUMMY_SP,
+    exprs: Vec::new(),
+  })
+}
+
 /// Records where the error about to be raised is reported, for a host that
 /// renders its own code frame: the fault's span in the compiler's source map,
 /// and the binding whose declaration the refusal framed (see
 /// [`frame_declaration_of`]).
 fn record_fault(fault_expression: &Expr, state: &impl DiagnosticState) {
   use swc_core::common::Spanned;
+  if matches!(fault_expression, Expr::Seq(seq) if seq.span.is_dummy() && seq.exprs.is_empty()) {
+    stylex_macros::stylex_error::report_panic_at(0, 0);
+    return;
+  }
   let span = fault_expression.span();
   if !span.is_dummy() {
     stylex_macros::stylex_error::record_panic_span(span.lo.0, span.hi.0);
