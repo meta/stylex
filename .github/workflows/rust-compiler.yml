@@ -76,6 +76,8 @@ jobs:
         env:
           STYLEX_NATIVE_TEST_HOOKS: '1'
         run: npm run build:native --workspace=@stylexjs/rust-plugin
+      - name: Check the addon for build-machine paths
+        run: node packages/@stylexjs/rust-plugin/scripts/check-binary-paths.cjs
       # The unchanged JS suite hardcodes POSIX paths in snapshots and mocks, so
       # it does not pass on Windows even with the JS compiler; there the native
       # run is compared test for test against the JS compiler instead.
