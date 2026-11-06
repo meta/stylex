@@ -1459,3 +1459,56 @@ test('a mutating array method on a named array reports Babel\'s call refusal', (
     }
   }
 });
+
+test('debug labels inside, outside and without a root, and in a package, equal Babel', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const { runEngine } = require('./support/babel_errors.cjs');
+  const base = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'stylex-debug-label-')),
+  );
+  const labels = (code) =>
+    [...code.matchAll(/\$\$css: ?("(?:[^"\\]|\\.)*")/g)].map((match) =>
+      JSON.parse(match[1]),
+    );
+  const source = `${header}export const styles = stylex.create({ root: { color: 'red' } });\n`;
+  try {
+    const rootDir = path.join(base, 'app');
+    const cases = [
+      ['inside the root', path.join(rootDir, 'src/a.js'), { rootDir }],
+      ['outside the root', path.join(base, 'other/b.js'), { rootDir }],
+      ['without a root', path.join(base, 'x/y/c.js'), {}],
+      [
+        'in an installed package',
+        path.join(rootDir, 'node_modules/npm-package/dist/Foo.js'),
+        { rootDir },
+      ],
+      ['in a package without a name', path.join(base, 'nameless/lib/Z.js'), { rootDir }],
+      ['in a named package', path.join(base, 'named/lib/Z.js'), {}],
+    ];
+    fs.mkdirSync(path.join(base, 'nameless'), { recursive: true });
+    fs.writeFileSync(path.join(base, 'nameless/package.json'), '{"private":true}');
+    fs.mkdirSync(path.join(base, 'named'), { recursive: true });
+    fs.writeFileSync(path.join(base, 'named/package.json'), '{"name":"named"}');
+    for (const [name, filename, resolution] of cases) {
+      const options = {
+        dev: true,
+        unstable_moduleResolution: { type: 'commonJS', ...resolution },
+      };
+      const expected = labels(runEngine('babel', source, filename, options).code);
+      assert.ok(expected.length > 0, `Babel writes a label ${name}`);
+      assert.deepEqual(
+        labels(runEngine('direct', source, filename, options).code),
+        expected,
+        `direct label ${name}`,
+      );
+      assert.deepEqual(
+        labels(runEngine('facade', source, filename, options).code),
+        expected,
+        `facade label ${name}`,
+      );
+    }
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
