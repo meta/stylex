@@ -1,5 +1,5 @@
-//! Unit tests for path resolver internal helpers: `file_not_found_error`
-//! and `possible_aliased_paths`.
+//! Unit tests for path resolver internal helpers: `file_not_found_error`,
+//! `possible_aliased_paths`, and the Windows reading of a path.
 
 use std::{
   fs,
@@ -458,4 +458,113 @@ fn resolve_path_panics_when_strip_prefix_fails() {
 
   let mut package_json_seen = FxHashMap::<String, PackageJsonExtended>::default();
   let _ = crate::resolvers::resolve_path(processing_file, root_dir, &mut package_json_seen);
+}
+
+// ==================== a Windows path, read on every platform ====================
+
+/// On Windows a package-relative path is written with `\`, and the import
+/// specifier built from it must still be the `/`-separated one a package's
+/// `exports` matches -- the defect that left a local package with `exports`
+/// unresolved there. Read through the Windows reading of the path, so this
+/// runs on every platform.
+#[test]
+fn a_windows_package_path_builds_a_slash_separated_import_specifier() {
+  use crate::resolvers::{forward_slashes_on, package_import_specifiers, package_subpath};
+
+  let relative = forward_slashes_on(
+    r"..\packages\stylex-lib-dist-exports-local\colors.stylex.js".into(),
+    true,
+  );
+  let subpath = package_subpath(&relative, "stylex-lib-dist-exports-local");
+
+  assert_eq!(subpath, Some("/colors.stylex.js"));
+  assert_eq!(
+    package_import_specifiers("stylex-lib-dist-exports-local", subpath.unwrap()),
+    vec![
+      "stylex-lib-dist-exports-local/colors.stylex.js",
+      "stylex-lib-dist-exports-local/colors.stylex",
+    ]
+  );
+
+  let scoped = forward_slashes_on(
+    r"..\..\packages\@stylex\theme-lib-main-dist\colors.stylex.js".into(),
+    true,
+  );
+  assert_eq!(
+    package_import_specifiers(
+      "@stylex/theme-lib-main-dist",
+      package_subpath(&scoped, "theme-lib-main-dist").unwrap()
+    )[0],
+    "@stylex/theme-lib-main-dist/colors.stylex.js"
+  );
+
+  // A path naming the package directory itself still reaches into it.
+  let package_root = forward_slashes_on(r"..\packages\stylex-lib-dist-main".into(), true);
+  assert_eq!(
+    package_subpath(&package_root, "stylex-lib-dist-main"),
+    Some("")
+  );
+}
+
+/// The pnpm reading of a resolved path splits it at `node_modules` into the
+/// package and the path inside it; a Windows path, written with `\`, reads the
+/// same once its separators are `/` -- where before nothing matched and the
+/// pnpm store path was never found there.
+#[test]
+fn a_windows_resolved_path_reads_its_node_modules_package() {
+  use crate::resolvers::{forward_slashes_on, node_modules_package};
+
+  let scoped = forward_slashes_on(
+    r"D:\a\app\node_modules\@stylex\lib-exports-pnpm\dist\colors.stylex.js".into(),
+    true,
+  );
+  assert_eq!(
+    node_modules_package(&scoped),
+    Some((
+      "D:/a/app/node_modules",
+      "@stylex/lib-exports-pnpm".to_string(),
+      "dist/colors.stylex.js"
+    ))
+  );
+
+  let plain = forward_slashes_on(
+    r"D:\a\app\node_modules\stylex-lib-pnpm\dist\index.jsx".into(),
+    true,
+  );
+  assert_eq!(
+    node_modules_package(&plain),
+    Some((
+      "D:/a/app/node_modules",
+      "stylex-lib-pnpm".to_string(),
+      "dist/index.jsx"
+    ))
+  );
+
+  // A path already in the pnpm store is left as it is.
+  let stored = forward_slashes_on(
+    r"D:\a\app\node_modules\.pnpm\stylex-lib-pnpm@0.1.0\node_modules\stylex-lib-pnpm\dist\index.jsx"
+      .into(),
+    true,
+  );
+  assert_eq!(node_modules_package(&stored), None);
+}
+
+/// Off Windows `\` is an ordinary file-name character, and the reading leaves
+/// it alone: the same path is not split, which is what keeps resolution there
+/// byte-for-byte what it was.
+#[test]
+fn a_backslash_is_a_file_name_character_off_windows() {
+  use crate::resolvers::{forward_slashes_on, node_modules_package, package_subpath};
+
+  let path = r"node_modules\pkg\file.js".to_string();
+
+  assert_eq!(forward_slashes_on(path.clone(), false), path);
+  assert_eq!(
+    node_modules_package(&forward_slashes_on(path.clone(), false)),
+    None
+  );
+  assert_eq!(
+    package_subpath(&forward_slashes_on(path, false), "pkg"),
+    Some(r"\file.js")
+  );
 }

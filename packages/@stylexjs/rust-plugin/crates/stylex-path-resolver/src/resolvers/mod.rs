@@ -37,11 +37,83 @@ fn resolve_path_cwd(root_dir: &Path) -> PathBuf {
 /// `Path` components are rebuilt with `\`, which would leak into module ids;
 /// elsewhere `\` is an ordinary file-name character and is left alone.
 fn to_forward_slashes(path: String) -> String {
-  if cfg!(windows) {
+  forward_slashes_on(path, cfg!(windows))
+}
+
+/// [`to_forward_slashes`] for a named platform, so the Windows reading of a
+/// path is exercised by the unit tests on every platform.
+fn forward_slashes_on(path: String, windows: bool) -> String {
+  if windows {
     path.replace('\\', "/")
   } else {
     path
   }
+}
+
+/// The part of a package-relative path after the package's directory name, or
+/// `None` when the path does not reach into that directory. Read from a path
+/// written with `/` separators (see [`to_forward_slashes`]).
+fn package_subpath<'a>(relative_package_path: &'a str, package_dir: &str) -> Option<&'a str> {
+  let subpath = relative_package_path
+    .split(package_dir)
+    .last()
+    .unwrap_or_default();
+
+  (!subpath.is_empty() || relative_package_path.ends_with(format!("/{}", package_dir).as_str()))
+    .then_some(subpath)
+}
+
+/// The import specifiers tried for a file inside package `name`, the one with
+/// the file's extension first: a package import specifier is written with `/`
+/// on every platform, which `subpath` already is.
+fn package_import_specifiers(name: &str, subpath: &str) -> Vec<String> {
+  if subpath.is_empty() {
+    return vec![name.to_string()];
+  }
+
+  let path_with_ext = format!("{}{}", name, subpath);
+  let path_without_ext = Path::new(&path_with_ext)
+    .with_extension("")
+    .to_string_lossy()
+    .to_string();
+  vec![path_with_ext, path_without_ext]
+}
+
+/// The `node_modules` directory a resolved path sits in, the package it names
+/// there (`@org/pkg` for a scoped one) and the rest of the path inside the
+/// package. Read from a path written with `/` separators.
+fn node_modules_package(resolved: &str) -> Option<(&str, String, &str)> {
+  let nm_idx = resolved.find("node_modules/")?;
+  let after_nm = &resolved[nm_idx + "node_modules/".len()..];
+
+  if after_nm.starts_with(".pnpm") {
+    return None;
+  }
+
+  let (package_name, rest_path) = if after_nm.starts_with('@') {
+    // Scoped package: @org/pkg/file.js
+    let parts: Vec<&str> = after_nm.splitn(3, '/').collect();
+    if parts.len() < 2 {
+      return None;
+    }
+    (
+      format!("{}/{}", parts[0], parts[1]),
+      if parts.len() > 2 { parts[2] } else { "" },
+    )
+  } else {
+    // Regular package: pkg/file.js
+    let parts: Vec<&str> = after_nm.splitn(2, '/').collect();
+    (
+      parts[0].to_string(),
+      if parts.len() > 1 { parts[1] } else { "" },
+    )
+  };
+
+  Some((
+    &resolved[..nm_idx + "node_modules".len()],
+    package_name,
+    rest_path,
+  ))
 }
 
 pub fn resolve_path(
@@ -162,31 +234,20 @@ fn get_package_path_by_package_json(
     let potential_path_section = name.split("/").last().unwrap_or_default();
 
     if contains_subpath(relative_package_path, Path::new(&potential_path_section)) {
-      let relative_package_path_str = relative_package_path.display().to_string();
+      // A package import specifier, built from a file-system path: written
+      // with `/` whatever the platform's separator, or the specifier
+      // `pkg\file.js` misses the package's `exports` on Windows.
+      let relative_package_path_str =
+        to_forward_slashes(relative_package_path.display().to_string());
 
-      let potential_file_path = relative_package_path_str
-        .split(potential_path_section)
-        .last()
-        .unwrap_or_default();
-
-      if !potential_file_path.is_empty()
-        || relative_package_path_str.ends_with(format!("/{}", potential_path_section).as_str())
+      if let Some(potential_file_path) =
+        package_subpath(&relative_package_path_str, potential_path_section)
       {
         // Try multiple import specifier variations to handle exports field matching.
         // Prefer the version with an explicit extension first, to align with typical
         // module resolution behavior when both extension-less and
         // extension-qualified paths exist.
-        let import_specifiers = if potential_file_path.is_empty() {
-          vec![name.to_string()]
-        } else {
-          // Try full path with extension first, then without extension
-          let path_with_ext = format!("{}{}", name, potential_file_path);
-          let path_without_ext = Path::new(&path_with_ext)
-            .with_extension("")
-            .to_string_lossy()
-            .to_string();
-          vec![path_with_ext, path_without_ext]
-        };
+        let import_specifiers = package_import_specifiers(name, potential_file_path);
 
         for import_specifier in import_specifiers {
           if let Ok(resolution) = RESOLVER.resolve(cwd, &import_specifier) {
@@ -410,7 +471,9 @@ pub fn resolve_file_path(
 /// function checks if such a path exists and returns it if found.
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn try_resolve_pnpm_path(resolved_path: &Path) -> PathBuf {
-  let resolved_str = resolved_path.to_string_lossy();
+  // Read with `/` separators, which the package-name parsing below splits on;
+  // on Windows the resolved path is written with `\`.
+  let resolved_str = to_forward_slashes(resolved_path.to_string_lossy().into_owned());
 
   // Check if the path contains node_modules (but not .pnpm, which means it's
   // already a pnpm path)
@@ -418,39 +481,14 @@ fn try_resolve_pnpm_path(resolved_path: &Path) -> PathBuf {
     return resolved_path.to_path_buf();
   }
 
-  // Find the node_modules directory and the package path after it
-  let Some(nm_idx) = resolved_str.find("node_modules/") else {
+  // Find the node_modules directory, the package and the path inside it
+  // (scoped packages like @org/pkg included); a path already in .pnpm is kept.
+  let Some((node_modules_base, package_name, rest_path)) = node_modules_package(&resolved_str)
+  else {
     return resolved_path.to_path_buf();
-  };
-
-  let after_nm = &resolved_str[nm_idx + "node_modules/".len()..];
-
-  // Skip if already in .pnpm
-  if after_nm.starts_with(".pnpm") {
-    return resolved_path.to_path_buf();
-  }
-
-  // Extract package name and rest of path (handle scoped packages like @org/pkg)
-  let (package_name, rest_path) = if after_nm.starts_with('@') {
-    // Scoped package: @org/pkg/file.js
-    let parts: Vec<&str> = after_nm.splitn(3, '/').collect();
-    if parts.len() >= 2 {
-      let pkg_name = format!("{}/{}", parts[0], parts[1]);
-      let rest = if parts.len() > 2 { parts[2] } else { "" };
-      (pkg_name, rest)
-    } else {
-      return resolved_path.to_path_buf();
-    }
-  } else {
-    // Regular package: pkg/file.js
-    let parts: Vec<&str> = after_nm.splitn(2, '/').collect();
-    let pkg_name = parts[0].to_string();
-    let rest = if parts.len() > 1 { parts[1] } else { "" };
-    (pkg_name, rest)
   };
 
   // Construct the package directory path in node_modules
-  let node_modules_base = &resolved_str[..nm_idx + "node_modules".len()];
   let package_dir = Path::new(node_modules_base).join(&package_name);
 
   // Check if .pnpm directory exists (indicating pnpm is being used)
