@@ -102,12 +102,11 @@ fn the_largest_ceiling_a_project_can_configure_can_be_claimed() {
   // Nothing to assert where the platform does not answer how much is left. The
   // claim was still made — reaching here at all means it was satisfied.
   //
-  // Read from inside the claim, so the frames between the boundary and the
-  // reading are already spent: what is asserted is that the whole claim is
-  // underfoot but for those.
+  // Read from inside the callback, after the platform's stack entry frames
+  // and reserved/guard region: the entire logical claim must be usable here.
   if let Some(bytes) = room {
     assert!(
-      bytes + 4096 >= claimed,
+      bytes >= claimed,
       "the largest claim left {} bytes underfoot rather than {}",
       bytes,
       claimed
