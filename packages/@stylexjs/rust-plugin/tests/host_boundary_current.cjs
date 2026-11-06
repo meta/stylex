@@ -1110,10 +1110,12 @@ test('a failing compiler arrow reaches the transform only if user code lets it',
       );
     }
   }
-  // The oracle: Babel's arrow throws a plain Error, wrapped once.
+  // The oracle: Babel's arrow throws a plain Error, wrapped once, prefixed with
+  // the filename Babel resolved against the working directory (`D:\app\...`
+  // on Windows).
   assert.deepEqual(arrowFailure('babel', scenarios.uncaught()).caught, {
     kind: 'Error',
-    message: '/app/arrow.js: Referenced constant is not defined.',
+    message: `${path.resolve('/app/arrow.js')}: Referenced constant is not defined.`,
     code: 'BABEL_TRANSFORM_ERROR',
     extra: undefined,
   });

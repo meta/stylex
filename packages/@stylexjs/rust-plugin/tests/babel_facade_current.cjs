@@ -1385,16 +1385,21 @@ export const keep = {
 });
 
 test('coverage instrumentation counts unused definitions in either plugin order', () => {
-  // Outside the tests directory, which istanbul excludes by default.
-  const istanbul = [require.resolve('babel-plugin-istanbul'), { cwd: '/repo' }];
+  // Outside the tests directory, which istanbul excludes by default. Resolved,
+  // because istanbul's exclusion on Windows matches the file against
+  // `<cwd>\**`, and a drive-less `/repo` never matches `D:\repo\...`.
+  const istanbul = [
+    require.resolve('babel-plugin-istanbul'),
+    { cwd: path.resolve('/repo') },
+  ];
   const source = `import * as stylex from '@stylexjs/stylex';
 const styles = stylex.create({root: {color: 'red'}});
 export function f(x) { if (x) { return stylex.props(styles.root); } return null; }
 `;
   const run = (plugins) =>
     babel.transformSync(source, {
-      filename: '/repo/src/Fixture.js',
-      cwd: '/repo',
+      filename: path.resolve('/repo/src/Fixture.js'),
+      cwd: path.resolve('/repo'),
       babelrc: false,
       configFile: false,
       plugins,
@@ -1421,7 +1426,11 @@ test('module lowering before StyleX does not revive unused definitions', () => {
 });
 
 test('coverage after StyleX spans the source of compiled and hoisted definitions', () => {
-  const istanbul = [require.resolve('babel-plugin-istanbul'), { cwd: '/repo' }];
+  // Resolved, for istanbul's Windows exclusion check (see above).
+  const istanbul = [
+    require.resolve('babel-plugin-istanbul'),
+    { cwd: path.resolve('/repo') },
+  ];
   const strip = () => ({
     visitor: {
       IfStatement(path) {
@@ -1537,8 +1546,8 @@ test('coverage after StyleX spans the source of compiled and hoisted definitions
   ];
   for (const [source, before, expected] of cases) {
     const result = babel.transformSync(source, {
-      filename: '/repo/src/Fixture.js',
-      cwd: '/repo',
+      filename: path.resolve('/repo/src/Fixture.js'),
+      cwd: path.resolve('/repo'),
       babelrc: false,
       configFile: false,
       plugins: [...before, [plugin, {}], istanbul],
