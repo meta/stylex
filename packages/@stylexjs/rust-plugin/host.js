@@ -496,8 +496,11 @@ function createHost(options, filename, binding) {
             state.thrown = undefined;
             throw thrown;
           }
-          // The compiler's own failure, as a plain Error (see below).
-          throw new Error(error.message);
+          // The compiler's own failure (an addon error, which carries the
+          // N-API status as its code), as a plain Error (see below). Anything
+          // else is a JavaScript exception the addon rethrew unchanged.
+          if (typeof error?.code === 'string') throw new Error(error.message);
+          throw error;
         }
         if (result?.type === 'failed') {
           // A compiler failure: a plain Error with the compiler's message, as

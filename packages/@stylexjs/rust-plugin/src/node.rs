@@ -129,7 +129,9 @@ enum HostReply {
     Nested(Job),
 }
 
-type HostFunction = FunctionRef<FnArgs<(String, WireArgs)>, WireReply>;
+/// The host function; `call_host` calls it and reads its reply (a value, or a
+/// thrown exception) with N-API directly.
+type HostFunction = FunctionRef<FnArgs<(String, WireArgs)>, Unknown<'static>>;
 
 /// Native frames between two JavaScript frames (N-API conversion, the host
 /// pump, error construction) are not covered by V8's stack check, which only
@@ -357,6 +359,65 @@ fn run(job: Job) {
 struct Session {
     receiver: mpsc::Receiver<CompilerMessage>,
     callback: Option<HostFunction>,
+    /// A JavaScript exception that escaped the host's own handler (V8 threw
+    /// it on entry, out of stack): kept by reference, never converted (that
+    /// would run JavaScript again at the stack limit), and rethrown unchanged
+    /// when the operation returns.
+    escaped: RefCell<Option<(sys::napi_env, sys::napi_ref)>>,
+}
+
+impl Session {
+    fn new(receiver: mpsc::Receiver<CompilerMessage>, callback: Option<HostFunction>) -> Self {
+        Session {
+            receiver,
+            callback,
+            escaped: RefCell::new(None),
+        }
+    }
+
+    /// Takes the pending exception and keeps the first one, running no
+    /// JavaScript.
+    unsafe fn keep_escaped(&self, env: sys::napi_env) {
+        let mut exception = std::ptr::null_mut();
+        if sys::napi_get_and_clear_last_exception(env, &mut exception) != sys::Status::napi_ok
+            || exception.is_null()
+        {
+            return;
+        }
+        let mut escaped = self.escaped.borrow_mut();
+        if escaped.is_none() {
+            let mut reference = std::ptr::null_mut();
+            if sys::napi_create_reference(env, exception, 1, &mut reference) == sys::Status::napi_ok
+            {
+                *escaped = Some((env, reference));
+            }
+        }
+    }
+
+    /// Rethrows the kept exception to the caller of this operation, if any.
+    fn rethrow_escaped(&self) -> Result<()> {
+        let Some((env, reference)) = self.escaped.borrow_mut().take() else {
+            return Ok(());
+        };
+        unsafe {
+            let mut exception = std::ptr::null_mut();
+            let found = sys::napi_get_reference_value(env, reference, &mut exception);
+            sys::napi_delete_reference(env, reference);
+            if found == sys::Status::napi_ok && !exception.is_null() {
+                sys::napi_throw(env, exception);
+            }
+        }
+        // napi-rs leaves a genuinely pending exception in place.
+        Err(Error::new(Status::PendingException, ""))
+    }
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        if let Some((env, reference)) = self.escaped.get_mut().take() {
+            unsafe { sys::napi_delete_reference(env, reference) };
+        }
+    }
 }
 
 enum PumpEnd {
@@ -379,7 +440,7 @@ fn pump(env: &Env, session: &Session) -> Result<PumpEnd> {
                 PENDING.with(|pending| pending.borrow_mut().push(reply.clone()));
                 let guard = PendingGuard;
                 let result = match &session.callback {
-                    Some(callback) => call_host(env, callback, id, arguments),
+                    Some(callback) => call_host(env, session, callback, id, arguments),
                     None => Err(host::WireFailure::plain(format!(
                         "a JavaScript host callback is required for {id}"
                     ))),
@@ -405,7 +466,7 @@ pub fn transform_sync(
     source: String,
     filename: String,
     options: Value,
-    callback: Option<Function<'_, FnArgs<(String, WireArgs)>, WireReply>>,
+    callback: Option<Function<'_, FnArgs<(String, WireArgs)>, Unknown<'static>>>,
 ) -> Result<NativeTransformOutput> {
     ensure_js_stack()?;
     let has_callback = callback.is_some();
@@ -418,8 +479,10 @@ pub fn transform_sync(
         has_callback,
         sender,
     })?;
-    let session = Session { receiver, callback };
-    let output = match pump(&env, &session)? {
+    let session = Session::new(receiver, callback);
+    let end = pump(&env, &session)?;
+    session.rethrow_escaped()?;
+    let output = match end {
         PumpEnd::Done(output) => *output,
         PumpEnd::Closure(_) => {
             return Err(Error::new(
@@ -446,17 +509,47 @@ pub fn transform_sync(
 
 fn call_host(
     env: &Env,
+    session: &Session,
     callback: &HostFunction,
     id: String,
     arguments: Vec<HostValue>,
 ) -> std::result::Result<HostValue, host::WireFailure> {
     let plain = |error: Error| host::WireFailure::plain(error.to_string());
-    callback
-        .borrow_back(env)
-        .map_err(plain)?
-        .call((id, WireArgs(arguments)).into())
-        .map_err(plain)?
-        .0
+    let function = callback.borrow_back(env).map_err(plain)?;
+    let raw = env.raw();
+    unsafe {
+        let argv = [
+            js_string(raw, &id).map_err(plain)?,
+            WireArgs::to_napi_value(raw, WireArgs(arguments)).map_err(plain)?,
+        ];
+        let mut receiver = std::ptr::null_mut();
+        napi_check(sys::napi_get_undefined(raw, &mut receiver)).map_err(plain)?;
+        let mut result = std::ptr::null_mut();
+        let status = sys::napi_call_function(
+            raw,
+            receiver,
+            JsValue::value(&function).value,
+            argv.len(),
+            argv.as_ptr(),
+            &mut result,
+        );
+        if status == sys::Status::napi_ok {
+            return js_to_host(raw, result).map_err(plain)?;
+        }
+        // The host catches every exception of the user code it runs, so one
+        // escapes only when V8 throws before the host's handler runs: a stack
+        // overflow on entry. It is not converted here (napi-rs would call
+        // its `toString`, running JavaScript at the same exhausted stack, and
+        // recurse until V8 itself fails); the operation rethrows it.
+        let mut pending = false;
+        if sys::napi_is_exception_pending(raw, &mut pending) == sys::Status::napi_ok && pending {
+            session.keep_escaped(raw);
+            return Err(host::WireFailure::plain(host::HOST_CALLBACK_THREW));
+        }
+        Err(host::WireFailure::plain(format!(
+            "a JavaScript host callback failed (N-API status {status})"
+        )))
+    }
 }
 
 // Host values cross the boundary as JavaScript values, built and read with
@@ -731,24 +824,6 @@ impl ToNapiValue for WireArgs {
     }
 }
 
-/// The host's reply to a request: a value, or a thrown exception.
-pub struct WireReply(std::result::Result<HostValue, host::WireFailure>);
-
-impl TypeName for WireReply {
-    fn type_name() -> &'static str {
-        "unknown"
-    }
-    fn value_type() -> ValueType {
-        ValueType::Unknown
-    }
-}
-
-impl FromNapiValue for WireReply {
-    unsafe fn from_napi_value(env: sys::napi_env, value: sys::napi_value) -> Result<Self> {
-        Ok(WireReply(js_to_host(env, value)?))
-    }
-}
-
 /// A host value JavaScript passes to the compiler.
 pub struct WireValue(HostValue);
 
@@ -852,22 +927,21 @@ pub fn call_compiler_function(
     id: String,
     this: WireValue,
     arguments: WireValues,
-    callback: Function<'_, FnArgs<(String, WireArgs)>, WireReply>,
+    callback: Function<'_, FnArgs<(String, WireArgs)>, Unknown<'static>>,
 ) -> Result<ClosureReply> {
     ensure_js_stack()?;
     let (this, arguments) = (this.0, arguments.0);
     let (sender, receiver) = mpsc::channel();
-    let session = Session {
-        receiver,
-        callback: Some(callback.create_ref()?),
-    };
+    let session = Session::new(receiver, Some(callback.create_ref()?));
     submit(Job::Closure {
         id,
         this,
         arguments,
         sender,
     })?;
-    match pump(&env, &session)? {
+    let end = pump(&env, &session)?;
+    session.rethrow_escaped()?;
+    match end {
         PumpEnd::Closure(Ok(value)) => Ok(ClosureReply::Value(value)),
         // A compiler failure with a cause comes back as data: the host raises
         // the exception for it, so it can recognize that exception later.

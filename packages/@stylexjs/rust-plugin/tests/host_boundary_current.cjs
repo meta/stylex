@@ -1223,3 +1223,71 @@ test('failing compiler arrows in workers behave as on the main thread', async ()
     assert.equal(result.babel.kind, 'Error');
   }
 });
+
+// V8 treats a frame more than its small slack below its own stack limit as
+// not on its stack at all, and fails (a crash, or on Windows a fatal check)
+// if it ever unwinds there. So a JavaScript exception thrown at the stack
+// limit inside a host request must reach the caller without the addon running
+// JavaScript again. Main-thread V8 limits well below the OS stack, at many
+// sizes, put the overflow at every point of the nested call path.
+test('nested transforms and compiler functions at the V8 stack limit fail catchably', () => {
+  const { spawnSync } = require('node:child_process');
+  const script = `
+    const { transformSync } = require(${JSON.stringify(path.join(__dirname, '..'))});
+    const header = "import * as stylex from '@stylexjs/stylex';\\n";
+    const make = (n) => header + 'export const s = stylex.create({ a: { color: stylex.env.nest(' + n + ') } });';
+    const outcome = (run) => {
+      try {
+        run();
+        return 'ok';
+      } catch (error) {
+        return error instanceof RangeError ? 'range' : 'other: ' + String(error && error.message);
+      }
+    };
+    const results = [];
+    for (const levels of [1, 8, 32, 64]) {
+      const options = { env: {} };
+      options.env.nest = (n) => {
+        if (n < levels) transformSync(make(n + 1), { filename: '/app/n.js', ...options });
+        return 'red';
+      };
+      results.push(outcome(() => transformSync(make(1), { filename: '/app/n.js', ...options })));
+    }
+    // A kept compiler function whose host request runs at the limit.
+    let kept;
+    transformSync(header + 'export const s = stylex.create({ a: { color: stylex.env.keep((v) => stylex.env.inner(v)) } });', {
+      filename: '/app/k.js',
+      env: { keep: (fn) => { kept = fn; return 'red'; }, inner: (v) => v },
+    });
+    let max = 0;
+    const probe = (d) => { max = d; probe(d + 1); };
+    try { probe(0); } catch {}
+    const at = (d, run) => (d > 0 ? at(d - 1, run) : run());
+    for (let back = 0; back < 400; back += 4) {
+      results.push(outcome(() => at(max - back, () => kept('x'))));
+    }
+    process.stdout.write(JSON.stringify(results));
+  `;
+  for (const stackSize of [
+    120, 136, 152, 168, 184, 200, 216, 232, 248, 264, 280,
+  ]) {
+    const child = spawnSync(
+      process.execPath,
+      [`--stack-size=${stackSize}`, '-e', script],
+      { encoding: 'utf8', timeout: 60000 },
+    );
+    assert.equal(
+      child.status,
+      0,
+      `--stack-size=${stackSize}: ${child.signal ?? ''} ${child.stderr.slice(-300)}`,
+    );
+    const results = JSON.parse(child.stdout);
+    assert.equal(results[0], 'ok', `--stack-size=${stackSize} ordinary input`);
+    for (const result of results) {
+      assert.ok(
+        result === 'ok' || result === 'range',
+        `--stack-size=${stackSize}: ${result}`,
+      );
+    }
+  }
+});
