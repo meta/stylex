@@ -42,6 +42,8 @@ const TREE_ARGS = [
   'none',
   '--format',
   '{p}',
+  '--color',
+  'never',
 ];
 
 const LICENSE_FILE =
@@ -130,7 +132,9 @@ function decompose(text) {
 
 function packages() {
   const cwd = root;
-  const tree = execFileSync('cargo', TREE_ARGS, { cwd, encoding: 'utf8' })
+  // Plain output whatever the environment's CARGO_TERM_COLOR says.
+  const env = { ...process.env, CARGO_TERM_COLOR: 'never' };
+  const tree = execFileSync('cargo', TREE_ARGS, { cwd, encoding: 'utf8', env })
     .split('\n')
     .map((l) => l.replace(/ \(.*$/, '').trim())
     .filter(Boolean);
@@ -138,19 +142,34 @@ function packages() {
   const meta = JSON.parse(
     execFileSync(
       'cargo',
-      ['metadata', '--locked', '--features', 'node', '--format-version', '1'],
+      [
+        'metadata',
+        '--locked',
+        '--features',
+        'node',
+        '--format-version',
+        '1',
+        '--color',
+        'never',
+      ],
       {
         cwd,
         encoding: 'utf8',
         maxBuffer: 1 << 28,
+        env,
       },
     ),
   );
   const found = meta.packages.filter((p) =>
     wanted.has(`${p.name} v${p.version}`),
   );
-  if (found.length !== wanted.size)
-    throw new Error('cargo metadata is missing packages of the tree');
+  if (found.length !== wanted.size) {
+    const known = new Set(found.map((p) => `${p.name} v${p.version}`));
+    const missing = [...wanted].filter((id) => !known.has(id));
+    throw new Error(
+      `cargo metadata is missing packages of the tree: ${missing.map((id) => JSON.stringify(id)).join(', ')}`,
+    );
+  }
   return found.sort(
     (a, b) =>
       a.name.localeCompare(b.name, 'en') ||
