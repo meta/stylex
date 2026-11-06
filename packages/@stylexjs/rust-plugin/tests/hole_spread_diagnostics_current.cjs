@@ -125,6 +125,15 @@ for (const [label, prelude, value] of [
   }
 }
 
+test('a hole in the argument is not relabeled as a receiver-call refusal', () => {
+  const value = "['a'].join([, 1])";
+  const expected = failure('babel', '', value);
+  assert.equal(expected.message, `${filename}: Unexpected error:\nCould not resolve the code being evaluated.\n`);
+  for (const engine of ['direct', 'facade']) {
+    assert.deepEqual(failure(engine, '', value), expected);
+  }
+});
+
 test('host-provided sparse arrays keep their existing values and slot counts', () => {
   for (const value of ['stylex.env.list.length', 'Object.keys(stylex.env.list).length']) {
     const source = `${header}export const s=stylex.create({x:{width:${value}}});`;
