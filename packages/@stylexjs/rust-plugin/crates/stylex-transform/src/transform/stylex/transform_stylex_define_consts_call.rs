@@ -42,8 +42,7 @@ where
 
       let evaluated_arg = evaluate_with_functions(first_arg, &mut self.state, function_map);
 
-      // The original plugin refuses an argument it cannot read, or one that is
-      // no object, at the call.
+      // Matches Babel: unreadable or non-object arguments are refused at the call.
       let value = reported_at(call.span, || {
         folded_style_object(
           evaluated_arg,

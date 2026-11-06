@@ -34,13 +34,7 @@ static NEXTJS_HYDRATION_WARNING: LazyLock<String> = LazyLock::new(|| {
     Please verify the expression that caused this error.".to_string()
 });
 
-/// The `$$css` entry of each namespace, carrying the `file:line` the namespace
-/// was written on.
-///
-/// Takes the styles rather than borrowing them, so the properties of a
-/// namespace move into the new map. Copying them allocated one string for
-/// every property of every namespace, and a debug build annotates every
-/// namespace of every `stylex.create` call.
+/// Adds each namespace's `$$css` entry carrying its `file:line`; consumes the styles.
 pub(crate) fn add_source_map_data(
   obj: StylesObjectMap,
   call_expr: &CallExpr,
@@ -75,13 +69,7 @@ pub(crate) fn add_source_map_data(
     },
   };
 
-  // Everything a namespace lookup needs that belongs to the *call*, built once.
-  // The loop below runs per namespace, and each of these was being rebuilt
-  // inside it -- which made a `create` call quadratic in its own namespace count.
-  // The wrapped expression it carries is a deep clone of the call, so it is
-  // built on the first namespace that actually needs one and not at all for a
-  // call whose namespaces all resolve through the input source map or the span
-  // cache.
+  // Per-call lookup state, built once; the wrapped call clone is built lazily.
   let lookup = CallLookup::new(call_expr, state.input_module_base());
 
   for (key, value) in obj {
@@ -92,29 +80,16 @@ pub(crate) fn add_source_map_data(
 
     match style_node_paths.remove(&key) {
       Some(style_node_path) => {
-        // The label is the compiled file and the line the namespace is written
-        // on in the compiler's input, as the Babel plugin writes it: its
-        // addSourceMapData reads `hub.file.codeMap`, which @babel/core 7 does
-        // not define, so an input source map never moves the label.
-        //
-        // Locate the namespace by its key: keys are static strings that
-        // survive value-level code transforms (e.g. macro expansion by an
-        // earlier loader), so this finds the original source position even
-        // when the compiled values no longer match the file content. Fall
-        // back to matching the value expression when the key cannot be
-        // located (e.g. computed keys).
+        // Matches Babel: the label uses the input line; `hub.file.codeMap` is undefined in
+        // @babel/core 7, so an input source map never moves it. Locate by key (survives value
+        // transforms), falling back to the value expression (e.g. computed keys).
         let source_code_frame_and_span = match get_key_span_from_source_code(&lookup, &key, state) {
           Ok((code_frame, span)) if !span.eq(&DUMMY_SP) => Ok((code_frame, span)),
           _ => get_span_from_source_code(lookup.wrapped(), &style_node_path.value, state),
         };
 
         match source_code_frame_and_span {
-          // The line is asked for once. `try_get_span_line_number` already
-          // answers nothing for a span that names no place -- an empty one, and
-          // one the frame cannot read a position off -- so asking about the
-          // span first said the same thing twice and left the second reason
-          // silent. Either way there is no line to point at, and the
-          // `contains_key` fallback below writes the plain marker.
+          // No line for an empty or unreadable span; the fallback below writes the plain marker.
           Ok((code_frame, span)) => match code_frame.try_get_span_line_number(span) {
             Some(original_line_number) => {
               let filename = state.get_filename().to_string();
@@ -172,7 +147,6 @@ pub(crate) fn add_source_map_data(
         result.insert(key, Rc::new(inner_map));
       },
       _ => {
-        // Fallback in case no sourcemap data is found
         result.insert(key, Rc::new(inner_map));
       },
     };
@@ -181,8 +155,7 @@ pub(crate) fn add_source_map_data(
   result
 }
 
-/// Inserts the `$$css` entry with a `file:line` annotation, or `true` when a
-/// usable short filename cannot be produced.
+/// Inserts `$$css` as `file:line`, or `true` when no usable short filename exists.
 fn insert_compiled_entry(
   inner_map: &mut IndexMap<String, Rc<FlatCompiledStylesValue>>,
   filename: &str,
@@ -192,19 +165,15 @@ fn insert_compiled_entry(
   functions: &FunctionMap,
 ) {
   let short_filename_expr = if let Some(namer) = state.options.core.debug_file_namer.clone() {
-    // Custom callbacks run once per annotated namespace, as in Babel; their
-    // results may be stateful and must not share the filesystem-name cache.
+    // Custom callbacks run once per namespace, as in Babel; don't share the filename cache.
     let name = match namer.debug_file_name(filename) {
       Ok(name) => name,
-      // A throwing callback aborts the transform at this first call, as its
-      // exception aborts Babel's; the host latch rethrows the original value.
-      // Never an empty name: '' is a successful answer (no label).
+      // A throwing callback aborts the transform, as in Babel. '' means no label.
       Err(error) => stylex_panic!("{}", error),
     };
     create_string_expr(&name)
   } else if let Some(ref function) = state.options.debug_file_path {
-    // The legacy public option also receives the original filename, not the
-    // package-shortened label. The host-namer branch must not call this again.
+    // The legacy option receives the original filename, not the shortened label.
     function.call(vec![create_string_expr(filename)])
   } else {
     let short = match state.cached_short_filename(filename) {
@@ -257,14 +226,8 @@ fn get_package_prefix(absolute_path: &str) -> Option<String> {
     .map(String::from)
 }
 
-/// Node's `path.resolve` and `path.relative`, which the Babel plugin builds
-/// the debug name with, in the flavour of the platform the compiler runs on.
-///
-/// The name has to be spelled the way the Babel plugin spells it on the same
-/// machine: relative to a root through the platform's own path rules (a
-/// root-relative `/src` takes the working directory's drive on Windows, and a
-/// drive is compared without case), and written with the platform's
-/// separator. Both flavours are plain text, so each can be tested anywhere.
+/// Node's `path.resolve` / `path.relative` in posix or win32 flavour, matching how the
+/// Babel plugin builds the debug name on the host platform.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum NodePath {
   Posix,
@@ -298,8 +261,7 @@ impl NodePath {
     }
   }
 
-  /// The root a path starts from (`/`, `D:\`, `D:` or `\`, or nothing) and
-  /// the rest of it.
+  /// Splits off the root (`/`, `D:\`, `D:`, `\`, or nothing) from the rest.
   fn split_root(self, path: &str) -> (String, &str) {
     match self {
       Self::Posix => match path.strip_prefix('/') {
@@ -379,7 +341,6 @@ impl NodePath {
 }
 
 fn get_short_path(relative_path: &str, state: &StateManager) -> String {
-  // Check if commonJS module resolution with rootDir is configured
   if let CheckModuleResolution::CommonJs {
     root_dir: Some(root_dir),
     ..
@@ -394,10 +355,8 @@ fn get_short_path(relative_path: &str, state: &StateManager) -> String {
     return NodePath::host().relative(&cwd, root_dir, relative_path);
   }
 
-  // Normalize slashes in the path and truncate to last 2 segments. The Babel
-  // plugin splits a filename Babel has already resolved, which on Windows
-  // spells every separator `\`; splitting on each separator the platform
-  // accepts gives the same segments for a filename written with `/`.
+  // Keep the last two segments, splitting on every platform separator as Babel's
+  // resolved (Windows: `\`) filename would be.
   let path_parts: Vec<&str> = relative_path.split(std::path::is_separator).collect();
 
   let path_segments = if path_parts.len() >= 2 {
@@ -409,15 +368,7 @@ fn get_short_path(relative_path: &str, state: &StateManager) -> String {
   path_segments.join("/")
 }
 
-/// The short name `absolute_path` is written as, measured against the directory
-/// the compilation runs in.
-///
-/// The directory comes from the state, where the compiler puts it. A
-/// compilation with no readable directory shares no path with the file, and
-/// every rule below already answers for a directory the file lies outside. A
-/// directory that no text can spell is still stripped from the front of the
-/// path; only the package it belongs to goes unread, because a package is
-/// looked up by name.
+/// The short name `absolute_path` is written as, relative to the compilation's cwd.
 fn create_short_filename(
   absolute_path: &str,
   state: &StateManager,
@@ -452,7 +403,6 @@ fn create_short_filename(
     .to_str()
     .and_then(|file| StateManager::get_package_name_and_path(file, package_json_seen));
 
-  // If package details exist, use package-relative path
   if let Some((package_name_opt, package_root_path)) = package_details {
     // `path.relative(packageRoot, filename)`, as the Babel plugin writes it.
     let relative_path = NodePath::host().relative(
@@ -461,34 +411,30 @@ fn create_short_filename(
       &effective_path.to_string_lossy(),
     );
 
-    // If the file is in the same package as cwd, return just the relative path
     if let Some((cwd_package_name, _)) = cwd_package
       && cwd_package_name == package_name_opt
     {
       return relative_path;
     }
 
-    // Otherwise, return package:relativePath. A package.json without a name
-    // is written as the Babel plugin's template literal writes it.
+    // Otherwise `package:relativePath`; a nameless package.json gives `undefined`, as in Babel.
     let package_name = package_name_opt.as_deref().unwrap_or("undefined");
     return format!("{package_name}:{relative_path}");
   }
 
-  // Fallback: construct a path based on package prefix, module type, and file
+  // Fallback: path from package prefix, module type, and file.
   if let Some(package_prefix) = get_package_prefix(absolute_path) {
     let short_path = get_short_path(absolute_path, state);
 
     return format!("{}:{}", package_prefix, short_path);
   }
 
-  // If haste mode, return just the filename
   if is_haste {
     return path
       .file_name()
       .map_or_else(String::new, |f| f.to_string_lossy().into_owned());
   }
 
-  // Otherwise, return short path relative to cwd
   let relative_path = cwd
     .as_deref()
     .and_then(|cwd| path.strip_prefix(cwd).ok())

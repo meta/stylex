@@ -1,9 +1,5 @@
-//! The fold that `keyframes` and `positionTry` share.
-//!
-//! Both transformers build one CSS rule and name it themselves, from a hash of
-//! what the author wrote. The call then folds to that name, and the rule goes
-//! into the injected rules under the same name, so a second call with the same
-//! content replaces the first entry instead of adding a duplicate.
+//! The fold that `keyframes` and `positionTry` share: file the hash-named rule and fold the call
+//! to its name, so identical calls dedupe.
 
 use std::rc::Rc;
 
@@ -25,15 +21,11 @@ pub(crate) fn fold_to_rule_name(
 ) -> Expr {
   let (name, rule) = transformer(&EvaluateResultValue::Expr(expr), state);
 
-  // Make the expression first, so that the name can move into the key. A copy
-  // of the name stood here only to keep it alive for this line.
   let folded = create_string_expr(&name);
 
   state.file_evaluation_rule(name.into(), Rc::new(rule));
 
-  // Told to the state so the evaluator memo can see that this fold had an
-  // effect it cannot replay, and decline to answer the next identical call from
-  // a remembered name.
+  // Tells the evaluator memo this fold had a side effect it cannot replay.
   state.note_evaluation_rule_filed();
 
   folded

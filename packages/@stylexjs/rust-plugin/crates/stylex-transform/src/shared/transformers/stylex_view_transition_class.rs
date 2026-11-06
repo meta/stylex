@@ -16,16 +16,14 @@ use stylex_types::{
 };
 use stylex_utils::{hash::create_hash, string::dashify};
 
-/// One animation part: the selector it is written under, and the CSS text of
-/// the declarations below it.
+/// Animation parts: selector to declarations CSS text.
 type ViewTransitionParts = IndexMap<String, String>;
 
 pub(crate) fn stylex_view_transition_class(
   styles: &EvaluateResultValue,
   state: &mut StateManager,
 ) -> (String, InjectableStyleKind) {
-  // NOTE: an unset `classNamePrefix` arrives here already defaulted to `x`,
-  // so an empty one was asked for explicitly and is honoured as empty.
+  // `classNamePrefix` is already defaulted to `x`; an empty one is honoured as empty.
   let class_name_prefix = state.options.class_name_prefix.clone();
 
   let Some(styles) = styles.as_expr().and_then(|expr| expr.as_object()) else {
@@ -43,8 +41,7 @@ pub(crate) fn stylex_view_transition_class(
     let declarations =
       obj_transform_values_then_map_keys(&entries, state, |key| dashify(key).into_owned());
 
-    // An upper bound: the declarations that turn out to spell nothing are
-    // dropped below, so this over-reserves rather than reallocating.
+    // Upper bound; empty declarations are dropped below.
     let capacity = declarations
       .iter()
       .map(|pair| pair.key.len() + pair.value.len() + 2)
@@ -91,13 +88,8 @@ fn construct_final_view_transition_css_str(
   result
 }
 
-/// The string the class name is hashed from.
-///
-/// This writes `selector:body;`, which is not a rule's CSS text at all, so it
-/// deliberately does not ask [`Pair::as_css_text`]: a selector whose body is
-/// empty still has to appear, because the reference implementation hashes it
-/// that way and the name has to agree. What the emitted CSS carries is set by
-/// [`construct_final_view_transition_css_str`], not here.
+/// The `selector:body;` string the class name is hashed from.
+/// Empty bodies are kept to match the reference hash; emitted CSS is built elsewhere.
 fn string_to_hash(parts: &ViewTransitionParts) -> String {
   let mut result = String::with_capacity(parts.len() * 16);
 

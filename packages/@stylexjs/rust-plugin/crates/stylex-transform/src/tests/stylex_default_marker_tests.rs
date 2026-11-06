@@ -1,16 +1,9 @@
 //! The shape of the default marker, and what the class name prefix does to it.
-//!
-//! Source: crates/stylex-transform/src/shared/transformers/
-//! stylex_default_marker.rs
 
 use super::*;
 
-/// Asserts that `options` name the marker `class_name`.
-///
-/// Every case asks the same three questions, so they are asked once here: the
-/// marker holds two entries, it holds the class name against itself, and it
-/// holds the compiled marker. The class name is looked up by name rather than
-/// by position, so the order the two entries go in is not asserted here.
+/// Asserts that `options` name the marker `class_name`: two entries, the class name against
+/// itself (looked up by name, so order is not asserted), and the compiled marker.
 fn assert_marker_is(options: &StyleXStateOptions, class_name: &str) {
   let values = default_marker_values(options);
 
@@ -49,8 +42,7 @@ fn a_custom_prefix_names_the_marker_class() {
   );
 }
 
-/// An empty prefix keeps its separator. It is asked for explicitly, because an
-/// unset `classNamePrefix` arrives here already defaulted to `x`.
+/// Asked explicitly, because an unset `classNamePrefix` arrives already defaulted to `x`.
 #[test]
 fn an_empty_prefix_keeps_the_separator() {
   assert_marker_is(

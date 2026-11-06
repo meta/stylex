@@ -1,4 +1,4 @@
-//! Tests for the object helpers the theme and variable transforms build on.
+//! Object helpers the theme and variable transforms build on.
 
 use indexmap::IndexMap;
 use stylex_state::state_manager::StateManager;
@@ -21,8 +21,7 @@ fn reads_no_entry_from_an_empty_object_literal() {
   assert!(obj_entries(&expr("{}")).is_empty());
 }
 
-/// Only an object literal holds entries to read. Anything else is a fault in
-/// the caller, so the call is refused rather than answered with nothing.
+/// A non-object is a caller fault, refused rather than answered with nothing.
 #[test]
 #[should_panic(expected = "Object expected")]
 fn refuses_to_read_the_entries_of_something_that_is_not_an_object() {
@@ -45,8 +44,6 @@ fn builds_a_map_from_the_pairs_that_hold_a_value() {
   assert_eq!(result["color"], "red");
 }
 
-/// A repeated key keeps the place the first of the two gave it, and holds the
-/// value of the last.
 #[test]
 fn a_repeated_pair_keeps_its_first_place() {
   let entries = vec![
@@ -69,16 +66,14 @@ fn builds_an_empty_map_from_no_pair() {
   assert!(obj_from_entries(&[]).is_empty());
 }
 
-/// A pair holding no value cannot become an entry, and dropping it silently
-/// would leave the caller with a map short of a key it wrote.
+/// Dropping it would leave the caller's map short of a key.
 #[test]
 #[should_panic(expected = "Value is not a string")]
 fn refuses_a_pair_that_holds_no_value() {
   obj_from_entries(&[OrderPair("color".into(), None)]);
 }
 
-/// The key is dashed before the value is read, because the dashed name is the
-/// one that decides whether a plain number gets a unit.
+/// The dashed name decides whether a plain number gets a unit.
 #[test]
 fn dashes_the_key_before_it_transforms_the_value() {
   let mut state = StateManager::default();
@@ -93,7 +88,6 @@ fn dashes_the_key_before_it_transforms_the_value() {
   assert_eq!(result, vec![Pair::new("margin-top", "10px")]);
 }
 
-/// A property that takes no unit keeps the number it was written with.
 #[test]
 fn keeps_a_unitless_value_as_it_was_written() {
   let mut state = StateManager::default();
@@ -120,8 +114,7 @@ fn maps_no_key_of_an_empty_entry_set() {
   );
 }
 
-/// Two keys that map to the same name are one declaration. The first place is
-/// kept, and the value written last wins.
+/// The first place is kept, and the value written last wins.
 #[test]
 fn folds_two_keys_that_map_to_one_name_into_one_pair() {
   let mut state = StateManager::default();
@@ -141,8 +134,7 @@ fn folds_two_keys_that_map_to_one_name_into_one_pair() {
   );
 }
 
-/// An alias is written under the property it stands for. Only the properties
-/// that carry a value survive, because the rest declare nothing.
+/// Only properties that carry a value survive.
 #[test]
 fn writes_an_alias_under_the_property_it_stands_for() {
   let mut state = StateManager::default();
@@ -153,8 +145,7 @@ fn writes_an_alias_under_the_property_it_stands_for() {
   assert_eq!(result["height"], "10px");
 }
 
-/// A shorthand keeps the value on its own key and leaves the properties it
-/// reaches empty, so only the shorthand itself reaches the answer.
+/// The reached longhands are left empty, so only the shorthand reaches the answer.
 #[test]
 fn expands_a_shorthand_and_keeps_the_keys_that_carry_a_value() {
   let mut state = StateManager::default();
@@ -165,8 +156,7 @@ fn expands_a_shorthand_and_keeps_the_keys_that_carry_a_value() {
   assert_eq!(result["margin"], "10px");
 }
 
-/// A number stays a number through the expansion, so the unit is added by the
-/// property that reads it rather than by the shorthand.
+/// The property that reads it adds the unit, not the shorthand.
 #[test]
 fn a_number_reaches_the_expansion_as_a_number() {
   let mut state = StateManager::default();

@@ -49,8 +49,7 @@ where
       let export_name = find_and_validate_stylex_define_vars(call, &mut self.state);
 
       let first_arg = argument_at(call, 0, STYLEX_DEFINE_VARS);
-      // Read off the declarator in place: only the binding is wanted, and a
-      // copy of the declarator is a copy of the whole group.
+      // Read in place: copying the declarator would copy the whole group.
       let self_binding = self
         .state
         .find_call_declaration(call)
@@ -60,8 +59,7 @@ where
         })
         .unwrap_or_else(|| stylex_panic!("A validated defineVars group has no source binding."));
 
-      // The same registrations `createThemeNested` and `defineVarsNested` fold
-      // their argument with, and this call adds the theme reference below.
+      // Same registrations as `createThemeNested` and `defineVarsNested`, plus the theme ref below.
       let function_map = build_eval_config(&mut self.state);
 
       // Canonical identity is computed before evaluation; the self proxy is

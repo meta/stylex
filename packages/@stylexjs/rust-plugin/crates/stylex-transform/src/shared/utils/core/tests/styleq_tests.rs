@@ -1,4 +1,4 @@
-//! Tests for the merge of the style arguments one `stylex.props` call is given.
+//! Merging the style arguments one `stylex.props` call is given.
 
 use std::rc::Rc;
 
@@ -12,7 +12,6 @@ use crate::shared::utils::core::{
 };
 use crate::tests::support::expr;
 
-/// The classes of the merge, in the order it wrote them.
 fn class_names(arguments: &[ResolvedArg]) -> Vec<String> {
   styleq(arguments)
     .class_name
@@ -38,8 +37,6 @@ fn keeps_the_class_of_every_property_one_style_declares() {
   );
 }
 
-/// A later style wins the properties it declares, and the properties it says
-/// nothing about stay as the earlier style left them.
 #[test]
 fn a_later_style_wins_the_properties_it_declares() {
   assert_eq!(
@@ -51,8 +48,6 @@ fn a_later_style_wins_the_properties_it_declares() {
   );
 }
 
-/// An argument the author wrote as absent declares nothing and holds nothing
-/// back.
 #[test]
 fn an_absent_argument_declares_nothing() {
   let arguments = [
@@ -63,8 +58,7 @@ fn an_absent_argument_declares_nothing() {
   assert_eq!(class_names(&arguments), ["xa"]);
 }
 
-/// A condition the compiler could not fold keeps whichever branch it did
-/// resolve, and a branch it resolved to nothing is skipped.
+/// A branch resolved to nothing is skipped.
 #[test]
 fn a_conditional_argument_is_read_through_the_branch_it_resolved() {
   let taken = ResolvedArg::conditional(
@@ -80,8 +74,7 @@ fn a_conditional_argument_is_read_through_the_branch_it_resolved() {
   assert!(class_names(&[unresolved]).is_empty());
 }
 
-/// The merger asks each argument for its style. An argument holding no style
-/// answers nothing, and is skipped rather than merged as empty.
+/// Skipped rather than merged as empty.
 #[test]
 fn an_argument_that_holds_no_style_is_skipped() {
   assert!(ResolvedArg::style_object(StyleObject::Nullable).should_skip());
@@ -98,8 +91,7 @@ fn an_argument_that_holds_no_style_is_skipped() {
   );
 }
 
-/// Two arguments holding the same style are two entries, because the merger is
-/// built for one merge and drops what it learned when the merge ends.
+/// The merger drops what it learned when the merge ends.
 #[test]
 fn the_same_style_twice_is_read_twice() {
   let style = compiled(&[("color", "xa")]);
@@ -107,8 +99,7 @@ fn the_same_style_twice_is_read_twice() {
   assert_eq!(class_names(&[styles(style.clone()), styles(style)]), ["xa"]);
 }
 
-/// A style carrying no marker was never compiled, so the merge keeps it beside
-/// the classes as an inline style.
+/// An unmarked style was never compiled.
 #[test]
 fn collects_an_inline_style_beside_the_classes() {
   let result = styleq(&[
@@ -128,16 +119,13 @@ fn collects_an_inline_style_beside_the_classes() {
   );
 }
 
-/// Only a compiled style can be merged. Anything else is a value the author
-/// passed that the compiler cannot read, so the call is refused.
 #[test]
 #[should_panic(expected = "Only compiled StyleX style objects are allowed in styleq()")]
 fn refuses_a_style_that_was_never_compiled() {
   styleq(&[ResolvedArg::style_object(StyleObject::Other)]);
 }
 
-/// The cache key stands for the style the argument holds, so two arguments over
-/// the same allocation share it and an argument holding none has none.
+/// Arguments over the same allocation share a key; one holding no style has none.
 #[test]
 fn an_argument_keys_the_cache_by_the_style_it_holds() {
   let argument = style_of(&[("color", "xa")]);
@@ -150,7 +138,6 @@ fn an_argument_keys_the_cache_by_the_style_it_holds() {
   );
 }
 
-/// A merge of many arguments stays one class per property.
 #[test]
 fn a_long_merge_keeps_one_class_for_each_property() {
   let arguments: Vec<ResolvedArg> = (0..1_000)
@@ -160,8 +147,6 @@ fn a_long_merge_keeps_one_class_for_each_property() {
   assert_eq!(class_names(&arguments), ["x999"]);
 }
 
-/// A property declared as absent unsets what an earlier style declared, rather
-/// than leaving that class in place.
 #[test]
 fn a_property_declared_absent_unsets_the_earlier_class() {
   let mut later = compiled(&[]);

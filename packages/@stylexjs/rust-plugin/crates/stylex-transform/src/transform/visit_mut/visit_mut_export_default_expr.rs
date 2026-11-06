@@ -31,11 +31,7 @@ where
         return;
       }
 
-      // The export can hold the call inside something else -- `export default
-      // wrap(stylex.create({ … }))` and `export default [stylex.create({ … })]`
-      // are both a module upstream compiles. Reading only the whole expression
-      // left every such call in the printed module, calling an API that is not
-      // there at runtime.
+      // Visit children: the call may be nested, e.g. `export default wrap(stylex.create({ … }))`.
       export_default_expr.visit_mut_children_with(self);
     }
   }

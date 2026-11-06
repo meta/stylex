@@ -68,14 +68,8 @@ impl<C> StyleXTransformBuilder<C>
 where
   C: Comments,
 {
-  /// The source map the test parses its input into, so the transform can read
-  /// the authored text of the module. Debug annotations then name the line the
-  /// author wrote a key on, as a build fed by a bundler does. Without it the
-  /// module is printed back out from its AST, and the printed layout is not the
-  /// authored one.
-  ///
-  /// The tester registers the file after the pass is built, so the lookup waits
-  /// for the program.
+  /// Source map of the test input, so debug annotations cite authored lines instead of the
+  /// printed AST.
   #[doc(hidden)]
   pub fn with_source_map(mut self, source_map: Lrc<SourceMap>) -> Self {
     self.source_map = Some(source_map);
@@ -151,30 +145,19 @@ where
     self
   }
 
-  /// How many levels the evaluator may descend before refusing to fold.
-  ///
-  /// Counted in evaluation steps rather than in levels of source nesting, so
-  /// a value is worth arriving at by measuring an input rather than by counting
-  /// brackets in it.
+  /// Maximum evaluation steps (not source nesting levels) before the evaluator refuses to fold.
   pub fn with_max_evaluation_depth(mut self, val: usize) -> Self {
     self.ensure_config().max_evaluation_depth = Some(val);
     self
   }
 
-  /// How many UTF-16 code units of string one fold may build or carry.
-  ///
-  /// The engine bounds loops, recursion and stack but not allocation, so this
-  /// is what turns a mistyped repeat count into a diagnostic rather than into
-  /// the machine.
+  /// Maximum UTF-16 code units of string one fold may build or carry.
   pub fn with_max_folded_characters(mut self, val: usize) -> Self {
     self.ensure_config().max_folded_characters = Some(val);
     self
   }
 
-  /// How many array elements and object properties one fold may build or carry.
-  ///
-  /// Separate from the string ceiling because a bounded string can still become
-  /// one element per code unit, which costs far more as a tree than as text.
+  /// Maximum array elements and object properties one fold may build or carry.
   pub fn with_max_folded_entries(mut self, val: usize) -> Self {
     self.ensure_config().max_folded_entries = Some(val);
     self
@@ -264,9 +247,7 @@ where
       config.treeshake_compensation = Some(true);
     }
 
-    // Apply Haste as the test default only when no explicit config was provided.
-    // If the caller set any option (e.g. with_filename, with_dev), treat it as
-    // an intentional configuration and skip the default.
+    // Apply Haste as the test default only when the caller set no options.
     if !had_config && config.unstable_module_resolution.is_none() {
       config.unstable_module_resolution = Some(ModuleResolution::haste(None));
     }
@@ -284,8 +265,7 @@ where
     }
   }
 
-  /// The tester builds its pass through this. Production drives the transform
-  /// directly, so it is here for the test harness and the benches alone.
+  /// Builds the test pass; used only by the test harness and benches.
   #[doc(hidden)]
   pub fn into_pass(self) -> impl Pass + use<C> {
     let unresolved_mark = Mark::new();
@@ -302,8 +282,7 @@ where
   }
 }
 
-/// The test pass: gives the transform the text of the module it is about to
-/// walk, then runs it.
+/// Test pass: supplies the module's source text to the transform, then runs it.
 struct InputSourcePass<C>
 where
   C: Comments,
@@ -317,13 +296,8 @@ where
   C: Comments,
 {
   fn process(&mut self, program: &mut Program) {
-    // A program with no span, or one this map did not parse, has no text to
-    // give. The transform then falls back to the printed module, as before.
-    //
-    // The lookup searches on the start of each file alone, so a position past
-    // the end of the last file answers with that last file. Only a position the
-    // file really holds names its text, or a program parsed by another map
-    // would be quoted as this one.
+    // Only use the text when the program's span lies inside a file this map parsed; the lookup
+    // returns the last file for positions past its end.
     if let Some(source_map) = &self.source_map
       && let Ok(Some(source_file)) = source_map.try_lookup_source_file(program.span_lo())
       && (source_file.start_pos..source_file.end_pos).contains(&program.span_lo())
@@ -364,9 +338,7 @@ where
 
   pub(crate) fn process_declaration(&mut self, call_expr: &CallExpr) -> Option<(Id, String)> {
     if let Callee::Expr(callee) = &call_expr.callee {
-      // A parenthesis is not a different callee, so both levels are read
-      // through it: `(stylex.create)({…})` and `(stylex).create({…})` name the
-      // same function the bare spelling names.
+      // Look through parentheses: `(stylex.create)({…})` names the same function.
       match normalize_expr(callee) {
         Expr::Ident(ident) if self.state.is_stylex_binding_for_current_cycle(ident) => {
           return Some((ident.to_id(), ident.sym.to_string()));
@@ -411,12 +383,8 @@ where
     (var_name, parent_var_decl)
   }
 
-  /// [`Self::get_call_var_name`] for the `create` transform, with the call's key
-  /// supplied by the caller that already asked about the same call.
-  ///
-  /// `with_init` false answers the declarator without its initializer, for a
-  /// caller that records it with what the call compiled to: copying the call it
-  /// holds would copy the whole style object for nothing.
+  /// [`Self::get_call_var_name`] for `create`, with the call's key supplied by the caller.
+  /// `with_init` false omits the initializer to avoid copying the style object.
   pub(crate) fn create_call_var_name_keyed(
     &mut self,
     call: &CallExpr,
@@ -444,8 +412,7 @@ where
     (var_name, parent_var_decl)
   }
 
-  /// The name of the variable the declarator `call` initialises binds, without
-  /// copying the declarator.
+  /// Name of the variable bound by the declarator that `call` initialises.
   pub(crate) fn call_var_name(&self, call: &CallExpr) -> Option<String> {
     self
       .state
@@ -455,12 +422,8 @@ where
   }
 }
 
-/// Seed the default StyleX import sources in a fixed order: the
-/// `@stylexjs/stylex` package source first, then the bare `stylex` alias.
-/// Returns an insertion-ordered `IndexSet` so callers that `extend` it with
-/// user-configured sources keep those at the tail (index 2+), which is where
-/// the first configured custom source is looked up when injecting the `sx`
-/// runtime binding.
+/// Default import sources in order: `@stylexjs/stylex`, then `stylex`. Configured sources
+/// appended later start at index 2, where the `sx` runtime binding looks them up.
 fn fill_stylex_imports_default() -> IndexSet<ImportSources> {
   let mut stylex_imports = IndexSet::new();
   stylex_imports.insert(ImportSources::Regular("@stylexjs/stylex".to_string()));

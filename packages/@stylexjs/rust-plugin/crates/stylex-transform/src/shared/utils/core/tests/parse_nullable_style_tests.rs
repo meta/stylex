@@ -1,5 +1,4 @@
-//! Tests for the reading of one `stylex.props` argument into the style it
-//! stands for.
+//! Reading one `stylex.props` argument into the style it stands for.
 
 use std::rc::Rc;
 
@@ -31,7 +30,6 @@ fn styles() -> IndexMap<String, Rc<FlatCompiledStylesValue>> {
   IndexMap::new()
 }
 
-/// The declarations one value holds, where it holds an object.
 fn object_of(value: &FlatCompiledStylesValue) -> Option<&FlatCompiledStyles> {
   match value {
     FlatCompiledStylesValue::Object(values) => Some(values),
@@ -39,23 +37,19 @@ fn object_of(value: &FlatCompiledStylesValue) -> Option<&FlatCompiledStyles> {
   }
 }
 
-/// The two ways an author writes "no style here" are the same answer, and the
-/// merge skips both.
+/// `null` and `undefined` are the same answer, and the merge skips both.
 #[test]
 fn reads_an_absent_argument_as_absent() {
   assert_eq!(read("null"), StyleObject::Nullable);
   assert_eq!(read("undefined"), StyleObject::Nullable);
 }
 
-/// A parenthesis is not a different argument, so the shape inside is what is
-/// read.
 #[test]
 fn reads_through_a_parenthesis() {
   assert_eq!(read("(null)"), StyleObject::Nullable);
 }
 
-/// Anything the compiler cannot fold to a compiled style is handed to the
-/// runtime, which is what `Other` says.
+/// `Other` hands the argument to the runtime.
 #[test]
 fn hands_an_unreadable_argument_to_the_runtime() {
   assert_eq!(read("'a string'"), StyleObject::Other);
@@ -65,8 +59,6 @@ fn hands_an_unreadable_argument_to_the_runtime() {
   assert_eq!(read("a + b"), StyleObject::Other);
 }
 
-/// An object the compiler folded is read as the style it spells, class names
-/// and all.
 #[test]
 fn reads_a_folded_object_as_a_style() {
   match read("({ color: 'xa', $$css: true })") {
@@ -84,8 +76,7 @@ fn reads_a_folded_object_as_a_style() {
   }
 }
 
-/// A property written as absent is kept, carrying that absence, so a style
-/// after it unsets the property rather than being shadowed by it.
+/// So a later style unsets the property rather than being shadowed.
 #[test]
 fn keeps_a_property_written_as_absent() {
   match read("({ color: null })") {
@@ -96,7 +87,6 @@ fn keeps_a_property_written_as_absent() {
   }
 }
 
-/// An array of styles is one style, merged in the order it was written.
 #[test]
 fn reads_an_array_of_objects_as_one_style() {
   let mut compiled = styles();
@@ -121,8 +111,7 @@ fn reads_an_array_of_objects_as_one_style() {
   }
 }
 
-/// An array holding an array is flattened, because the runtime reads it the
-/// same way.
+/// The runtime reads nested arrays the same way.
 #[test]
 fn reads_a_nested_array_as_part_of_the_same_style() {
   let mut compiled = styles();
@@ -141,7 +130,6 @@ fn reads_a_nested_array_as_part_of_the_same_style() {
   }
 }
 
-/// An absent element of an array declares nothing and is passed over.
 #[test]
 fn passes_over_an_absent_element_of_an_array() {
   let mut compiled = styles();
@@ -161,8 +149,7 @@ fn passes_over_an_absent_element_of_an_array() {
   }
 }
 
-/// An array that declares nothing is handed to the runtime rather than read as
-/// an empty style, which would say the merge had something to apply.
+/// An empty style would claim the merge had something to apply.
 #[test]
 fn hands_an_array_that_declares_nothing_to_the_runtime() {
   assert_eq!(
@@ -175,7 +162,6 @@ fn hands_an_array_that_declares_nothing_to_the_runtime() {
   );
 }
 
-/// A theme reference is not a style, and the runtime is what reads it.
 #[test]
 fn hands_a_theme_reference_to_the_runtime() {
   let theme_ref = EvaluateResultValue::ThemeRef(stylex_state::theme_ref::ThemeRef::new(
@@ -190,8 +176,7 @@ fn hands_a_theme_reference_to_the_runtime() {
   );
 }
 
-/// A folded value that is not an object says nothing about the style, so the
-/// answer stays the one the caller had.
+/// The caller's answer stays as it was.
 #[test]
 fn says_nothing_about_a_folded_value_that_is_not_an_object() {
   assert_eq!(
@@ -204,8 +189,6 @@ fn says_nothing_about_a_folded_value_that_is_not_an_object() {
   );
 }
 
-/// A class name, the compiled marker and an absent value are what a compiled
-/// style holds, and each is read as the kind it is.
 #[test]
 fn reads_each_kind_of_value_a_compiled_style_holds() {
   let mut compiled = styles();
@@ -226,9 +209,7 @@ fn reads_each_kind_of_value_a_compiled_style_holds() {
   assert_eq!(compiled["margin"].as_ref(), &FlatCompiledStylesValue::Null);
 }
 
-/// An inline style is the object the author wrote, so a value keeps the kind
-/// they gave it. A number stays a number and is not the text that spells it,
-/// because `opacity: 0.5` and `opacity: '0.5'` are two declarations.
+/// `opacity: 0.5` and `opacity: '0.5'` are two declarations.
 #[test]
 fn reads_each_kind_of_value_an_inline_style_holds() {
   let mut inline = styles();
@@ -258,8 +239,7 @@ fn reads_each_kind_of_value_an_inline_style_holds() {
   assert_eq!(nested["margin"].as_ref(), &FlatCompiledStylesValue::Null);
 }
 
-/// A declaration written with no value is kept as one, so the merge can skip
-/// the property whole rather than clear it.
+/// So the merge can skip the property whole rather than clear it.
 #[test]
 fn reads_a_declaration_with_no_value() {
   let mut inline = styles();
@@ -273,8 +253,6 @@ fn reads_a_declaration_with_no_value() {
   assert_eq!(inline["margin"].as_ref(), &FlatCompiledStylesValue::Null);
 }
 
-/// A list keeps its elements in the order they were written, each read as the
-/// kind it is.
 #[test]
 fn reads_a_list_of_values() {
   let mut inline = styles();
@@ -302,7 +280,6 @@ fn reads_a_list_of_values() {
   ));
 }
 
-/// A list holding nothing is a list, not an absent declaration.
 #[test]
 fn reads_a_list_holding_nothing() {
   let mut inline = styles();
@@ -315,17 +292,13 @@ fn reads_a_list_holding_nothing() {
   );
 }
 
-/// A slot of a list that holds no value of its own cannot be read, so the
-/// whole call is left to the runtime.
 #[test]
 #[should_panic(expected = "Encountered a list element with no value of its own.")]
 fn refuses_a_list_element_with_no_value_of_its_own() {
   parse_nullable_object(&mut styles(), &expr("{ color: ['a', , 'c'] }"));
 }
 
-/// The name that sets what an object inherits from declares nothing of its
-/// own, whichever of its three spellings the author used, and a prototype that
-/// is not an object leaves nothing to inherit either.
+/// All three `__proto__` spellings; a non-object prototype leaves nothing to inherit.
 #[test]
 fn leaves_out_the_name_that_sets_what_an_object_inherits_from() {
   for source in [
@@ -342,14 +315,9 @@ fn leaves_out_the_name_that_sets_what_an_object_inherits_from() {
   }
 }
 
-/// A prototype that is an object declares its own names too. The merge walks
-/// what a style inherits from, so those names come after the ones the style
-/// wrote and are shadowed by them.
-///
-/// Measured against `@stylexjs/babel-plugin` 0.19.0 with `pnpm run
-/// parity:probe`: `stylex.props({ __proto__: { color: 'red', margin: '9px' },
-/// margin: '1px' })` answers `{ style: { margin: "1px", color: "red" } }`
-/// there.
+/// Inherited names come after own names and are shadowed by them. Measured against
+/// `@stylexjs/babel-plugin` 0.19.0: `stylex.props({ __proto__: { color: 'red', margin: '9px' },
+/// margin: '1px' })` answers `{ style: { margin: "1px", color: "red" } }`.
 #[test]
 fn reads_the_names_a_style_inherits_after_its_own() {
   let mut inline = styles();
@@ -369,8 +337,6 @@ fn reads_the_names_a_style_inherits_after_its_own() {
   );
 }
 
-/// A prototype that was given one of its own is read the same way again, so a
-/// whole chain declares its names in the order the merge walks them.
 #[test]
 fn reads_a_whole_chain_of_prototypes() {
   let mut inline = styles();
@@ -383,9 +349,7 @@ fn reads_a_whole_chain_of_prototypes() {
   assert_eq!(inline.keys().cloned().collect::<Vec<_>>(), ["c", "b", "a"]);
 }
 
-/// A prototype nested inside a declaration is left out whole. Nothing merges
-/// such an object -- the runtime is handed it as it stands -- so nothing walks
-/// what it inherits from.
+/// The runtime is handed a nested object as is, so nothing walks its prototype.
 #[test]
 fn leaves_out_a_prototype_a_nested_object_was_given() {
   let mut inline = styles();
@@ -402,9 +366,7 @@ fn leaves_out_a_prototype_a_nested_object_was_given() {
   assert_eq!(nested.keys().cloned().collect::<Vec<_>>(), ["margin"]);
 }
 
-/// A later style argument wins over a name an earlier one inherited, because
-/// what a style inherits is still a declaration of that style and nothing
-/// more.
+/// An inherited name is still just a declaration of that style.
 #[test]
 fn a_later_argument_wins_over_an_inherited_name() {
   let mut inline = styles();
@@ -418,7 +380,6 @@ fn a_later_argument_wins_over_an_inherited_name() {
   );
 }
 
-/// An object holds objects as deep as the author wrote them.
 #[test]
 fn reads_an_object_inside_an_object() {
   let mut inline = styles();
@@ -438,8 +399,6 @@ fn reads_an_object_inside_an_object() {
   );
 }
 
-/// An object holding nothing is read as an object holding nothing, rather than
-/// as a declaration that was never written.
 #[test]
 fn reads_an_object_holding_nothing() {
   let mut inline = styles();
@@ -449,8 +408,7 @@ fn reads_an_object_holding_nothing() {
   assert_eq!(object_of(&inline[":hover"]).map(IndexMap::len), Some(0));
 }
 
-/// A name written twice keeps the place of its first writing and the value of
-/// its last, the way the language reads such an object.
+/// As JavaScript reads such an object.
 #[test]
 fn keeps_a_repeated_name_in_its_first_place() {
   let mut inline = styles();
@@ -470,20 +428,14 @@ fn keeps_a_repeated_name_in_its_first_place() {
   );
 }
 
-/// A property that is not a key-value pair is refused rather than skipped.
-///
-/// A compiled style reaches this reader with every property already a pair, so
-/// the refusal is what says the shape was not compiled -- where skipping it
-/// merged a style short of a declaration and named a class that does not hold
-/// it.
+/// A compiled style has only pairs; skipping would name a class missing a declaration.
 #[test]
 #[should_panic(expected = "Encountered a declaration the compiler cannot read.")]
 fn refuses_a_property_that_is_not_a_key_value_pair() {
   parse_nullable_object(&mut styles(), &expr("{ ...rest, color: 'xa' }"));
 }
 
-/// A declaration holds a literal or an object. Anything else was never
-/// evaluated, and reading it as a class name would write the wrong class.
+/// Anything else was never evaluated, and would write the wrong class.
 #[test]
 #[should_panic(expected = "Encountered a style value the compiler cannot read.")]
 fn refuses_a_value_that_is_neither_a_literal_nor_an_object() {
@@ -496,9 +448,7 @@ fn refuses_a_compiled_style_that_is_not_an_object() {
   parse_nullable_object(&mut styles(), &expr("[1, 2]"));
 }
 
-/// Only a style, an array of styles and an absent value can stand in an array
-/// of style arguments. Anything else means the argument was not compiled, and
-/// merging it would write a class the author never asked for.
+/// Anything else was not compiled, and merging it would write an unasked-for class.
 #[test]
 #[should_panic(expected = "Encountered an element of a style list the compiler cannot read.")]
 fn refuses_an_array_element_that_is_not_a_style() {
@@ -519,12 +469,7 @@ fn refuses_a_folded_value_that_is_not_a_style() {
   );
 }
 
-/// A style the module declared is shared with the state, not copied.
-///
-/// One `stylex.props` argument used to copy every name and value of the style
-/// it names, and a file reads the same style from as many arguments as it has
-/// elements. The pointers are compared because the values were equal either
-/// way: what changed is that one style is now read by all of them.
+/// Compared by pointer, since the values are equal either way.
 #[test]
 fn shares_a_declared_style_with_the_state() {
   let read = expr("styles.base");

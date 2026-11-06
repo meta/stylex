@@ -25,8 +25,7 @@ where
 
       let source_path = convert_atom_to_string(&import_decl.src.value);
 
-      // Record `@stylexjs/atoms` imports for the atoms transform pass. These
-      // are not treated as a StyleX API import source.
+      // Record `@stylexjs/atoms` imports for the atoms pass; not a StyleX API import source.
       if source_path == ATOMS_SOURCE {
         for specifier in &import_decl.specifiers {
           match specifier {

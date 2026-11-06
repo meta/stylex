@@ -25,12 +25,7 @@ impl StyleqArgument<Rc<FlatCompiledStylesValue>> for ResolvedArg {
     }
   }
 
-  /// The address of the style, which names it only while the merge holds it.
-  ///
-  /// Safe because the merger is built and dropped inside one merge, below, so
-  /// every style outlives the cache that names it. A merger that lived longer
-  /// would have to refuse this key for a style the reader built, which is
-  /// dropped with the merge, and give it only for a style read from the state.
+  /// The style's address; valid only while this merge holds it.
   fn cache_key(&self) -> Option<usize> {
     self
       .as_style()
@@ -54,18 +49,8 @@ pub(crate) fn styleq(arguments: &[ResolvedArg]) -> StyleQResult {
     };
   }
 
-  // The cache is off, because this merger cannot hit it. It is built here and
-  // dropped when the call returns, so a hit needs the same style twice at the
-  // same position of one merge. Measured over the whole transform suite and the
-  // fixture corpus: 1,076 lookups, none of them a hit. Every one of those paid
-  // for an entry, three shared strings, a chunk and a child map, and collected
-  // nothing. The cache is transparent -- a merge answers the same with it and
-  // without it -- so turning it off changes what the merge costs and not what
-  // it says.
-  //
-  // A merger that lives for the file does answer lookups from the cache, and
-  // saves less than one percent for it. The module comment of `stylex-styleq`
-  // holds both measurements.
+  // Cache off: this per-call merger measured zero hits over 1,076 lookups. See the
+  // `stylex-styleq` module comment.
   let styleq = stylex_styleq::create_styleq(stylex_styleq::StyleqOptions {
     dedupe_class_name_chunks: true,
     disable_cache: true,

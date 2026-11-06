@@ -22,9 +22,7 @@ where
         if let Pat::Ident(bind_ident) = &decl.name {
           let decl_id = bind_ident.id.to_id();
 
-          // Babel only deletes remembered StyleX namespace bindings. An
-          // unrelated binding stays even when its value was folded or nothing
-          // references it; matching uses its full resolved Id, not spelling.
+          // Matches Babel: only remembered StyleX namespace bindings are deleted (matched by Id).
           if self.state.is_style_var_ident(&bind_ident.id)
             && self.state.decl_uses.contains_key(&decl_id)
           {

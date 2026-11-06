@@ -138,8 +138,7 @@ mod class_methods {
     );
   }
 
-  /// Zero is the one number a length and a percentage write without a unit,
-  /// because `0px` and `0%` both mean `0`.
+  /// `0px` and `0%` both mean `0`, so zero is written without a unit.
   mod a_zero_value {
     use super::*;
 
@@ -159,8 +158,6 @@ mod class_methods {
     }
   }
 
-  /// A map carries a value per at-rule. Every number below it is converted the
-  /// same way a value written on its own is, however deep it sits.
   mod a_map_value {
     use super::*;
 
@@ -173,8 +170,7 @@ mod class_methods {
       )
     }
 
-    /// The four value shapes in one call: a number, a string that reads as a
-    /// number, a string that does not, and a map below the map.
+    /// A number, a numeric string, a non-numeric string, and a nested map.
     #[test]
     fn converts_every_number_it_holds_and_leaves_the_rest() {
       let result = FN_MAP.get("length").unwrap()(map(&[
@@ -210,8 +206,6 @@ mod class_methods {
       );
     }
 
-    /// A map that holds nothing is answered by a value object that holds
-    /// nothing, rather than by a refusal.
     #[test]
     fn is_answered_by_an_empty_value_object_when_it_holds_nothing() {
       let result = FN_MAP.get("number").unwrap()(map(&[]));

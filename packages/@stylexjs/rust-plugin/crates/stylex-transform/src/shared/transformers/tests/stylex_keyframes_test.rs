@@ -89,8 +89,6 @@ mod stylex_keyframes {
     assert_eq!(result, *expected_injected_styles.get(key.as_str()).unwrap())
   }
 
-  /// A logical value reads as a different physical value in each direction, so
-  /// the animation carries a rule for each.
   #[test]
   fn carries_a_right_to_left_rule_for_a_logical_value() {
     use crate::tests::support::expr;
@@ -109,7 +107,6 @@ mod stylex_keyframes {
     );
   }
 
-  /// An animation that names no step is still a named rule, with an empty body.
   #[test]
   fn writes_an_empty_body_for_an_animation_that_names_no_step() {
     use crate::tests::support::expr;

@@ -1,6 +1,5 @@
-//! Tests for the expansion of one authored property into the declarations it
-//! stands for, and for what each validation mode does with a value that cannot
-//! be expanded.
+//! Expanding one authored property into its declarations, and each validation mode's handling
+//! of a value that cannot be expanded.
 
 use std::borrow::Cow;
 
@@ -29,13 +28,10 @@ fn expand(key: &str, value: PreRuleValue, mode: PropertyValidationMode) -> Vec<O
   flat_map_expanded_shorthands((Cow::Borrowed(key), value), &options_with(mode))
 }
 
-/// The keys of the answer, in the order the expansion gives them.
 fn keys_of(pairs: &[OrderPair]) -> Vec<String> {
   pairs.iter().map(|pair| pair.0.to_string()).collect()
 }
 
-/// A property that stands for itself is one pair, and the value reaches it
-/// unchanged.
 #[test]
 fn a_plain_property_expands_to_itself() {
   let pairs = expand(
@@ -48,8 +44,7 @@ fn a_plain_property_expands_to_itself() {
   assert_eq!(pairs[0].1, Some(TRawValue::String("red".to_owned())));
 }
 
-/// A shorthand carries its value and empties every property it reaches, so a
-/// later declaration of one of them is unset rather than shadowed.
+/// Emptying the reached properties makes a later declaration unset rather than shadowed.
 #[test]
 fn a_shorthand_expands_to_the_properties_it_reaches() {
   let pairs = flat_map_expanded_shorthands(
@@ -66,8 +61,6 @@ fn a_shorthand_expands_to_the_properties_it_reaches() {
   );
 }
 
-/// The resolution decides which table the key is read from, so the same
-/// shorthand expands to a different set under each.
 #[test]
 fn the_resolution_decides_the_expansion() {
   let entry = || (Cow::Borrowed("margin"), PreRuleValue::string("10px"));
@@ -89,8 +82,6 @@ fn the_resolution_decides_the_expansion() {
   assert!(!keys_of(&specificity).is_empty());
 }
 
-/// A key spelled as a CSS variable reference is written under the variable it
-/// names, because that is the declaration the author meant.
 #[test]
 fn a_variable_reference_key_becomes_the_variable_it_names() {
   let pairs = expand(
@@ -102,8 +93,7 @@ fn a_variable_reference_key_becomes_the_variable_it_names() {
   assert_eq!(keys_of(&pairs), ["--color"]);
 }
 
-/// Only a whole reference is unwrapped. A key that merely starts with `var(`
-/// is a property name, and renaming it would lose the declaration.
+/// Only a whole reference is unwrapped; a key merely starting with `var(` is a property name.
 #[test]
 fn a_key_that_is_not_a_whole_reference_keeps_its_name() {
   let pairs = expand(
@@ -115,7 +105,7 @@ fn a_key_that_is_not_a_whole_reference_keeps_its_name() {
   assert_eq!(keys_of(&pairs), ["var(--color"]);
 }
 
-/// A number stays a number, so the property that reads it decides the unit.
+/// The property that reads the number decides the unit.
 #[test]
 fn a_number_stays_a_number() {
   let pairs = expand(
@@ -127,7 +117,6 @@ fn a_number_stays_a_number() {
   assert_eq!(pairs[0].1, Some(TRawValue::Number(1.0)));
 }
 
-/// A numeric expression is read as a number for the same reason.
 #[test]
 fn a_numeric_expression_stays_a_number() {
   let pairs = expand(
@@ -139,7 +128,6 @@ fn a_numeric_expression_stays_a_number() {
   assert_eq!(pairs[0].1, Some(TRawValue::Number(1.0)));
 }
 
-/// A string expression is read as the text it spells.
 #[test]
 fn a_string_expression_becomes_its_text() {
   let pairs = expand(
@@ -151,7 +139,7 @@ fn a_string_expression_becomes_its_text() {
   assert_eq!(pairs[0].1, Some(TRawValue::String("red".to_owned())));
 }
 
-/// A big integer is read as its digits, which is what JavaScript spells it as.
+/// JavaScript spells a big integer as its digits.
 #[test]
 fn a_big_integer_expression_becomes_its_digits() {
   let pairs = expand(
@@ -166,7 +154,7 @@ fn a_big_integer_expression_becomes_its_digits() {
   );
 }
 
-/// `null` declares nothing, and the property survives carrying that absence.
+/// The property survives carrying the absence.
 #[test]
 fn a_null_value_declares_nothing() {
   assert_eq!(
@@ -184,8 +172,7 @@ fn a_null_value_declares_nothing() {
   );
 }
 
-/// A boolean reaches here only from the calls that have no value validator in
-/// front of them, and it declares nothing either.
+/// A boolean only reaches here from calls with no value validator in front.
 #[test]
 fn a_boolean_value_declares_nothing() {
   assert_eq!(
@@ -199,8 +186,7 @@ fn a_boolean_value_declares_nothing() {
   );
 }
 
-/// A regular expression is not an absent value, it is an unusable one. Saying
-/// nothing about it would drop a declaration the author meant to write.
+/// Unusable, not absent: dropping it silently would lose a declaration.
 #[test]
 #[should_panic(expected = "Failed to convert literal value to string in shorthand expansion.")]
 fn refuses_a_literal_that_spells_no_text() {
@@ -211,8 +197,7 @@ fn refuses_a_literal_that_spells_no_text() {
   );
 }
 
-/// A shorthand has no place to put a fallback list, because each of its
-/// properties would need one.
+/// Each longhand would need its own fallback list.
 #[test]
 #[should_panic(expected = "Cannot use fallbacks for shorthands. Use the expansion instead.")]
 fn refuses_a_fallback_list_when_it_must_throw() {
@@ -258,8 +243,7 @@ fn says_nothing_about_a_fallback_list_when_it_must_stay_silent() {
   assert!(messages.is_empty());
 }
 
-/// An expression that folded to no literal cannot be expanded, because the
-/// expansion has to read the value to give each property its part of it.
+/// The expansion has to read the value to split it across properties.
 #[test]
 #[should_panic(expected = "Cannot use expressions for shorthands. Use the expansion instead.")]
 fn refuses_an_unfolded_expression_when_it_must_throw() {
@@ -305,8 +289,7 @@ fn says_nothing_about_an_unfolded_expression_when_it_must_stay_silent() {
   assert!(messages.is_empty());
 }
 
-/// `all` is a shorthand the expansion refuses by name, so it carries the
-/// message the expansion itself wrote rather than one of the two above.
+/// The expansion refuses `all` by name with its own message.
 #[test]
 #[should_panic(expected = "all is not supported")]
 fn refuses_an_unsupported_shorthand_when_it_must_throw() {

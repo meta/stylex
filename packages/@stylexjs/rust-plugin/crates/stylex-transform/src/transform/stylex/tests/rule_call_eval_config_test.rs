@@ -1,9 +1,5 @@
-//! The function map a rule call folds its argument with.
-//!
-//! The suite under `tests/` proves the map holds the right names, because a
-//! missing name stops a call folding. It cannot prove the map is built once:
-//! delete the memo and every one of those cases still passes. So the two
-//! questions the memo owes are asked here, against the builder itself.
+//! The function map a rule call folds its argument with: that it is memoised per module.
+//! The `tests/` suite covers its contents but would still pass without the memo.
 
 use std::rc::Rc;
 
@@ -21,8 +17,7 @@ use swc_core::atoms::Atom;
 
 use crate::transform::stylex::visitor_utils::rule_call_eval_config;
 
-/// A module that imports the StyleX namespace and names `firstThatWorks` and
-/// `keyframes` through it, which is what the two maps register.
+/// Imports the StyleX namespace and names `firstThatWorks` and `keyframes` through it.
 fn state_with_stylex_imports() -> StateManager {
   let mut state = StateManager::for_test(None, StyleXStateOptions::default());
 
@@ -33,8 +28,7 @@ fn state_with_stylex_imports() -> StateManager {
   state
 }
 
-/// The second call of a module reads the map the first one built. The same
-/// object, not an equal one -- an equal one would mean the build ran again.
+/// The same object, not an equal one; an equal one would mean the build ran again.
 #[test]
 fn the_map_is_built_once_for_the_module() {
   let mut state = state_with_stylex_imports();
@@ -45,8 +39,7 @@ fn the_map_is_built_once_for_the_module() {
   assert!(Rc::ptr_eq(&first, &second));
 }
 
-/// The two sets are built and kept apart. `viewTransitionClass` folds a
-/// `keyframes` call inside a step, and the other two calls must refuse one.
+/// `viewTransitionClass` folds a `keyframes` call inside a step; the other two must refuse it.
 #[test]
 fn the_two_helper_sets_answer_different_maps() {
   let mut state = state_with_stylex_imports();
@@ -80,8 +73,6 @@ fn the_two_helper_sets_answer_different_maps() {
   );
 }
 
-/// Each set keeps its own map, so asking for the other one in between does not
-/// replace the first answer.
 #[test]
 fn one_set_does_not_replace_the_other() {
   let mut state = state_with_stylex_imports();
@@ -95,9 +86,6 @@ fn one_set_does_not_replace_the_other() {
   assert!(Rc::ptr_eq(&first, &again));
 }
 
-/// A module that imports no StyleX name still gets a map, and it registers
-/// nothing. The first call of such a module must not be answered by a build
-/// that reads names it does not have.
 #[test]
 fn a_module_with_no_stylex_import_gets_an_empty_map() {
   let mut state = StateManager::for_test(None, StyleXStateOptions::default());
@@ -109,14 +97,8 @@ fn a_module_with_no_stylex_import_gets_an_empty_map() {
   assert!(!function_map.disable_imports);
 }
 
-/// The `env` object is folded into the map when it is built, so keeping one map
-/// for the file rests on the env being one object for the file. It is:
-/// `CoreStyleXOptions::env` is read-only once the options are built. This says
-/// the second call is still handed a map that carries it, which is what a
-/// stale-map bug would take away.
-///
-/// An env that could vary inside one file would have to key the cache, and this
-/// case is where that would first show.
+/// One map per file relies on `CoreStyleXOptions::env` being read-only once built; an env
+/// that varied within a file would have to key the cache.
 #[test]
 fn the_env_survives_into_every_map_the_module_asks_for() {
   let mut env = IndexMap::new();

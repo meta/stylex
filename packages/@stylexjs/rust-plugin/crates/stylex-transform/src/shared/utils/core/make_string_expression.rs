@@ -32,9 +32,6 @@ pub(crate) fn make_string_expression(
     })
     .collect::<Vec<_>>();
 
-  // Split where the emptiness is decided, so the join below is handed a first
-  // condition rather than indexing for one. What the set holds is then part of
-  // what the join is asked, instead of an invariant argued from here.
   let Some((first_condition, rest_conditions)) = conditions.split_first() else {
     return fn_result_to_expression(props_like_fn(values));
   };
@@ -90,21 +87,11 @@ pub(crate) fn make_string_expression(
   ))
 }
 
-/// The key an author's conditions read at runtime: each condition shifted to
-/// its own bit, the bits joined.
-///
-/// The first condition is asked for on its own, so a caller cannot ask for the
-/// key of no conditions at all -- the set the join starts from is one the
-/// signature guarantees.
-///
-/// The conditions are borrowed from the arguments they were read out of. Each
-/// is copied once, into the expression built from it. A set copied to be passed
-/// here copied every condition twice.
+/// The runtime key for an author's conditions: each condition shifted to its own bit, OR-ed.
 fn gen_bitwise_or_of_conditions(first: &Expr, rest: &[&Expr]) -> Box<Expr> {
   let count = rest.len() + 1;
 
-  // `!!condition << shift`: the double negation makes the author's value a
-  // boolean, and the shift gives each condition a bit of its own.
+  // `!!condition << shift`: one bit per condition.
   let shifted = |index: usize, condition: &Expr| {
     create_bin_expr(
       BinaryOp::LShift,

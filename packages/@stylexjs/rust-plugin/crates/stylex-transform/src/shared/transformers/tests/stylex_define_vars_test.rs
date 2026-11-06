@@ -305,9 +305,7 @@ mod stylex_define_vars {
     )
   }
 
-  /// The variable group the two cases below both read: four variables, between
-  /// them every shape a default can take -- a plain value, a nested default, an
-  /// at-rule, and an at-rule inside an at-rule.
+  /// Four variables covering a plain value, a nested default, an at-rule and a nested at-rule.
   fn nested_at_rules_vars() -> EvaluateResultValue {
     default_vars_factory(&[
       (
@@ -457,11 +455,7 @@ mod stylex_define_vars {
     )
   }
 
-  /// A debug build writes the same stylesheet as a production build. A variable
-  /// is named from the export and the key alone, so no option changes it.
-  ///
-  /// Read off both runs rather than off one run and the literals the case above
-  /// pins, so the two cannot drift apart while each still passes.
+  /// Read off both runs, not pinned literals, so the two cannot drift apart.
   #[test]
   fn spells_the_same_css_in_debug_and_production_builds() {
     let export_id = "TestTheme.stylex.js//buttonTheme";
@@ -491,7 +485,6 @@ mod stylex_define_vars {
     let color_fn = types_fn("color".into());
     let length_fn = types_fn("length".into());
 
-    // #region bgColor
     let mut bg_color_map = IndexMap::new();
 
     bg_color_map.insert(
@@ -519,9 +512,7 @@ mod stylex_define_vars {
       "@media print".to_string(),
       ValueWithDefault::String("white".to_string()),
     );
-    // #endregion bgColor
 
-    // #region bgColorDisabled
     let mut bg_color_disabled_map = IndexMap::new();
 
     let mut bg_color_disabled_default_map = IndexMap::new();
@@ -557,17 +548,13 @@ mod stylex_define_vars {
       "@media (prefers-color-scheme: dark)".to_string(),
       ValueWithDefault::Map(bg_color_disabled_mq_map),
     );
-    // #endregion bgColorDisabled
 
-    // #region fgColor
     let mut fg_color_map = IndexMap::new();
 
     fg_color_map.insert(
       "default".to_string(),
       ValueWithDefault::String("pink".to_string()),
     );
-
-    // #endregion fgColor
 
     let bg_color = type_fabric(&color_fn, ValueWithDefault::Map(bg_color_map));
     let bg_color_disabled = type_fabric(&color_fn, ValueWithDefault::Map(bg_color_disabled_map));
@@ -729,7 +716,6 @@ mod stylex_define_vars {
     let color_fn = types_fn("color".into());
     let length_fn = types_fn("length".into());
 
-    // #region bgColor
     let mut bg_color_map = IndexMap::new();
 
     bg_color_map.insert(
@@ -757,9 +743,7 @@ mod stylex_define_vars {
       "@media print".to_string(),
       ValueWithDefault::String("white".to_string()),
     );
-    // #endregion bgColor
 
-    // #region bgColorDisabled
     let mut bg_color_disabled_map = IndexMap::new();
 
     let mut bg_color_disabled_default_map = IndexMap::new();
@@ -795,17 +779,13 @@ mod stylex_define_vars {
       "@media (prefers-color-scheme: dark)".to_string(),
       ValueWithDefault::Map(bg_color_disabled_mq_map),
     );
-    // #endregion bgColorDisabled
 
-    // #region fgColor
     let mut fg_color_map = IndexMap::new();
 
     fg_color_map.insert(
       "default".to_string(),
       ValueWithDefault::String("pink".to_string()),
     );
-
-    // #endregion fgColor
 
     let bg_color = type_fabric(&color_fn, ValueWithDefault::Map(bg_color_map));
     let bg_color_disabled = type_fabric(&color_fn, ValueWithDefault::Map(bg_color_disabled_map));
@@ -926,8 +906,7 @@ mod stylex_define_vars {
     css_type
   }
 
-  /// The name a variable is written under in the stylesheet is hashed from the
-  /// export it belongs to, in a debug build as in a production one.
+  /// Hashed from the export it belongs to, in debug and production alike.
   mod the_name_a_variable_is_written_under {
     use super::*;
 
@@ -960,7 +939,6 @@ mod stylex_define_vars {
       );
     }
 
-    /// A debug build names the variable exactly as a production build does.
     #[test]
     fn is_the_same_hash_under_debug() {
       assert_eq!(
@@ -969,8 +947,7 @@ mod stylex_define_vars {
       );
     }
 
-    /// A name the author wrote as a CSS custom property keeps that name, with
-    /// the two leading dashes taken off.
+    /// The two leading dashes are taken off.
     #[test]
     fn keeps_a_custom_property_name_the_author_wrote() {
       assert_eq!(var_refs("{ '--brand': 'red' }", true)[0], "var(--brand)");

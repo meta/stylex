@@ -70,8 +70,7 @@ mod stylex_define_consts {
 
     match injectable_styles.get(sm_hash.as_str()).unwrap().as_ref() {
       InjectableStyleKind::Const(style) => {
-        // The rule carries the constant as JSON, so text arrives quoted and a
-        // reader of it knows the kind without guessing one.
+        // The rule carries the constant as JSON.
         assert_eq!(style.const_value, "\"(min-width: 768px)\"");
         assert_eq!(style.ltr, "");
         assert_eq!(style.rtl, None);
@@ -238,9 +237,7 @@ mod stylex_define_consts {
     );
   }
 
-  /// A constant keeps the kind the author gave it. A literal and a template
-  /// that spells one piece of text are read as that text, an object is read as
-  /// an object, and a value that spells nothing static is refused.
+  /// Static literals and one-piece templates read as text, objects as objects; the rest is refused.
   mod a_constant_value {
     use super::*;
 
@@ -280,18 +277,13 @@ mod stylex_define_consts {
       assert_eq!(text_of("{ value: `` }"), "");
     }
 
-    /// A template holding an expression spells no one piece of text, so there
-    /// is no static value to keep and the call is refused. The reference
-    /// refuses such a constant too.
+    /// The reference refuses such a constant too.
     #[test]
     #[should_panic(expected = "Encountered a style value the compiler cannot read.")]
     fn refuses_a_template_that_spells_no_one_piece_of_text() {
       text_of("{ value: `a${b}c` }");
     }
 
-    /// An object stays an object, with the kind of every value in it kept. It
-    /// used to be flattened to the JSON text of itself, which a reader of the
-    /// answer then saw as a string.
     #[test]
     fn keeps_an_object_as_an_object() {
       let value = value_of("{ value: { nested: 1 } }");
@@ -306,8 +298,6 @@ mod stylex_define_consts {
       );
     }
 
-    /// The JSON the injected rule carries spells the kind too, so a reader of
-    /// the metadata sees a number as a number.
     #[test]
     fn spells_the_json_the_injected_rule_carries() {
       assert_eq!(value_of("{ value: 800 }").to_json_text(), "800");
@@ -319,8 +309,7 @@ mod stylex_define_consts {
     }
   }
 
-  /// The name a constant is written under in the stylesheet is hashed from the
-  /// export it belongs to, in a debug build as in a production one.
+  /// Hashed from the export it belongs to, in debug and production alike.
   mod the_name_a_constant_is_written_under {
     use super::*;
 
@@ -351,7 +340,6 @@ mod stylex_define_consts {
       );
     }
 
-    /// A debug build names the constant exactly as a production build does.
     #[test]
     fn is_the_same_hash_under_debug() {
       assert_eq!(
@@ -360,8 +348,7 @@ mod stylex_define_consts {
       );
     }
 
-    /// A name the author wrote as a CSS custom property keeps that name, with
-    /// the two leading dashes taken off.
+    /// The two leading dashes are taken off.
     #[test]
     fn keeps_a_custom_property_name_the_author_wrote() {
       assert_eq!(const_keys("{ '--brand': 'red' }", true), ["brand"]);

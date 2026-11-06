@@ -16,11 +16,6 @@ pub(crate) struct PreRuleSet {
 
 impl PreRuleSet {
   /// Makes a set that holds no rules.
-  //
-  // Kept by ticket 31. Only this function can make an empty set, because
-  // `create` builds every other set and collapses an empty list to a null
-  // rule. No production code calls it. The compiler warns without the
-  // attribute.
   #[allow(dead_code)]
   pub(crate) fn new() -> Self {
     PreRuleSet { rules: vec![] }
@@ -37,9 +32,6 @@ impl PreRuleSet {
 
     match flat_rules.len() {
       0 => PreRules::NullPreRule(NullPreRule::new()),
-      // The one rule is moved out rather than copied. The length above is what
-      // makes the index good, so the set is never asked for a rule it has not
-      // got.
       1 => flat_rules.swap_remove(0),
       _ => PreRules::PreRuleSet(PreRuleSet { rules: flat_rules }),
     }
@@ -48,8 +40,7 @@ impl PreRuleSet {
 
 #[cfg_attr(coverage_nightly, coverage(off))]
 impl PreRule for PreRuleSet {
-  /// Two sets are equal when they hold the same rules in the same order, each
-  /// compared by its own `equals` rather than field by field.
+  /// Equal when both hold equal rules in the same order.
   fn equals(&self, other: &PreRules) -> bool {
     match other {
       PreRules::PreRuleSet(other) => {

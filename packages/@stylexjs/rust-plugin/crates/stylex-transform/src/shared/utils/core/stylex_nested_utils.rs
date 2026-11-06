@@ -36,8 +36,6 @@ pub(crate) fn unflatten_object(
       continue;
     }
 
-    // A split always answers at least one part, so the last of them is the leaf
-    // and every part before it names an object to go down into.
     let parts = key.split(SEPARATOR).collect::<Vec<_>>();
     let leaf_key = parts[parts.len() - 1];
     let mut current = &mut result;
@@ -47,8 +45,7 @@ pub(crate) fn unflatten_object(
         .entry((*part).to_string())
         .or_insert_with(|| UnflattenedCompiledStylesValue::Object(IndexMap::new()));
 
-      // A leaf already written under this part cannot hold the parts below it,
-      // so it gives way to the object they go in.
+      // An existing leaf gives way to an object for the deeper parts.
       if !matches!(entry, UnflattenedCompiledStylesValue::Object(_)) {
         *entry = UnflattenedCompiledStylesValue::Object(IndexMap::new());
       }
@@ -94,13 +91,7 @@ pub(crate) fn convert_unflattened_object_to_ast(
   )
 }
 
-/// The object `value` holds.
-///
-/// Total for the one caller above, which makes `value` an object on the line
-/// before it asks. The second arm answers for a state no input can put the
-/// value in, and is kept because the language names every variant or none. Left
-/// out of the coverage measurement for that reason, as
-/// `guidelines/stack/RUST.md` describes.
+/// The object `value` holds; the caller guarantees it is an object.
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn object_under(
   value: &mut UnflattenedCompiledStylesValue,
@@ -114,9 +105,6 @@ fn object_under(
 }
 
 /// The expression one unflattened value is written back as.
-///
-/// A leaf is written by the one writer every other compiled value goes
-/// through, so a nested constant and a flat one are spelled the same way.
 fn unflattened_value_to_ast(value: &UnflattenedCompiledStylesValue) -> Expr {
   match value {
     UnflattenedCompiledStylesValue::Object(map) => convert_unflattened_object_to_ast(map),

@@ -80,9 +80,7 @@ impl Normalizer<'_> {
         });
         let result = evaluate_function_in_scope_observed(callback, Vec::new(), self.state,
           self.call.span, &self.overlay, Some(observer))
-          // Babel's defineVars normalizer catches function-evaluation failure
-          // and frames its API-specific refusal at the call. Other consumers
-          // still preserve ordinary evaluated-arrow Error metadata.
+          // Matches Babel: a failed function evaluation is refused at the call.
           .unwrap_or_else(|_| stylex_panic!("{}", non_static_value(STYLEX_DEFINE_VARS)));
         if matches!(result, EvaluateResultValue::Callback(_)) {
           stylex_panic!("{}", invalid_define_vars_function_value());

@@ -17,33 +17,18 @@ use stylex_state::{
   types::{FlatCompiledStyles, StylesObjectMap},
 };
 
-/// What one argument of a `stylex.props`-family call was read as.
-///
-/// Exactly the three answers the reader gives: the compiled style it names, the
-/// absence the author wrote, and anything the compiler cannot read, which the
-/// runtime is left to apply.
+/// What one `stylex.props`-family argument was read as: a compiled style, an authored null, or
+/// something left to the runtime.
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum StyleObject {
-  /// Shared rather than owned, for the style a name stands for. The state
-  /// holds such a style for the whole file, and one `stylex.props` argument
-  /// copied every name and value of it only to drop the copy when the merge
-  /// ended.
-  ///
-  /// A style the reader builds instead of finding -- an object written in the
-  /// call, or a value the evaluator folded -- is put in an `Rc` of its own and
-  /// is shared with nothing. It lives as long as the merge and no longer.
+  /// A compiled style, shared with the state or owned by this merge.
   Style(Rc<FlatCompiledStyles>),
   Nullable,
   Other,
 }
 
 impl StyleObject {
-  /// Names the style of one argument.
-  ///
-  /// Takes the style the state holds, or a map the reader has just built and
-  /// nothing else holds. One constructor for both, so a reader of
-  /// `StyleObject::Style` does not have to know which of the two a site hands
-  /// over.
+  /// Wraps a state-held or freshly built style.
   #[inline]
   pub(crate) fn style(style: impl Into<Rc<FlatCompiledStyles>>) -> Self {
     StyleObject::Style(style.into())
@@ -59,9 +44,6 @@ pub(crate) enum ResolvedArg {
 impl ResolvedArg {
   /// Creates a `ResolvedArg::StyleObject`.
   ///
-  /// # Arguments
-  /// * `style_obj` - The resolved style object
-  ///
   /// # Example
   /// ```ignore
   /// let arg = ResolvedArg::style_object(StyleObject::style(...));
@@ -72,11 +54,6 @@ impl ResolvedArg {
   }
 
   /// Creates a `ResolvedArg::ConditionalStyle`.
-  ///
-  /// # Arguments
-  /// * `test` - The test expression
-  /// * `primary` - Primary style object
-  /// * `fallback` - Fallback style object
   ///
   /// # Example
   /// ```ignore
@@ -97,14 +74,10 @@ pub(crate) fn parse_nullable_style(
   state: &mut StateManager,
   evaluate_path_fn_config: &Rc<FunctionMap>,
 ) -> StyleObject {
-  // A parenthesis is not a different argument, so the style shape is read
-  // through it. Read bare, `stylex.props((styles.root))` reached no arm below
-  // and the whole merge was handed back to the runtime.
+  // Read through parentheses: `stylex.props((styles.root))`.
   let path = normalize_expr(path);
 
-  // Call expressions (dynamic atom `_temp.color(c)`, dynamic create style
-  // `styles.opacity(1)`, etc.) always bail out to runtime so the props merge
-  // keeps the conditional class / inline-var semantics intact.
+  // Calls (`_temp.color(c)`, `styles.opacity(1)`) always bail out to the runtime.
   if path.is_call() {
     return StyleObject::Other;
   }
@@ -125,11 +98,6 @@ pub(crate) fn parse_nullable_style(
       }
     },
     Expr::Member(member) => {
-      // The namespaces come back with the name, rather than being looked up
-      // again once the name is admitted: the reader that admits the name reads
-      // the same map, so a second look-up asked a question already answered.
-      // Both names are read against maps that take a string slice, so only the
-      // computed key needs an owned string of its own.
       let mut namespaces: Option<&StylesObjectMap> = None;
       let mut obj_name: Option<&str> = None;
       let mut prop_name: Option<Cow<'_, str>> = None;
@@ -158,8 +126,7 @@ pub(crate) fn parse_nullable_style(
         && let Some(obj_name) = obj_name
         && let Some(prop_name) = prop_name
       {
-        // Dynamic style functions (e.g. `styles.opacity` where `opacity` is a
-        // dynamic style) must bail out so runtime props handling stays intact.
+        // Dynamic style functions bail out to the runtime.
         if state
           .dynamic_style_namespaces
           .get(obj_name)
@@ -171,9 +138,7 @@ pub(crate) fn parse_nullable_style(
         if let Some(style_value) = namespaces.get(prop_name.as_ref()) {
           return StyleObject::style(Rc::clone(style_value));
         }
-        // A known compiler-generated style object with an unknown namespace
-        // remains a runtime call. Generic JS missing gets still yield
-        // undefined; that is not authored null input/provenance for StyleX.
+        // A known generated style object with an unknown namespace stays a runtime call.
         return StyleObject::Other;
       }
 
@@ -238,8 +203,7 @@ fn parse_compiled_styles(
     _ => None,
   }
 }
-/// Flatten the materialized data once in authored/iterated order. Null slots
-/// stay nullable rather than becoming missing keys or reordered styles.
+/// Flattens materialized data once in authored order; null slots stay nullable.
 fn read_array(
   compiled_styles: &mut IndexMap<String, Rc<FlatCompiledStylesValue>>,
   array: &swc_core::ecma::ast::ArrayLit,
@@ -276,18 +240,8 @@ fn parse_nullable_object(
   }
 }
 
-/// Every declaration one style argument makes: the names it writes itself, and
-/// after them the names it inherits.
-///
-/// The merge walks what an object inherits from, so a prototype declares its
-/// own names too -- after the object's, and shadowed by them. A prototype that
-/// was given one of its own is read the same way again, which is why the walk
-/// is a loop rather than one step.
-///
-/// The names of one object go into a map of their own before they reach the
-/// caller's, because the two levels are combined by different rules: a name
-/// written twice in one object keeps the value of its last writing, and a name
-/// an object both writes and inherits keeps the one it wrote.
+/// Every declaration one style argument makes: own names (last write wins), then inherited
+/// prototype names it doesn't shadow.
 fn declarations_of(object: &ObjectLit) -> IndexMap<String, Rc<FlatCompiledStylesValue>> {
   let mut declarations: IndexMap<String, Rc<FlatCompiledStylesValue>> =
     IndexMap::with_capacity(object.props.len());

@@ -18,10 +18,6 @@ use stylex_structures::{
 use swc_core::ecma::ast::{Expr, Lit};
 
 /// The declarations one authored property stands for.
-///
-/// The key is borrowed where the caller has one to lend. A shorthand is read by
-/// name and then expanded into keys of its own, so the name is only copied on
-/// the one path that keeps it: a property that stands for itself.
 pub(crate) fn flat_map_expanded_shorthands(
   obj_entry: (Cow<'_, str>, PreRuleValue),
   options: &StyleXStateOptions,
@@ -46,27 +42,11 @@ pub(crate) fn flat_map_expanded_shorthands(
       }
     },
     PreRuleValue::Expr(expr) => match expr {
-      // A numeric literal stays a number: the unit suffix is decided later, per
-      // expanded property, by `transform_value`.
+      // Numbers stay numbers; `transform_value` picks the unit per expanded property.
       Expr::Lit(Lit::Num(num)) => Some(TRawValue::Number(num.value)),
-      // Two literals reach here with nothing to declare, for two different
-      // reasons.
-      //
-      // `null` is an absent value everywhere: it declares nothing, and the
-      // property it expands to survives carrying that absence, which is how a
-      // later declaration of the same property gets unset rather than
-      // shadowed.
-      //
-      // A boolean only reaches here from the calls that have no value
-      // validator in front of them -- `keyframes`, `positionTry` and
-      // `viewTransitionClass` -- where it is dropped. Inside `create` the
-      // validator refuses it first, so this arm is not the decision about a
-      // boolean; `is_style_value_literal` in `validators.rs` is.
-      //
-      // Every other literal that spells no string is a different thing again: a
-      // regular expression is not an absent value, it is an unusable one, and
-      // saying nothing about it would drop a declaration the author meant to
-      // write.
+      // `null` declares nothing but keeps the property, so a later declaration is unset.
+      // Booleans only get here from `keyframes`, `positionTry` and `viewTransitionClass` (no
+      // validator) and are dropped. Other non-string literals (e.g. regex) are errors below.
       Expr::Lit(Lit::Null(_) | Lit::Bool(_)) => None,
       Expr::Lit(lit) => Some(TRawValue::String(match convert_lit_to_string(&lit) {
         Some(s) => s,
@@ -91,15 +71,8 @@ pub(crate) fn flat_map_expanded_shorthands(
     PreRuleValue::Null => None,
   };
 
-  // A key that is one variable reference and nothing else names the custom
-  // property it declares. This is the wider of the two questions the compiler
-  // asks about such a key: it takes any name, where the one in
-  // `flatten_raw_style_object.rs` takes only a narrow class. Both are kept,
-  // because the reference implementation asks both, and a key the narrow one
-  // passes over reaches its property here.
-  //
-  // The slice is safe to count in bytes: both ends are proven ASCII by the two
-  // checks beside it.
+  // A lone `var(...)` key names its custom property. Wider than the check in
+  // `flatten_raw_style_object.rs`; the reference has both. Both ends are ASCII, so slicing is safe.
   let key = if key.starts_with("var(") && key.ends_with(')') {
     Cow::Owned(key[4..key.len() - 1].to_string())
   } else {

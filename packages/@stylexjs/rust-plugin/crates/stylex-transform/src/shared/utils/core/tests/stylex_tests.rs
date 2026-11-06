@@ -16,7 +16,6 @@ use stylex_state::flat_compiled_styles_value::FlatCompiledStylesValue;
 fn create_style_object_args(args: &[&[(&str, FlatCompiledStylesValue)]]) -> Vec<ResolvedArg> {
   let mut result_args = vec![];
   for arg in args.iter() {
-    // Arrange
     let mut object = IndexMap::new();
 
     for (key, value) in arg.iter() {
@@ -37,10 +36,8 @@ fn stylex_inject() {
     ("$$css", FlatCompiledStylesValue::Bool(true)),
   ]]);
 
-  // Act
   let result = stylex(&args);
 
-  // Assert
   let classname_string = result
     .as_class_name()
     .and_then(|expr| expr.as_lit())
@@ -71,10 +68,8 @@ fn merge_order() {
 
   let args = create_style_object_args(&[&first, &second, &third]);
 
-  // Act
   let result = stylex(&args);
 
-  // Assert
   let classname_string = result
     .as_class_name()
     .and_then(|expr| expr.as_lit())
@@ -104,10 +99,8 @@ fn with_a_top_level_array_of_simple_overridden_classes() {
 
   let args = create_style_object_args(&[&first, &second]);
 
-  // Act
   let result = stylex(&args);
 
-  // Assert
   let classname_string = result
     .as_class_name()
     .and_then(|expr| expr.as_lit())
@@ -150,10 +143,8 @@ fn with_nested_arrays_and_pseudo_classes_overriding_things() {
 
   let args = create_style_object_args(&[&first, &second, &third]);
 
-  // Act
   let result = stylex(&args);
 
-  // Assert
   let classname_string = result
     .as_class_name()
     .and_then(|expr| expr.as_lit())
@@ -387,11 +378,9 @@ fn with_complicated_set_of_arguments() {
     ],
   ]);
 
-  // Act
   let result = stylex(&styles);
   let repeat = stylex(&styles);
 
-  // Assert
   let classname_string = result
     .as_class_name()
     .and_then(|expr| expr.as_lit())
@@ -507,7 +496,7 @@ fn with_just_pseudoclasses() {
 
 #[test]
 fn props_with_dynamic_styles() {
-  // First arg: compiled style (with $$css)
+  // Compiled style (with $$css)
   let mut compiled = IndexMap::new();
   compiled.insert(
     "backgroundColor".to_string(),
@@ -522,7 +511,7 @@ fn props_with_dynamic_styles() {
     )),
   );
 
-  // Second arg: dynamic inline style (no $$css)
+  // Dynamic inline style (no $$css)
   let mut dynamic_style = IndexMap::new();
   dynamic_style.insert(
     "color".to_string(),
@@ -548,7 +537,6 @@ fn props_with_dynamic_styles() {
     Some("backgroundColor-red"),
   );
 
-  // Inline style should be present as the object a style property holds
   let style_value = values.get("style").expect("Expected style key in props");
   if let FlatCompiledStylesValue::Object(declarations) = style_value.as_ref() {
     assert_eq!(declarations.len(), 1);
@@ -572,9 +560,7 @@ fn props_with_dynamic_styles() {
   );
 }
 
-// -------------------------------------------------------------------------
 // attrs
-// -------------------------------------------------------------------------
 
 #[test]
 fn attrs_basic_resolve() {
@@ -598,7 +584,7 @@ fn attrs_basic_resolve() {
 
 #[test]
 fn attrs_with_dynamic_styles() {
-  // First arg: compiled style (with $$css)
+  // Compiled style (with $$css)
   let mut compiled = IndexMap::new();
   compiled.insert(
     "backgroundColor".to_string(),
@@ -613,7 +599,7 @@ fn attrs_with_dynamic_styles() {
     )),
   );
 
-  // Second arg: dynamic inline style (no $$css)
+  // Dynamic inline style (no $$css)
   let mut dynamic_style = IndexMap::new();
   dynamic_style.insert(
     "color".to_string(),
@@ -683,8 +669,7 @@ fn attrs_with_dynamic_styles() {
   );
 }
 
-/// `stylex.legacyMerge.attrs(...)` behaves identically to `attrs(...)` at
-/// the Rust level — both route through the same `attrs()` transform.
+/// Both route through the same `attrs()` transform.
 #[test]
 fn legacy_merge_exposes_attrs() {
   let args = create_style_object_args(&[&[

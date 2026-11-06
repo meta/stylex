@@ -67,8 +67,7 @@ where
         &FunctionConfigType::Regular(get_keyframes_fn()),
       );
 
-      // `positionTry` and `types` are read by name alone here, so neither is a
-      // member of the namespace.
+      // `positionTry` and `types` are read by name only, not as namespace members.
       register_stylex_identifier(
         &self.state,
         &mut function_map,
@@ -78,8 +77,8 @@ where
 
       register_stylex_identifier(&self.state, &mut function_map, ImportKind::Types, &types_fn);
 
-      // `types` is carried in the namespace's own fold, because a theme reads
-      // `stylex.types` off a namespace it also spreads.
+      // `types` is in the namespace fold because a theme reads `stylex.types` off a spread
+      // namespace.
       for name in self.state.stylex_imports() {
         insert_stylex_identifier_entry(
           &mut function_map.identifiers,
@@ -93,21 +92,15 @@ where
 
       self.state.apply_stylex_env(&mut function_map);
 
-      // `env` is carried in the fold for the same reason `types` is: the
-      // namespace is a value in this map, so a fold one key short is an object
-      // that does not say what the namespace has.
+      // `env` is in the fold for the same reason as `types`.
       register_env_in_namespace_fold(&self.state, &mut function_map);
 
       let function_map: Box<FunctionMap> = Box::new(function_map);
 
       let evaluated_arg1 = evaluate(first_arg, &mut self.state, &function_map);
 
-      // The fold's two failures are read once. A refusal is the reachable one, and
-      // it reads the sentence and the position it always did. A confident answer
-      // with no value is the other: the evaluator's memo is its only known
-      // producer, and no source through this producer reaches it, so it reads this
-      // sentence rather than one of its own. `folded_style_object_lit` reads the
-      // two the same way for the producers that share it.
+      // A refusal keeps its own message and position; a confident fold with no value (only the
+      // evaluator's memo produces one, unreachable here) uses this message.
       let Some(variables) = evaluated_arg1.value.filter(|_| evaluated_arg1.confident) else {
         stylex_panic!(
           "{}",
@@ -173,9 +166,7 @@ where
         ),
       };
 
-      // Babel checks the evaluated override shape before the theme group.
-      // Retain that diagnostic precedence and frame invalid groups at the call.
-      // Carry the group forward so the producer need not read it a second time.
+      // Matches Babel: the override shape is checked before the theme group, framed at the call.
       let theme_group = reported_at(call.span, || {
         validate_theme_variables(&variables, &self.state)
       });

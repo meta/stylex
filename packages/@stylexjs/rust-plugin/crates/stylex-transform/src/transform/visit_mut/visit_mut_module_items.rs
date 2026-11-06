@@ -19,10 +19,8 @@ where
   pub(crate) fn visit_mut_module_items_impl(&mut self, module_items: &mut Vec<ModuleItem>) {
     match self.state.cycle {
       TransformationCycle::Discover => {
-        // Pre-fill `state.declarations` for top-level ident var decls so any
-        // subsequent lookup during the descent (or in later phases) can find
-        // them. The visit_mut_var_declarator hook will re-fill them
-        // per-decl, but `fill_state_declarations` is idempotent.
+        // Pre-fill `state.declarations` for top-level var decls so lookups during the descent find
+        // them; `fill_state_declarations` is idempotent.
         module_items.iter().for_each(|module_item| {
           if let ModuleItem::Stmt(Stmt::Decl(Decl::Var(var_decl))) = module_item {
             var_decl.decls.iter().for_each(|decl| {
@@ -33,8 +31,7 @@ where
           }
         });
 
-        // Single descent: discovers stylex imports, transforms compiled-JSX
-        // sx attributes, and accumulates ident / member-expr counts.
+        // Single descent: finds imports, rewrites compiled-JSX sx attributes, counts references.
         module_items.visit_mut_children_with(self);
 
         if !self.state.has_import_paths() {
@@ -74,9 +71,7 @@ where
         }
       },
       TransformationCycle::TransformProducers | TransformationCycle::TransformConsumers => {
-        // Hoisted/queued items are merged once after the consumer walk
-        // completes via `flush_pending_insertions`; the per-cycle
-        // module-items hook only needs to descend into children.
+        // Pending items are merged once by `flush_pending_insertions` after the consumer walk.
         let parent_anchor = self.state.current_statement_anchor();
         for item in module_items {
           if parent_anchor.is_none() {
@@ -89,11 +84,10 @@ where
         self.state.replace_statement_anchor(parent_anchor);
       },
       TransformationCycle::Finalize => {
-        // We need it twice for a clear dead code after declaration transforms
+        // Second pass clears dead code left by declaration transforms.
         module_items.visit_mut_children_with(self);
 
-        // We remove `Stmt::Empty` from the statement list.
-        // This is optional, but it's required if you don't want extra `;` in output.
+        // Remove `Stmt::Empty` to avoid stray `;` in output.
         module_items.retain(|module_item| {
           !matches!(module_item, ModuleItem::Stmt(Stmt::Empty(..)))
             && !matches!(module_item, ModuleItem::ModuleDecl(ModuleDecl::ExportDecl(ExportDecl { decl: Decl::Var(var), .. })) if var.decls.is_empty())

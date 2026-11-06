@@ -31,8 +31,8 @@ fn names(source: &str) -> Vec<String> {
 
 #[test]
 fn current_babel_cleanup_retains_ordinary_bindings_after_props_inline() {
-  // Current Babel keeps both the authored constant and the result binding, but
-  // removes the remembered styles declaration once the props call is inlined.
+  // Current Babel keeps the authored constant and result binding, but removes the remembered
+  // styles declaration once the props call is inlined.
   let result = names(
     "import * as stylex from '@stylexjs/stylex';const borderRadius=2;const styles=stylex.create({root:{color:'red'}});const classnames=stylex.props(styles.root);",
   );
@@ -41,8 +41,7 @@ fn current_babel_cleanup_retains_ordinary_bindings_after_props_inline() {
 
 #[test]
 fn current_babel_cleanup_keeps_style_references_from_retained_array_binding() {
-  // Inlining an array use does not authorize deleting the author's array. Its
-  // surviving initializer therefore still keeps the referenced namespace live.
+  // Inlining an array use does not delete the author's array, so it keeps the namespace live.
   let result = names(
     "import * as stylex from '@stylexjs/stylex';const styles=stylex.create({root:{color:'red'}});const base=[styles.root];stylex.props(base);",
   );

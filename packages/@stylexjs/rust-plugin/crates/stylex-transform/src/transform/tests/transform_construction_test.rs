@@ -1,10 +1,5 @@
-//! How the transform is built, and what it reads a call as.
-//!
-//! The suite under `tests/` compiles every fixture through the test builder,
-//! which leaves the production constructor and the options that no fixture sets
-//! unexercised. The compiler builds the transform with
-//! [`StyleXTransform::new`], so each is measured here rather than left to a
-//! fixture that cannot reach it.
+//! How the transform is built, and what it reads a call as. The compiler uses
+//! [`StyleXTransform::new`], which the fixture suite's test builder never exercises.
 
 use swc_core::{
   common::{GLOBALS, Globals},
@@ -18,7 +13,6 @@ use stylex_structures::{
 use crate::StyleXTransform;
 use crate::transform::tests::prelude::{comments, resolved_module, test_transform};
 
-/// The import sources a transform built from `config` recognises, in order.
 fn import_sources_of(config: &mut StyleXOptionsParams) -> Vec<String> {
   let transform = StyleXTransform::new(comments(), PluginPass::default(), config);
 
@@ -34,9 +28,7 @@ fn import_sources_of(config: &mut StyleXOptionsParams) -> Vec<String> {
     .collect()
 }
 
-/// The compiler builds the transform through this constructor, and the order of
-/// the sources it seeds is read later: the `sx` runtime binding picks the first
-/// configured custom source, which is the entry after the two defaults.
+/// Order matters: the `sx` runtime binding picks the first custom source, after the two defaults.
 #[test]
 fn the_production_constructor_seeds_the_default_import_sources() {
   GLOBALS.set(&Globals::default(), || {
@@ -61,9 +53,7 @@ fn the_production_constructor_seeds_the_default_import_sources() {
   });
 }
 
-/// A member call whose object names no StyleX import is passed over. The
-/// transform reads every call in the module, so the shape has to be answered
-/// rather than refused: a module is free to call anything else it imports.
+/// A module is free to call anything else it imports, so this is answered, not refused.
 #[test]
 fn a_member_call_on_another_object_is_passed_over() {
   GLOBALS.set(&Globals::default(), || {
@@ -88,10 +78,7 @@ fn a_member_call_on_another_object_is_passed_over() {
   });
 }
 
-/// The two builder settings the fixture suite never asks for. Both are read off
-/// the built transform rather than asserted through compiled output, because
-/// the point is only that the setting reaches the state the transform runs
-/// against.
+/// Read off the built transform: the point is only that each setting reaches the state.
 #[test]
 fn the_builder_carries_an_options_record_and_the_debug_data_prop() {
   GLOBALS.set(&Globals::default(), || {

@@ -8,17 +8,7 @@ use swc_core::ecma::{
 
 use stylex_state::state_manager::StateManager;
 
-/// The name a top-level expression is exported under, where it is exported
-/// under one.
-///
-/// Two spellings say the same thing: a declarator written with `export`, and a
-/// plain declarator a later `export { … }` names. Both carry a name, so the
-/// answer is the name itself rather than a yes. A caller that needs the name
-/// then has it proven, and asks no second question about a name that is not
-/// there.
-///
-/// Only a default export carries no name, and a default export is not a named
-/// export either, so the two answers are the same one.
+/// The name a top-level declarator is exported under (`export const` or a later `export { … }`).
 pub(crate) fn named_export_name<'a>(
   TopLevelExpression(kind, _, variable_name): &'a TopLevelExpression,
   state: &StateManager,
@@ -34,9 +24,7 @@ pub(crate) fn named_export_name<'a>(
       if let ExportSpecifier::Named(named_specifier) = specifier
         && matches!(&named_specifier.orig, ModuleExportName::Ident(ident) if ident.sym == *var_name)
       {
-        // A re-export names another module's binding, and a rename exports a
-        // name this declarator does not carry. Neither is this declarator
-        // exported under its own name.
+        // Re-exports and renames do not export this declarator under its own name.
         return (named_export.src.is_none() && named_specifier.exported.is_none())
           .then_some(var_name);
       }
@@ -69,20 +57,14 @@ pub fn get_property_by_key<'a>(expr: &'a Expr, key: &str) -> Option<&'a Expr> {
   }
 }
 
-/// Returns `true` if `expr` contains any `Expr::Arrow` anywhere in its subtree
-/// (object values, parens, conditionals, arrays, calls, template literals, …).
-/// Used to decide whether a rewrite pass is necessary without paying the cost
-/// of cloning the AST eagerly.
+/// Whether `expr` contains an arrow function anywhere in its subtree.
 pub(crate) fn expr_contains_arrow(expr: &Expr) -> bool {
   let mut finder = ArrowFinder { found: false };
   expr.visit_with(&mut finder);
   finder.found
 }
 
-/// SWC `Visit` implementation that flags `true` on the first `ArrowExpr` it
-/// encounters, regardless of the surrounding expression kind. Default
-/// `visit_children_with` dispatch covers all variants (Cond, Logical, Array,
-/// Seq, TaggedTpl, New, Call, …) so the check is exhaustive.
+/// Visitor that flags the first `ArrowExpr` it finds.
 struct ArrowFinder {
   found: bool,
 }

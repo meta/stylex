@@ -1,4 +1,4 @@
-//! Tests for the object expression the compiled styles are written back as.
+//! The object expression the compiled styles are written back as.
 
 use std::rc::Rc;
 
@@ -17,8 +17,7 @@ use crate::shared::utils::core::js_to_ast::{
   compiled_namespaces, convert_values_to_ast, namespaces_to_object, remove_objects_with_spreads,
 };
 
-/// The text of an atom. A lone surrogate spells no text, and no case here
-/// writes one.
+/// The text of an atom; no case here writes a lone surrogate.
 fn text_of(atom: &Wtf8Atom) -> String {
   match atom.as_str() {
     Some(text) => text.to_owned(),
@@ -26,7 +25,6 @@ fn text_of(atom: &Wtf8Atom) -> String {
   }
 }
 
-/// The key of a property, however it is spelled.
 fn key_of(prop: &PropOrSpread) -> String {
   let key_value = match prop {
     PropOrSpread::Prop(prop) => match prop.as_key_value() {
@@ -43,7 +41,6 @@ fn key_of(prop: &PropOrSpread) -> String {
   }
 }
 
-/// The value of a property, rendered so a case can name it in one word.
 fn value_of(prop: &PropOrSpread) -> String {
   let key_value = match prop {
     PropOrSpread::Prop(prop) => match prop.as_key_value() {
@@ -84,12 +81,7 @@ fn values_of(pairs: &[(&str, FlatCompiledStylesValue)]) -> FlatCompiledStyles {
   values
 }
 
-/// Every kind of value has a spelling of its own, and each is written as the
-/// kind it was read with.
-///
-/// Text that reads as a number stays text. The writer used to make a number of
-/// it, which was a guess standing in for a kind that had been thrown away
-/// before it got here; now the kind arrives intact and the guess is gone.
+/// Text that reads as a number stays text.
 #[test]
 fn writes_each_kind_of_value_the_way_javascript_spells_it() {
   let values = values_of(&[
@@ -112,8 +104,6 @@ fn writes_each_kind_of_value_the_way_javascript_spells_it() {
   );
 }
 
-/// A namespace becomes an object of its own, keyed by the name the author
-/// wrote.
 #[test]
 fn writes_a_namespace_as_an_object_of_its_own() {
   let mut styles: StylesObjectMap = IndexMap::new();
@@ -143,17 +133,14 @@ fn writes_an_empty_object_for_no_style() {
   assert!(properties_of(&convert_values_to_ast(&FlatCompiledStyles::new())).is_empty());
 }
 
-/// A value kind the writer has no spelling for means the styles were not
-/// flattened, so the call is refused rather than written as something the
-/// runtime cannot read.
+/// Unflattened styles are refused rather than written as something the runtime cannot read.
 #[test]
 #[should_panic(expected = "Encountered an unsupported value type during AST conversion.")]
 fn refuses_a_value_it_cannot_write() {
   convert_values_to_ast(&values_of(&[("color", unwritable())]));
 }
 
-/// The same refusal inside an inline style, which the writer reads by rules of
-/// its own.
+/// The inline-style writer reads by its own rules.
 #[test]
 #[should_panic(expected = "Encountered an unsupported value type during AST conversion.")]
 fn refuses_an_inline_value_it_cannot_write() {
@@ -163,8 +150,7 @@ fn refuses_an_inline_value_it_cannot_write() {
   )]));
 }
 
-/// A value kind neither writer has a spelling for. An injectable style is
-/// collected where a rule is, never where a declaration is.
+/// An injectable style is collected where a rule is, never where a declaration is.
 fn unwritable() -> FlatCompiledStylesValue {
   FlatCompiledStylesValue::InjectableStyle(InjectableStyle {
     ltr: ".x1e2nbdu{color:red}".to_owned(),
@@ -185,20 +171,13 @@ fn keeps_every_namespace_it_is_given() {
   assert_eq!(result.keys().cloned().collect::<Vec<_>>(), ["root", "dark"]);
 }
 
-/// Every prop of a written object is a key-value under a name that can be read
-/// back, whatever the name and the value are.
-///
-/// The finalize sweep in `visit_mut_var_declarator` reads these objects and
-/// leaves one alone that holds anything else -- a spread, a method, a key with
-/// no compile-time text. Nothing it can be handed holds one, and this is where
-/// that is true: the invariant is asserted where the object is built, rather
-/// than argued at the reader.
+/// The finalize sweep in `visit_mut_var_declarator` skips objects holding anything else; the
+/// invariant is asserted here where the object is built.
 #[test]
 fn writes_every_prop_as_a_key_value_under_a_name() {
   let mut styles: StylesObjectMap = IndexMap::new();
 
-  // A namespace whose name has to be quoted, and a declaration whose name has
-  // to be quoted, are the two names that are not plain identifiers.
+  // The two names that are not plain identifiers.
   styles.insert(
     "a-namespace".to_owned(),
     Rc::new(values_of(&[
@@ -212,8 +191,6 @@ fn writes_every_prop_as_a_key_value_under_a_name() {
 
   let written = namespaces_to_object(compiled_namespaces(&styles));
 
-  // `key_of` refuses a spread and a prop that is not a key-value, and it reads
-  // the name of every key a written object can carry.
   let namespaces = properties_of(&written);
 
   assert_eq!(
@@ -230,8 +207,6 @@ fn writes_every_prop_as_a_key_value_under_a_name() {
   );
 }
 
-/// The properties of the object one named key holds, read the same way the
-/// answer itself is. A namespace and an inline style are both such an object.
 fn properties_under(expr: &Expr, key: &str) -> Vec<(String, String)> {
   let object = match expr {
     Expr::Object(object) => object,
@@ -247,12 +222,7 @@ fn properties_under(expr: &Expr, key: &str) -> Vec<(String, String)> {
   }
 }
 
-/// The inline style a `props` merge built is written as the object a `style`
-/// property holds, one declaration per pair.
-///
-/// The text stays text, because an inline style is what the author wrote. A
-/// compiled value that reads as a number is written as one, but `gridRow: '1'`
-/// is a string in the source and stays a string here.
+/// The text stays text: `gridRow: '1'` is a string in the source.
 #[test]
 fn writes_an_inline_style_as_the_object_a_style_property_holds() {
   let values = values_of(&[
@@ -288,15 +258,8 @@ fn writes_an_inline_style_as_the_object_a_style_property_holds() {
   );
 }
 
-/// An inline style that holds no pair is written as an empty object, because
-/// the merge wrote the property it sits under.
-///
-/// A source does reach this shape: `stylex.props({ color: true })` keeps the
-/// declaration through the merge, and the step that writes the properties
-/// leaves it out because it is not text. The shape is built here and not
-/// compiled, because that source is the one the compiler must stop leaving
-/// out -- ticket 84 of `.scratch/split-transform-crate` -- so a test compiled
-/// from it would pin the gap rather than the writer.
+/// Reached by `stylex.props({ color: true })`, built by hand so the test pins the writer rather
+/// than that compile gap.
 #[test]
 fn writes_an_inline_style_that_holds_no_pair_as_an_empty_object() {
   let values = values_of(&[(
@@ -310,9 +273,7 @@ fn writes_an_inline_style_that_holds_no_pair_as_an_empty_object() {
   );
 }
 
-/// A number the emitter has no numeral for is written by name, the way
-/// JavaScript writes it, rather than as the arithmetic the emitter invents.
-/// The value stays the number itself, so only the text of the module changes.
+/// Written as JavaScript writes it, not as emitter arithmetic; only the module text changes.
 #[test]
 fn writes_a_number_that_has_no_digits_by_name() {
   let values = values_of(&[(
@@ -331,8 +292,6 @@ fn writes_a_number_that_has_no_digits_by_name() {
   );
 }
 
-/// The text each number of one named object is written with. A number carries
-/// its own spelling, and that spelling is what the module prints.
 fn raw_numbers_under(expr: &Expr, key: &str) -> Vec<String> {
   let object = match expr {
     Expr::Object(object) => object,
@@ -368,9 +327,7 @@ fn raw_numbers_under(expr: &Expr, key: &str) -> Vec<String> {
   }
 }
 
-/// A list has no form of its own in a style object, so each element is named
-/// by the place it holds. A `null` element keeps its place; a value with no
-/// value at all has no place to be written into, and the call is refused.
+/// A `null` element keeps its place; a value with no value at all is refused.
 #[test]
 fn writes_a_list_as_the_places_its_elements_hold() {
   let values = values_of(&[(
@@ -407,14 +364,11 @@ fn refuses_a_list_holding_a_value_that_is_undefined() {
   )]));
 }
 
-/// The declarations of one inline style, built the way a case names them.
 fn inline_style(declarations: &[(&str, FlatCompiledStylesValue)]) -> FlatCompiledStyles {
   values_of(declarations)
 }
 
-/// Each kind of value an inline style holds is written back as the kind it is,
-/// because the runtime applies the object as it stands. A number stays a
-/// number, and the text that spells the same number stays text.
+/// The runtime applies the object as it stands.
 #[test]
 fn writes_each_kind_of_inline_value_as_the_kind_it_is() {
   let values = values_of(&[(

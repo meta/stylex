@@ -14,8 +14,7 @@ where
   pub(crate) fn visit_mut_expr_impl(&mut self, expr: &mut Expr) {
     let normalized_expr = normalize_expr_mut(expr);
 
-    // During Discover, transform compiled JSX/VDOM calls with sx prop and
-    // register call expressions for downstream lookup:
+    // During Discover, rewrite compiled JSX/VDOM `sx` props and register calls for lookup:
     // React/Vue: _jsx("div", { sx: expr }) → _jsx("div", { ...stylex.props(expr) })
     // Solid.js:  _$setAttribute(el, "sx", expr) → _$spread(el, _$mergeProps(() =>
     // stylex.props(expr)), false, true)

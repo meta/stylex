@@ -31,59 +31,36 @@ use stylex_state::state_manager::{
   BindingWrites, OpaqueDeclarationFault, OpaqueDeclarationKind, flush_pending_insertions,
 };
 
-/// Span covering the whole source, used for the module-level scope frame so
-/// top-level bindings enclose every `sx` site. The scope stack is seeded with
-/// this frame and never emptied, so the scope lookups always resolve to a real
-/// frame and fall back to this span only in theory.
+/// Span covering the whole source, used for the module-level scope frame.
 const MODULE_SCOPE_SPAN: Span = Span {
   lo: BytePos(0),
   hi: BytePos(u32::MAX),
 };
 
-/// The kind of lexical scope a frame on the [`ModuleBindingsCollector`] stack
-/// represents. `var` declarations hoist to the nearest `Function` scope;
-/// everything else (`let`/`const`/`class`, function declarations in module
-/// code, params, catch bindings) belongs to the innermost scope, `Block` or
-/// `Function`.
+/// Kind of lexical scope on the [`ModuleBindingsCollector`] stack. `var` hoists to the nearest
+/// `Function` scope; all other bindings go to the innermost scope.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ScopeKind {
   Function,
   Block,
 }
 
-/// Which of the two write sets a recorded write belongs in. Both refuse a fold
-/// with the same text; they are kept apart so the evaluator's resolution chain
-/// can probe them as the two sequential steps the reference implementation
-/// probes — `constantViolations` and `isMutated`.
+/// Which write set a recorded write belongs in; kept apart so the evaluator probes them in
+/// the upstream order (`constantViolations`, then `isMutated`).
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum WriteKind {
-  /// The binding itself is given a new value: an assignment, update,
-  /// destructuring or loop target spelled as a bare name.
+  /// The binding gets a new value (assignment, update, destructuring or loop target).
   Reassignment,
-  /// The binding keeps pointing at the same value and that value changes:
-  /// `obj.x = 1`, `arr.push(…)`, `delete obj.x`, `Object.assign(obj, …)`.
-  ///
-  /// One member hop from the binding, which is the shape the reference
-  /// implementation's `isMutated` recognises: it asks that the reference's own
-  /// parent be the member the write lands on.
+  /// The referenced value changes one member hop away (`obj.x = 1`, `arr.push(…)`), matching
+  /// upstream `isMutated`.
   Mutation,
-  /// The same, reached through more than one hop: `obj.a.b = 1`,
-  /// `obj.items.push(…)`. Upstream calls this no mutation of `obj` at all, and
-  /// folds the initializer. Recorded apart rather than folded into
-  /// [`Self::Mutation`] so the chain can refuse it exactly where refusing
-  /// protects something — see `StateManager::has_deep_binding_mutation`.
+  /// A mutation more than one hop away (`obj.a.b = 1`), which upstream ignores; see
+  /// `StateManager::has_deep_binding_mutation`.
   DeepMutation,
 }
 
-/// The write kind after crossing one more member hop on the way to the binding
-/// at the root of a chain.
-///
-/// The first hop makes a write a mutation of the object the reference names, and
-/// that is the shape the reference implementation's `isMutated` recognises. A
-/// second hop takes it past what upstream looks at: for `obj.a.b = 1` the
-/// reference's parent is `obj.a`, whose own parent is another member rather than
-/// the assignment, so upstream sees no mutation of `obj`. Every hop after the
-/// first is therefore the same answer as the second, and the kind stops moving.
+/// The write kind after one more member hop: the first makes a [`WriteKind::Mutation`],
+/// later ones a [`WriteKind::DeepMutation`] (beyond what upstream `isMutated` sees).
 fn crossed_a_member_hop(kind: WriteKind) -> WriteKind {
   match kind {
     WriteKind::Reassignment => WriteKind::Mutation,
@@ -91,25 +68,17 @@ fn crossed_a_member_hop(kind: WriteKind) -> WriteKind {
   }
 }
 
-/// A lexical scope on the collector's stack, identified by the source span it
-/// covers. Shadowing is decided by span containment: a binding shadows an
-/// `sx` site when the binding's scope span encloses that site's span.
+/// A lexical scope identified by its span; a binding shadows an `sx` site whose span its
+/// scope encloses.
 #[derive(Clone, Copy)]
 struct ScopeFrame {
   span: Span,
   kind: ScopeKind,
 }
 
-/// One-time read-only pre-scan of the module performed at the start of the
-/// `Discover` cycle. Captures the sources of every import declaration
-/// (including type-only ones) in body order, the names of every bound
-/// identifier in the module, and — for non-import bindings — the source span
-/// of the scope each one occupies. It also records writes to bindings and
-/// mutations of their referenced values for static evaluation. SWC visitors
-/// have no parent pointers or scope chain, so this pre-scan supplies the
-/// binding information used by both runtime-binding resolution and evaluation.
-/// Only call sites whose callable/array receiver is known from this input
-/// contribute argument-to-parameter write edges. Unknown calls are not escapes.
+/// Read-only pre-scan at the start of `Discover`: import sources, bound names, scope spans of
+/// non-import bindings, and binding writes for static evaluation (SWC has no scope chain).
+/// Only calls with a known receiver add argument-to-parameter write edges.
 #[derive(Clone)]
 enum KnownCallee {
   Binding(Id),
@@ -125,25 +94,18 @@ struct ModuleBindingsCollector {
   collect_sx_bindings: bool,
   import_sources: Vec<String>,
   bound_names: FxHashSet<String>,
-  /// Every **declared binding** in the module, keyed by full SWC `Id`; the
-  /// crate glossary defines the term. Collected in every mode, unlike
-  /// [`Self::bound_names`], because the evaluator consumes it whether or not
-  /// the `sx` prop is enabled.
+  /// Every **declared binding**, keyed by SWC `Id`; collected in every mode, unlike
+  /// [`Self::bound_names`].
   declared_bindings: FxHashSet<Id>,
   /// Source faults for bindings whose declaration is not value-folded.
   opaque_declaration_faults: FxHashMap<Id, OpaqueDeclarationFault>,
-  /// For each name bound by a non-import declaration, the spans of the scopes
-  /// in which it is bound. A name shadows an `sx` site iff one of its scope
-  /// spans encloses that site (see [`StateManager::is_locally_rebound_at`]).
+  /// Scope spans of each non-import binding name (see [`StateManager::is_locally_rebound_at`]).
   local_rebinding_scopes: FxHashMap<String, Vec<Span>>,
-  /// Bindings rebound anywhere in the module. See
-  /// [`StateManager::binding_reassignments`].
+  /// Bindings rebound anywhere. See [`StateManager::binding_reassignments`].
   binding_reassignments: FxHashSet<Id>,
-  /// Bindings whose referenced value is mutated in place anywhere in the
-  /// module. See [`StateManager::binding_mutations`].
+  /// Bindings whose value is mutated in place. See [`StateManager::binding_mutations`].
   binding_mutations: FxHashSet<Id>,
-  /// Bindings whose referenced value is mutated further down a member chain
-  /// than the reference implementation looks. See
+  /// Bindings mutated deeper than upstream checks. See
   /// [`StateManager::binding_deep_mutations`].
   binding_deep_mutations: FxHashSet<Id>,
   binding_aliases: FxHashMap<Id, FxHashSet<Id>>,
@@ -154,15 +116,12 @@ struct ModuleBindingsCollector {
   iterations: Vec<(Vec<Id>, Id)>,
   /// Stack of enclosing lexical scopes, outermost (module) first.
   scope_stack: Vec<ScopeFrame>,
-  /// `VarDeclKind` of the `VarDecl` currently being visited, if any — needed
-  /// to route `var` bindings to the nearest function scope (hoisting) while
-  /// `let`/`const` stay in the innermost scope.
+  /// Kind of the `VarDecl` being visited, to hoist `var` bindings to the function scope.
   current_var_kind: Option<VarDeclKind>,
 }
 
 impl ModuleBindingsCollector {
-  /// Pattern bindings only: initializer/default expressions still take the
-  /// ordinary discovery path and are not names declared by this pattern.
+  /// Pattern bindings only; initializer/default expressions take the normal discovery path.
   fn record_opaque_pattern(&mut self, pattern: &Pat, fault: OpaqueDeclarationFault) {
     struct PatternFaults<'a> {
       faults: &'a mut FxHashMap<Id, OpaqueDeclarationFault>,
@@ -193,11 +152,7 @@ impl ModuleBindingsCollector {
     }
   }
 
-  /// The binding sets, moved out together.
-  ///
-  /// The one place the collector's four fields are matched to the state's four,
-  /// so a transposition is a single visible mistake here rather than one
-  /// repeated at every call site.
+  /// Moves the binding sets out, matching collector fields to state fields in one place.
   fn take_binding_writes(&mut self) -> BindingWrites {
     fn propagate(writes: &mut FxHashSet<Id>, aliases: &FxHashMap<Id, FxHashSet<Id>>) {
       let mut work = writes.iter().cloned().collect::<Vec<_>>();
@@ -211,9 +166,8 @@ impl ModuleBindingsCollector {
         }
       }
     }
-    // Resolve forward named callees after the one discovery walk. Edges only
-    // carry actual object writes from parameters to concrete source arguments;
-    // rebinding a parameter never mutates the caller's object.
+    // Resolve forward named callees after discovery. Edges carry only object writes from
+    // parameters to concrete arguments; rebinding a parameter never mutates the caller's object.
     propagate(&mut self.array_bindings, &self.array_aliases);
     for (parameters, receiver) in &self.iterations {
       if self.array_bindings.contains(receiver) {
@@ -267,8 +221,7 @@ impl ModuleBindingsCollector {
         }
       }
     }
-    // Object writes affect every binding of that same object, in both
-    // directions. Reassigning an alias alone never changes the other object.
+    // Object writes affect every alias of the object; reassigning an alias does not.
     propagate(&mut self.binding_mutations, &self.binding_aliases);
     propagate(&mut self.binding_deep_mutations, &self.binding_aliases);
     BindingWrites {
@@ -279,17 +232,12 @@ impl ModuleBindingsCollector {
     }
   }
 
-  /// Collects everything: the `sx` runtime-binding inputs (import sources,
-  /// bound names, rebinding scopes) *and* the evaluator's inputs (the module's
-  /// bindings and the writes against them), in one pass.
+  /// Collects both the `sx` runtime-binding inputs and the evaluator's inputs.
   fn for_sx() -> Self {
     Self::new(true)
   }
 
-  /// Collects what the evaluator needs and nothing else — the bindings the
-  /// module declares and the writes against them. Used when the `sx` prop is
-  /// disabled and nothing consumes the import-source or name-keyed scope
-  /// information.
+  /// Collects only the evaluator's inputs; used when the `sx` prop is disabled.
   fn writes_only() -> Self {
     Self::new(false)
   }
@@ -311,8 +259,6 @@ impl ModuleBindingsCollector {
       functions: FxHashMap::default(),
       known_calls: Vec::new(),
       iterations: Vec::new(),
-      // Seed a module-level function scope spanning the whole source so
-      // top-level bindings enclose every `sx` site.
       scope_stack: vec![ScopeFrame {
         span: MODULE_SCOPE_SPAN,
         kind: ScopeKind::Function,
@@ -321,8 +267,7 @@ impl ModuleBindingsCollector {
     }
   }
 
-  /// Span of the innermost enclosing function scope (where `var`/function
-  /// declarations hoist to). Falls back to the module scope, always present.
+  /// Span of the innermost function scope (where `var` hoists), else the module scope.
   fn nearest_function_scope(&self) -> Span {
     self
       .scope_stack
@@ -333,8 +278,7 @@ impl ModuleBindingsCollector {
       .unwrap_or(MODULE_SCOPE_SPAN)
   }
 
-  /// Span of the innermost enclosing scope (where `let`/`const`, params, etc.
-  /// belong). Always present — the module scope sits at the stack bottom.
+  /// Span of the innermost enclosing scope.
   fn innermost_scope(&self) -> Span {
     self
       .scope_stack
@@ -343,14 +287,8 @@ impl ModuleBindingsCollector {
       .unwrap_or(MODULE_SCOPE_SPAN)
   }
 
-  /// Record a binding produced by a non-import declaration in `bindings`
-  /// (always), `bound_names` (every binding) and `local_rebinding_scopes`
-  /// (non-import only), scoping the latter to the function scope when `hoisted`
-  /// (`var` declarations) or the innermost scope otherwise.
-  ///
-  /// `bindings` is filled ahead of the mode gate: the two name-keyed maps below
-  /// serve the `sx` prop and are collected only where it is enabled, where the
-  /// `Id`-keyed set serves the evaluator, which runs either way.
+  /// Record a non-import binding: always in `bindings`; in `bound_names` and
+  /// `local_rebinding_scopes` (function scope if `hoisted`, else innermost) only for `sx`.
   fn add_local_binding(&mut self, ident: &Ident, hoisted: bool) {
     self.declared_bindings.insert(ident.to_id());
     self.bound_names.insert(ident.sym.to_string());
@@ -373,19 +311,8 @@ impl ModuleBindingsCollector {
       .push(scope);
   }
 
-  /// Record a write to `ident`'s binding under the kind it is: a rebinding or
-  /// an in-place mutation of the value it references. Both make the
-  /// declaration initializer unsafe to inline at a use site and both refuse
-  /// with the same text; they are kept apart because the evaluator's
-  /// resolution chain probes them as two sequential steps, mirroring the
-  /// reference implementation's `constantViolations` and `isMutated`.
-  ///
-  /// Note the deliberate limit on what counts as a write: only mutations
-  /// spelled out syntactically in this module are recorded. A binding that
-  /// *escapes* into a call (`const a = []; mutate(a);`) is not, because
-  /// deopting on every identifier passed as an argument would disable
-  /// evaluation for nearly every StyleX module. The escape case is therefore a
-  /// known unsoundness, accepted deliberately rather than overlooked.
+  /// Record a write to `ident`'s binding (rebinding or mutation); either makes the initializer
+  /// unsafe to inline. Known unsoundness: escapes into calls (`mutate(a)`) are not recorded.
   fn add_binding_write(&mut self, ident: &Ident, kind: WriteKind) {
     let target = match kind {
       WriteKind::Reassignment => &mut self.binding_reassignments,
@@ -396,26 +323,9 @@ impl ModuleBindingsCollector {
     target.insert(ident.to_id());
   }
 
-  /// Record the write performed by an expression used as a write target: a
-  /// bare identifier rebinds itself, a member expression mutates the object at
-  /// the *root* of its chain (`obj.a.b = 1` and `obj.a.b.push(…)` both
-  /// invalidate `obj`). Walks past intermediate members and the parenthesised,
-  /// optional-chain and TypeScript wrappers that can sit anywhere along the
-  /// chain, stopping at anything that owns no binding to invalidate — a call
-  /// result, `this`, `super`, or a literal.
-  ///
-  /// `kind` is what the caller's shape writes when it writes a bare name;
-  /// crossing a member hop overrides it to a mutation, because the root object
-  /// keeps its binding and only the value it references changes. So `n = 1`
-  /// and `n++` reassign while `o.x = 1` and `o.x++` mutate `o`, out of one
-  /// walk.
-  ///
-  /// This is the single entry point for every write shape the collector
-  /// recognises (assignment targets, update and `delete` operands, mutating
-  /// method receivers, `Object.assign` targets). Keeping one walk means a
-  /// wrapper handled for one shape is handled for all of them; the earlier
-  /// split between a member-only walk and a shallow expression match silently
-  /// missed `(n)++`, `((a)) = 2` and `Object.assign((o), …)`.
+  /// Record a write through a target expression: a bare name writes with `kind`; a member chain
+  /// mutates its root object. Looks through parens, optional chains and TS wrappers; stops at
+  /// call results, `this`, `super` and literals. The single entry point for every write shape.
   fn add_target_root_write(&mut self, expression: &Expr, kind: WriteKind) {
     let mut current = expression;
     let mut kind = kind;
@@ -449,17 +359,13 @@ impl ModuleBindingsCollector {
     }
   }
 
-  /// Record a write reached through a member expression (`obj.x = 1`,
-  /// `obj.a.b.push(…)`, `delete obj.x`) by invalidating the binding at the
-  /// root of the chain.
+  /// Record a member write (`obj.x = 1`, `delete obj.x`) against the chain's root binding.
   fn add_member_root_write(&mut self, member_expression: &MemberExpr) {
     self.add_target_root_write(member_expression.obj.as_ref(), WriteKind::Mutation);
   }
 
-  /// Record every binding written by an assignment or `for-in`/`for-of`
-  /// pattern. Identifier targets rebind (`[a, b] = …`); `Pat::Expr` targets
-  /// are member writes (`({ x: obj.x } = …)`) and invalidate the member's
-  /// root object instead, through whatever wrappers sit around them.
+  /// Record writes from an assignment or `for-in`/`for-of` pattern: names rebind; member
+  /// targets (`({ x: obj.x } = …)`) mutate their root object.
   fn add_pattern_writes(&mut self, pattern: &Pat) {
     match pattern {
       Pat::Ident(binding_ident) => {
@@ -470,9 +376,7 @@ impl ModuleBindingsCollector {
       Pat::Rest(rest_pattern) => self.add_pattern_writes(&rest_pattern.arg),
       Pat::Assign(assign_pattern) => self.add_pattern_writes(&assign_pattern.left),
       Pat::Expr(expression) => {
-        // Read through the wrappers, as every other write shape is: `[(o.x)]`
-        // and `[o!.x]` are the target `[o.x]` is. Anything that is not a member
-        // is a call result or a `this`, which owns no binding to invalidate.
+        // Look through wrappers: `[(o.x)]` and `[o!.x]` are `[o.x]`.
         if let Some(member_expression) = member_target(expression) {
           self.add_member_root_write(member_expression);
         }
@@ -488,8 +392,7 @@ impl ModuleBindingsCollector {
     }
   }
 
-  /// `{ a, b: obj.x, c = 1, ...rest } = …`, shared by `Pat` and
-  /// `AssignTargetPat`.
+  /// `{ a, b: obj.x, c = 1, ...rest } = …`, shared by `Pat` and `AssignTargetPat`.
   fn add_object_pattern_writes(&mut self, object_pattern: &ObjectPat) {
     for property in &object_pattern.props {
       match property {
@@ -502,10 +405,7 @@ impl ModuleBindingsCollector {
     }
   }
 
-  /// Record the write performed by an assignment target. Every arm that
-  /// carries an expression defers to [`Self::add_target_root_write`], which
-  /// unwraps the parenthesised and TypeScript wrappers that can nest between
-  /// the target and the identifier or member it resolves to.
+  /// Record the write performed by an assignment target via [`Self::add_target_root_write`].
   fn add_simple_target_write(&mut self, target: &SimpleAssignTarget) {
     match target {
       SimpleAssignTarget::Ident(ident) => {
@@ -609,30 +509,24 @@ impl ModuleBindingsCollector {
     }
   }
 
-  /// Record the mutations performed by a method call, shared by plain calls
-  /// (`arr.push(1)`) and optional calls (`arr?.push(1)`) — both reach the same
-  /// receiver, so both must invalidate it.
+  /// Record mutations by a method call, plain (`arr.push(1)`) or optional (`arr?.push(1)`).
   fn add_call_mutation_writes(&mut self, callee: &Expr, args: &[ExprOrSpread]) {
     let Some(member_expression) = member_target(callee) else {
       return;
     };
 
     let Some(property) = member_property_name(&member_expression.prop) else {
-      // A dynamic property (`arr[method](…)`) names no known method. Nothing
-      // is recorded: guessing would deopt every computed call in the module.
+      // A computed method name is unknown; recording it would deopt every computed call.
       return;
     };
 
-    // `arr.push(…)`, `arr.sort()`, … mutate the receiver in place. The
-    // receiver may itself be a member chain (`state.items.push(…)`), in
-    // which case the binding to invalidate is the chain's root object.
+    // Mutating array methods invalidate the receiver chain's root binding.
     if MUTATING_ARRAY_METHODS.contains(property) {
       self.add_member_root_write(member_expression);
     }
 
-    // `Object.assign(target, …)` and friends mutate their first argument.
-    // Matching on the `Object` name is a deliberate over-approximation: a
-    // shadowed `Object` only costs a deopt, never a wrong inline.
+    // `Object.assign(target, …)` and friends mutate their first argument. Matching the `Object`
+    // name over-approximates: a shadowed `Object` only costs a deopt.
     if MUTATING_OBJECT_METHODS.contains(property)
       && member_expression
         .obj
@@ -685,11 +579,7 @@ fn known_callee(expression: &Expr) -> Option<KnownCallee> {
   }
 }
 
-/// The `MemberExpr` an expression resolves to, looking through parentheses,
-/// TypeScript wrappers and the optional-chain link of `obj?.x`. `None` when
-/// the expression is not a member access — used where only a member access can
-/// signal a mutation (a mutating method's callee, a `delete` operand), so that
-/// `arr.push`, `(arr).push` and `arr?.push` are all recognised alike.
+/// The `MemberExpr` an expression resolves to through parens, TS wrappers and `obj?.x`.
 fn member_target(expression: &Expr) -> Option<&MemberExpr> {
   match expression {
     Expr::Member(member_expression) => Some(member_expression),
@@ -707,15 +597,12 @@ fn member_target(expression: &Expr) -> Option<&MemberExpr> {
   }
 }
 
-/// The statically known name of a member property: `obj.push` and
-/// `obj["push"]` both yield `push`. `None` for a genuinely dynamic property,
-/// whose name is unknowable at build time.
+/// The static name of a member property (`obj.push`, `obj["push"]`), or `None` if dynamic.
 fn member_property_name(property: &MemberProp) -> Option<&str> {
   match property {
     MemberProp::Ident(ident) => Some(ident.sym.as_ref()),
     MemberProp::Computed(computed) => match computed.expr.as_ref() {
-      // A lone-surrogate property name cannot be one of the method names being
-      // matched, so treat it as unknown rather than panicking on the decode.
+      // A lone-surrogate name can't match any method name; treat it as unknown.
       Expr::Lit(Lit::Str(string)) => string.value.as_atom().map(|atom| &**atom),
       _ => None,
     },
@@ -806,10 +693,7 @@ impl Visit for ModuleBindingsCollector {
   }
 
   fn visit_import_decl(&mut self, import_decl: &ImportDecl) {
-    // An import local is a binding like any other, and the evaluator asks about
-    // it in every mode -- so `bindings` is filled before the mode gate. An
-    // import declaration contains no write targets, so nothing below the
-    // specifiers is worth descending into either way.
+    // Import locals are bindings in every mode; imports contain no write targets.
     for specifier in &import_decl.specifiers {
       let local = local_binding_of(specifier);
 
@@ -817,8 +701,7 @@ impl Visit for ModuleBindingsCollector {
       self.bound_names.insert(local.sym.to_string());
 
       if self.collect_sx_bindings {
-        // Import locals are bindings, but never count as a re-binding that
-        // would shadow another import.
+        // Import locals never count as a re-binding that shadows another import.
         self.bound_names.insert(local.sym.to_string());
       }
     }
@@ -866,8 +749,7 @@ impl Visit for ModuleBindingsCollector {
     });
 
     if let Some(ident) = &fn_expr.ident {
-      // A named function expression's name is bound only inside the function
-      // body, where it can shadow an imported `stylex` namespace.
+      // A named function expression's name is bound only inside its body.
       self.add_local_binding(ident, false);
     }
 
@@ -930,8 +812,7 @@ impl Visit for ModuleBindingsCollector {
         .map(|param| parameter_id(&param.pat))
         .collect(),
     );
-    // Function declarations in modules are block-scoped; top-level ones still
-    // land in the module scope because it is the innermost frame there.
+    // Function declarations in modules are block-scoped.
     self.add_local_binding(&fn_decl.ident, false);
     fn_decl.visit_children_with(self);
   }
@@ -962,8 +843,7 @@ impl Visit for ModuleBindingsCollector {
   }
 
   fn visit_unary_expr(&mut self, unary_expression: &UnaryExpr) {
-    // `delete obj.x` mutates `obj`. Only a member operand is a mutation:
-    // `delete someBinding` is a no-op on a declared binding's value.
+    // `delete obj.x` mutates `obj`; `delete someBinding` changes nothing.
     if unary_expression.op == UnaryOp::Delete
       && let Some(member_expression) = member_target(unary_expression.arg.as_ref())
     {
@@ -983,9 +863,7 @@ impl Visit for ModuleBindingsCollector {
   }
 
   fn visit_opt_chain_expr(&mut self, opt_chain: &OptChainExpr) {
-    // `arr?.push(1)` parses as an optional *call*, not a `CallExpr`, so it
-    // needs its own hook — it mutates the receiver exactly as `arr.push(1)`
-    // does whenever the receiver is non-nullish.
+    // `arr?.push(1)` parses as an optional call, not a `CallExpr`, so needs its own hook.
     if let OptChainBase::Call(call) = opt_chain.base.as_ref() {
       self.record_known_call(call.callee.as_ref(), &call.args);
       self.add_call_mutation_writes(call.callee.as_ref(), &call.args);
@@ -1118,12 +996,8 @@ where
     match program {
       Program::Module(module) => self.visit_mut_module_impl(module),
       Program::Script(script) => {
-        // A `Script` body holds plain statements, not `ModuleItem`s, so it
-        // cannot carry the injected `import * as stylex` declaration that the
-        // `sx` runtime binding may need. Promote it to a `Module`, run the
-        // standard pipeline, then restore the `Script` form when no
-        // module-level declaration was added — preserving non-module output
-        // verbatim for inputs that need no injection.
+        // A `Script` can't hold an injected import: promote it to a `Module`, run the pipeline, and
+        // restore the `Script` if no module declaration was added.
         let mut module = Module {
           span: script.span,
           body: std::mem::take(&mut script.body)
@@ -1142,8 +1016,7 @@ where
         {
           *program = Program::Module(module);
         } else {
-          // The `any(ModuleDecl)` check above is false here, so every item is
-          // a `Stmt`; `ModuleItem::stmt` extracts each one.
+          // No `ModuleDecl` here, so every item is a `Stmt`.
           *script = Script {
             span: module.span,
             shebang: module.shebang,
@@ -1162,19 +1035,11 @@ where
     self
       .state
       .adopt_module_root_bindings(module_root_bindings(module));
-    // Recorded unconditionally, unlike the memo below it. A key-span lookup
-    // compares this module's positions against candidates indexed from a
-    // re-parse into the code frame's own source map, and only offsets into the
-    // file compare -- but `memoize_module` will re-parse and memoize on demand,
-    // so that lookup is reachable on configurations this branch skips. Left
-    // inside it, the base went unset exactly there and every offset silently
-    // became the raw position again.
+    // Recorded unconditionally: `memoize_module` can re-parse on demand, so key-span lookups
+    // need the base even on configurations that skip the memo.
     self.state.set_input_module_base(ModuleBase::of(module));
 
-    // The copy is a deep clone of the whole module, so a release build makes one
-    // only where the compiler cannot read the file back off disk. The state
-    // owns that choice, and the build this pass was compiled for is the only
-    // half of it this walk knows.
+    // Deep clone; the state decides whether release builds need it (file unreadable from disk).
     self
       .state
       .keep_module_source_copy(module, cfg!(debug_assertions));
@@ -1185,8 +1050,8 @@ where
       return;
     }
 
-    // Discovery has already collected lexical binding writes and names before
-    // any CommonJS loader or generated sx binding is classified.
+    // Discovery collects lexical binding writes before CommonJS loaders or sx bindings are
+    // classified.
 
     self.transform_producers(module);
     self.transform_atoms(module);
@@ -1194,19 +1059,12 @@ where
     self.finalize_module(module);
   }
 
-  /// Run the discovery pass.
-  ///
-  /// Walks the module once under the `Discover` cycle, populating import
-  /// state, transforming compiled-JSX `sx` attributes, counting variable /
-  /// member-expression references, and pre-filling top-level declarations —
-  /// all the work the legacy `Initializing` + `StateFilling` two-pass split
-  /// used to do separately. Whenever stylex was imported, also captures the
-  /// top-level expressions consumed by later phases.
+  /// Discovery pass: one `Discover` walk that populates import state, rewrites compiled-JSX `sx`
+  /// attributes, counts references and pre-fills top-level declarations.
   pub(crate) fn discover_module(&mut self, module: &mut Module) {
     self.state.cycle = TransformationCycle::Discover;
 
-    // Require-loader identity is read during discovery too, including when sx
-    // is disabled. Collect it once before that walk, not afterwards.
+    // Require-loader identity is read during discovery even when sx is disabled.
     let mut collector = if self.state.options.sx_prop_name.is_some() {
       ModuleBindingsCollector::for_sx()
     } else {
@@ -1233,24 +1091,14 @@ where
     }
   }
 
-  /// Run the producer transformation pass.
-  ///
-  /// Transforms `stylex.create` / `defineVars` / `keyframes` / etc. — the calls
-  /// that *produce* style namespaces consumed by later phases.
+  /// Producer pass: transforms `stylex.create`, `defineVars`, `keyframes`, etc.
   pub(crate) fn transform_producers(&mut self, module: &mut Module) {
     self.state.cycle = TransformationCycle::TransformProducers;
     module.visit_mut_children_with(self);
   }
 
-  /// Run the consumer transformation pass plus pending-insertion flush.
-  ///
-  /// Transforms `stylex.props` / `stylex.attrs` (which consume the style
-  /// namespaces produced by the prior phase). After the consumer walk
-  /// completes, drains the pending-insertion buffer with a single
-  /// linear merge into the module body. Runtime helpers and per-decl
-  /// metadata are gated on `options.runtime_injection.is_some()`,
-  /// matching the legacy gate; hoisted dynamic-style consts always
-  /// emit.
+  /// Consumer pass (`stylex.props` / `stylex.attrs`), then merges pending insertions into the
+  /// body. Runtime helpers need `runtime_injection`; hoisted dynamic-style consts always emit.
   pub(crate) fn transform_consumers(&mut self, module: &mut Module) {
     self.state.cycle = TransformationCycle::TransformConsumers;
     module.visit_mut_children_with(self);
@@ -1259,36 +1107,16 @@ where
     flush_pending_insertions(&mut self.state, &mut module.body, runtime_injection);
   }
 
-  /// Run the cleanup phase: materialize deferred JSX-spread
-  /// replacements, build the decl-reference graph, compute the live
-  /// set, then sweep unused declarations in a single forward pass.
-  ///
-  /// The mark step (`mark_style_vars_to_keep`) walks the module once
-  /// and populates `state.style_vars_to_keep` plus materializes any
-  /// deferred JSX-spread replacements. The graph is then captured at
-  /// G-PostHoc against the post-mark AST, fixing the live set used by
-  /// the sweep. The sweep itself runs under `TransformationCycle::Finalize`
-  /// in original module-body order — the live-set is computed up
-  /// front, so no body reversal is needed to handle transitive removal.
+  /// Cleanup: materialize deferred JSX spreads, build the decl-reference graph, compute the live
+  /// set, then sweep unused declarations in one forward pass.
   pub(crate) fn finalize_module(&mut self, module: &mut Module) {
-    // The mark phase materializes any deferred JSX-spread replacements
-    // accumulated during the consumer walk; running it first ensures the
-    // subsequent graph capture sees the final JSX shape (no leftover
-    // `stylex.props(styles.X)` SpreadElement nodes).
+    // Runs first so the graph sees the final JSX shape.
     mark_style_vars_to_keep(module, &mut self.state);
 
-    // Capture the decl-reference graph after producer + consumer
-    // transforms — and the JSX-spread materialization above — have run.
-    // At this point inlined references (e.g. `styles.container` in JSX,
-    // replaced with literal class strings) are gone from the AST, so
-    // the graph reflects only the references that survive into the
-    // emitted module.
+    // Captured after inlining, so it holds only references that survive into the output.
     build_decl_use_graph(module, &mut self.state);
 
-    // Compute the live-set up front so the sweep filter has a single
-    // immutable membership check per declarator. Computation depends on
-    // `state.roots` and `state.decl_uses`, both finalized by the
-    // mark-phase pass above.
+    // Compute the live set up front for one membership check per declarator.
     self.state.live_set = compute_live_set(&self.state);
 
     self.state.cycle = TransformationCycle::Finalize;

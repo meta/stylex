@@ -37,9 +37,7 @@ pub(crate) fn stylex_define_consts(
 
   for key_value in key_values.iter() {
     let key = convert_key_value_to_str(key_value);
-    // The constant keeps the kind the author gave it. A reader of the answer
-    // and a reader of the injected rule both see what was written, rather than
-    // text that each of them has to guess a kind back out of.
+    // Keep the authored value kind rather than stringifying it.
     let value = Rc::new(folded_value(&key_value.value));
 
     let const_key = create_authored_or_hashed_key(&class_name_prefix, &export_id, &key);

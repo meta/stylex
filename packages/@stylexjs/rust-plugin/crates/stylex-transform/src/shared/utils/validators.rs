@@ -39,9 +39,8 @@ use stylex_diagnostics::code_frame::{
 use stylex_evaluator::evaluate::materialize_result;
 use stylex_evaluator::evaluate_result::{EvaluateResult, refusal_site};
 
-/// Convert a final evaluated data value through the evaluator's single owned
-/// boundary. A host failure is terminal; values such as callbacks remain typed
-/// and are not recreated from source text.
+/// Converts a final evaluated data value through the evaluator's owned boundary; host failures
+/// are terminal.
 fn materialized_data(value: &EvaluateResultValue, state: &StateManager) -> Option<Expr> {
   match materialize_result(value, state) {
     Ok(value) => value,
@@ -77,20 +76,7 @@ fn validate_arg_count_for_expr(
   }
 }
 
-/// The expression written at argument `index`, with a spread there refused.
-///
-/// A spread gets this far because every shape check above reads the expression
-/// a spread carries, which is the object they ask for: `keyframes(...{…})`
-/// passes all of them. It is refused at the read, because a spread asks the
-/// compiler for the own properties of a value and the compiler keeps no such
-/// list.
-///
-/// Every caller validates the argument count first, so there is an argument at
-/// each index one asks for.
-///
-/// The expression is lent rather than copied. Eleven of the twelve producers
-/// only read it, and the object an author writes in a `stylex.*` call is the
-/// whole style tree, so a copy per call was the largest one the read made.
+/// The expression at argument `index`, refusing a spread. Callers check the count first.
 pub(crate) fn argument_at<'a>(call: &'a CallExpr, index: usize, fn_name: &str) -> &'a Expr {
   let arg = or_refuse_missing_argument(call.args.get(index), index, fn_name);
 
@@ -100,40 +86,8 @@ pub(crate) fn argument_at<'a>(call: &'a CallExpr, index: usize, fn_name: &str) -
   }
 }
 
-/// The style object a producer's argument folded to.
-///
-/// Seven producers that take one object read their argument through the same
-/// three answers, and each one wrote all three out: the fold refused, it
-/// answered something that is not an object, or it answered nothing at all.
-/// `fn_name` was the only thing that differed, and both sentences name it.
-///
-/// The third answer is read here as the first, because it is the same mistake:
-/// an argument that folded to nothing and one that refused both leave the
-/// producer with no object, so both read one sentence at one position. Which is
-/// not what the seven copies did -- four reported the empty answer with no code
-/// frame, and the four that asked through `assert!` (a different four) panicked
-/// with the string they formatted rather than through this compiler's error.
-///
-/// Those four now report the way the other three and every validator do, so
-/// three things reach a reader that did not before: the brand, which neither
-/// boundary shows as new because `stylex_logs` prefixes a payload that lacks
-/// one; the colour, which the NAPI reader strips and stderr prints, so it is
-/// new there whenever the process is a terminal; and the stack trace
-/// `StyleXError` writes when `log` admits `Info`, which is off by default and
-/// reaches both. The sentence itself is unchanged.
-///
-/// How an argument comes to fold to nothing while the fold stayed confident is
-/// not settled: the memo can answer `None` without a refusal having been
-/// recorded. No source is known to reach it, no test does, and it is written
-/// here as the refusal it is rather than left to each producer to guess at.
-///
-/// `#[track_caller]` so the position a refusal reports stays the producer's
-/// call site. Without it all seven would name this file.
-///
-/// [`folded_style_object`] is this answer wrapped back up as the value the rest
-/// of the compiler passes around. One question, two spellings of the answer, so
-/// a caller of either needs no refusal of its own: a caller that walks the
-/// properties asks here and gets the object itself.
+/// The style object a producer's argument folded to; a refusal or a missing value reports one
+/// error at the producer's call site (`#[track_caller]`). See also [`folded_style_object`].
 #[track_caller]
 pub(crate) fn folded_style_object_lit(
   evaluated: Box<EvaluateResult>,
@@ -142,20 +96,11 @@ pub(crate) fn folded_style_object_lit(
   fn_name: &str,
   state: &mut StateManager,
 ) -> ObjectLit {
-  // Two fields off the box rather than the whole of it: the other three are
-  // never read here, and unboxing the struct would copy them onto the stack on
-  // the path that compiles.
   let confident = evaluated.confident;
   let value = evaluated.value;
   let deopt = evaluated.deopt;
 
-  // `Expr::Call(call.clone())` deep-clones the whole argument, so it is built
-  // only on the paths that are about to panic anyway.
-  //
-  // Reported with `build_code_frame_error` and a panic of its own rather than
-  // with `build_code_frame_error_and_panic`, because the seven copies did: the
-  // second one names the file and the line in the panic as well, and reading
-  // the answer in one place is not a reason to change what an author reads.
+  // Build the deep-cloned call only on the panic paths.
   let Some(value) = value.filter(|_| confident) else {
     stylex_panic!(
       "{}",
@@ -183,11 +128,7 @@ pub(crate) fn folded_style_object_lit(
   object
 }
 
-/// The style object a producer's argument folded to, as the value the rest of
-/// the compiler passes around.
-///
-/// [`folded_style_object_lit`] answers the same question and reads the object
-/// itself; this is that answer wrapped back up.
+/// [`folded_style_object_lit`], wrapped back up as an expression.
 #[track_caller]
 pub(crate) fn folded_style_object(
   evaluated: Box<EvaluateResult>,
@@ -201,9 +142,8 @@ pub(crate) fn folded_style_object(
   )))
 }
 
-/// [`folded_style_object`] for a positionTry or viewTransitionClass argument,
-/// refused where the original plugin frames it: an argument it cannot read at
-/// the call, one that folds to no object at the argument.
+/// [`folded_style_object`] for `positionTry`/`viewTransitionClass`, framed as the original plugin
+/// frames it: unreadable at the call, non-object at the argument.
 pub(crate) fn folded_producer_object(
   evaluated: Box<EvaluateResult>,
   call: &CallExpr,
@@ -218,12 +158,7 @@ pub(crate) fn folded_producer_object(
   })
 }
 
-/// `read`, or the refusal an argument list too short is reported with.
-///
-/// The exclusion covers this step and nothing else, and the step computes
-/// nothing -- it chooses between answers the caller has already worked out.
-/// Every caller reached the read through a count check on the same call, so the
-/// argument is there. `guidelines/stack/RUST.md` describes the allowance.
+/// `read`, or the refusal for too few arguments (unreachable; excluded from coverage).
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn or_refuse_missing_argument<'a>(
   read: Option<&'a ExprOrSpread>,
@@ -244,9 +179,7 @@ fn assert_first_arg_is_object(
 ) {
   let first_arg = &call.args[0];
 
-  // A parenthesis is not a different argument. Read bare, `keyframes(({…}))`
-  // stopped the build on an object the same author could have written without
-  // the brackets.
+  // Read through parentheses: `keyframes(({…}))`.
   if !normalize_expr(&first_arg.expr).is_object() {
     build_code_frame_error_and_panic(
       wrapped_expr,
@@ -257,13 +190,7 @@ fn assert_first_arg_is_object(
   }
 }
 
-/// `read`, or the refusal a declarator that holds no call is reported with.
-///
-/// This is the whole of what is left out of the coverage measurement, and it
-/// computes nothing -- it chooses between answers the caller has already
-/// worked out. Every caller reached the read through a predicate that asked the
-/// same question of the same declarator, so there is an initializer and it is a
-/// call. `guidelines/stack/RUST.md` describes the allowance.
+/// `read`, or the refusal for a declarator without a call (unreachable; excluded from coverage).
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn or_refuse_initializer<'a>(
   read: Option<(&'a Expr, &'a CallExpr)>,
@@ -282,13 +209,8 @@ fn or_refuse_initializer<'a>(
   }
 }
 
-/// The call a declarator is initialised by, and the expression it was read out
-/// of.
-///
-/// A parenthesis is not a different initializer, so the call is read through it
-/// -- both here and at `find_top_level_expr` below, which matches the recorded
-/// expression. Not [`init_call`]: the panics below report at the initializer,
-/// so the expression the call was read out of is needed beside the call itself.
+/// The call a declarator is initialised by (read through parentheses), and the expression it
+/// was read out of, for error frames.
 fn init_call_of<'a>(
   var_decl: &'a VarDeclarator,
   fn_name: &str,
@@ -300,11 +222,8 @@ fn init_call_of<'a>(
   or_refuse_initializer(read, init_expr, fn_name, state)
 }
 
-/// Runs `check`, and reports a refusal it raises at `reported` instead of the
-/// node it named: the original plugin throws some producer errors from the
-/// variable declarator (`const k = stylex.keyframes()` frames from `k`), the
-/// call or the argument. The message and everything else about the refusal
-/// stay as `check` made them.
+/// Runs `check`, reporting any refusal at `reported`, as the original plugin frames some producer
+/// errors from the declarator, call or argument.
 pub(crate) fn reported_at<T>(reported: Span, check: impl FnOnce() -> T) -> T {
   match std::panic::catch_unwind(std::panic::AssertUnwindSafe(check)) {
     Ok(value) => value,
@@ -328,9 +247,8 @@ fn validate_single_object_arg_indent(
     build_code_frame_error_and_panic_at(init_expr, &unbound_call_value(fn_name), state);
   }
 
-  // The original keyframes, positionTry and viewTransitionClass visitors check
-  // the argument count on the declarator; only keyframes also refuses a
-  // non-object argument there (the other two report it at the argument).
+  // Matches the original visitors: argument count is framed at the declarator; only keyframes
+  // frames a non-object argument there too.
   reported_at(var_decl.span, || {
     validate_arg_count_for_expr(init_expr, call, 1, fn_name, state)
   });
@@ -370,15 +288,9 @@ macro_rules! stylex_var_decl_call_predicate {
 }
 
 /// Refuses a `stylex.create` call the compiler cannot read.
-///
-/// Every caller asks `is_create_call` before it calls this, so the call is one.
 pub(crate) fn validate_stylex_create(call: &CallExpr, state: &mut StateManager) {
-  // Nothing reads what the call answers, so the styles it compiles have nowhere
-  // to go. Every other position holds the result, and the transform either
-  // leaves it where it was written or hoists it to a declaration above.
+  // A bare call statement has nowhere to put its compiled styles.
   if state.is_bare_call_statement(call) {
-    // `Expr::Call(call.clone())` deep-clones the whole style object, so it is
-    // built lazily — only on the paths that are about to panic anyway.
     build_code_frame_error_and_panic_at(
       &Expr::Call(call.clone()),
       &unbound_call_value(STYLEX_CREATE),
@@ -386,10 +298,8 @@ pub(crate) fn validate_stylex_create(call: &CallExpr, state: &mut StateManager) 
     );
   }
 
-  // The one position this compiler refuses and the reference implementation
-  // compiles, because the printer cannot write it back. See
-  // `type_asserted_call_value`. The shipped compiler strips every type before
-  // this pass, so no build reaches it.
+  // Refused here though the reference compiles it: the printer can't write it back (see
+  // `type_asserted_call_value`). The shipped compiler strips types first.
   if state.is_type_asserted_call(call) {
     build_code_frame_error_and_panic_at(
       &Expr::Call(call.clone()),
@@ -408,11 +318,7 @@ pub(crate) fn validate_stylex_create(call: &CallExpr, state: &mut StateManager) 
 
   let first_arg = &call.args[0];
 
-  // A parenthesis is not a different argument, here or at the reader that
-  // evaluates it. Read bare, `create(({…}))` stopped the build on an object the
-  // same author could have written without the brackets.
-  // The original plugin frames both refusals at the call, as it does the ones
-  // above.
+  // Read through parentheses; both refusals are framed at the call, as in the original plugin.
   let Expr::Object(obj) = normalize_expr(&first_arg.expr) else {
     build_code_frame_error_and_panic_at(
       &Expr::Call(call.clone()),
@@ -431,15 +337,11 @@ pub(crate) fn validate_stylex_create(call: &CallExpr, state: &mut StateManager) 
 }
 
 /// Refuses a `stylex.keyframes` call the compiler cannot read.
-///
-/// Asked for by a caller that already knows the call is one.
 pub(crate) fn validate_stylex_keyframes_indent(var_decl: &VarDeclarator, state: &mut StateManager) {
   validate_single_object_arg_indent(var_decl, STYLEX_KEYFRAMES, state);
 }
 
 /// Refuses a `stylex.positionTry` call the compiler cannot read.
-///
-/// Asked for by a caller that already knows the call is one.
 pub(crate) fn validate_stylex_position_try_indent(
   var_decl: &VarDeclarator,
   state: &mut StateManager,
@@ -448,11 +350,7 @@ pub(crate) fn validate_stylex_position_try_indent(
 }
 
 /// Refuses a `stylex.defaultMarker` call that was given an argument.
-///
-/// Asked for by a caller that already knows the call is one.
 pub(crate) fn validate_stylex_default_marker_indent(call: &CallExpr, state: &mut StateManager) {
-  // Cloned only where it is about to be reported: the clone is a deep copy of
-  // the whole call, and a call that compiles reports nothing.
   if !call.args.is_empty() {
     build_code_frame_error_and_panic_at(
       &Expr::from(call.clone()),
@@ -463,8 +361,6 @@ pub(crate) fn validate_stylex_default_marker_indent(call: &CallExpr, state: &mut
 }
 
 /// Refuses a `stylex.viewTransitionClass` call the compiler cannot read.
-///
-/// Asked for by a caller that already knows the call is one.
 pub(crate) fn validate_stylex_view_transition_class_indent(
   var_decl: &VarDeclarator,
   state: &mut StateManager,
@@ -473,16 +369,11 @@ pub(crate) fn validate_stylex_view_transition_class_indent(
 }
 
 /// Refuses a `stylex.createTheme` call the compiler cannot read.
-///
-/// Asked for by a caller that already knows the call is one.
 pub(crate) fn validate_stylex_create_theme_indent(
   var_decl: &Option<VarDeclarator>,
   call: &CallExpr,
   state: &mut StateManager,
 ) {
-  // Cloned only where it is about to be reported, as the two validators below
-  // do: the clone is a deep copy of the whole theme, and a call that compiles
-  // reports nothing.
   let call_expr = || Expr::Call(call.clone());
   let (init_expr, init) = theme_init_call_of(var_decl, call, state);
 
@@ -505,22 +396,15 @@ pub(crate) fn validate_stylex_create_theme_indent(
     );
   }
 
-  // The second argument is validated after evaluation in the createTheme
-  // visitor. Its authored syntax does not determine whether it yields an
-  // object, and an unresolvable call must retain the non-static diagnostic.
+  // The second argument is validated after evaluation: an unresolvable call must keep the
+  // non-static diagnostic.
 }
 
-/// Refuses a `stylex.defineVars` call the compiler cannot read, and answers the
-/// name it is exported under.
-///
-/// Asked for by a caller that already knows the call is one.
+/// Refuses a `stylex.defineVars` call the compiler cannot read, and returns its export name.
 pub(crate) fn find_and_validate_stylex_define_vars(
   call: &CallExpr,
   state: &mut StateManager,
 ) -> Atom {
-  // Cloned only where it is about to be reported, as `validate_stylex_create`
-  // does: the clone is a deep copy of the whole variable group, and a call that
-  // compiles reports nothing.
   let call_expr = || Expr::from(call.clone());
 
   let stylex_create_theme_top_level_expr = match state.find_top_level_expr(call) {
@@ -557,22 +441,11 @@ pub(crate) fn find_and_validate_stylex_define_vars(
   or_refuse_unexported(export_name, &call_expr, STYLEX_DEFINE_VARS, state)
 }
 
-/// Refuses a `stylex.defineMarker` call the compiler cannot read, and answers
-/// the name it is exported under.
-///
-/// The name is the answer rather than a yes, as the two `define*` validators
-/// beside it do it: the export check proves a name is there, so a caller that
-/// needs one takes it from here instead of reading the declarator again and
-/// guarding a shape this check has already ruled out.
-///
-/// Asked for by a caller that already knows the call is one.
+/// Refuses a `stylex.defineMarker` call the compiler cannot read, and returns its export name.
 pub(crate) fn find_and_validate_stylex_define_marker(
   call: &CallExpr,
   state: &mut StateManager,
 ) -> Atom {
-  // Cloned only where it is about to be reported, as `validate_stylex_create`
-  // does: every path that needs it diverges, so the call that compiles pays
-  // nothing.
   let fault_expr = || Expr::from(call.clone());
 
   if !call.args.is_empty() {
@@ -583,24 +456,11 @@ pub(crate) fn find_and_validate_stylex_define_marker(
     );
   }
 
-  // Matched by span: two `defineMarker()` calls are indistinguishable without
-  // their positions, so a span-insensitive lookup would validate every call in
-  // the module against the first one's declaration and let an unexported
-  // marker through behind an exported one.
+  // Match by span so each `defineMarker()` call is checked against its own declaration.
   let define_marker_top_level_expr = match state.find_top_level_expr_by_span(call) {
     Some(define_marker_top_level_expr) => define_marker_top_level_expr,
-    // Missing from the top level does not mean unbound. A call in a nested
-    // scope still initialises a declarator, and the discovery pass records
-    // declarators from every scope, so what that declarator looks like is what
-    // separates the two failures: bound to a plain identifier and the export is
-    // what is missing, bound to anything else — a destructuring pattern — and
-    // the variable is. Answered from the recorded declarations, on the error
-    // path only, so nothing is re-walked to tell them apart.
-    //
-    // The call itself is the fault site. `defineMarker()` takes no arguments —
-    // the check above has already panicked otherwise — so there is never an
-    // argument to point at, unlike the `defineVars` / `defineConsts` validators
-    // this shape was copied from.
+    // Not top-level: a plain-identifier binding means a missing export; anything else (e.g.
+    // destructuring) means a missing variable. The call itself is the fault site.
     None => {
       let is_bound_to_a_bare_variable = state
         .find_call_declaration_by_span(call)
@@ -616,7 +476,6 @@ pub(crate) fn find_and_validate_stylex_define_marker(
     },
   };
 
-  // Read out before the refusal below, which needs the state mutably.
   let export_name = named_export_name(define_marker_top_level_expr, state).cloned();
 
   match export_name {
@@ -629,17 +488,11 @@ pub(crate) fn find_and_validate_stylex_define_marker(
   }
 }
 
-/// Refuses a `stylex.defineConsts` call the compiler cannot read, and answers
-/// the name it is exported under.
-///
-/// Asked for by a caller that already knows the call is one.
+/// Refuses a `stylex.defineConsts` call the compiler cannot read, and returns its export name.
 pub(crate) fn find_and_validate_stylex_define_consts(
   call: &CallExpr,
   state: &mut StateManager,
 ) -> Atom {
-  // Cloned only where it is about to be reported, as `validate_stylex_create`
-  // does: the clone is a deep copy of the whole variable group, and a call that
-  // compiles reports nothing.
   let call_expr = || Expr::from(call.clone());
 
   let define_consts_top_level_expr = match state.find_top_level_expr(call) {
@@ -721,9 +574,7 @@ pub(crate) fn is_target_call(
   call: &CallExpr,
   state: &StateManager,
 ) -> bool {
-  // A parenthesis is not a different callee, so both levels are read through
-  // it, as the dispatch in `process_declaration` reads them. `(stylex.create)(…)`
-  // and `(stylex).create(…)` name the same function the bare spelling names.
+  // Read through parentheses: `(stylex.create)(…)`, `(stylex).create(…)`.
   let callee = call.callee.as_expr().map(|expr| normalize_expr(expr));
 
   let is_create_ident = callee
@@ -732,9 +583,6 @@ pub(crate) fn is_target_call(
       ImportKind::from_import_name(call_name).is_some_and(|kind| state.matches_method(ident, kind))
     });
 
-  // The receiver is asked for its name once. Asking whether it has one and then
-  // reading it left a second answer for a receiver that has none, which the
-  // first answer had already ruled out.
   let is_create_member = callee
     .and_then(|callee| callee.as_member())
     .is_some_and(|member| {
@@ -757,12 +605,8 @@ pub(crate) fn validate_define_call(
   arg_count: usize,
   state: &mut StateManager,
 ) {
-  // Cloned only where it is about to be reported: the clone is a deep copy of
-  // the whole call, and a call that compiles reports nothing.
   let call_expr = || Expr::Call(call.clone());
 
-  // Asked whether the call is bound to anything, and nothing more, so the
-  // expression it is bound to stays in the state rather than being copied out.
   if state.find_top_level_expr(call).is_none() {
     refuse_unbound_call(api_name, &call_expr, state);
   }
@@ -770,12 +614,7 @@ pub(crate) fn validate_define_call(
   reject_unless_argument_count(call, api_name, arg_count, &call_expr, state);
 }
 
-/// The same, for a define call whose result must be exported under a name, and
-/// that name.
-///
-/// The name comes from the export check itself. A caller that asked for it
-/// separately had to answer for a name that is not there, which the check has
-/// already ruled out.
+/// [`validate_define_call`] for a define call that must be exported, returning the name.
 pub(crate) fn validate_exported_define_call(
   call: &CallExpr,
   api_name: &str,
@@ -792,12 +631,7 @@ pub(crate) fn validate_exported_define_call(
   export_name
 }
 
-/// The name the result of a call is exported under, with a call bound to
-/// nothing refused first.
-///
-/// The name is read through the expression the state holds and copied out on
-/// its own. Copying the expression to read it copied the whole variable group
-/// the author wrote, for a name that is one interned word.
+/// The export name of a call's result, refusing an unbound call first.
 fn bound_export_name(
   call: &CallExpr,
   api_name: &str,
@@ -836,11 +670,7 @@ fn reject_unless_argument_count(
   }
 }
 
-/// `export_name`, or the refusal a result that is exported under no name is
-/// reported with.
-///
-/// The call is lent as the closure that builds it, so the deep copy of it the
-/// report quotes is made only where there is a report to make.
+/// `export_name`, or the refusal for an unexported result; the call is built lazily.
 fn or_refuse_unexported(
   export_name: Option<Atom>,
   call_expr: &impl Fn() -> Expr,
@@ -857,30 +687,13 @@ fn or_refuse_unexported(
   }
 }
 
-/// Whether a literal is one a style value is allowed to be.
-///
-/// A string and a number declare something, and `null` declares nothing --
-/// which is an answer, not a failure, so it is accepted here and dropped later.
-/// Every other literal is refused: a boolean, a big integer and a regular
-/// expression are not absent values, they are unusable ones, and accepting them
-/// would silently drop a declaration the author wrote.
-///
-/// The set is exactly the reference implementation's `val === null ||
-/// typeof val === 'string' || typeof val === 'number'`. A big integer is on the
-/// refused side for that reason rather than because anything reaches here with
-/// one -- evaluation deopts on `BigIntLiteral` first, in every position. Listing
-/// it as allowed would leave this function, which is now the single answer to
-/// what a style value may be, naming a set upstream does not.
+/// Whether a literal may be a style value: string, number or `null` (dropped later), matching
+/// the reference's `val === null || typeof val === 'string' || typeof val === 'number'`.
 fn is_style_value_literal(lit: &Lit) -> bool {
   matches!(lit, Lit::Str(_) | Lit::Null(_) | Lit::Num(_))
 }
 
-/// Refuse a literal that is not a style value, reported at the literal itself.
-///
-/// Both positions that carry a value directly -- written on a property, and
-/// written under a condition -- refuse the same set for the same reason, so they
-/// refuse through the same function. Restating the rejection beside each copy of
-/// the set is how the two came to disagree in the first place.
+/// Refuses a non-style-value literal, reported at the literal.
 fn reject_unless_style_value_literal(lit: &Lit, state: &mut StateManager) {
   if !is_style_value_literal(lit) {
     let lit_expr = Expr::Lit(lit.clone());
@@ -888,22 +701,8 @@ fn reject_unless_style_value_literal(lit: &Lit, state: &mut StateManager) {
   }
 }
 
-/// Refuse a fallback array holding an entry that is not a style value, reported
-/// at the array rather than at the entry -- a fallback chain is one value, and
-/// the code frame the author needs is the whole of it.
-///
-/// The two positions that can carry a chain hold its entries to the same rule
-/// and differ only in which message they report: upstream gives the
-/// array-specific one for a chain written on a property and the plain one for a
-/// chain written under a condition (`basic-validation.js:31` and `:86`). That is
-/// upstream's choice of wording, not a second rule, so the message is the
-/// parameter and the rule is written once.
-///
-/// A spread entry needs no case of its own. This runs on an evaluated namespace,
-/// where the evaluator has already resolved every spread it can into the value
-/// spread -- which is an array, not a literal, and so is refused here -- and
-/// deopted on every spread it cannot. Both outcomes are pinned in
-/// `validation_stylex_create_test::invalid_values`.
+/// Refuses a fallback array with a non-style-value entry, reported at the array. Upstream
+/// picks the message by position (`basic-validation.js:31` and `:86`).
 fn reject_unless_style_value_array(array: &ArrayLit, message: &str, state: &mut StateManager) {
   for elem in array.elems.iter().flatten() {
     if !matches!(elem.expr.as_ref(), Expr::Lit(lit) if is_style_value_literal(lit)) {
@@ -992,11 +791,7 @@ pub(crate) fn validate_conditional_styles(
     }
   }
 
-  // A value under a condition is the same kind of value as one written
-  // directly, so it is held to the same literal set -- reached through
-  // `is_style_value_literal` rather than restated, because two spellings of
-  // "what a style value may be" are what let a boolean compile in one position
-  // and fail in the other.
+  // Conditional values are held to the same literal set.
   match inner_value.as_ref() {
     Expr::Lit(lit) => reject_unless_style_value_literal(lit, state),
     Expr::Array(array) => {
@@ -1083,13 +878,8 @@ pub(crate) fn assert_valid_view_transition_class(
   assert_stylex_arg(obj, state, STYLEX_VIEW_TRANSITION_CLASS);
 }
 
-/// The name of the variable group a theme overrides, and the source the name
-/// of each variable is read from.
-///
-/// Both halves come out of the same read: a group states its own name, and an
-/// object carries it under `__varGroupHash__`. A value that is neither, or an
-/// object that names no group, is refused here, so what is answered has only
-/// the two states [`ThemeVars`] holds.
+/// The variable group a theme overrides and where its variable names come from; refuses
+/// anything else.
 pub(crate) fn validate_theme_variables(
   variables: &EvaluateResultValue,
   state: &StateManager,
@@ -1126,13 +916,8 @@ pub(crate) fn validate_theme_variables(
   }
 }
 
-/// `read`, or the refusal a theme bound to something else is reported with.
-///
-/// This is the whole of what is left out of the coverage measurement, and it
-/// computes nothing -- it chooses between answers the caller has already worked
-/// out. The declarator the reader below is given was found by looking the call
-/// up, so there is one and the call is its initializer.
-/// `guidelines/stack/RUST.md` describes the allowance.
+/// `read`, or the refusal for a theme bound to something else (unreachable; excluded from
+/// coverage).
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn or_refuse_theme<'a>(
   read: Option<(&'a Expr, &'a CallExpr)>,
@@ -1158,10 +943,8 @@ fn or_refuse_theme<'a>(
   }
 }
 
-/// The call a theme is bound to, and the expression it was read out of.
-///
-/// A parenthesis is not a different initializer, so the call is read through it
-/// -- as the declarator lookup that found this declarator reads it.
+/// The call a theme is bound to (read through parentheses), and the expression it was read
+/// out of.
 fn theme_init_call_of<'a>(
   var_decl: &'a Option<VarDeclarator>,
   call: &CallExpr,
@@ -1177,14 +960,8 @@ fn theme_init_call_of<'a>(
   or_refuse_theme(read, init_expr, call, state)
 }
 
-/// `value`, or the refusal a group hash that names no variable is reported
-/// with.
-///
-/// This is the whole of what is left out of the coverage measurement, and it
-/// computes nothing -- it chooses between answers the caller has already worked
-/// out. A theme reference answers something other than a variable for two keys,
-/// and the group hash is neither of them. `guidelines/stack/RUST.md` describes
-/// the allowance.
+/// `value`, or the refusal for a group hash naming no variable (unreachable; excluded from
+/// coverage).
 #[cfg_attr(coverage_nightly, coverage(off))]
 pub(crate) fn or_refuse_nameless_group(value: Option<&str>) -> &str {
   match value {

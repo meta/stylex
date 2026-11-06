@@ -37,7 +37,6 @@ fn current_unnamed_source_short_filename_uses_cwd_package_context() {
 
 use stylex_state::state_manager::StateManager;
 
-/// The shortening of a path, and the annotation it is written into.
 mod short_filenames {
   use std::path::PathBuf;
   use std::rc::Rc;
@@ -125,8 +124,7 @@ mod short_filenames {
     ));
   }
 
-  /// A namer that fails aborts at its first call, as Babel's `debugFilePath`
-  /// exception does: the failure is not turned into a missing label.
+  /// Matches Babel's `debugFilePath` exception: the failure is not turned into a missing label.
   #[test]
   fn current_debug_file_namer_failure_refuses_at_the_first_call() {
     #[derive(Debug)]
@@ -144,7 +142,6 @@ mod short_filenames {
     let mut seen = FxHashMap::default();
     let _quiet = stylex_macros::stylex_error::SuppressPanicStderr::new();
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-      // Two annotated namespaces, named in order.
       for line in [2, 4] {
         insert_compiled_entry(
           &mut values,
@@ -166,9 +163,7 @@ mod short_filenames {
     assert!(!values.contains_key(COMPILED_KEY));
   }
 
-  /// The whole transform of a two-namespace module stops at the first failing
-  /// call, and the panic carries the callback's own error for the host latch.
-  /// (b51's regression test from the 16e3 private worktree.)
+  /// The panic carries the callback's own error for the host latch.
   #[test]
   fn current_debug_file_namer_throw_aborts_before_the_next_namespace() {
     #[derive(Debug)]
@@ -240,7 +235,6 @@ mod short_filenames {
     create_short_filename(path, state, &mut FxHashMap::default())
   }
 
-  /// A file inside a package is named for the package it came from.
   #[test]
   fn names_a_file_after_the_package_it_came_from() {
     let state = StateManager::default();
@@ -251,8 +245,6 @@ mod short_filenames {
     );
   }
 
-  /// A path that ends at the package directory names no package, so the file is
-  /// shortened the ordinary way.
   #[test]
   fn names_no_package_for_a_path_that_ends_at_the_directory() {
     assert_eq!(get_package_prefix("/somewhere/node_modules/"), None);
@@ -263,9 +255,7 @@ mod short_filenames {
     );
   }
 
-  /// A name measured from a root is written as `path.relative` writes it on
-  /// the platform the compiler runs on, as the Babel plugin's is: with the
-  /// platform's separator, and normalised.
+  /// Matches the Babel plugin: the platform's separator, normalised.
   #[test]
   fn writes_a_name_measured_from_a_root_as_path_relative_does() {
     let root: PathBuf = [std::path::MAIN_SEPARATOR_STR, "project"].iter().collect();
@@ -290,8 +280,6 @@ mod short_filenames {
     );
   }
 
-  /// A short path keeps the last two parts of the path it was given, which is
-  /// enough for a person to tell two files apart.
   #[test]
   fn keeps_the_last_two_parts_of_a_path() {
     let state = StateManager::default();
@@ -300,8 +288,6 @@ mod short_filenames {
     assert_eq!(get_short_path("Card.tsx", &state), "Card.tsx");
   }
 
-  /// Where the project names a root, the path is given relative to it instead,
-  /// because that is the path the author reads in their editor.
   #[test]
   fn names_a_path_relative_to_the_root_the_project_declares() {
     let state = StateManager::new(StyleXOptions::default().with_unstable_module_resolution(
@@ -316,16 +302,14 @@ mod short_filenames {
       platform("src/components/Card.tsx")
     );
 
-    // A path outside the root is still given relative to it, as
-    // `path.relative` gives it to the Babel plugin.
+    // `path.relative` still relativises a path outside the root, as in the Babel plugin.
     assert_eq!(
       get_short_path("/elsewhere/src/Card.tsx", &state),
       platform("../elsewhere/src/Card.tsx")
     );
   }
 
-  /// A haste project names a file by itself, because a haste name is unique
-  /// across the whole project.
+  /// A haste name is unique across the whole project.
   #[test]
   fn names_a_haste_file_by_itself() {
     let state = StateManager::new(StyleXOptions::default().with_unstable_module_resolution(
@@ -341,8 +325,6 @@ mod short_filenames {
     );
   }
 
-  /// A package the file belongs to is named in front of the path inside it, so
-  /// two files of the same name in two packages read apart.
   #[test]
   fn names_the_package_a_file_belongs_to() {
     let root = package_at("stylex_named_package", Some("@acme/ui"));
@@ -354,8 +336,7 @@ mod short_filenames {
     );
   }
 
-  /// A package with no name of its own is written as the Babel plugin's
-  /// template literal writes a missing name: `undefined`.
+  /// Matches the Babel plugin's template literal: `undefined`.
   #[test]
   fn names_a_package_that_has_no_name_as_babel_does() {
     let root = package_at("stylex_unnamed_package", None);
@@ -367,8 +348,7 @@ mod short_filenames {
     );
   }
 
-  /// An absent filename is resolved in the same package context as Babel.
-  /// Explicit cwd inside the package keeps dirname(cwd) in that package.
+  /// Resolved in the same package context as Babel: explicit cwd keeps dirname(cwd).
   #[test]
   fn names_no_package_for_a_file_of_the_package_it_runs_in() {
     let root = package_at("stylex_same_package_context", Some("fixture"));
@@ -383,7 +363,6 @@ mod short_filenames {
     );
   }
 
-  /// A directory holding a `package.json`, named or not.
   pub(super) fn package_at(name: &str, package_name: Option<&str>) -> String {
     let root = std::env::temp_dir().join(format!("{name}_{}", std::process::id()));
 
@@ -402,8 +381,6 @@ mod short_filenames {
     root.to_string_lossy().into_owned()
   }
 
-  /// A path outside any package and outside the working directory is shortened
-  /// to its last two parts.
   #[test]
   fn shortens_a_path_that_belongs_to_no_package() {
     let state = StateManager::default();
@@ -414,9 +391,6 @@ mod short_filenames {
     );
   }
 
-  /// A compilation running outside every package names a file of its own
-  /// directory by the path inside it, because that is the path the author
-  /// reads.
   #[test]
   fn names_a_file_of_a_working_directory_that_is_in_no_package() {
     let cwd = directory_in_no_package("stylex_cwd_without_a_package");
@@ -430,12 +404,8 @@ mod short_filenames {
     );
   }
 
-  /// The path of a directory that no `package.json` stands above.
-  ///
-  /// Under the temporary directory, because every directory inside the
-  /// checkout has this repository's own manifest over it. Nothing is written:
-  /// the naming reads the manifests above a path and the path itself, so a
-  /// directory that is not there answers the same as an empty one.
+  /// A directory under the temp dir, which no `package.json` stands above (unlike the checkout).
+  /// Nothing is written: a missing directory answers the same as an empty one.
   fn directory_in_no_package(name: &str) -> String {
     std::env::temp_dir()
       .join(format!("{name}_{}", std::process::id()))
@@ -458,7 +428,6 @@ mod short_filenames {
     (*inner_map[COMPILED_KEY]).clone()
   }
 
-  /// The annotation names the file and the line the namespace was written on.
   #[test]
   fn names_the_file_and_the_line() {
     let mut state = StateManager::default();
@@ -469,8 +438,7 @@ mod short_filenames {
     );
   }
 
-  /// Without a line there is nothing to point at, so the entry is the plain
-  /// marker a build with no annotation writes.
+  /// Without a line the entry is the plain unannotated marker.
   #[test]
   fn writes_the_plain_marker_without_a_line() {
     let mut state = StateManager::default();
@@ -481,8 +449,7 @@ mod short_filenames {
     );
   }
 
-  /// The second namespace of a call asks for the same file, and the shortening
-  /// it already paid for is what answers.
+  /// The second namespace reuses the cached shortening.
   #[test]
   fn shortens_one_path_once() {
     let mut state = StateManager::default();
@@ -497,8 +464,6 @@ mod short_filenames {
     );
   }
 
-  /// A project can name the file itself, and what that answers is what the
-  /// annotation says.
   #[test]
   fn lets_the_project_name_the_file() {
     let mut state = StateManager::default();
@@ -513,8 +478,6 @@ mod short_filenames {
     );
   }
 
-  /// A name that spells nothing points at no file, so the entry is the plain
-  /// marker.
   #[test]
   fn writes_the_plain_marker_for_a_name_that_spells_nothing() {
     let mut state = StateManager::default();
@@ -528,7 +491,6 @@ mod short_filenames {
   }
 }
 
-/// The `$$css` entry each namespace of a `create` call is given.
 mod annotations {
   use std::rc::Rc;
 
@@ -548,7 +510,6 @@ mod annotations {
   use crate::tests::capturing_logger::logged_at;
   use crate::tests::support::expr;
 
-  /// The call `code` spells.
   fn call(code: &str) -> CallExpr {
     match expr(code) {
       Expr::Call(call) => call,
@@ -590,8 +551,7 @@ mod annotations {
     }
   }
 
-  /// A namespace the call wrote is annotated, and the styles it held travel
-  /// with it.
+  /// The styles each namespace held travel with it.
   #[test]
   fn annotates_every_namespace_the_call_wrote() {
     let result = annotate(
@@ -610,8 +570,7 @@ mod annotations {
     );
   }
 
-  /// A namespace the call did not write cannot be placed, so it keeps the
-  /// styles it had and no annotation is added.
+  /// It keeps its styles and gets no annotation.
   #[test]
   fn leaves_a_namespace_the_call_did_not_write_alone() {
     let result = annotate("create({ root: { color: 'red' } })", &["other"]);
@@ -620,7 +579,6 @@ mod annotations {
     assert!(!result["other"].contains_key(COMPILED_KEY));
   }
 
-  /// A key the compiler cannot name is not a namespace it can place.
   #[test]
   fn leaves_a_namespace_under_a_key_it_cannot_name_alone() {
     let result = annotate("create({ [makeKey()]: { color: 'red' } })", &["root"]);
@@ -628,8 +586,6 @@ mod annotations {
     assert!(!result["root"].contains_key(COMPILED_KEY));
   }
 
-  /// A namespace written twice is one namespace, and the first of the two is
-  /// the place it is annotated at.
   #[test]
   fn places_a_repeated_namespace_at_its_first_spelling() {
     let result = annotate("create({ root: { color: 'red' }, root: {} })", &["root"]);
@@ -637,9 +593,7 @@ mod annotations {
     assert_eq!(result.len(), 1);
   }
 
-  /// Without the source the namespace was written in there is no frame to read
-  /// a line off, and the reader says so and points at the setting that tells
-  /// more.
+  /// Without the source there is no frame; the report points at the detail setting.
   #[test]
   fn reports_a_namespace_it_cannot_place() {
     let messages = logged_at(Level::Warn, || {
@@ -655,8 +609,6 @@ mod annotations {
     );
   }
 
-  /// Asked for the detail, it names the namespace it could not place rather
-  /// than pointing the reader at the setting they already turned on.
   #[test]
   fn names_the_namespace_it_cannot_place_when_asked_for_the_detail() {
     let messages = logged_at(Level::Debug, || {
@@ -671,8 +623,7 @@ mod annotations {
     );
   }
 
-  /// The first argument of the call is the object of namespaces. Anything else
-  /// is a call the compiler should never have reached this reader with.
+  /// The first argument must be the object of namespaces.
   #[test]
   #[should_panic(expected = "Expected an object expression")]
   fn refuses_a_call_whose_argument_is_not_an_object() {
@@ -686,9 +637,7 @@ mod annotations {
   }
 }
 
-/// The annotation a namespace gets when the compiler holds the text the
-/// namespace was written in -- either through a source map that points back at
-/// the file the author wrote, or by locating the namespace in the text itself.
+/// Annotation when the authored text is available, via a source map or by locating the text.
 mod over_the_authored_text {
   use std::sync::Arc;
 
@@ -715,10 +664,7 @@ mod over_the_authored_text {
 
   const CODE: &str = "const styles = create({\n  root: { color: 'red' },\n});\n";
 
-  /// The call `CODE` binds, and a state that reads `CODE` as its input.
-  ///
-  /// Both come out of one parse, so the key spans the call carries are
-  /// positions in the very source file the state is given.
+  /// One parse, so the call's key spans are positions in the state's source file.
   fn call_and_state() -> (CallExpr, StateManager) {
     let source_map = SwcSourceMap::default();
     let source_file = source_map.new_source_file(
@@ -740,10 +686,7 @@ mod over_the_authored_text {
 
     let mut state = StateManager::default();
 
-    // A real name, because the annotation is `file:line` and a file with no
-    // name shortens to nothing. The directory is left unstated, so the naming
-    // is measured against the one the suite runs in -- what this module reads
-    // is the line, and a stated directory would move the file name with it.
+    // A real name (an unnamed file shortens to nothing); no directory, so only the line is read.
     state.set_plugin_pass(
       PluginPass::default().with_filename(FileName::Real("/project/src/Card.tsx".into())),
     );
@@ -777,12 +720,8 @@ mod over_the_authored_text {
     obj
   }
 
-  /// The marker the namespace of `call` is given.
-  ///
-  /// Inside `GLOBALS`, which every span read this path makes needs: the reader
-  /// parses the authored text into the code frame's own source map, and that
-  /// map is reached through the globals. Without them the read stops and the
-  /// reader reports instead, which is a different case from the one under test.
+  /// Runs inside `GLOBALS`, which the code-frame source map needs; without them the reader
+  /// reports instead.
   fn annotate(state: &mut StateManager, call: &CallExpr) -> FlatCompiledStylesValue {
     let result = GLOBALS.set(&Globals::default(), || {
       add_source_map_data(
@@ -803,8 +742,7 @@ mod over_the_authored_text {
     }
   }
 
-  /// With no map at all the source text is the only place left to look, and it
-  /// names the line the same way.
+  /// With no map at all, the source text names the line.
   #[test]
   fn names_the_line_the_source_text_spells_it_on() {
     let (call, mut state) = call_and_state();
@@ -815,9 +753,7 @@ mod over_the_authored_text {
     );
   }
 
-  /// A text that spells neither the namespace nor its styles places nothing.
-  /// The reader says so and points at the setting that says more, and the
-  /// namespace keeps the plain marker a build with no annotation writes.
+  /// The namespace keeps the plain marker and the report points at the detail setting.
   #[test]
   fn reports_a_namespace_the_text_does_not_spell() {
     let messages = logged_at(Level::Info, || {
@@ -841,8 +777,6 @@ mod over_the_authored_text {
     );
   }
 
-  /// Asked for the detail, it quotes the namespace it could not place rather
-  /// than pointing the reader at the setting they already turned on.
   #[test]
   fn names_the_namespace_the_text_does_not_spell_when_asked_for_the_detail() {
     let messages = logged_at(Level::Debug, || {
@@ -863,7 +797,6 @@ mod over_the_authored_text {
     );
   }
 
-  /// A text holding no `root` namespace and none of its styles.
   fn other_source_file() -> Arc<swc_core::common::SourceFile> {
     SwcSourceMap::default().new_source_file(
       Arc::new(FileName::Custom("Other.tsx".to_owned())),
@@ -872,9 +805,7 @@ mod over_the_authored_text {
   }
 }
 
-/// The short name keeps the last two segments of the filename whichever
-/// separator it is written with, as the Babel plugin's name for the same file
-/// does once Babel has resolved it (`D:\repo\Comp.js` on Windows).
+/// Matches Babel's resolved name for the same file (`D:\repo\Comp.js` on Windows).
 #[test]
 fn the_short_path_keeps_the_last_two_segments_for_either_separator() {
   let state = StateManager::default();
@@ -903,11 +834,8 @@ fn the_short_path_keeps_the_last_two_segments_for_either_separator() {
   }
 }
 
-/// The debug name is `path.relative(root, filename)` the way Node computes it
-/// on Windows: a root-relative `/src` takes the working directory's drive,
-/// either separator is read, a drive and its directories are compared without
-/// case, another drive's file is answered whole, and the result is written
-/// with `\`. Run on every platform, since the flavour is only text.
+/// Node's Windows `path.relative`: `/src` takes the cwd's drive, either separator, case-insensitive
+/// drives and directories, another drive answered whole, `\` output. Runs on every platform.
 #[test]
 fn a_debug_name_is_measured_from_its_root_as_node_does_on_windows() {
   use super::NodePath::Win32;
@@ -941,8 +869,7 @@ fn a_debug_name_is_measured_from_its_root_as_node_does_on_windows() {
   );
 }
 
-/// The same measure on every other platform, where only `/` separates and
-/// case is significant.
+/// Node's posix `path.relative`: only `/` separates and case is significant.
 #[test]
 fn a_debug_name_is_measured_from_its_root_as_node_does_on_posix() {
   use super::NodePath::Posix;

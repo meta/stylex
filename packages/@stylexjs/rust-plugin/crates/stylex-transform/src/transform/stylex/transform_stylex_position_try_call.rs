@@ -60,7 +60,7 @@ where
         &mut self.state,
       );
 
-      // The original plugin refuses the folded value at the argument.
+      // Matches Babel: the folded value is refused at the argument.
       let argument = first_arg.span();
       reported_at(argument, || {
         assert_valid_position_try(&plain_object, &mut self.state)

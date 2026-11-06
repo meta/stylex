@@ -26,10 +26,8 @@ where
       }
     }
 
-    // JSX-spread replacement no longer happens in this hook; it now runs in
-    // `mark_style_vars_to_keep` at the start of the finalize phase. The
-    // cycle-specific work here is only collecting spread expressions during
-    // `Discover`; traversal still descends into children on every cycle.
+    // Spread replacement happens in `mark_style_vars_to_keep`; here only `Discover` collects
+    // spreads.
     jsx_attrs.visit_mut_children_with(self);
   }
 }

@@ -62,8 +62,6 @@ pub(crate) fn stylex_merge(
   }
 
   for name in state.stylex_imports() {
-    // `or_default` answers the entry itself, new or already there, so the
-    // second look-up that stood here and its refusal are both gone.
     evaluate_path_fn_config
       .member_expressions
       .entry(name.clone())
@@ -76,16 +74,10 @@ pub(crate) fn stylex_merge(
 
   state.apply_stylex_env(&mut evaluate_path_fn_config);
 
-  // Shared rather than owned from here on. Each argument of the call asks the
-  // evaluator, and the evaluator owns the map it hands to every callback, so a
-  // map given by reference was copied once per argument and once per member
-  // read inside it.
+  // Shared: the evaluator hands this map to every callback.
   let evaluate_path_fn_config = Rc::new(evaluate_path_fn_config);
 
-  // A parenthesis is not a different argument, at either level. Read bare,
-  // `stylex.props(([a, b]))` was not flattened into its elements and
-  // `stylex.props((styles.root))` reached no arm of the match below, so both
-  // handed the whole merge back to the runtime.
+  // Read through parentheses: `stylex.props(([a, b]))`, `stylex.props((styles.root))`.
   let mut args_path = Vec::with_capacity(call.args.len());
   for arg in &call.args {
     match normalize_expr(&arg.expr) {
@@ -103,25 +95,16 @@ pub(crate) fn stylex_merge(
     let arg = normalize_expr(&arg_path.expr);
 
     match &arg {
-      // The four kinds that name a style, each answered once. The kind used to
-      // be asked again after the argument was read, which left a kind the
-      // reader never answers for in between.
       Expr::Object(_) | Expr::Ident(_) | Expr::Member(_) | Expr::Call(_) => {
         let resolved = parse_nullable_style(arg, state, &evaluate_path_fn_config);
         let is_unreadable = resolved == StyleObject::Other;
 
-        // A style the compiler cannot read stays for the runtime to apply, and
-        // the bail-out is what keeps the whole call there.
         if is_unreadable {
           bail_out_index = Some(current_index);
           bail_out = true;
         }
 
-        // An object and a name merge as they stand. A member merges too, unless
-        // it is one of those the bail-out has just kept for the runtime --
-        // merging it here would apply it twice. A call never merges: a dynamic
-        // atom (`_temp.color(c)`) or a dynamic create style
-        // (`styles.opacity(1)`) is the runtime's to apply.
+        // Objects and idents merge; members merge unless just kept for the runtime; calls never do.
         let merges = match &arg {
           Expr::Object(_) | Expr::Ident(_) => true,
           Expr::Member(_) => !is_unreadable,
@@ -192,12 +175,7 @@ pub(crate) fn stylex_merge(
     }
 
     if bail_out {
-      // Stop at the first bail. On the bail path `resolved_args`/`conditional`
-      // are discarded entirely and the output is produced by the
-      // `MemberTransform` re-walk over *all* `call.args` below — which already
-      // registers and keeps every member arg's `stylex.create` styles. Scanning
-      // further here would only repeat `parse_nullable_style`/`evaluate` work on
-      // args past the bail and risk choking on a shape only that path rejects.
+      // Stop at the first bail: the bail path re-walks all `call.args` with `MemberTransform`.
       break;
     }
   }
@@ -227,14 +205,8 @@ pub(crate) fn stylex_merge(
       bail_out_index = member_transform.bail_out_index;
       non_null_props = member_transform.non_null_props;
 
-      // Hoist any inline compiled-style objects (produced by atoms) to module
-      // scope so the runtime `stylex.props` receives a stable reference instead
-      // of a re-created object literal.
-      //
-      // A second walk, and it stays one. The reader above stops at a member
-      // expression, because counting a nested one would move the bail-out
-      // point, while this walk must reach an object wherever it sits. One walk
-      // could serve only one of those two rules.
+      // Hoist inline compiled-style objects to module scope for a stable reference. Separate from
+      // the member walk above, which must not descend into nested members.
       let mut object_hoister = CompiledStyleObjectHoister {
         state: &mut *state,
         hoist_expression,
@@ -254,7 +226,6 @@ pub(crate) fn stylex_merge(
         .map(static_jsx_attr_from_prop)
         .collect::<Option<Vec<_>>>();
 
-      // Store the JSX attributes to replace the spread element
       if let Some(jsx_attr_expressions) = jsx_attr_expressions {
         state.set_jsx_spread_replacement(call, jsx_attr_expressions);
 
@@ -268,23 +239,7 @@ pub(crate) fn stylex_merge(
   None
 }
 
-/// The JSX attribute a compiled property spells, where it spells one.
-///
-/// The properties read here are the ones the merge answered with when no
-/// argument was conditional. `make_string_expression` builds those through
-/// `create_key_value_prop`, which spells a key as a bare name or as a quoted
-/// string and never as a computed one. So `key_value_name` below has no
-/// computed key to refuse, and the guard that stood here had no input. A quoted
-/// key is usual on this path: `data-style-src` is one, and
-/// `local_static_styles` writes it into an attribute.
-///
-/// This reader never sees the table that the conditional case builds, because
-/// that case answers a member read on the table and the caller matches an
-/// object. `files_every_answer_as_a_key_value_under_a_name` holds the table's
-/// own shape.
-///
-/// What is left to decide is the value, and only a literal can be written into
-/// an attribute.
+/// The JSX attribute a non-conditional compiled property spells; only literal values qualify.
 fn static_jsx_attr_from_prop(prop: &PropOrSpread) -> Option<JSXAttrOrSpread> {
   prop
     .as_prop()
@@ -303,10 +258,7 @@ fn static_jsx_attr_from_prop(prop: &PropOrSpread) -> Option<JSXAttrOrSpread> {
     })
 }
 
-/// Hoists inline compiled-style objects (those carrying the `$$css: true`
-/// marker, produced by the atoms transform) out of a `stylex.props(...)`
-/// argument and into a module-scoped `const`, replacing the object with a
-/// reference to it.
+/// Hoists inline `$$css: true` objects out of a `stylex.props(...)` argument into module `const`s.
 struct CompiledStyleObjectHoister<'a> {
   state: &'a mut StateManager,
   hoist_expression: fn(Expr, &mut StateManager) -> Ident,
@@ -330,8 +282,7 @@ impl VisitMut for CompiledStyleObjectHoister<'_> {
   }
 }
 
-/// Whether an object literal carries a `$$css: true` property, marking it as a
-/// compiled StyleX style object.
+/// Whether an object literal carries `$$css: true`.
 fn object_has_css_marker(object: &ObjectLit) -> bool {
   let mut compiled = false;
   for property in &object.props {
@@ -359,8 +310,7 @@ fn object_has_css_marker(object: &ObjectLit) -> bool {
       property.value.as_ref(),
       Expr::Lit(Lit::Str(_) | Lit::Null(_))
     ) {
-      // A compiled object containing a local reference or expression belongs
-      // to that scope and must never be moved to the module as a static hoist.
+      // References local scope, so it can't be hoisted.
       return false;
     }
   }

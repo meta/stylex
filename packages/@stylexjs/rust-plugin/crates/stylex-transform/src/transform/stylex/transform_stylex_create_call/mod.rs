@@ -80,28 +80,19 @@ use stylex_types::structures::injectable_style::InjectableStyle;
 use stylex_types::traits::WhenMarkerValue;
 use stylex_utils::hash::stable_hash_unspanned;
 
-/// Resolves the value that occupies the second slot of a `when` call: the
-/// custom marker when one was passed, and the StyleX options otherwise.
-///
-/// A marker that matches none of the shapes `when` understands is left to the
-/// fallback rather than rejected, so an unfamiliar marker never fails the
-/// build — but since the fallback silently produces CSS that no marker class
-/// can match, it is worth a warning.
+/// Resolves the second slot of a `when` call: the custom marker if passed, else the options.
+/// Unrecognised markers fall back to the options with a warning.
 fn resolve_when_marker<'a>(
   when_fn_name: &str,
   marker: Option<&'a EvaluateResultValue>,
   state: &'a StateManager,
 ) -> &'a dyn WhenMarkerValue {
-  // A marker that is absent and one that evaluates to null or undefined are
-  // the same case: both hand the slot to the options.
+  // An absent marker and a nullish one both hand the slot to the options.
   let Some(marker) = marker.filter(|marker| !evaluate_result_is_nullish(marker)) else {
     return &state.options;
   };
 
-  // NOTE: every test here is a borrow or a discriminant check, so deciding
-  // whether to warn costs nothing. Asking `as_proxy_string` instead would
-  // hash the marker's base id and throw the result away, leaving
-  // `from_proxy` to compute the very same string again.
+  // Cheap checks only; `as_proxy_string` would hash the base id and discard it.
   let is_resolvable =
     marker.as_str_value().is_some() || marker.first_css_key().is_some() || marker.is_proxy();
 
@@ -116,13 +107,7 @@ fn resolve_when_marker<'a>(
   marker
 }
 
-/// Registers one `stylex.when.*` entry.
-///
-/// The five functions differ only in the name they are exposed under and the
-/// `stylex-css` function they delegate to; the surrounding work — read the
-/// selector out of the evaluated first argument, resolve the marker from the
-/// second, and attribute either failure to the right function — is identical,
-/// so it lives here once instead of five times.
+/// Registers one `stylex.when.*` entry, delegating to the named `stylex-css` function.
 macro_rules! insert_when_fn {
   ($map:expr, $js_name:literal, $when_fn:path) => {
     $map.insert(
@@ -148,13 +133,7 @@ macro_rules! insert_when_fn {
   };
 }
 
-/// Lazily-initialized Arc-wrapped map of stylex.when helper functions.
-///
-/// Thread-safety: Arc ensures safe sharing across threads; Lazy guarantees
-/// one-time initialization. Lifecycle: Initialized on first access, immutable
-/// thereafter. Contains pure, stateless transformation functions (ancestor,
-/// descendant, etc.) that convert expressions to CSS selectors for relational
-/// styling.
+/// Lazily initialised, immutable map of the pure `stylex.when` helper functions.
 static STYLEX_WHEN_MAP: LazyLock<Arc<IndexMap<String, StylexWhenFn>>> = LazyLock::new(|| {
   let mut map: IndexMap<String, StylexWhenFn> = IndexMap::default();
 
@@ -171,8 +150,7 @@ impl<C> StyleXTransform<C>
 where
   C: Comments,
 {
-  /// `call_key` answers the call's `stable_hash_unspanned_call`; the caller
-  /// shares the one it computed for its own lookups.
+  /// `call_key` is the call's `stable_hash_unspanned_call`, shared by the caller.
   pub(crate) fn transform_stylex_create(
     &mut self,
     call: &CallExpr,
@@ -186,14 +164,10 @@ where
     let result = if is_create_call {
       validate_stylex_create(call, &mut self.state);
 
-      // Where the call was written, read from the positions the discovery pass
-      // recorded. A bare declarator, a pattern, a top-level array and an object
-      // literal are one question here, because the position of the call answers
-      // all of them.
+      // Read from the positions recorded by the discovery pass.
       let is_program_level = self.state.is_program_level_call(call);
 
-      // The only producer that rewrites its argument, so the only one that
-      // needs a copy of it.
+      // The only producer that rewrites its argument, so the only one that copies it.
       let mut first_arg = argument_at(call, 0, STYLEX_CREATE).clone();
 
       let mut resolved_namespaces: IndexMap<String, Box<FlatCompiledStyles>> = IndexMap::new();
@@ -202,12 +176,8 @@ where
       let evaluated_arg =
         evaluate_stylex_create_arg(&mut first_arg, &mut self.state, &function_map);
 
-      // The fold's two failures are read once. A refusal is the reachable one, and
-      // it reads the sentence and the position it always did. A confident answer
-      // with no value is the other: the evaluator's memo is its only known
-      // producer, and no source through this producer reaches it, so it reads this
-      // sentence rather than one of its own. `folded_style_object_lit` reads the
-      // two the same way for the producers that share it.
+      // A refusal keeps its own message and position; a confident fold with no value (only the
+      // evaluator's memo produces one, unreachable here) uses this message.
       let Some(value) = evaluated_arg.value.filter(|_| evaluated_arg.confident) else {
         stylex_panic!(
           "{}",
@@ -266,12 +236,8 @@ where
 
       injected_styles.extend(injected_inherit_styles);
 
-      // `register_styles` rewrites the style variable a call initialises to
-      // what the call compiled to only when the call has rules to register, and
-      // it rewrites the first one recorded under the call. So the variable is
-      // recorded already compiled only where it would have been that first one
-      // and been rewritten; otherwise it keeps the call and is recorded as
-      // before.
+      // `register_styles` rewrites only the first variable recorded under a call with rules, so
+      // record it pre-compiled exactly in that case.
       let registers_rules = !injected_styles.is_empty()
         && self
           .state
@@ -298,14 +264,7 @@ where
         compiled_styles = convert_to_test_styles(compiled_styles, &var_name, &self.state);
       }
 
-      // Both come from `create_call_var_name_keyed`, which reads the name off
-      // the declarator: a name is only ever answered together with the
-      // declarator it was read from, so asking for the pair asks one question.
-      //
-      // Where the call registers rules, the declarator is recorded as a style
-      // variable once the call has compiled, holding what it compiled to -- the
-      // initializer `register_styles` used to rewrite it to. Nothing between
-      // here and there reads the style variables.
+      // Where the call registers rules, record the declarator once compiled, holding its output.
       let mut style_var = None;
       if is_program_level
         && let Some(var_name) = var_name.as_ref()
@@ -318,13 +277,8 @@ where
           .style_map
           .insert(var_name.clone(), Rc::new(styles_to_remember));
 
-        // Remember which namespaces are dynamic style functions so an uncalled
-        // member access (`styles.opacity`) bails out to runtime in
+        // Record dynamic namespaces so an uncalled `styles.opacity` bails to runtime in
         // `parse_nullable_style`.
-        //
-        // The argument reader answers a map of dynamic functions only where it
-        // holds one, so a list that is there is never empty and needs no check
-        // of its own.
         if let Some(fns) = evaluated_arg.fns.as_ref() {
           let dynamic_namespaces: FxHashSet<String> = fns.keys().cloned().collect();
 
@@ -343,9 +297,7 @@ where
         }
       }
 
-      // The rewrite of the dynamic entries reads the namespaces as the named
-      // list they were written as, and it writes the object literal itself, so
-      // it runs before the hoist.
+      // Must run before the hoist: it reads the named namespace list and writes the object literal.
       let styles_ast = apply_dynamic_style_functions(
         &mut self.state,
         compiled_namespaces(&compiled_styles),
@@ -354,9 +306,8 @@ where
         &injected_styles,
       );
 
-      // A call that is not a module-level statement is hoisted to one and the
-      // call site becomes a reference. The hash of the object goes on, so the
-      // runtime injection calls still find the declaration they belong to.
+      // Hoist non-module-level calls; keep the object hash so runtime injection finds the
+      // declaration.
       let (result_ast, fallback_ast_hash) =
         if is_program_level || !hoist_safety::can_hoist_to_module(&styles_ast, &self.state) {
           (styles_ast, None)

@@ -113,9 +113,7 @@ mod transform_value_content_property_tests {
   #[test]
   fn preserves_css_escape_sequences_when_adding_quotes() {
     let strings = vec![
-      // Inside a CSS string a backslash starts an escape sequence. `\2014` is
-      // the escape for an em dash and `\201C` for a left double quotation
-      // mark, so escaping the backslash would print the digits instead.
+      // `\2014` and `\201C` are CSS escapes; escaping the backslash would print the digits.
       ("\\2014", "\"\\2014\""),
       ("\\201C hello \\201D", "\"\\201C hello \\201D\""),
       ("back\\slash", "\"back\\slash\""),
@@ -123,8 +121,7 @@ mod transform_value_content_property_tests {
       ("C:\\\\Users", "\"C:\\\\Users\""),
       // A double quote the author already escaped is escaped once, not twice.
       ("He said \\\"hello\\\"", "\"He said \\\"hello\\\"\""),
-      // A trailing backslash would escape the closing quote, so it is doubled
-      // into the escape for a literal backslash.
+      // A trailing backslash would escape the closing quote, so it is doubled.
       ("50% off \\", "\"50% off \\\\\""),
       // A CSS string cannot hold a line break, so it is written as `\A`.
       ("line one\nline two", "\"line one\\A line two\""),
@@ -155,22 +152,16 @@ mod transform_value_content_property_tests {
     }
   }
 
-  /// `hyphenate-character` takes the same component list as `content`, and the
-  /// property arrives under both its CSS name and its camel-case name.
+  /// Shares `content`'s component list; arrives under its CSS and camel-case names.
   #[test]
   fn quotes_a_hyphenate_character_value_under_either_key() {
     let cases = vec![
-      // A plain character is text, so it is quoted.
       ("\u{2010}", "\"\u{2010}\""),
       ("-", "\"-\""),
-      // A value that is already a string is left as it stands.
       ("\"-\"", "\"-\""),
-      // The two properties share one keyword list, and `auto` is not on it.
-      // The initial value of `hyphenate-character` is therefore quoted, which
-      // is what the reference compiler does with it too.
+      // `auto` is not on the shared keyword list, so it is quoted, as the reference compiler does.
       ("auto", "\"auto\""),
-      // An apostrophe does not end a double-quoted string, so it is copied as
-      // it stands. Only a double quote is escaped.
+      // Only a double quote is escaped.
       ("it's", "\"it's\""),
     ];
 
@@ -188,17 +179,13 @@ mod transform_value_content_property_tests {
   #[test]
   fn preserve_units_in_zero_values_css_variables() {
     let variables = vec![
-      // CSS variables should preserve units
       ("--test", "0px", "0px"),
       ("--test", "0vdh", "0vdh"),
-      // Regular properties still normalize
       ("transform", "0rad", "0deg"),
       ("animation-duration", "0ms", "0s"),
       // grid-template-rows preserves fr units
       ("grid-template-rows", "0fr", "0fr"),
-      // Percentages are always preserved
       ("width", "0%", "0%"),
-      // Regular properties normalize px to unitless
       ("margin", "0px", "0"),
     ];
 
@@ -214,13 +201,8 @@ mod transform_value_content_property_tests {
     }
   }
 
-  /// The corpus values whose only rewrite is this quoting, which reached the
-  /// pass through a whole-transform case alone -- a class name and a rule, from
-  /// which the quoting can only be inferred.
-  ///
-  /// Every expectation is what `@stylexjs/babel-plugin` emits for the same
-  /// declaration, read from a report the parity harness in
-  /// `crates/stylex-rs-compiler/parity` wrote.
+  /// Expectations are what `@stylexjs/babel-plugin` emits, from a report by the parity harness
+  /// in `crates/stylex-rs-compiler/parity`.
   #[test]
   fn quotes_the_corpus_content_values() {
     let cases = vec![
@@ -228,12 +210,10 @@ mod transform_value_content_property_tests {
       ("abc", "\"abc\""),
       ("next", "\"next\""),
       ("x", "\"x\""),
-      // Non-ASCII text is quoted as it stands, which is what the class-name
-      // hash is then taken over.
+      // The class-name hash is taken over the quoted text as it stands.
       ("\u{2022}", "\"\u{2022}\""),
       ("\u{1F389}", "\"\u{1F389}\""),
-      // An unclosed string is not a CSS string, so the value is quoted whole
-      // and its lone quote character is escaped.
+      // An unclosed string is quoted whole with its lone quote escaped.
       ("\"unterminated", "\"\\\"unterminated\""),
     ];
 

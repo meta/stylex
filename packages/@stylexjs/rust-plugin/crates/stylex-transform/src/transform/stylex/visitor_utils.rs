@@ -33,16 +33,8 @@ pub(crate) fn is_call_to(
   is_target_call((name, state.get_stylex_api_import(kind)), call, state)
 }
 
-/// Register `entry` under `key` on the identifier map a stylex import's name
-/// carries, creating the map when that name has none yet.
-///
-/// Every registration on a namespace import needs the same create-then-insert,
-/// and each of the four wrote it by hand -- one of them as an
-/// `and_modify`/`or_insert_with` pair that spelled the insert twice.
-///
-/// A name already bound to something that is not a map keeps it, and the entry
-/// is dropped. That is what all four did, and it is what an import spelling an
-/// API name over the namespace has always meant here.
+/// Register `entry` under `key` on the identifier map a stylex import's name carries,
+/// creating the map if needed. A name already bound to a non-map keeps it; the entry is dropped.
 pub(crate) fn insert_stylex_identifier_entry(
   identifiers: &mut FunctionMapIdentifiers,
   name: &ImportSources,
@@ -58,38 +50,10 @@ pub(crate) fn insert_stylex_identifier_entry(
   }
 }
 
-/// Registers `env` as an entry of the namespace's own fold, which is the map
-/// that answers what properties the namespace *has* — its own keys, a spread
-/// of it, and the member read that walks it.
-///
-/// Beside [`insert_stylex_identifier_entry`] rather than on `StateManager`,
-/// because it reads one field of the state and writes the caller's map: living on
-/// the state meant `shared::structures` importing out of `transform::stylex` to
-/// reach the helper, which is the dependency the other way round from every
-/// other pair in this crate.
-///
-/// Apart from `StateManager::apply_stylex_env`, and called only where the
-/// namespace name is a value of the map already: `create`, `defineVars` and
-/// `createTheme` each bind the name to a fold, and an `env` the fold does not
-/// hold is an object one key short of what the namespace has.
-///
-/// The calls that leave the name unregistered — `keyframes`, `positionTry`,
-/// `viewTransitionClass`, `defineConsts` — are left alone, so a bare `stylex`
-/// written where a static value belongs refuses rather than materializing into
-/// an object and dropping the declaration silently. Adding the entry there too
-/// flipped four of those refusals into silent drops.
-///
-/// What those calls lose by that is nothing: `stylex.env.<name>` folds in all
-/// of them, because the evaluator reads the two-level member off the
-/// namespace's member entries — which `apply_stylex_env` registers for every
-/// map — rather than off the namespace as a value.
-///
-/// Registered whether or not the option is set. `env` is a key of the StyleX
-/// namespace however the compiler is configured, so an unset option is
-/// reported by the member step as the option being unset; an absent entry
-/// would be reported as a property nobody can find and send an author looking
-/// in their source. It is also what keeps the namespace's key list the same
-/// list on every configuration.
+/// Registers `env` in the namespace's own fold (its keys, spreads and member reads), always,
+/// so an unset option is reported as unset rather than as a missing property.
+/// Call only where the namespace is already bound in the map (`create`, `defineVars`,
+/// `createTheme`); elsewhere a bare `stylex` must keep refusing rather than fold silently.
 pub(crate) fn register_env_in_namespace_fold(state: &StateManager, function_map: &mut FunctionMap) {
   for name in state.stylex_imports() {
     insert_stylex_identifier_entry(
@@ -101,33 +65,9 @@ pub(crate) fn register_env_in_namespace_fold(state: &StateManager, function_map:
   }
 }
 
-/// The function map a rule call -- `keyframes`, `positionTry` or
-/// `viewTransitionClass` -- evaluates its argument with, built on the first
-/// call of the module that asks for `helpers` and kept for the rest.
-///
-/// One shape written three times before this: each of the three call handlers
-/// built the same map for itself, on every call, even in a module that never
-/// writes one of the helpers.
-///
-/// The reference builds the map again for every call, so keeping one for the
-/// file rests on two conditions. Both hold, and both are named here because
-/// neither is obvious from this function:
-///
-/// - **Every import is recorded before the first call folds.** The map names
-///   the helpers under each local name an import gave them, and `Discover`
-///   records every import of the module before `TransformProducers` folds
-///   anything, so no name arrives after the map is built. The suite
-///   `transform_stylex_keyframes_test::shared_function_map` measures that, with
-///   calls standing between the import and the call that reads it.
-/// - **`env` is one object for the file.** `build_rule_call_eval_config` folds
-///   `apply_stylex_env` into the map, and `CoreStyleXOptions::env` is read-only
-///   once the options are built, so a second call cannot be handed a map built
-///   from a different env. `the_env_survives_into_every_map_the_module_asks_-
-///   for` measures that every map the module asks for still carries it.
-///
-/// A future `env` that can vary inside one file breaks the second condition,
-/// and the answer would be to key the cache on it rather than on `helpers`
-/// alone.
+/// The function map a rule call (`keyframes`, `positionTry`, `viewTransitionClass`) folds its
+/// argument with, built once per module for `helpers`. Upstream rebuilds it per call; caching
+/// is sound because `Discover` records all imports first and `env` is fixed per file.
 pub(crate) fn rule_call_eval_config(
   state: &mut StateManager,
   helpers: RuleCallHelpers,
@@ -172,17 +112,8 @@ fn build_rule_call_eval_config(state: &StateManager, helpers: RuleCallHelpers) -
   function_map
 }
 
-/// Registers one API entry under every local name an import gave it, and as
-/// `member_name` on every StyleX namespace the module imports.
-///
-/// Every function map built in this crate registers most of what it holds this
-/// way, and each builder wrote the two loops out again. The entry is a
-/// [`FunctionConfigType`] and not a bare [`FunctionConfig`] because the default
-/// marker is a compiled object rather than a function, and it is registered the
-/// same way.
-///
-/// The namespace name itself stays unregistered here. Which maps bind it, and
-/// why the rest do not, is what [`register_env_in_namespace_fold`] says.
+/// Registers one API entry under every local import name and as `member_name` on every
+/// imported StyleX namespace. See [`register_env_in_namespace_fold`] for the namespace itself.
 pub(crate) fn register_stylex_helper(
   state: &StateManager,
   function_map: &mut FunctionMap,
@@ -201,13 +132,7 @@ pub(crate) fn register_stylex_helper(
   }
 }
 
-/// Registers one API entry under every local name an import gave it, and
-/// nowhere else.
-///
-/// Apart from [`register_stylex_helper`] because not every entry a named import
-/// carries is also read off the namespace. `createTheme` reads `positionTry` and
-/// `types` by name alone, and registering a member for either would answer a
-/// member read the compiler refuses today.
+/// Registers one API entry under every local import name only, not as a namespace member.
 pub(crate) fn register_stylex_identifier(
   state: &StateManager,
   function_map: &mut FunctionMap,
@@ -251,9 +176,8 @@ pub(crate) fn build_eval_config(state: &mut StateManager) -> FunctionMap {
     &FunctionConfigType::Regular(types_fn.clone()),
   );
 
-  // `types` is the one helper the namespace carries in its own fold rather than
-  // as a member alone, because a `create` call reads `stylex.types` off a
-  // namespace it also spreads.
+  // `types` is in the namespace fold because `create` reads `stylex.types` off a spread
+  // namespace.
   for name in state.stylex_imports() {
     insert_stylex_identifier_entry(
       &mut function_map.identifiers,
@@ -266,10 +190,7 @@ pub(crate) fn build_eval_config(state: &mut StateManager) -> FunctionMap {
   apply_unstable_conditional(state, &mut function_map);
   state.apply_stylex_env(&mut function_map);
 
-  // The namespace is a value in this map already -- the fold above binds the
-  // name -- so `env` belongs in the fold beside `types`. Without it a bare
-  // `stylex` here stands for an object one key short of what it has, and
-  // `Object.keys(stylex)` says so.
+  // The fold binds the namespace, so `env` belongs in it (see `Object.keys(stylex)`).
   register_env_in_namespace_fold(state, &mut function_map);
 
   function_map

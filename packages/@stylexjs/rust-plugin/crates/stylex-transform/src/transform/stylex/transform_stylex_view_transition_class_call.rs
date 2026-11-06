@@ -62,7 +62,7 @@ where
         &mut self.state,
       );
 
-      // The original plugin refuses the folded value at the argument.
+      // Matches Babel: the folded value is refused at the argument.
       let argument = first_arg.span();
       reported_at(argument, || {
         assert_valid_view_transition_class(&plain_object, &mut self.state)

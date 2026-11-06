@@ -75,19 +75,13 @@ where
           }
         }
 
-        // The style variable this declarator is, and the top-level expression
-        // it was declared as -- both found by the name they are bound to rather
-        // than by a walk of every style variable and every recorded expression
-        // in the module, which ran once per declarator the finalize cycle
-        // visits.
+        // Look up the style variable and its top-level expression by binding name.
         if let Some((binding, init)) = self.state.matching_style_var(var_declarator) {
           let declared_as_a_statement = matches!(
             self.state.find_top_level_expr_named(&binding.sym, init),
             Some(TopLevelExpression(TopLevelExpressionKind::Stmt, _, _))
           );
 
-          // Read here, because the object below needs the declarator to
-          // itself.
           let var_id = binding.id.to_id();
 
           if declared_as_a_statement
@@ -96,8 +90,7 @@ where
               .as_mut()
               .and_then(|var_decl| var_decl.as_mut_object())
           {
-            // A set, because the sweep below asks it once per prop of the
-            // object.
+            // A set: the sweep below queries it once per prop.
             let namespaces_to_keep: FxHashSet<Atom> = match vars_to_keep.get(&var_id) {
               Some(NonNullProps::Vec(vec)) => vec.iter().cloned().collect(),
               _ => FxHashSet::default(),
@@ -136,13 +129,9 @@ where
       },
       Pat::Ident(_) => {},
       Pat::Object(object) => {
-        // Mirror the ES `import { foo } from 'stylex'` named-import path: when an
-        // `import_sources: [{ from, as }]` alias is configured, a destructured
-        // require whose imported name matches the alias should still register the
-        // local binding as the StyleX namespace handle. Other destructured props
-        // are skipped in that mode (the alias narrows what counts as a StyleX
-        // import). Without an alias, fall back to the original behaviour of
-        // tracking every prop that maps to a known `ImportKind`.
+        // Mirror ES named imports: with an `import_sources: [{ from, as }]` alias, only a
+        // destructured prop matching the alias registers as the namespace; otherwise track
+        // every prop that maps to a known `ImportKind`.
         self.state.insert_import_path(source_path);
 
         for prop in &object.props {
@@ -204,22 +193,15 @@ where
     }
   }
 
-  /// The props of a compiled style object, swept down to the namespaces the
-  /// module still reads.
-  ///
-  /// The object was written by `convert_namespaces_to_ast` a few phases back, and
-  /// that step writes every prop as a key-value under a name -- asserted where
-  /// the object is built, by `writes_every_prop_as_a_key_value_under_a_name`.
-  /// A prop that is not a key-value under a name leaves the whole object as it
-  /// is, because a sweep cannot tell what such an entry carries.
+  /// The props of a compiled style object, swept down to the namespaces the module still reads.
+  /// Leaves the object unchanged if any prop is not a named key-value.
   fn retain_object_props(
     &self,
     object: &mut ObjectLit,
     namespaces_to_keep: &FxHashSet<Atom>,
     var_id: &DeclId,
   ) -> Vec<PropOrSpread> {
-    // The namespace each prop names, read once. A `None` here answers for the
-    // whole object, so the sweep below runs over props it has already read.
+    // A `None` namespace leaves the whole object unswept.
     let mut namespace_names = Vec::with_capacity(object.props.len());
 
     for object_prop in object.props.iter() {
@@ -233,16 +215,12 @@ where
       }
     }
 
-    // What each namespace of this declaration keeps of its null declarations,
-    // gathered in one pass. The recorded list holds every entry in the module,
-    // so reading it again for each namespace made the sweep cost the module
-    // twice over. `None` against a namespace means one entry keeps it whole,
-    // and then nothing is swept out of it.
+    // What each namespace keeps of its null declarations, gathered in one pass; `None` keeps the
+    // namespace whole.
     let mut nulls_by_namespace: FxHashMap<&Atom, Option<Vec<Atom>>> = FxHashMap::default();
 
     for StyleVarsToKeep(var, recorded_name, prop) in self.state.style_vars_to_keep.iter() {
-      // A name recorded as `True` says the whole style variable is read, not
-      // one namespace of it, so this sweep has no entry to make for it.
+      // `True` means the whole style variable is read, not one namespace.
       let NonNullProp::Atom(recorded_name) = recorded_name else {
         continue;
       };
@@ -256,8 +234,7 @@ where
         .or_insert_with(|| Some(Vec::new()));
 
       match prop {
-        // An entry that keeps the namespace whole stays that way: the names
-        // gathered before it are unread, and a list after it adds nothing.
+        // An entry keeping the namespace whole overrides any names lists.
         NonNullProps::Vec(vec) => {
           if let Some(nulls) = nulls {
             nulls.extend(vec.iter().cloned());
@@ -278,8 +255,7 @@ where
         // One entry keeps this namespace whole, so nothing is swept out of it.
         Some(None) => None,
         Some(Some(nulls)) => Some(nulls),
-        // Nothing was recorded against the namespace, so every null
-        // declaration in it goes.
+        // Nothing recorded for the namespace: drop every null declaration.
         None => Some(&[]),
       };
 
@@ -299,17 +275,8 @@ where
   }
 }
 
-/// The module a `require` call names, or nothing where the call is not one.
-///
-/// The callee and the argument are both read through their parentheses. A
-/// parenthesis is not a different call and not a different string, so
-/// `(require)('@stylexjs/stylex')` and `require(('@stylexjs/stylex'))` name the
-/// module the bare spelling names. Read bare, the import is never registered
-/// and the whole module reaches the runtime unstyled, with no error for the
-/// author to read.
-///
-/// One reader for both the StyleX source and the atoms source, so the two
-/// cannot come to answer a spelling differently.
+/// The module a `require` call names, ignoring parentheses around the callee and argument.
+/// Shared by the StyleX and atoms sources so both read spellings the same way.
 fn required_module(
   call: &CallExpr,
   state: &stylex_state::state_manager::StateManager,
@@ -377,10 +344,7 @@ fn local_binding_from_pat(pat: &Pat) -> Option<(swc_core::atoms::Atom, swc_core:
 
 fn retain_style_props(style_object: &mut ObjectLit, nulls_to_keep: &[Atom]) {
   style_object.props.retain(|prop| match prop {
-    // Only a declaration written as a name and a value can hold `null`. A
-    // shorthand carries its own name as its value, so it is read as it stands
-    // rather than expanded first: expanding one can never answer this
-    // question, and the copy it needs was paid for every prop of every style.
+    // Only a key-value can hold `null`; shorthands are matched without expanding them.
     PropOrSpread::Prop(prop) => match &**prop {
       Prop::KeyValue(key_value)
         if key_value
@@ -388,10 +352,8 @@ fn retain_style_props(style_object: &mut ObjectLit, nulls_to_keep: &[Atom]) {
           .as_lit()
           .is_some_and(|value| matches!(value, Lit::Null(_))) =>
       {
-        // Babel's Program.exit sweep reads Identifier, StringLiteral and numeric
-        // keys before pruning a null reset (2d42d72 src/index.js:267-289).
-        // Debug keys are quoted strings; their representation is not a reason
-        // to preserve an otherwise unused cancellation.
+        // Matches Babel's Program.exit sweep: Identifier, StringLiteral and numeric keys are
+        // read before pruning a null reset (2d42d72 src/index.js:267-289).
         match &key_value.key {
           PropName::Ident(_) | PropName::Str(_) | PropName::Num(_) => {
             namespace_name_from_prop_key(&key_value.key)

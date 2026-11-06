@@ -1,5 +1,4 @@
-//! The suites registered from `transform/mod.rs`, and the prelude the suites
-//! registered from the files beside it share.
+//! Suites registered from `transform/mod.rs`, and the prelude their sibling suites share.
 
 pub(crate) mod prelude;
 mod transform_construction_test;

@@ -527,13 +527,8 @@ mod stylex_create_theme {
     )
   }
 
-  /// `0.4 + 2 / 10` is `0.6000000000000001`, not `0.6`. Rounding it to `0.6`
-  /// would tie the rule with a var group nested five at-rules deep, whose
-  /// priority is exactly `0.6`, and a tie is resolved by content rather than by
-  /// priority — which can order the override before the rule it overrides.
-  ///
-  /// Compared bitwise because `0.6000000000000001` and `0.6` are adjacent
-  /// doubles: an `assert_eq!` on a rounded value would still read as passing.
+  /// `0.4 + 2 / 10` is `0.6000000000000001`; rounding to `0.6` would tie a five-deep var
+  /// group and fall back to the by-content tie-break. Compared bitwise: the doubles are adjacent.
   #[test]
   fn keeps_the_single_at_rule_priority_unrounded() {
     let export_id = "TestTheme.stylex.js//buttonTheme";
@@ -559,8 +554,7 @@ mod stylex_create_theme {
       &mut IndexMap::default(),
     );
 
-    // Each rule is identified by what it emits rather than by its key: the
-    // at-rule rule is the one wrapped in the at-rule, the default rule is not.
+    // Identify each rule by whether it is wrapped in the at-rule, not by key.
     let priority_of = |wrapped: bool| {
       css_output.values().find_map(|style| match &**style {
         InjectableStyleKind::Regular(style) if style.ltr.starts_with('@') == wrapped => {
@@ -587,14 +581,8 @@ mod stylex_create_theme {
     }
   }
 
-  /// The drift above is what holds this one pair apart: a one-at-rule override
-  /// against a var group nested five deep, whose priority is exactly `0.6`. Were
-  /// the two equal, the stylesheet sort would fall through to its by-content
-  /// tie-break and could place the override before the rule it overrides.
-  ///
-  /// That pair is the exception, not the rule. Two at-rules against a group six
-  /// deep both come to exactly `0.7` and do tie — asserted here so the case above
-  /// is not read as a guarantee that the two priority scales never meet.
+  /// One at-rule vs a five-deep var group differ only by float drift; two at-rules vs six deep
+  /// both reach exactly `0.7` and do tie, so the scales are not guaranteed apart.
   #[test]
   fn override_and_var_group_priorities_differ_only_where_the_sum_is_inexact() {
     let nested = |depth: usize| {
@@ -620,9 +608,7 @@ mod stylex_create_theme {
     );
   }
 
-  /// The @-rules a theme writes are hashed and emitted in one order: `default`
-  /// first, and the rest by name. The order has to hold whatever order the
-  /// author wrote them in, because the class name is hashed from it.
+  /// The class name is hashed from this order, so author order must not matter.
   #[test]
   fn writes_the_default_rule_first_and_sorts_the_rest_by_name() {
     use crate::tests::support::expr;
@@ -661,9 +647,7 @@ mod stylex_create_theme {
     );
   }
 
-  /// A theme can override the group a variable-defining module exports, rather
-  /// than the object a `defineVars` call in the same module printed. The group
-  /// answers a variable name for any key it is asked for.
+  /// The group answers a variable name for any key it is asked for.
   #[test]
   fn overrides_the_group_a_variable_defining_module_exports() {
     use stylex_state::theme_ref::ThemeRef;

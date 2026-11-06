@@ -1,12 +1,5 @@
-//! The reader that finds the same-group names a function value depends on.
-//!
-//! The member expressions are built rather than compiled, because the reader
-//! answers for every shape a member can be written in and only some of them
-//! reach a `defineVars` group from a source file: a private name is legal
-//! inside a class body alone, and a `defineVars` call is bound to a top-level
-//! export. Building them is also what lets one test drive the whole reader --
-//! llvm-cov scores a function on its best-covered instantiation, and the
-//! compiled suite reaches it in another one.
+//! The reader that finds the same-group names a function value depends on. Members are built
+//! by hand: some shapes (private names) cannot reach a `defineVars` group from source.
 
 use swc_core::{
   atoms::Atom,
@@ -26,7 +19,6 @@ fn ident(name: &str) -> Ident {
   Ident::new_no_ctxt(Atom::new(name), DUMMY_SP)
 }
 
-/// `<object>.<prop>`, as an expression.
 fn member(object: Expr, prop: MemberProp) -> Expr {
   Expr::Member(MemberExpr {
     span: DUMMY_SP,
@@ -42,7 +34,7 @@ fn computed(expr: Expr) -> MemberProp {
   })
 }
 
-/// The names the reader finds in `expr`, sorted so a case can name them.
+/// The names the reader finds in `expr`, sorted.
 fn dependencies_of(expr: &Expr) -> Vec<String> {
   let mut collector = DependencyVisitor {
     export_name: "vars",
@@ -56,8 +48,6 @@ fn dependencies_of(expr: &Expr) -> Vec<String> {
   names
 }
 
-/// A name written after a dot, and one written as a string in brackets, are the
-/// same dependency.
 #[test]
 fn reads_a_dotted_name_and_a_string_in_brackets() {
   let dotted = member(
@@ -77,7 +67,6 @@ fn reads_a_dotted_name_and_a_string_in_brackets() {
   assert_eq!(dependencies_of(&bracketed), vec!["background".to_string()]);
 }
 
-/// A parenthesis is not a different group, so the name behind one is read.
 #[test]
 fn reads_the_group_through_a_parenthesis() {
   let expr = member(
@@ -91,8 +80,7 @@ fn reads_the_group_through_a_parenthesis() {
   assert_eq!(dependencies_of(&expr), vec!["text".to_string()]);
 }
 
-/// An index that is not a string names no variable of the group. A group is a
-/// map of names, so `vars[0]` reads nothing this check can follow.
+/// A group is a map of names, so `vars[0]` reads nothing to follow.
 #[test]
 fn reads_no_name_from_an_index_that_is_not_text() {
   let expr = member(
@@ -107,8 +95,6 @@ fn reads_no_name_from_an_index_that_is_not_text() {
   assert!(dependencies_of(&expr).is_empty());
 }
 
-/// A private name names nothing the group can hold, and it can only be written
-/// inside a class body at all.
 #[test]
 fn reads_no_name_from_a_private_member() {
   let expr = member(
@@ -122,8 +108,7 @@ fn reads_no_name_from_a_private_member() {
   assert!(dependencies_of(&expr).is_empty());
 }
 
-/// A member of anything but the group under compilation is none of this
-/// reader's business, whether the receiver is another name or no name at all.
+/// Whether the receiver is another name or no name at all.
 #[test]
 fn reads_no_name_from_another_receiver() {
   let other_group = member(
@@ -142,8 +127,6 @@ fn reads_no_name_from_another_receiver() {
   assert!(dependencies_of(&unnamed_receiver).is_empty());
 }
 
-/// The reader walks the whole sub-tree, so a member nested under another one is
-/// found as well.
 #[test]
 fn reads_a_name_nested_under_another_member() {
   let expr = member(

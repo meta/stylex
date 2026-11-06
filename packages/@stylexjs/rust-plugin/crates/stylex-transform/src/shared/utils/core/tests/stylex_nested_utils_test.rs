@@ -623,17 +623,14 @@ fn differs_from_flatten_nested_vars_config_for_objects_with_default_key() {
       ("@media (prefers-color-scheme: dark)", s("darkblue")),
     ]),
   )]);
-  // Vars: { default + @-rule keys only } is detected as conditional via
-  // expr-based parse; however, when constructed directly as Namespace, vars
-  // flattener will descend (no is_conditional_object detection at the value
-  // level). Build via expr parser to exercise the heuristic instead.
+  // Built directly as a namespace, the vars flattener descends: there is no
+  // is_conditional_object detection at the value level.
   let vars_result_namespace_path = flatten_nested_vars_config(&with_at_keys);
   assert_eq!(
     lit_string(&vars_result_namespace_path["color.default"]),
     "blue"
   );
 
-  // Consts: same input flattens as namespace
   let consts_input = IndexMap::from([(
     "color".to_string(),
     consts_namespace(vec![
@@ -829,8 +826,7 @@ fn round_trips_with_conditional_values_preserved() {
   let original = IndexMap::from([("button".to_string(), namespace(vec![("color", cond)]))]);
   let flat = flatten_nested_vars_config(&original);
   assert_eq!(flat.len(), 1);
-  // The flatten preserves the conditional object as a single AST leaf at
-  // "button.color".
+  // The conditional object stays a single AST leaf.
   assert!(flat.contains_key("button.color"));
 }
 
@@ -940,9 +936,7 @@ fn round_trips_complex_nested_vars_shape() {
   );
 }
 
-/// A key that names a leaf and a key that goes down through it cannot both be
-/// kept. The nested key wins, because the leaf is what the flat spelling of the
-/// same name would have written.
+/// The nested key wins: the leaf is what the flat spelling of the same name would write.
 #[test]
 fn a_nested_key_replaces_the_leaf_of_the_same_name() {
   let result = unflatten_object(&flat_styles(vec![
@@ -964,8 +958,6 @@ fn a_nested_key_replaces_the_leaf_of_the_same_name() {
   }
 }
 
-/// The order is the other way around too: a leaf written after the object it
-/// would replace is still the one that gives way.
 #[test]
 fn a_leaf_written_after_a_nested_key_gives_way_to_it() {
   let result = unflatten_object(&flat_styles(vec![
@@ -985,10 +977,7 @@ fn a_leaf_written_after_a_nested_key_gives_way_to_it() {
   ));
 }
 
-/// A value kind the writer has no spelling for means the styles were not
-/// flattened, so the call is refused rather than written as something the
-/// runtime cannot read. A nested value is written by the same writer every
-/// other compiled value goes through, so it refuses with the same words.
+/// Nested values share the writer every compiled value goes through, so the refusal matches.
 #[test]
 #[should_panic(expected = "Encountered an unsupported value type during AST conversion.")]
 fn refuses_a_nested_value_it_cannot_write() {

@@ -1,11 +1,5 @@
-//! The two answers the `sx` runtime binding gives that no fixture can ask for.
-//!
-//! Both are about the state the transform is handed rather than about the
-//! module it walks: a call a build step generated carries no position, and a
-//! caller can configure the transform with no import source at all. The suite
-//! under `tests/` parses every fixture, which gives every node a position, and
-//! builds every transform through the builder, which always seeds the two
-//! default sources -- so neither shape reaches the walk from there.
+//! `sx` runtime-binding answers no fixture reaches: a generated call with no position, and a
+//! transform with no import source (fixtures are parsed and always seed the two defaults).
 
 use swc_core::{
   common::{GLOBALS, Globals},
@@ -18,10 +12,8 @@ use swc_core::{
 
 use crate::transform::tests::prelude::{resolved_module, test_transform};
 
-/// A module whose `sx` prop sits in one function and whose rebinding of the
-/// imported name sits in another. Reading the positions, the prop is not
-/// shadowed and the imported `stylex` is reused; reading no positions, the
-/// rebinding has to be assumed to reach it.
+/// The `sx` prop and a rebinding of `stylex` sit in sibling functions; only positions show
+/// the rebinding does not reach the prop.
 const REBOUND_IN_A_SIBLING_FUNCTION: &str = r#"
   import * as stylex from '@stylexjs/stylex';
 
@@ -35,7 +27,6 @@ const REBOUND_IN_A_SIBLING_FUNCTION: &str = r#"
   }
 "#;
 
-/// The local name of each `import * as <name>` declaration the module holds.
 fn namespace_import_names(module: &Module) -> Vec<String> {
   module
     .body
@@ -52,8 +43,6 @@ fn namespace_import_names(module: &Module) -> Vec<String> {
     .collect()
 }
 
-/// With positions, the imported namespace is reused: the rebinding is in
-/// another function and does not enclose the call.
 #[test]
 fn a_positioned_call_reuses_an_imported_namespace_another_function_rebinds() {
   GLOBALS.set(&Globals::default(), || {
@@ -70,11 +59,8 @@ fn a_positioned_call_reuses_an_imported_namespace_another_function_rebinds() {
   });
 }
 
-/// The same module with every position dropped, which is what a call a build
-/// step generated carries. Without a position the rebinding cannot be placed,
-/// so the imported name is not reused and a uid import is injected instead --
-/// over-injecting rather than emitting `stylex.props(…)` against a binding that
-/// may be the rebound one.
+/// Without a position the rebinding cannot be placed, so it over-injects rather than emit
+/// `stylex.props(…)` against a possibly rebound binding.
 #[test]
 fn a_call_without_a_position_injects_a_uid_import_instead() {
   GLOBALS.set(&Globals::default(), || {
@@ -92,9 +78,7 @@ fn a_call_without_a_position_injects_a_uid_import_instead() {
   });
 }
 
-/// A transform configured with no import source at all still needs a module to
-/// import the runtime from, and names the package. Every builder seeds the two
-/// defaults, so the empty set is written here rather than configured.
+/// Every builder seeds the two defaults, so the empty set is written directly.
 #[test]
 fn an_sx_call_with_no_configured_import_source_names_the_package() {
   GLOBALS.set(&Globals::default(), || {

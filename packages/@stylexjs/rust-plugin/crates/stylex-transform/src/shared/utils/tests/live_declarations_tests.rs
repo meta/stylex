@@ -180,8 +180,7 @@ mod live_declarations {
   }
 }
 
-/// The mark step of the finalize phase, and the JSX spread substitution that
-/// rides with it. The fixtures reach this walk, but no unit test did.
+/// The finalize phase's mark step, and the JSX spread substitution that rides with it.
 #[cfg(test)]
 mod mark_style_vars_to_keep {
   use swc_core::{
@@ -205,7 +204,6 @@ mod mark_style_vars_to_keep {
     }
   }
 
-  /// A call the state can record a spread replacement against.
   fn call(name: &str) -> CallExpr {
     CallExpr {
       span: DUMMY_SP,
@@ -227,7 +225,6 @@ mod mark_style_vars_to_keep {
     })
   }
 
-  /// One JSX element holding `attrs`, as the only statement of a module.
   fn module_with_attrs(attrs: Vec<JSXAttrOrSpread>) -> Module {
     let element = JSXElement {
       span: DUMMY_SP,
@@ -306,8 +303,7 @@ mod mark_style_vars_to_keep {
     assert_eq!(attr_names(&module), vec!["id", "className", "style"]);
   }
 
-  /// A spread the state recorded but never gave attributes to keeps the spread
-  /// the author wrote. Dropping it would lose whatever the call gives back.
+  /// Dropping it would lose whatever the call gives back.
   #[test]
   fn a_recorded_spread_with_no_attributes_keeps_the_spread() {
     let mut state = StateManager::default();

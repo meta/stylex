@@ -31,17 +31,14 @@ where
     &mut self,
     jsx_opening_element: &mut JSXOpeningElement,
   ) {
-    // Only transform during Discover cycle
     if self.state.cycle != TransformationCycle::Discover {
       jsx_opening_element.visit_mut_children_with(self);
       return;
     }
 
-    // The `sx` site span — used to resolve the runtime binding against any
-    // local binding that shadows the imported `stylex` name at this position.
+    // Used to detect local bindings shadowing the imported `stylex` name at this site.
     let element_span = jsx_opening_element.span;
 
-    // Check if sxPropName is enabled
     let sx_prop_name = match self.state.options.sx_prop_name.clone() {
       Some(name) => name,
       None => {
@@ -50,8 +47,7 @@ where
       },
     };
 
-    // Only transform lowercase JSX element names (HTML elements, not React
-    // components)
+    // Only transform lowercase (host) element names, not components.
     let is_lowercase_element = match &jsx_opening_element.name {
       JSXElementName::Ident(ident) => ident
         .sym
@@ -67,9 +63,7 @@ where
       return;
     }
 
-    // The first attribute that names the prop, with the value it carries. The
-    // value is borrowed, so an attribute the compiler goes on to leave alone
-    // costs no copy of the subtree under it.
+    // The first attribute naming the prop; borrowed to avoid copying its subtree.
     let sx_attr = jsx_opening_element
       .attrs
       .iter()
@@ -84,11 +78,8 @@ where
         JSXAttrOrSpread::SpreadElement(_) => None,
       });
 
-    // Only an expression container names styles to compile. An attribute
-    // written as text, or with no value at all, stays where the author wrote
-    // it. So does a prop of a compiled call whose value the compiler cannot
-    // read. The first attribute with the name wins either way, so a second one
-    // is not read.
+    // Only an expression container is compiled; text, valueless or unreadable values are left
+    // as written. Only the first matching attribute is read.
     if let Some((
       idx,
       Some(JSXAttrValue::JSXExprContainer(JSXExprContainer {
@@ -107,21 +98,10 @@ where
     jsx_opening_element.visit_mut_children_with(self);
   }
 
-  /// Transform a compiled JSX/VDOM call that carries an `sx` prop, in place.
-  ///
-  /// Handles:
-  /// - React: `_jsx("div", { sx: expr })` / `_jsxs("div", { sx: expr })`
-  /// - React classic: `React.createElement("div", { sx: expr })`
-  /// - Vue: `_createElementBlock("div", …)` / `_createElementVNode("div", …)`
-  ///
-  /// Rewrites the one prop to `...stylex.props(expr)` and leaves every other
-  /// prop, and every other argument, untouched. Returns whether it matched.
-  ///
-  /// Runs in the `Discover` cycle.
+  /// Rewrites the `sx` prop of a compiled JSX/VDOM call (React `_jsx`/`_jsxs`,
+  /// `React.createElement`, Vue `_createElementBlock`/`_createElementVNode`) to
+  /// `...stylex.props(expr)` in place, during `Discover`. Returns whether it matched.
   pub(crate) fn transform_sx_in_compiled_jsx(&mut self, expr: &mut Expr) -> bool {
-    // Read first, because it is the cheapest way out and it settles the whole
-    // feature. The borrow ends at the search below, well before the runtime
-    // binding is resolved.
     let Some(sx_prop_name) = self.state.options.sx_prop_name.as_deref() else {
       return false;
     };
@@ -136,8 +116,7 @@ where
 
     let span = call.span;
 
-    // The first arg must be a lowercase string literal: a host element. Read
-    // through its parentheses, because they name no other element.
+    // The first arg must be a lowercase string literal (a host element), ignoring parens.
     let Some(Expr::Lit(Lit::Str(element))) = call.args.first().map(|arg| normalize_expr(&arg.expr))
     else {
       return false;
@@ -152,8 +131,6 @@ where
       return false;
     }
 
-    // The props object holds the element's whole subtree, so it is reached by
-    // borrow. A call the scan passes over costs no copy of it.
     let Some(obj_lit) = call
       .args
       .get_mut(1)
@@ -166,10 +143,7 @@ where
       return false;
     };
 
-    // The props object stays borrowed across this call, because it belongs to
-    // the expression the caller owns and not to `self`. The runtime binding is
-    // resolved only now, because resolving it injects an import that a call
-    // with no `sx` prop must not get.
+    // Resolve the binding only now: it injects an import a call without `sx` must not get.
     let stylex_local_name = self.get_stylex_runtime_binding(span);
 
     obj_lit.props[sx_prop_idx] = create_spread_prop(Expr::Call(build_stylex_props_call(
@@ -180,21 +154,14 @@ where
     true
   }
 
-  /// Transform a Solid.js compiled `sx` attribute, in the `Discover` cycle.
-  ///
-  /// Solid.js compiles `<div sx={styles.main}>` to:
-  /// `_$setAttribute(_el$, "sx", styles.main)`
-  ///
-  /// We transform it to:
-  /// `_$spread(_el$, _$mergeProps(() => stylex.props(styles.main)), false,
-  /// true)`
+  /// Rewrites Solid's compiled `_$setAttribute(_el$, "sx", v)` to
+  /// `_$spread(_el$, _$mergeProps(() => stylex.props(v)), false, true)`, during `Discover`.
   pub(crate) fn transform_sx_in_solid_set_attribute(&mut self, expr: &Expr) -> Option<Expr> {
     let sx_prop_name = self.state.options.sx_prop_name.as_deref()?;
 
     let call = expr.as_call()?;
 
-    // Check callee is _$setAttribute, read through its parentheses for the
-    // reason `is_jsx_runtime_call` gives.
+    // Check callee is _$setAttribute, ignoring parentheses.
     let is_set_attribute = match &call.callee {
       Callee::Expr(e) => match normalize_expr(e) {
         Expr::Ident(ident) => ident.sym.as_str() == "_$setAttribute",
@@ -211,8 +178,7 @@ where
       return None;
     }
 
-    // Args[1] must be the string matching sx_prop_name, read through its
-    // parentheses.
+    // Args[1] must be the string matching sx_prop_name, ignoring parentheses.
     let attr_name = match normalize_expr(&call.args[1].expr) {
       Expr::Lit(Lit::Str(s)) => s.value.as_str().unwrap_or(""),
       _ => return None,
@@ -227,11 +193,9 @@ where
     let stylex_local_name = self.get_stylex_runtime_binding(call.span);
     let args = sx_value_to_props_args(value_expr);
 
-    // Build: () => stylex.props(args...)
     let props_call = Expr::Call(build_stylex_props_call(stylex_local_name, args));
     let arrow_fn = create_arrow_expression(props_call);
 
-    // Build: _$mergeProps(() => stylex.props(...))
     let merge_props_call = Expr::Call(create_ident_call_expr(
       "_$mergeProps",
       vec![ExprOrSpread {
@@ -240,7 +204,6 @@ where
       }],
     ));
 
-    // Build: _$spread(el, _$mergeProps(() => stylex.props(...)), false, true)
     use stylex_ast::ast::factories::create_expr_or_spread;
     Some(Expr::Call(create_ident_call_expr(
       "_$spread",
@@ -259,37 +222,20 @@ where
     )))
   }
 
-  /// Resolve the local name of the value-level `stylex` namespace binding to
-  /// use for an `sx` runtime call, injecting an `import * as <name> from
-  /// '<source>'` declaration when none exists.
-  ///
-  /// 1. Reuse an existing value-level namespace/default import if present and
-  ///    not shadowed by a local binding in scope at the `sx` site.
-  /// 2. Otherwise find the first existing import declaration (including
-  ///    type-only) whose source is a configured import source.
-  /// 3. Pick the import source: existing import source, else the first
-  ///    configured custom source, else the default `@stylexjs/stylex`.
-  /// 4. Pick the local name: a generated uid (`_stylex`) when an existing
-  ///    import source was found or a `stylex` binding already exists,
-  ///    otherwise plain `stylex`.
-  /// 5. Prepend the namespace import, register it, and return the local name.
+  /// Local name of the value-level `stylex` binding for an `sx` runtime call, injecting
+  /// `import * as <name> from '<source>'` when none is usable at `site`.
   fn get_stylex_runtime_binding(&mut self, site: Span) -> swc_core::ecma::ast::Ident {
     let local_rebinding_shadows_site = |name: &str| {
       if site.is_dummy() {
-        // Generated compiled-JSX/Solid calls can carry DUMMY spans. Without a
-        // reliable position, do not reuse an imported name that has any local
-        // non-import re-binding; over-injecting a uid import is safer than
-        // emitting `stylex.props(...)` against a shadowed binding.
+        // DUMMY spans give no position: avoid any name with a local re-binding; over-injecting a
+        // uid import is safer than targeting a shadowed binding.
         self.state.local_rebinding_scopes.contains_key(name)
       } else {
         self.state.is_locally_rebound_at(name, site)
       }
     };
 
-    // 1. Reuse an existing value-level namespace/default import, skipping any
-    //    whose local name is shadowed by a non-import binding in scope at the
-    //    `sx` site. The shadow check is position-aware, using the pre-scanned
-    //    scope spans and the `sx` site span.
+    // 1. Reuse a value-level namespace/default import not shadowed at the `sx` site.
     if let Some(binding) = self
       .state
       .namespace_bindings()
@@ -300,8 +246,7 @@ where
       return swc_core::ecma::ast::Ident::new(binding.0, DUMMY_SP, binding.1);
     }
 
-    // 2. First existing import declaration (incl. type-only) whose source is
-    //    a configured import source.
+    // 2. First existing import (incl. type-only) from a configured source.
     let existing_import_source = self
       .state
       .existing_import_sources
@@ -320,10 +265,8 @@ where
         .unwrap_or_else(|| "@stylexjs/stylex".to_string())
     });
 
-    // 4. localName = uid when an existing import source was found or a
-    //    `stylex` binding already exists, else plain `stylex`. The uid is
-    //    `_stylex`, then `_stylex2`, ..., skipping any name already bound in
-    //    the module.
+    // 4. localName = uid (`_stylex`, `_stylex2`, …) if an import source exists or `stylex` is
+    //    already bound, else `stylex`.
     let stylex_local_name = if existing_import_source.is_some() || self.state.has_binding("stylex")
     {
       let uid_generator = UidGenerator::new("stylex", CounterMode::Local);
@@ -336,9 +279,7 @@ where
       "stylex".to_string()
     };
 
-    // 5. Prepend `import * as <local> from '<source>'`, register it so the
-    //    pipeline proceeds (the module visitor bails when no import path was
-    //    discovered) and subsequent `sx` attributes reuse this binding.
+    // 5. Prepend the import and register it so the pipeline runs and later `sx` sites reuse it.
     let import_item = create_import_namespace_decl(&stylex_local_name, &import_source);
     self
       .state
@@ -348,10 +289,7 @@ where
       .state
       .insert_stylex_import(ImportSources::Regular(stylex_local_name.clone()));
 
-    // Reserve the injected name so a later `sx` site that is forced down the uid
-    // path again (e.g. this binding is itself shadowed there) cannot regenerate
-    // the same name and emit a duplicate `import * as <name>`. The pre-scan
-    // `bound_names` does not see injected imports otherwise.
+    // Reserve the name: `bound_names` doesn't see injected imports, so a later uid could collide.
     self.state.bound_names.insert(stylex_local_name.clone());
 
     let binding = create_ident(&stylex_local_name);
@@ -360,8 +298,7 @@ where
   }
 }
 
-/// Convert an `sx` value expression into args for `stylex.props(...)`.
-/// The value is passed through as-is: `expr` → `[expr]`.
+/// Convert an `sx` value into `stylex.props(...)` args: `expr` → `[expr]`.
 fn sx_value_to_props_args(value_expr: Expr) -> Vec<ExprOrSpread> {
   vec![ExprOrSpread {
     spread: None,
@@ -369,8 +306,7 @@ fn sx_value_to_props_args(value_expr: Expr) -> Vec<ExprOrSpread> {
   }]
 }
 
-/// Build a `<stylex_local_name>.props(args...)` call expression, where
-/// `stylex_local_name` is the value-level namespace binding resolved by
+/// Build `<stylex_local_name>.props(args...)`, with the binding from
 /// [`StyleXTransform::get_stylex_runtime_binding`].
 fn build_stylex_props_call(
   stylex_local_name: swc_core::ecma::ast::Ident,
@@ -384,24 +320,8 @@ fn build_stylex_props_call(
   create_member_call_expr(member, args)
 }
 
-/// Find the first prop that names `sx_prop_name`, with the value it forwards.
-///
-/// A key-value prop gives its value, whatever shape its key is written in, as
-/// long as the text of that key is known at compile time. A shorthand gives
-/// the identifier it names, because `{ sx }` and `{ sx: sx }` name the same
-/// prop.
-///
-/// Every other shape is skipped. A getter, a setter and a method carry no
-/// value expression to forward, like an attribute whose value is not an
-/// expression container. A spread is not inspected at all, like a spread
-/// attribute, and its keys are not knowable at compile time anyway. A key
-/// whose text cannot be read -- a lone surrogate, say -- is simply not the
-/// prop asked about, so the scan passes over it rather than refusing it.
-///
-/// The first match wins, like the raw markup path, which stops at the first
-/// matching attribute. Where the two paths cannot correspond they do not: a
-/// shorthand has no markup spelling, and a numeric or computed key is not a
-/// shape JSX can write.
+/// First prop named `sx_prop_name` (key-value with a static key, or shorthand) and its value.
+/// Getters, setters, methods, spreads and unreadable keys are skipped; first match wins.
 fn find_sx_prop(props: &[PropOrSpread], sx_prop_name: &str) -> Option<(usize, Expr)> {
   props.iter().enumerate().find_map(|(idx, prop)| {
     let PropOrSpread::Prop(prop) = prop else {
@@ -422,14 +342,8 @@ fn find_sx_prop(props: &[PropOrSpread], sx_prop_name: &str) -> Option<(usize, Ex
   })
 }
 
-/// Check if a `CallExpr` is a JSX/VDOM runtime call that takes `(elementName,
-/// props, ...)`.
-///
-/// The callee and the receiver inside it are read through their parentheses. A
-/// parenthesis is not a different callee, so `(React).createElement(...)` names
-/// the function `React.createElement(...)` names. Read bare, the call is not
-/// recognised, and the `sx` prop reaches the runtime with no error for the
-/// author to read.
+/// Whether `call` is a JSX/VDOM runtime call `(elementName, props, ...)`, ignoring parentheses
+/// around the callee and receiver.
 fn is_jsx_runtime_call(call: &CallExpr) -> bool {
   match &call.callee {
     Callee::Expr(e) => match normalize_expr(e) {

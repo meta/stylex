@@ -61,8 +61,7 @@ pub(crate) fn member_expression(
       *non_null_props = NonNullProps::True;
       style_non_null_props = NonNullProps::True;
     } else {
-      // Reconstruct the one data view before computing retention metadata;
-      // an unknown/non-data result must conservatively keep cancellation keys.
+      // Unknown or non-data results conservatively keep cancellation keys.
       let materialized = match style_value
         .as_ref()
         .map(|value| stylex_evaluator::evaluate::materialize_result(value, state))
@@ -99,26 +98,8 @@ pub(crate) fn member_expression(
   }
 }
 
-/// The namespaces an evaluated style object still declares.
-///
-/// A property whose value is `null` declares nothing the runtime needs, so it
-/// gives no name. Every other property gives the name it is declared under,
-/// whichever shape its key was written in -- which is why the key goes through
-/// the reader that names all of them. Read through `as_ident` alone, a quoted
-/// key answered nothing and the namespace behind it went missing. That is no
-/// theoretical shape: the fold rebuilds the keys of the object it writes but
-/// not those of an object it carries through as a value, and `stylex.env`,
-/// `stylex.types` and a folded function map each write a quoted key.
-///
-/// A property the reader cannot name is refused, on the sentence
-/// `named_key_value` gives. Skipped instead, the namespace would never reach
-/// `vars_to_keep`, and `retain_object_props` then deletes a namespace the
-/// runtime still reads. A wrong output is worse than a stopped build.
-///
-/// No source reaches a refusal: the fold refuses a spread and a property that
-/// is no key-value pair before it writes an object, and each producer above
-/// writes key-value pairs only. So the cases for the refusals hand the reader
-/// its object directly.
+/// The namespaces an evaluated style object still declares (`null` values give none).
+/// Reads quoted keys too; an unnamed property panics rather than dropping a live namespace.
 fn declared_namespaces(props: &[PropOrSpread]) -> impl Iterator<Item = Atom> + '_ {
   props.iter().filter_map(|prop| {
     let (name, key_value) = named_key_value(prop);
@@ -130,13 +111,7 @@ fn declared_namespaces(props: &[PropOrSpread]) -> impl Iterator<Item = Atom> + '
   })
 }
 
-/// Walks the member expressions of a `stylex.props`-family call argument and
-/// records which style variables and namespaces the runtime still needs.
-///
-/// A reader, not a writer: [`member_expression`] takes the node by shared
-/// reference and writes only to the state and to the three counters here. The
-/// walk says so through `Visit`, which is what keeps it independent of the
-/// hoisting walk that runs beside it.
+/// Records which style variables and namespaces a `stylex.props`-family argument still needs.
 pub(crate) struct MemberTransform<'a> {
   pub(crate) index: i32,
   pub(crate) bail_out_index: Option<i32>,
@@ -148,9 +123,7 @@ pub(crate) struct MemberTransform<'a> {
 impl Visit for MemberTransform<'_> {
   noop_visit_type!();
 
-  // Deliberately does not walk the children of a member expression. The index
-  // counts one step per member expression the argument holds, and a nested one
-  // would count twice and move the bail-out point.
+  // Don't walk children: a nested member expression would count twice.
   fn visit_member_expr(&mut self, member: &MemberExpr) {
     member_expression(
       member,

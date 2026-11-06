@@ -13,17 +13,7 @@ use stylex_state::{
   types::{FlatCompiledStyles, StylesObjectMap},
 };
 
-/// One property of an object this compiler wrote: the name it is written under,
-/// and what it holds.
-///
-/// Every object the compiler writes here comes from a map whose keys are names,
-/// so the list it spells can hold nothing else -- no spread, no method, no
-/// computed key. Handing the list on instead of the object literal keeps that
-/// in the type, so a reader below does not ask again what the producer has
-/// already answered.
-///
-/// The name is borrowed from the map it was read from, because every reader
-/// spells it straight into a key and none of them outlives the map.
+/// One named property of a compiler-written object (no spreads, methods or computed keys).
 pub(crate) struct NamedProp<'a, V> {
   pub(crate) key: &'a str,
   pub(crate) value: V,
@@ -45,19 +35,7 @@ pub(crate) fn remove_objects_with_spreads(obj: &StylesObjectMap) -> StylesObject
   new_obj
 }
 
-/// The properties one flat map of compiled values spells.
-///
-/// A compiled namespace is one such map, and so are the variables `defineVars`
-/// answers, the values `defineConsts` answers, a theme's overrides and the
-/// properties a `props` merge answers.
-///
-/// Every value keeps the kind it was read with, so one writer serves them all:
-/// a class name is text, a constant the author wrote as a number is a number,
-/// and an inline style is an object of its own. The reference implementation
-/// writes each of these back through one function too.
-///
-/// Answered as an iterator, so a caller that wants the object literal builds
-/// the one list it needs rather than a list of names and a list of properties.
+/// The properties one flat map of compiled values spells, each value keeping its kind.
 fn compiled_value_props(values: &FlatCompiledStyles) -> impl Iterator<Item = NamedProp<'_, Expr>> {
   values.iter().map(|(key, value)| NamedProp {
     key: key.as_str(),
@@ -70,14 +48,12 @@ fn named_prop_to_key_value(prop: NamedProp<'_, Expr>) -> PropOrSpread {
   create_key_value_prop(prop.key, prop.value)
 }
 
-/// The object literal a list of named properties spells:
-/// `{ key: value, ... }`.
+/// The object literal a list of named properties spells.
 pub(crate) fn named_props_to_object(props: CompiledValues<'_>) -> Expr {
   create_object_expression(props.into_iter().map(named_prop_to_key_value).collect())
 }
 
-/// The object literal one flat map of compiled values spells:
-/// `{ key: value, ... }`.
+/// The object literal one flat map of compiled values spells.
 pub(crate) fn convert_values_to_ast(values: &FlatCompiledStyles) -> Expr {
   create_object_expression(
     compiled_value_props(values)
@@ -86,11 +62,7 @@ pub(crate) fn convert_values_to_ast(values: &FlatCompiledStyles) -> Expr {
   )
 }
 
-/// The object literal an inline style spells: `{ color: "blue", ... }`.
-///
-/// A `props` merge answers one of these under `style`, holding what the author
-/// wrote beside the compiled styles. Each name keeps the spelling of the
-/// source, because the runtime reads this object and not a stylesheet.
+/// The object literal an inline style spells; names keep their authored (camelCase) spelling.
 fn convert_inline_style_to_ast(style: &FlatCompiledStyles) -> Expr {
   let props = style
     .iter()
@@ -100,13 +72,7 @@ fn convert_inline_style_to_ast(style: &FlatCompiledStyles) -> Expr {
   create_object_expression(props)
 }
 
-/// The expression one compiled value is written back as.
-///
-/// The kind the value was read with is the kind written here, whatever wrote
-/// it: `gridRow: '1'` is text and stays text, a constant the author wrote as
-/// `0.5` is a number and stays a number, and an object or a list holds values
-/// read the same way again. The reference implementation writes every one of
-/// these back through one function too.
+/// The expression one compiled value is written back as, keeping the kind it was read with.
 pub(crate) fn compiled_value_to_ast(value: &FlatCompiledStylesValue) -> Expr {
   match value {
     FlatCompiledStylesValue::String(text) => create_string_expr(text.as_str()),
@@ -115,11 +81,7 @@ pub(crate) fn compiled_value_to_ast(value: &FlatCompiledStylesValue) -> Expr {
     FlatCompiledStylesValue::Null => create_null_expr(),
     FlatCompiledStylesValue::Object(style) => convert_inline_style_to_ast(style),
     FlatCompiledStylesValue::List(elements) => convert_list_to_ast(elements),
-    // The merge drops a declaration with no value where it stands as a
-    // declaration of the style itself. One held inside an object or a list is
-    // never read by the merge, and neither shape has a form that can carry it,
-    // so the call is refused rather than written with a slot the runtime
-    // cannot read.
+    // An `undefined` nested in an object or list has no output form, so refuse it.
     FlatCompiledStylesValue::Undefined => {
       stylex_unimplemented!("A style value that is undefined cannot be written.")
     },
@@ -127,11 +89,7 @@ pub(crate) fn compiled_value_to_ast(value: &FlatCompiledStylesValue) -> Expr {
   }
 }
 
-/// The object literal a list is written back as: `{ "0": ..., "1": ... }`.
-///
-/// A list has no form of its own where a style object is written, so each
-/// element is named by the place it holds. That is the object the reference
-/// writes, and it is what a reader of the printed module sees.
+/// A list written as `{ "0": ..., "1": ... }`, as the reference does.
 fn convert_list_to_ast(elements: &[Rc<FlatCompiledStylesValue>]) -> Expr {
   let props = elements
     .iter()
@@ -144,8 +102,7 @@ fn convert_list_to_ast(elements: &[Rc<FlatCompiledStylesValue>]) -> Expr {
   create_object_expression(props)
 }
 
-/// A whole compiled style object: one namespace per key, each namespace the
-/// properties [`compiled_value_props`] spells.
+/// A whole compiled style object as named namespaces of named properties.
 pub(crate) fn compiled_namespaces(namespaces: &StylesObjectMap) -> CompiledNamespaces<'_> {
   namespaces
     .iter()
@@ -156,8 +113,7 @@ pub(crate) fn compiled_namespaces(namespaces: &StylesObjectMap) -> CompiledNames
     .collect()
 }
 
-/// The object literal a whole compiled style object spells: one namespace per
-/// key, each namespace the object [`convert_values_to_ast`] spells.
+/// The object literal a whole compiled style object spells.
 pub(crate) fn namespaces_to_object(namespaces: CompiledNamespaces<'_>) -> Expr {
   create_object_expression(
     namespaces

@@ -1,5 +1,4 @@
-//! Tests for the React properties and the HTML attributes a merge is written
-//! back as.
+//! The React properties and HTML attributes a merge is written back as.
 
 use std::rc::Rc;
 
@@ -18,7 +17,6 @@ use crate::shared::utils::core::{
   stylex::stylex,
 };
 
-/// The values a result holds, keyed the way it named them.
 fn values_of(result: FnResult) -> FlatCompiledStyles {
   match result.as_values() {
     Some(values) => values.clone(),
@@ -33,7 +31,6 @@ fn text_of(values: &FlatCompiledStyles, key: &str) -> String {
   }
 }
 
-/// The declarations the `style` property holds, as name and value.
 fn style_pairs_of(values: &FlatCompiledStyles) -> Vec<(String, FlatCompiledStylesValue)> {
   match values.get("style").map(Rc::as_ref) {
     Some(FlatCompiledStylesValue::Object(declarations)) => declarations
@@ -44,7 +41,6 @@ fn style_pairs_of(values: &FlatCompiledStyles) -> Vec<(String, FlatCompiledStyle
   }
 }
 
-/// The text a declaration holds, named the way a case spells it.
 fn text(value: &str) -> FlatCompiledStylesValue {
   FlatCompiledStylesValue::String(value.to_owned())
 }
@@ -56,21 +52,14 @@ fn names_the_merged_classes_as_one_class_name() {
   assert_eq!(text_of(&values, "className"), "xa xb");
 }
 
-/// A merge that wrote no class writes no `className`, rather than one holding
-/// nothing.
 #[test]
 fn writes_no_class_name_when_the_merge_wrote_no_class() {
   assert!(values_of(props(&[])).is_empty());
   assert!(values_of(props(&[ResolvedArg::style_object(StyleObject::Nullable)])).is_empty());
 }
 
-/// An inline style becomes the pairs a `style` property holds, each under the
-/// name the author wrote. The runtime reads the property as a style object,
-/// and `marginTop` is the name such an object carries.
-///
-/// The test `writes_an_inline_style_out_as_css_text` holds the other half of
-/// the rule: it reads the same name as an attribute and gets `margin-top`.
-/// Each result spells the name the way its own reader expects.
+/// The runtime reads a style object, so `marginTop` keeps its name; the attribute half is
+/// `writes_an_inline_style_out_as_css_text`.
 #[test]
 fn names_an_inline_style_as_the_pairs_the_author_wrote() {
   let values = values_of(props(&[styles(inline(&[("marginTop", "1px")]))]));
@@ -81,12 +70,8 @@ fn names_an_inline_style_as_the_pairs_the_author_wrote() {
   );
 }
 
-/// Each kind of value an inline style holds is carried through the merge as
-/// the kind it is, because the runtime applies the object as it stands.
-///
-/// Measured against `@stylexjs/babel-plugin` 0.19.0 with `pnpm run
-/// parity:probe`: `stylex.props({ opacity: 0.5 })` answers
-/// `{ style: { opacity: 0.5 } }` there, not the text `"0.5"`.
+/// Measured against `@stylexjs/babel-plugin` 0.19.0: `stylex.props({ opacity: 0.5 })` answers
+/// `{ style: { opacity: 0.5 } }`, not the text `"0.5"`.
 #[test]
 fn keeps_the_kind_of_each_inline_value() {
   let opacity = values_of(props(&[styles(inline_value(
@@ -123,13 +108,9 @@ fn keeps_the_kind_of_each_inline_value() {
   );
 }
 
-/// A later declaration of one name wins whatever kind either of them is, and
-/// the name keeps the place of its first writing.
-///
-/// Measured against `@stylexjs/babel-plugin` 0.19.0 with `pnpm run
-/// parity:probe`: `stylex.props({ color: 'red', opacity: 0.5 }, { opacity:
-/// true })` answers `{ style: { color: "red", opacity: true } }` there, which
-/// is the order and the value below.
+/// The name keeps its first place. Measured against `@stylexjs/babel-plugin` 0.19.0:
+/// `stylex.props({ color: 'red', opacity: 0.5 }, { opacity: true })` answers
+/// `{ style: { color: "red", opacity: true } }`.
 #[test]
 fn a_later_declaration_of_another_kind_wins() {
   let mut earlier = inline(&[("color", "red")]);
@@ -153,17 +134,9 @@ fn a_later_declaration_of_another_kind_wins() {
   );
 }
 
-/// A custom property keeps the author's spelling in a `style` property and
-/// takes the attribute spelling in a `style` attribute, and those are two
-/// names: the runtime dashes every capital where it writes the attribute, and
-/// it leaves a custom property alone nowhere.
-///
-/// Both results are read here, because this is the name that shows the two
-/// spellings are not one, and nothing else pins the attribute half of it.
-///
-/// Measured against `@stylexjs/babel-plugin` 0.19.0 with `pnpm run
-/// parity:probe`: `stylex.attrs({ '--myColor': 'red' })` answers
-/// `{ style: "--my-color:red" }` there.
+/// The runtime dashes every capital in the attribute, custom properties included. Measured
+/// against `@stylexjs/babel-plugin` 0.19.0: `stylex.attrs({ '--myColor': 'red' })` answers
+/// `{ style: "--my-color:red" }`.
 #[test]
 fn spells_a_custom_property_the_way_each_result_spells_it() {
   let declaration = [styles(inline(&[("--myColor", "red")]))];
@@ -178,15 +151,9 @@ fn spells_a_custom_property_the_way_each_result_spells_it() {
   );
 }
 
-/// A list is the fallbacks an author gives one property. A `props` call names
-/// each element by the place it holds, because a style object has no list
-/// form, and an `attrs` call joins them with commas, because that is the text
-/// a list spells.
-///
-/// Measured against `@stylexjs/babel-plugin` 0.19.0 with `pnpm run
-/// parity:probe`: `stylex.props({ color: ['red', 'blue'] })` answers
-/// `{ style: { color: { "0": "red", "1": "blue" } } }` there, and the same
-/// source read as attributes answers `{ style: "color:red,blue" }`.
+/// Measured against `@stylexjs/babel-plugin` 0.19.0: `stylex.props({ color: ['red', 'blue'] })`
+/// answers `{ style: { color: { "0": "red", "1": "blue" } } }`; as attributes,
+/// `{ style: "color:red,blue" }`.
 #[test]
 fn writes_a_list_as_places_and_spells_it_as_a_join() {
   let list = FlatCompiledStylesValue::List(vec![
@@ -214,8 +181,6 @@ fn writes_a_list_as_places_and_spells_it_as_a_join() {
   );
 }
 
-/// A list holding nothing spells nothing, so the declaration is written with
-/// no text after the colon.
 #[test]
 fn spells_a_list_holding_nothing_as_no_text() {
   let values = values_of(attrs(&[styles(inline_value(
@@ -226,14 +191,9 @@ fn spells_a_list_holding_nothing_as_no_text() {
   assert_eq!(text_of(&values, "style"), "color:");
 }
 
-/// A declaration the author gave no value declares nothing: the merge skips
-/// it whole, so it writes no `style` property at all and does not clear what
-/// a style before it declared.
-///
-/// Measured against `@stylexjs/babel-plugin` 0.19.0 with `pnpm run
-/// parity:probe`: `stylex.props({ color: undefined })` answers `{}` there, and
-/// `stylex.props({ color: 'red' }, { color: undefined })` answers
-/// `{ style: { color: "red" } }`.
+/// It does not clear an earlier style. Measured against `@stylexjs/babel-plugin` 0.19.0:
+/// `stylex.props({ color: undefined })` answers `{}`, and
+/// `stylex.props({ color: 'red' }, { color: undefined })` answers `{ style: { color: "red" } }`.
 #[test]
 fn skips_a_declaration_that_was_given_no_value() {
   let alone = values_of(props(&[styles(inline_value(
@@ -254,9 +214,7 @@ fn skips_a_declaration_that_was_given_no_value() {
   );
 }
 
-/// A value kind an inline style cannot hold is carried to the properties all
-/// the same, because the merge keeps what it was given. The writers below are
-/// what decide what such a value spells.
+/// The writers, not the merge, decide what such a value spells.
 #[test]
 fn carries_a_value_kind_an_inline_style_cannot_hold() {
   let values = values_of(props(&[styles(inline_unwritable("margin"))]));
@@ -264,7 +222,6 @@ fn carries_a_value_kind_an_inline_style_cannot_hold() {
   assert_eq!(style_pairs_of(&values).len(), 1);
 }
 
-/// The debug source is written only when the merge has one to write.
 #[test]
 fn names_the_debug_source_only_when_there_is_one() {
   let mut style = FlatCompiledStyles::new();
@@ -285,8 +242,6 @@ fn names_the_merged_classes_as_a_class_attribute() {
   assert!(!values.contains_key("className"));
 }
 
-/// An attribute is text, so the inline style is written out as the CSS a
-/// `style` attribute holds.
 #[test]
 fn writes_an_inline_style_out_as_css_text() {
   let values = values_of(attrs(&[styles(inline(&[
@@ -302,26 +257,15 @@ fn writes_no_attribute_for_a_merge_that_wrote_nothing() {
   assert!(values_of(attrs(&[])).is_empty());
 }
 
-/// A value kind an inline style cannot hold means the styles were not
-/// flattened, so the attribute writer refuses rather than writing a style
-/// short of one declaration. The writer of a `style` property gives the same
-/// answer, and `refuses_a_value_it_cannot_write` holds that half.
-///
-/// Both refusals now come from the value itself, which is where the one
-/// reading of each kind lives.
+/// The `style` property half is `refuses_a_value_it_cannot_write`.
 #[test]
 #[should_panic(expected = "Encountered a value kind that spells no text.")]
 fn refuses_an_inline_value_that_spells_no_text() {
   attrs(&[styles(inline_unwritable("margin"))]);
 }
 
-/// Every kind an inline style holds spells the text JavaScript spells for it,
-/// because an attribute is text and the runtime writes each value into one.
-///
-/// Measured against `@stylexjs/babel-plugin` 0.19.0 with `pnpm run
-/// parity:probe`: `stylex.attrs({ opacity: 0.5 })` answers
-/// `{ style: "opacity:0.5" }` there, and a nested object answers
-/// `":hover:[object Object]"`.
+/// Measured against `@stylexjs/babel-plugin` 0.19.0: `stylex.attrs({ opacity: 0.5 })` answers
+/// `{ style: "opacity:0.5" }`, and a nested object answers `":hover:[object Object]"`.
 #[test]
 fn spells_each_kind_of_inline_value_as_javascript_spells_it() {
   let mut style = inline(&[("color", "red")]);
@@ -351,9 +295,7 @@ fn spells_each_kind_of_inline_value_as_javascript_spells_it() {
   );
 }
 
-/// An object spells the same text whatever it holds, so a declaration set to
-/// null inside one is never read and never spelled. The merge drops a null
-/// only where it stands as a declaration of the style itself.
+/// A null inside an object is never read; the merge drops nulls only at the top level.
 #[test]
 fn spells_an_object_the_same_whatever_it_holds() {
   let holding_a_null = values_of(attrs(&[styles(inline_value(
@@ -370,9 +312,7 @@ fn spells_an_object_the_same_whatever_it_holds() {
   assert_eq!(text_of(&holding_nothing, "style"), ":hover:[object Object]");
 }
 
-/// A number with no digits is spelled by name, the way JavaScript spells it,
-/// rather than as the arithmetic an emitter invents for a value it has no
-/// numeral for.
+/// As JavaScript spells it, not as emitter arithmetic.
 #[test]
 fn spells_a_number_that_has_no_digits_by_name() {
   let mut style = FlatCompiledStyles::new();
@@ -396,9 +336,7 @@ fn spells_a_number_that_has_no_digits_by_name() {
   );
 }
 
-/// The three calls answer two kinds, and each names the kind it made: a merge
-/// asked for properties or attributes answers values, and one asked for a class
-/// name answers a string.
+/// `props`/`attrs` answer values; `className` answers a string.
 #[test]
 fn each_call_answers_the_kind_it_makes() {
   let merged = [style_of(&[("color", "xa")])];

@@ -49,9 +49,7 @@ use stylex_state::{
 use stylex_structures::inline_style::InlineStyle;
 use stylex_utils::hash::create_hash;
 
-/// The key-value properties of an evaluated object, which is what a namespace
-/// carries. A spread or a method has no key and value of its own and is dropped,
-/// as it was before an object could arrive here from more than one place.
+/// The key-value properties of an evaluated object; spreads and methods are dropped.
 fn key_value_props_of(object: &ObjectLit) -> Vec<KeyValueProp> {
   object
     .props
@@ -61,12 +59,7 @@ fn key_value_props_of(object: &ObjectLit) -> Vec<KeyValueProp> {
     .collect()
 }
 
-/// `text`, or the refusal a key that spells no name is reported with.
-///
-/// This is the whole of what is left out of the coverage measurement, and it
-/// computes nothing -- it chooses between answers the caller has already worked
-/// out. A key that folded answers a string literal, and the text of a string
-/// literal is the string. `guidelines/stack/RUST.md` describes the allowance.
+/// `text`, or the refusal for a key that spells no name (unreachable; excluded from coverage).
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn or_refuse_nameless_key(text: Option<String>) -> String {
   match text {
@@ -75,14 +68,8 @@ fn or_refuse_nameless_key(text: Option<String>) -> String {
   }
 }
 
-/// `object`, or the refusal a dynamic style body that folded to no object is
-/// reported with.
-///
-/// This is the whole of what is left out of the coverage measurement, and it
-/// computes nothing -- it chooses between answers the caller has already worked
-/// out. The only producer is the recursion below, which answers an object
-/// expression on every confident path, and the caller returns before this on
-/// every other one. `guidelines/stack/RUST.md` describes the allowance.
+/// `object`, or the refusal for a dynamic style body that folded to no object (unreachable;
+/// excluded from coverage).
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn or_refuse_unfolded_body(object: Option<&ObjectLit>) -> &ObjectLit {
   match object {
@@ -98,13 +85,8 @@ fn key_text_of(key: &Expr, traversal_state: &mut StateManager, functions: &Funct
   or_refuse_nameless_key(convert_expr_to_str(key, traversal_state, functions))
 }
 
-/// `expr`, or the refusal a key that answered no expression is reported with.
-///
-/// This is the whole of what is left out of the coverage measurement, and it
-/// computes nothing -- it chooses between answers the caller has already worked
-/// out. Each caller asks only after the key folded, and a key that folded
-/// answers a string literal. `guidelines/stack/RUST.md` describes the
-/// allowance.
+/// `expr`, or the refusal for a key that folded to no expression (unreachable; excluded from
+/// coverage).
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn or_refuse_unfolded_key(expr: Option<&Expr>) -> &Expr {
   match expr {
@@ -113,14 +95,7 @@ fn or_refuse_unfolded_key(expr: Option<&Expr>) -> &Expr {
   }
 }
 
-/// The name a namespace key expression spells, or `None` where it spells no
-/// readable one.
-///
-/// `evaluate_obj_key` answers a string literal for every key it accepts, so a
-/// key of any other shape never reaches the map. Asked through the readers each
-/// shape already has, so the shapes it is not are answered where they are read
-/// rather than by an arm here that nothing can enter. The last `as_str` is
-/// fallible for its own reason: a literal can hold text no `str` can spell.
+/// The name a namespace key expression spells, or `None` if it has no readable one.
 fn namespace_key_of(key: &Expr) -> Option<&str> {
   key
     .as_lit()
@@ -128,40 +103,8 @@ fn namespace_key_of(key: &Expr) -> Option<&str> {
     .and_then(|name| name.value.as_str())
 }
 
-/// The expression a style value carries, materializing a folded function map as
-/// the object it stands for.
-///
-/// The fold has no expression form, so this position used to abort with a
-/// message about a static expression instead. `function_fold_to_object`
-/// owns which folds have an object form and why, and the static object
-/// evaluator asks it the same question -- a value read where a style value
-/// belongs is refused by the same sentence whether or not a dynamic style holds
-/// it.
-///
-/// A theme reference has no expression form either, and is not a fold that
-/// function can materialize: it stands for a `defineVars` group, whose keys live
-/// in another file. The reference implementation folds it to an object its
-/// namespace validation refuses because it is not a plain object, so it is
-/// refused here with that same message rather than materialized -- the static
-/// position refuses it the same way, in `nodes/object_expression.rs`. Named
-/// ahead of the fold arm because that arm answers `None` for it and the message
-/// differs.
-///
-/// An array is folded the way the static position folds one, through the same
-/// function, and refused with the array-specific message when an element has no
-/// array-element form. `EvaluateResultValue::Vec` is what an array literal
-/// evaluates to and it has no expression form either, so every array written
-/// inside a dynamic style's body used to abort here -- including the ones the
-/// reference implementation compiles. What decides an array is not this
-/// position: an element that is not a string or a number is refused by namespace
-/// validation, from the folded `Expr::Array`, with the message upstream gives.
-///
-/// Every other evaluated shape with no expression form still falls through to
-/// the old message. Each is a refusal of its own rather than a fold this
-/// understands, and the set is not audited here.
-///
-/// Expression refusals report at authored input. A known data container with
-/// a non-materializable CSS leaf instead raises Babel's plain style-value Error.
+/// The expression a style value carries, materializing folded function maps and arrays.
+/// Theme references are refused as non-plain objects, matching the reference implementation.
 fn materialize_style_value(
   value: Option<EvaluateResultValue>,
   value_path: &Expr,
@@ -177,8 +120,7 @@ fn materialize_style_value(
     ) => match stylex_evaluator::evaluate::materialize_result(&value, traversal_state) {
       Ok(Some(expr)) => expr,
       Ok(None) => {
-        // Babel rejects a non-materializable style leaf with a plain Error,
-        // not a namespace-shape error or an evaluated-expression code frame.
+        // Matches Babel: a non-materializable style leaf throws a plain Error.
         stylex_macros::stylex_error::mark_panic_plain();
         stylex_panic!("{}", ILLEGAL_PROP_VALUE)
       },
@@ -207,9 +149,7 @@ pub fn evaluate_stylex_create_arg(
   traversal_state: &mut StateManager,
   functions: &Rc<FunctionMap>,
 ) -> Box<EvaluateResult> {
-  // A parenthesis is not a different argument. Unwrapped here rather than at
-  // the call site, because the validator beside this reader unwraps the same
-  // argument and the two have to see one expression.
+  // Read through parentheses, as the validator beside this reader does.
   match normalize_expr_mut(path) {
     Expr::Object(style_object) => {
       let mut result_value: IndexMap<Expr, Vec<KeyValueProp>> = IndexMap::new();
@@ -219,9 +159,6 @@ pub fn evaluate_stylex_create_arg(
         match prop {
           PropOrSpread::Spread(_) => stylex_unimplemented!("{}", SPREAD_NOT_SUPPORTED),
           PropOrSpread::Prop(prop) => {
-            // Read where it lies. Nothing below writes to the property, so the
-            // only copy made is the one a shorthand name needs to become the
-            // pair it stands for.
             let prop = expanded_shorthand_prop(prop);
 
             match prop.as_ref() {
@@ -229,9 +166,7 @@ pub fn evaluate_stylex_create_arg(
                 let key_result = evaluate_obj_key(key_value_prop, traversal_state, functions);
 
                 if !key_result.confident {
-                  // Babel's create-argument reader deliberately omits the
-                  // evaluator reason for a namespace key (but keeps its deopt
-                  // node), so the create visitor reports its generic message.
+                  // Matches Babel: no evaluator reason for a namespace key (deopt node kept).
                   return Box::new(EvaluateResult::refused(key_result.deopt, None));
                 }
 
@@ -243,13 +178,7 @@ pub fn evaluate_stylex_create_arg(
                 );
                 let value_path = &key_value_prop.value;
 
-                // Read through the parentheses an author may have written
-                // around the function. They are a node in this tree and none in
-                // the reference implementation's, so matching the bare node
-                // sent `root: ((color) => ({ color }))` down the plain-value
-                // path, where a dynamic style has no object form and the build
-                // stopped -- while the same function without parentheses
-                // compiled.
+                // Read through parentheses: `root: ((color) => ({ color }))` is a dynamic style.
                 match normalize_expr(value_path) {
                   Expr::Arrow(fn_path) => {
                     let all_params = fn_path.params.clone();
@@ -267,11 +196,7 @@ pub fn evaluate_stylex_create_arg(
 
                           if !eval_result.confident {
                             let reason = eval_result.reason;
-                            // Not `EvaluateResult::refused`, and the difference
-                            // is the point: this refusal carries the value the
-                            // evaluation did reach, which the constructor
-                            // deliberately forces to `None`. Every other refusal
-                            // in this file goes through it.
+                            // Not `refused`: keeps the value the evaluation reached.
                             return Box::new(EvaluateResult {
                               confident: false,
                               deopt: eval_result.deopt,
@@ -319,11 +244,7 @@ pub fn evaluate_stylex_create_arg(
                           );
                         }
                       },
-                      // A block body is not an object either: the reference
-                      // plugin re-evaluates the whole argument, as for any
-                      // body that is not an object (lib/index.js:7016-7019),
-                      // so the arrow is refused where the evaluator refuses
-                      // it, with its sentence and frame.
+                      // Block bodies are refused by the evaluator (lib/index.js:7016-7019).
                       _ => {
                         return evaluate_with_functions(
                           path,
@@ -338,19 +259,10 @@ pub fn evaluate_stylex_create_arg(
                       evaluate_with_functions(value_path, traversal_state, Rc::clone(functions));
 
                     if !val.confident {
-                      // Ordinary namespace-value refusals retain the evaluator's
-                      // message and deopt node verbatim, without a key prefix.
+                      // Keep the evaluator's message and deopt node verbatim, without a key prefix.
                       return val;
                     }
 
-                    // What the fold answered is read once. A value with no
-                    // object form is the reachable answer, and it reads the
-                    // sentence below. No value at all is the other: the
-                    // evaluator's memo is its only known producer, and no
-                    // source through a `create` namespace reaches it, so it
-                    // reads that sentence too rather than one of its own. This
-                    // is the reading `materialize_style_value` takes of a
-                    // style value.
                     let value_to_insert = match val.value.as_ref() {
                       Some(EvaluateResultValue::Expr(Expr::Object(obj_expr))) => {
                         key_value_props_of(obj_expr)
@@ -363,8 +275,7 @@ pub fn evaluate_stylex_create_arg(
                           traversal_state,
                         ) {
                           Ok(Some(EvaluateResultValue::Object(object))) => {
-                            // A known namespace remains an object even when a
-                            // nested leaf cannot be represented as CSS data.
+                            // A known namespace stays an object even with a non-CSS leaf.
                             let properties = object
                               .entries
                               .iter()
@@ -391,12 +302,7 @@ pub fn evaluate_stylex_create_arg(
                           Err(error) => stylex_panic!("{}", error),
                         }
                       },
-                      // A folded function map written where a namespace
-                      // belongs, materialized as the object it stands for so
-                      // namespace validation refuses its keys -- which is what
-                      // the reference implementation refuses, having folded the
-                      // same reference to a plain object. Everything else with
-                      // no object form is a namespace this cannot read.
+                      // Materialize folded function maps so validation refuses their keys.
                       value => match value.and_then(function_fold_to_object) {
                         Some(object) => key_value_props_of(&object),
                         None => stylex_panic!("{}", ILLEGAL_NAMESPACE_VALUE),
@@ -417,20 +323,13 @@ pub fn evaluate_stylex_create_arg(
         }
       }
 
-      // Namespace assembly has JavaScript object-assignment semantics. A
-      // __proto__ assignment is not an enumerable namespace; its value has
-      // already been evaluated, so dropping the entry does not skip effects.
+      // Object-assignment semantics: `__proto__` is not a namespace (value already evaluated).
       result_value.retain(|key, _| namespace_key_of(key) != Some("__proto__"));
       fns.shift_remove("__proto__");
 
-      // A `create` call collects its namespaces here rather than through the
-      // object evaluator, so the ordering the evaluator applies inside a style
-      // object has to be applied to the namespace map too. It decides which
-      // namespace is compiled first, and with it the order whole rule sets
-      // reach the stylesheet.
+      // Order namespaces as the object evaluator orders style keys; this decides stylesheet order.
       order_own_map_keys(&mut result_value, namespace_key_of);
-      // The dynamic functions are a second map over the same names, and their
-      // `@property` rules are emitted in its order, so it takes the same order.
+      // `@property` rules follow the function map's order, so sort it the same way.
       order_own_map_keys(&mut fns, |key| Some(key.as_str()));
 
       Box::new(EvaluateResult {
@@ -461,60 +360,21 @@ fn evaluate_partial_object_recursively(
       PropOrSpread::Spread(spread) => {
         let result = evaluate_with_functions(&spread.expr, traversal_state, Rc::clone(functions));
         if !result.confident {
-          // The reason is dropped here, and this compiler's choice rather than
-          // the reference compiler's placement. Worth separating the two,
-          // because the comment here used to run them together.
-          //
-          // Upstream does not drop it at the spread: `:142-144` returns the
-          // result whole, reason and all. The drop happens one frame up, at
-          // `:107-109`, where `evaluatePartialObjectRecursively`'s caller
-          // destructures `{ confident, value, deopt }` and leaves `reason`
-          // behind -- for *every* refusal out of this function, not for spreads
-          // in particular. Matching that shape would therefore mean dropping the
-          // reason for the computed-key refusal too, and losing the
-          // `Referenced constant is not defined` that
-          // `a_shadowing_param_as_a_computed_key` pins. The divergence is kept
-          // deliberately, which the two sites named in the `docs(transform)`
-          // commit that introduced it both say.
-          //
-          // Dropped *at this arm* because a spread asks the evaluator to
-          // enumerate the value's keys rather than to fold it to a value: there
-          // is no inline-style fall-through to deopt into, the build stops, and
-          // the complaint is the whole of what the author is handed. The useful
-          // one names the position -- a `create()` argument that is not static,
-          // which is what the reference compiler says -- and naming the binding
-          // instead answers a question nobody asked, since there is nothing an
-          // author can do with a resolvable binding in a position that admits no
-          // dynamic value at all. The caller supplies `non_static_value` for
-          // whichever call it is, and this function cannot know that.
-          //
-          // The deopt node survives even when the visitor selects its own
-          // fallback message, so the code frame still identifies the refusal.
+          // Deliberate divergence: upstream drops the reason one frame up for every refusal
+          // (`:107-109`); we drop it only here so the caller's non-static message applies.
+          // The deopt node is kept for the code frame.
           return Box::new(EvaluateResult::refused(result.deopt, None));
         }
-        // `Object.assign(obj, result.value)` upstream
-        // (`visitors/parse-stylex-create-arg.js:146`, 0.19.0): a spread whose
-        // operand folded contributes that value's own enumerable properties, and
-        // the fold carries on.
-        //
-        // The same two helpers the object-expression path uses, rather than a
-        // reader of its own. `spread_own_properties` already answers what a
-        // spread operand contributes for every reading one can arrive as -- an
-        // object, a string's code units, an array's indices -- and `assign_props`
-        // already *is* `Object.assign`: shallow, a repeated key taking the later
-        // value and keeping the position it first took. Both are the semantics
-        // the language fixes, so spelling them again here would be a second
-        // answer to a question asked once.
+        // `Object.assign(obj, result.value)` upstream (`visitors/parse-stylex-create-arg.js:146`,
+        // 0.19.0), via the shared spread/assign helpers.
         let Some(new_props) = result.value.and_then(spread_own_properties) else {
-          // A value with no own-properties reading: a number, a boolean, a
-          // callback. Nothing to enumerate, so the refusal stands.
+          // No own properties (number, boolean, callback): refuse.
           stylex_unimplemented!("{}", SPREAD_NOT_SUPPORTED);
         };
 
         obj = assign_props(obj, new_props);
       },
       PropOrSpread::Prop(prop) => {
-        // Read where it lies, for the reason the namespace reader above gives.
         let prop = expanded_shorthand_prop(prop);
 
         match prop.as_ref() {
@@ -568,8 +428,6 @@ fn evaluate_partial_object_recursively(
                 );
                 obj.push(new_prop);
 
-                // Nothing collected is nothing to add. Flattening the option
-                // says that without an arm of its own.
                 inline_styles.extend(result.inline_styles.into_iter().flatten());
               },
               _ => {
@@ -672,10 +530,7 @@ fn evaluate_partial_object_recursively(
               },
             }
           },
-          // Every remaining `Prop` variant is refused. A method, a getter and
-          // a setter each contain statements this reader cannot fold. A
-          // shorthand name became a key-value pair above, and an assignment is
-          // a destructuring shape that no object literal holds.
+          // Methods, getters, setters and assignment props are refused.
           _ => return Box::new(EvaluateResult::refused(None, None)),
         }
       },

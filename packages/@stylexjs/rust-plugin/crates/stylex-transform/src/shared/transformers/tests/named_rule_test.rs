@@ -12,7 +12,6 @@ mod fold_to_rule_name {
     structures::injectable_style::InjectableStyle,
   };
 
-  /// A rule with the given name and CSS text, which is all the fold reads.
   fn rule(name: &str, css: &str) -> (String, InjectableStyleKind) {
     (
       name.to_string(),
@@ -24,8 +23,7 @@ mod fold_to_rule_name {
     )
   }
 
-  /// Stands for a transformer that names its rule after the string it was
-  /// given, so a test can choose the name the fold must use.
+  /// A transformer that names its rule after the string it was given.
   fn name_from_expr(
     styles: &EvaluateResultValue,
     _: &mut StateManager,
@@ -84,7 +82,6 @@ mod fold_to_rule_name {
     );
   }
 
-  /// The same content twice is one rule, because the name is the key.
   #[test]
   fn the_same_name_twice_stays_one_entry() {
     let mut state = StateManager::default();
@@ -95,7 +92,6 @@ mod fold_to_rule_name {
     assert_eq!(injected_names(&state), vec!["same".to_string()]);
   }
 
-  /// A rule the fold puts in does not remove what the state already holds.
   #[test]
   fn keeps_a_rule_that_was_there_before() {
     let mut state = StateManager::default();
@@ -112,8 +108,7 @@ mod fold_to_rule_name {
     );
   }
 
-  /// An expression the transformer cannot name is still folded, to whatever
-  /// name the transformer fell back to.
+  /// Folded under whatever name the transformer fell back to.
   #[test]
   fn folds_an_expression_the_transformer_cannot_name() {
     let mut state = StateManager::default();
@@ -128,7 +123,6 @@ mod fold_to_rule_name {
     assert_eq!(injected_names(&state), vec!["unnamed".to_string()]);
   }
 
-  /// An empty name is a legal key, so it is kept like any other.
   #[test]
   fn accepts_an_empty_name() {
     let mut state = StateManager::default();
@@ -152,7 +146,6 @@ mod fold_to_rule_name {
     assert_eq!(injected_names(&state), vec![odd.to_string()]);
   }
 
-  /// A name far longer than any hash the transformers make.
   #[test]
   fn accepts_a_very_long_name() {
     let mut state = StateManager::default();
@@ -165,8 +158,6 @@ mod fold_to_rule_name {
     assert_eq!(injected_names(&state), vec![long]);
   }
 
-  /// Many rules in one file, to show the fold adds one entry per call and
-  /// holds their order across a large map.
   #[test]
   fn keeps_ten_thousand_rules_in_order() {
     let mut state = StateManager::default();

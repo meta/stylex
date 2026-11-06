@@ -11,7 +11,7 @@ use stylex_state::{
   types::{FlatCompiledStyles, StylesObjectMap},
 };
 
-/// The debug name of each namespace, in front of the styles of that namespace.
+/// Prepends each namespace's debug class name to its styles.
 pub(crate) fn inject_dev_class_names(
   obj: StylesObjectMap,
   var_name: &Option<String>,
@@ -22,13 +22,7 @@ pub(crate) fn inject_dev_class_names(
   with_dev_class_names(obj, |key| dev_class_name(&prefix, key))
 }
 
-/// Puts the name `label` gives each namespace in front of the styles of that
-/// namespace, keyed by itself.
-///
-/// Takes the styles rather than borrowing them, so the properties of a
-/// namespace move into the new map. Copying them allocated one string for
-/// every property of every namespace, and a development build names every
-/// namespace of every `stylex.create` call.
+/// Prepends the name `label` gives each namespace, keyed by itself; consumes the styles.
 fn with_dev_class_names(obj: StylesObjectMap, label: impl Fn(&str) -> String) -> StylesObjectMap {
   let mut result: StylesObjectMap = IndexMap::with_capacity(obj.len());
 
@@ -36,7 +30,6 @@ fn with_dev_class_names(obj: StylesObjectMap, label: impl Fn(&str) -> String) ->
     let dev_class_name = label(&key);
     let styles = Rc::unwrap_or_clone(value);
 
-    // The debug name and the styles it belongs to, so the map is sized once.
     let mut dev_class = IndexMap::with_capacity(styles.len() + 1);
 
     dev_class.insert(
@@ -63,7 +56,6 @@ pub(crate) fn convert_to_test_styles(
   for (key, _value) in obj {
     let dev_class_name = dev_class_name(&prefix, &key);
 
-    // The debug name and the compiled marker, and nothing else.
     let mut dev_class = IndexMap::with_capacity(2);
 
     dev_class.insert(
@@ -82,12 +74,7 @@ pub(crate) fn convert_to_test_styles(
   result
 }
 
-/// The name of the file, without any extension, for a debug name to start
-/// with.
-///
-/// Answers `UnknownFile` when the path holds no name to read. An empty answer
-/// would be the same for every file, so every file would give the same debug
-/// name.
+/// The file name without extension, or `UnknownFile` when the path has none.
 fn file_basename(filename: &str) -> &str {
   Path::new(filename)
     .file_stem()
@@ -97,11 +84,7 @@ fn file_basename(filename: &str) -> &str {
     .unwrap_or("UnknownFile")
 }
 
-/// The start that every debug name of one call shares: the file, and the
-/// variable the styles are bound to.
-///
-/// Built once per call. It does not depend on the namespace, and reading the
-/// file name means walking the path.
+/// The debug-name prefix shared by one call: the file and the bound variable.
 fn dev_class_name_prefix(var_name: &Option<String>, filename: &str) -> String {
   match var_name {
     Some(var_name) => format!("{}__{}.", file_basename(filename), var_name),
@@ -113,12 +96,8 @@ fn dev_class_name_prefix(var_name: &Option<String>, filename: &str) -> String {
 fn dev_class_name(prefix: &str, namespace: &str) -> String {
   let class_name = format!("{prefix}{namespace}");
 
-  // A character a class name cannot hold is removed, not replaced. A space in
-  // its place would make the name two class names, and the first of the two is
-  // the debug name of another namespace of the same variable.
+  // Strip invalid characters rather than replacing them; a space would split the class name.
   match SANITIZE_CLASS_NAME_REGEX.is_match(&class_name) {
-    // Almost every namespace holds nothing to remove, and the name it built is
-    // already the answer. Asking first keeps that name from being copied.
     Ok(false) => class_name,
     _ => SANITIZE_CLASS_NAME_REGEX
       .replace_all(&class_name, "")

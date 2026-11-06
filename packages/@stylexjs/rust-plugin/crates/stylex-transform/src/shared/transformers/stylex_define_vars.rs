@@ -41,8 +41,6 @@ pub(crate) fn stylex_define_vars(
 
   let key_values = get_key_values_from_object(variables);
 
-  // The value each variable takes, under the name the stylesheet writes it
-  // with, and beside it the reference the module reads it through.
   let mut variables_map = FlatCompiledStyles::with_capacity(key_values.len());
   let mut theme_variables_objects = FlatCompiledStyles::with_capacity(key_values.len() + 1);
 
@@ -73,8 +71,7 @@ pub(crate) fn stylex_define_vars(
     );
   }
 
-  // The `@property` rules the typed variables declare are collected as the
-  // variables are read, and the variable rules are appended after them.
+  // `@property` rules come first; the variable rules are appended after them.
   let mut injectable_types = InjectableStylesMap::with_capacity(key_values.len());
 
   let injectable_styles =

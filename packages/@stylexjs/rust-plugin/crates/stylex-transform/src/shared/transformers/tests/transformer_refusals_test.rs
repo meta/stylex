@@ -1,12 +1,4 @@
-//! What each producer refuses before it writes anything.
-//!
-//! Every `stylex` producer is handed a value the evaluator folded, and each one
-//! states the shape it takes. The refusals are collected here because they are
-//! the same question asked of eleven producers, and a test per producer beside
-//! its own file would repeat the fixture eleven times.
-//!
-//! A refusal that a producer's own value shapes reach is tested beside those
-//! shapes instead.
+//! What each `stylex` producer refuses before it writes anything, collected to share one fixture.
 
 #[cfg(test)]
 mod transformer_refusals {
@@ -27,18 +19,15 @@ mod transformer_refusals {
     evaluate_result_value::EvaluateResultValue, functions::FunctionMap, state_manager::StateManager,
   };
 
-  /// The folded value `code` spells, as the evaluator would hand it over.
   fn folded(code: &str) -> EvaluateResultValue {
     EvaluateResultValue::Expr(expr(code))
   }
 
-  /// A value that is no expression at all. Nothing an author writes folds to
-  /// this, so it stands for the kinds a producer has no reading for.
+  /// No author code folds to this; stands for kinds no producer reads.
   fn a_kind_no_producer_reads() -> EvaluateResultValue {
     EvaluateResultValue::Vec(vec![])
   }
 
-  /// A state that names the export a variable group is bound to.
   fn state_with_an_export_id() -> StateManager {
     let mut state = StateManager::default();
     state.export_id = Some("tokens.stylex.js//tokens".to_owned());
@@ -135,8 +124,7 @@ mod transformer_refusals {
     }
   }
 
-  /// A nested theme reads the variable object itself, so it states what it
-  /// takes before the flat producer below it does.
+  /// The nested theme refuses before the flat producer below it does.
   #[test]
   #[should_panic(expected = "Theme variables must be defined as a plain object.")]
   fn a_kind_that_is_neither_an_object_nor_a_group_is_refused_as_nested_theme_variables() {
@@ -148,8 +136,7 @@ mod transformer_refusals {
     );
   }
 
-  /// A variable group is named after the export it is bound to, and the name of
-  /// every variable in it is taken from that name.
+  /// Variable names are derived from the export the group is bound to.
   mod an_unbound_variable_group {
     use super::*;
 
@@ -166,14 +153,12 @@ mod transformer_refusals {
     }
   }
 
-  /// A theme names the variables it overrides, and every name has to belong to
-  /// the group it overrides.
+  /// Every overridden name has to belong to the overridden group.
   mod a_theme_override {
     use super::*;
 
     use stylex_state::theme_ref::ThemeRef;
 
-    /// The group a variable-defining module exports.
     fn a_variable_group() -> EvaluateResultValue {
       EvaluateResultValue::ThemeRef(ThemeRef::new("tokens.stylex.js", "tokens", "x"))
     }
@@ -200,8 +185,7 @@ mod transformer_refusals {
       );
     }
 
-    /// A group answers a variable name for any key but its own two methods,
-    /// and a method is no variable to override.
+    /// A group answers a variable name for any key but its own two methods.
     #[test]
     #[should_panic(expected = "Expected a CSS custom property (variable) reference.")]
     fn is_refused_when_it_names_a_method_of_the_group() {

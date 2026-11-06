@@ -37,18 +37,13 @@ pub(crate) fn stylex_create_theme(
   state: &mut StateManager,
   typed_variables: &mut InjectableStylesMap,
 ) -> (FlatCompiledStyles, InjectableStylesMap) {
-  // The group name and the source of every variable name come out of one read,
-  // which also refuses anything that is no variable group.
+  // Reads the group name and variable-name source; refuses non-groups.
   let theme_group = validate_theme_variables(theme_vars, state);
 
   stylex_create_theme_from_group(theme_group, variables, state, typed_variables)
 }
 
-/// The same production, for a caller that has already read the variable group.
-///
-/// The read is not free: it copies every property of the group, and a caller
-/// that asks for it to order its own refusals would otherwise pay for the whole
-/// group a second time here.
+/// [`stylex_create_theme`] for a caller that has already read the variable group.
 pub(crate) fn stylex_create_theme_from_group(
   theme_group: (String, ThemeVars),
   variables: &EvaluateResultValue,
@@ -65,13 +60,10 @@ pub(crate) fn stylex_create_theme_from_group(
   };
   let mut variables_key_values = get_key_values_from_object(variables_obj);
 
-  // Sorted by the name each key is written under, read by borrow. A sort asks
-  // for that name about twice per element per level, and the owned form copied
-  // it every time.
+  // Sort by the authored key name, borrowed.
   variables_key_values.sort_unstable_by(|left, right| {
     let (left, right) = (key_value_name(left), key_value_name(right));
-    // UTF-16 order is byte order for ASCII text, so ASCII names compare as
-    // bytes without being re-encoded.
+    // UTF-16 order equals byte order for ASCII.
     if left.is_ascii() && right.is_ascii() {
       left.as_bytes().cmp(right.as_bytes())
     } else {
@@ -117,8 +109,7 @@ pub(crate) fn stylex_create_theme_from_group(
     collect_vars_by_at_rules(&key, &value, &mut rules_by_at_rule, &[], typed_variables);
   }
 
-  // Sort @-rules to get a consistent unique hash value
-  // But also put "default" first
+  // Sort @-rules for a stable hash, with "default" first.
   rules_by_at_rule.sort_unstable_by(|left, _, right, _| {
     if left.as_str() == "default" {
       Ordering::Less
@@ -129,8 +120,6 @@ pub(crate) fn stylex_create_theme_from_group(
     }
   });
 
-  // The declarations of each @-rule, joined once and read by both the hash and
-  // the rule written below it.
   let declarations_by_at_rule = rules_by_at_rule
     .iter()
     .map(|(at_rule, rules)| (at_rule.as_str(), rules.join("")))
@@ -141,7 +130,6 @@ pub(crate) fn stylex_create_theme_from_group(
     .map(|(at_rule, declarations)| wrap_with_at_rules(declarations, at_rule))
     .collect::<String>();
 
-  // Create a class name hash
   let override_class_name = format!(
     "{}{}",
     state.options.class_name_prefix,

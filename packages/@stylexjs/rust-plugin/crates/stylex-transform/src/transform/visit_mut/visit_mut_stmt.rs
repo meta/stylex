@@ -21,9 +21,7 @@ where
       if let Some(Stmt::Decl(Decl::Var(var))) = stmt.as_ref()
         && var.decls.is_empty()
       {
-        // Variable declaration without declarator is invalid.
-        //
-        // After this, `stmt` becomes `Stmt::Empty`.
+        // A variable declaration without declarators is invalid; replace it with `Stmt::Empty`.
         stmt.take();
       }
     } else {

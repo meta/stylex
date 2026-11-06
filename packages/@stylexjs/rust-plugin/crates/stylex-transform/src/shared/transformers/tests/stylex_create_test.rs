@@ -879,10 +879,9 @@ mod stylex_create {
     let (before_hover, before_hover_rules, before_hover_paths) = stylex_create(before_hover_object);
     let (hover_before, hover_before_rules, hover_before_paths) = stylex_create(hover_before_object);
 
-    // Executed current Babel (2d42d72): shared/stylex-create.js:76-87 hashes
-    // namespace keys; shared/utils/convert-to-className.js:49-63 preserves
-    // pseudo-element segment order in the class hash. Its selector builder
-    // (shared/utils/generate-css-rule.js:32-48) puts pseudo-classes first.
+    // Executed current Babel (2d42d72): stylex-create.js:76-87 hashes namespace keys;
+    // convert-to-className.js:49-63 keeps pseudo-element segment order in the hash;
+    // generate-css-rule.js:32-48 puts pseudo-classes first in the selector.
     let (expected_before_hover, expected_before_hover_rules, expected_before_hover_paths) =
       exprected_result_factory(
         &[("default", &[("::before_color-kxBb7d", "xeb2lg0")])],
@@ -1069,8 +1068,6 @@ mod stylex_create {
     assert_eq!(class_paths_in_namespace, expected_class_paths_in_namespace)
   }
 
-  /// A namespace is named by the key it is written under, which has to spell
-  /// text at compile time.
   #[test]
   #[should_panic(expected = "Expected a string value but received a non-string expression.")]
   fn refuses_a_namespace_name_that_spells_no_text() {
@@ -1087,8 +1084,7 @@ mod stylex_create {
     stylex_create(object);
   }
 
-  /// A property written with no value declares nothing. The namespace still
-  /// names the property, so a merge below it can still take the property away.
+  /// A merge below the namespace can still take the valueless property away.
   #[test]
   fn names_a_property_that_declares_nothing_and_injects_no_rule() {
     let mut object = IndexMap::new();
@@ -1120,9 +1116,7 @@ mod stylex_create {
     );
   }
 
-  /// A property written under two conditions is one set of rules. When no
-  /// condition declares anything, the set compiles to no class name at all,
-  /// and the namespace names the property as declaring nothing.
+  /// A conditional set that declares nothing compiles to no class name.
   #[test]
   fn names_a_set_of_rules_that_all_declare_nothing() {
     let mut object = IndexMap::new();
@@ -1152,14 +1146,10 @@ mod stylex_create {
     assert!(injected_styles.is_empty());
   }
 
-  /// A namespace is answered under the name it was given.
-  ///
-  /// The atoms pass reads this: it wraps one property in a namespace of its own
-  /// naming and reads the compiled namespace back out under that name. A name
-  /// that did not survive the compile would leave it with nothing.
+  /// The atoms pass reads its compiled namespace back under the name it gave.
   #[test]
   fn answers_a_namespace_under_the_name_it_was_given() {
-    // The name the atoms pass writes, beside one an author writes.
+    // The name the atoms pass writes, beside an author-written one.
     let names = [INLINE_NAMESPACE, "root"];
 
     let object = style_object_factory(&[
@@ -1177,16 +1167,9 @@ mod stylex_create {
     }
   }
 
-  /// Every namespace that is compiled gets a class-paths entry.
-  ///
-  /// The rewrite of the dynamic entries reads the paths of the namespace it
-  /// rewrites. It answers the empty map for a name it holds no entry for, and
-  /// no reader reaches that answer, because the two maps are written in one
-  /// pass over the same names. The parity is read here, so the day the two come
-  /// apart is the day this fails.
+  /// The dynamic-entry rewrite reads these paths; the two maps must stay in parity.
   #[test]
   fn answers_class_paths_for_every_namespace_it_compiles() {
-    // Two namespaces, and one of them declares nothing.
     let object = style_object_factory(&[
       ("declares", &[("color", "blue")]),
       ("declares_nothing", &[]),

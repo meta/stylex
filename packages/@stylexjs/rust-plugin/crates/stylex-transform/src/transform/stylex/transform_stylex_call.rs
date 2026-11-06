@@ -13,12 +13,7 @@ impl<C> StyleXTransform<C>
 where
   C: Comments,
 {
-  /// The merge a bare `stylex(...)` call compiles to, where the call is one.
-  ///
-  /// One answer for every call this is not. The three the handler wrote out --
-  /// a callee that is no expression, an expression that is no name, and a name
-  /// that is no `stylex` import -- all mean the same thing to the dispatcher
-  /// above, which asks the next handler either way.
+  /// The merge a bare `stylex(...)` call compiles to, or `None` if the call is not one.
   pub(crate) fn transform_stylex_call(&mut self, call: &mut CallExpr) -> Option<Expr> {
     if let Callee::Expr(callee) = &call.callee
       && let Expr::Ident(ident) = callee.as_ref()

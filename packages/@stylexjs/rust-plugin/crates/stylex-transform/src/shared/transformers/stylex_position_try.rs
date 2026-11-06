@@ -21,8 +21,7 @@ pub(crate) fn stylex_position_try(
   styles: &EvaluateResultValue,
   state: &mut StateManager,
 ) -> (String, InjectableStyleKind) {
-  // NOTE: an unset `classNamePrefix` arrives here already defaulted to `x`,
-  // so an empty one was asked for explicitly and is honoured as empty.
+  // `classNamePrefix` is already defaulted to `x`; an empty one is honoured as empty.
   let class_name_prefix = state.options.class_name_prefix.clone();
 
   let Some(styles) = styles.as_expr().filter(|expr| expr.is_object()) else {
@@ -33,8 +32,7 @@ pub(crate) fn stylex_position_try(
   let declarations =
     obj_map_keys_and_transform_values(&entries, state, |key| dashify(key).into_owned());
 
-  // Directional generators return a key/value pair. Serialize it once and
-  // honor this call's normalized options; a flipped key is not a fallback value.
+  // Directional generators return a key/value pair; a flipped key is not a fallback value.
   let options = &state.options;
   let ltr_string = construct_position_try_obj(&declarations, |pair| generate_ltr(pair, options));
   let rtl_string = construct_position_try_obj(&declarations, |pair| {
@@ -43,10 +41,7 @@ pub(crate) fn stylex_position_try(
 
   let position_try_name = format!("--{}{}", class_name_prefix, create_hash(&ltr_string));
 
-  // The space before the block is part of the rule text the reference
-  // implementation emits. It sits outside the hash, which is taken from the body
-  // alone, so the name is unaffected either way -- but the rule text is compared
-  // byte for byte wherever both compilers' output meets.
+  // Matches the reference: a space before the block (outside the hashed body).
   let ltr = format!("@position-try {} {{{}}}", position_try_name, ltr_string);
   let rtl = if ltr_string == rtl_string {
     None
@@ -76,8 +71,7 @@ pub(crate) fn get_position_try_fn() -> FunctionConfig {
   }
 }
 
-/// Map each directional key, collapse duplicates like Object.fromEntries,
-/// then sort the resulting names by JavaScript's UTF-16 ordering.
+/// Maps directional keys, dedupes like `Object.fromEntries`, and sorts names in UTF-16 order.
 fn construct_position_try_obj(
   declarations: &[Pair],
   resolve: impl for<'a> Fn(&'a Pair) -> PairCow<'a>,

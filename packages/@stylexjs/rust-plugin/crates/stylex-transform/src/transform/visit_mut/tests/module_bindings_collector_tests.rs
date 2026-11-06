@@ -43,10 +43,7 @@ fn current_module_root_bindings_keep_types_but_exclude_nested_type_parameters() 
 }
 use crate::transform::tests::prelude::{resolved_module, resolved_ts_module};
 
-/// Names of the bindings the collector recorded as written under any kind,
-/// ignoring syntax contexts (asserted separately where shadowing is what's
-/// under test). Most shapes here are about *whether* a write is seen at all,
-/// which the union answers; `splits_…` below pins which set each lands in.
+/// Names written under any kind, ignoring syntax contexts; `splits_…` below pins which set.
 fn written_names(code: &str) -> FxHashSet<String> {
   written_ids(code)
     .iter()
@@ -77,8 +74,7 @@ fn mutated_names(code: &str) -> FxHashSet<String> {
   }))
 }
 
-/// Names recorded as written further down a chain than upstream's `isMutated`
-/// looks — one hop is a mutation, two or more is this.
+/// Names written two or more hops down a chain, past upstream's one-hop `isMutated`.
 fn deeply_mutated_names(code: &str) -> FxHashSet<String> {
   names(collect(code, |collector| {
     collector.binding_deep_mutations.clone()
@@ -89,8 +85,6 @@ fn names(ids: FxHashSet<Id>) -> FxHashSet<String> {
   ids.iter().map(|(sym, _)| sym.to_string()).collect()
 }
 
-/// Runs the collector over `code` and reads whichever set the caller asks for,
-/// so the three readers above differ only in that choice.
 fn collect(code: &str, read: impl Fn(&ModuleBindingsCollector) -> FxHashSet<Id>) -> FxHashSet<Id> {
   collect_parsed_by(resolved_module, code, read)
 }
@@ -266,8 +260,7 @@ fn records_destructuring_assignment_targets() {
   assert_written("let a, b; [a, b] = [1, 2];", &["a", "b"]);
   assert_written("let a, rest; ({ a, ...rest } = {});", &["a", "rest"]);
   assert_written("let a; ({ a = 1 } = {});", &["a"]);
-  // A member target inside a destructuring assignment mutates the object it
-  // is reached through, it does not rebind a name of its own.
+  // A member target mutates the object it is reached through; it rebinds no name.
   assert_written("const o = {}; ({ x: o.x } = { x: 1 });", &["o"]);
 }
 
@@ -275,7 +268,6 @@ fn records_destructuring_assignment_targets() {
 fn records_loop_head_rebindings() {
   assert_written("let key; const o = {}; for (key in o) {}", &["key"]);
   assert_written("let item; for (item of []) {}", &["item"]);
-  // A `for` head that declares its own binding is not a write.
   assert_written("for (const item of []) { item; }", &[]);
 }
 
@@ -284,7 +276,6 @@ fn records_member_writes_through_the_chain_root() {
   assert_written("const o = { a: { b: 1 } }; o.a.b = 2;", &["o"]);
   assert_written("const o = { a: {} }; delete o.a.b;", &["o"]);
   assert_written("const o = { a: [] }; o.a[0] = 1;", &["o"]);
-  // Nothing to invalidate when the chain root owns no binding.
   assert_written("getConfig().a.b = 1;", &[]);
 }
 
@@ -306,15 +297,11 @@ fn records_mutating_object_methods_on_their_target() {
     "const o = {}; Object.defineProperty(o, 'a', { value: 1 });",
     &["o"],
   );
-  // A spread first argument names no single binding to invalidate.
   assert_written("const o = {}; Object.assign(...[o], {});", &[]);
-  // Non-mutating `Object` statics leave their argument alone.
   assert_written("const o = {}; Object.keys(o);", &[]);
 }
 
-/// Parenthesised and nested-wrapper targets reach the same binding as their
-/// bare form, so every write shape must look through them. Each case here
-/// silently escaped detection while the expression-target match was shallow.
+/// Each case escaped detection while the expression-target match was shallow.
 #[test]
 fn looks_through_parenthesised_targets() {
   assert_written("let a = 1; (a)++;", &["a"]);
@@ -325,8 +312,7 @@ fn looks_through_parenthesised_targets() {
   assert_written("const o = { a: {} }; delete ((o).a);", &["o"]);
 }
 
-/// `arr?.push(1)` parses as an optional call rather than a `CallExpr`, but
-/// mutates the receiver just the same whenever it is non-nullish.
+/// `arr?.push(1)` parses as an optional call, not a `CallExpr`.
 #[test]
 fn records_mutating_methods_reached_through_optional_calls() {
   assert_written("const items = []; items?.push(1);", &["items"]);
@@ -338,27 +324,20 @@ fn records_mutating_methods_reached_through_optional_calls() {
     "const state = { items: [] }; state?.items?.push(1);",
     &["state"],
   );
-  // Non-mutating optional calls leave the receiver alone.
   assert_written("const items = []; items?.at(0);", &[]);
 }
 
-/// A string-literal computed property names its method as unambiguously as
-/// dot access does.
 #[test]
 fn records_mutating_methods_named_by_a_string_literal() {
   assert_written("const items = []; items['push'](1);", &["items"]);
   assert_written("const o = {}; Object['assign'](o, { a: 1 });", &["o"]);
-  // A genuinely dynamic property name is unknowable, so nothing is recorded
-  // rather than deopting every computed call in the module.
+  // A dynamic name is unknowable; recording it would deopt every computed call.
   assert_written("const items = []; const m = 'push'; items[m](1);", &[]);
 }
 
-// ==================== which set a write lands in ====================
+// Which set a write lands in
 
-/// A bare name given a new value is a reassignment — the reference
-/// implementation's constant violation — and nothing about the value it used to
-/// reference has changed, so it is not also a mutation. Every shape that writes
-/// a name directly answers this way.
+/// The reference implementation's constant violation; the old value is unchanged, so no mutation.
 #[test]
 fn splits_a_rebound_name_into_the_reassignment_set() {
   assert_reassigned("let a = 1; a = 2;", &["a"]);
@@ -374,9 +353,7 @@ fn splits_a_rebound_name_into_the_reassignment_set() {
   assert_mutated("let a, b; [a, b] = [1, 2];", &[]);
 }
 
-/// Reaching the binding through a member keeps the binding and changes what it
-/// points at, which is the reference implementation's `isMutated`. So `o.n++`
-/// mutates where `n++` reassigns, out of the one walk that serves both.
+/// The reference implementation's `isMutated`: `o.n++` mutates where `n++` reassigns.
 #[test]
 fn splits_a_write_through_a_member_into_the_mutation_set() {
   assert_mutated("const o = { n: 1 }; o.n = 2;", &["o"]);
@@ -391,11 +368,8 @@ fn splits_a_write_through_a_member_into_the_mutation_set() {
   assert_reassigned("const o = {}; ({ x: o.x } = { x: 1 });", &[]);
 }
 
-/// A second member hop takes the write past what `isMutated` looks at: it asks
-/// that the reference's own parent be the member the write lands on, and
-/// `o.a.b = 2` puts another member in between. Recorded apart so the chain can
-/// keep refusing it — which upstream does not — without changing the refusal a
-/// binding of a kind that folds nothing already had.
+/// Upstream `isMutated` requires the reference's parent to be the written member, so
+/// `o.a.b = 2` escapes it; recorded apart so the chain can keep refusing it.
 #[test]
 fn splits_a_write_below_the_first_member_into_the_deep_mutation_set() {
   for (source, root) in [
@@ -412,18 +386,13 @@ fn splits_a_write_below_the_first_member_into_the_deep_mutation_set() {
   }
 }
 
-/// And one hop stays one hop however many wrappers sit around it, so a
-/// parenthesised or `as`-cast single write is not mistaken for a deep one.
 #[test]
 fn wrappers_around_a_single_hop_do_not_deepen_it() {
   assert_mutated("const o = { n: 1 }; ((o).n) = 2;", &["o"]);
   assert_deeply_mutated("const o = { n: 1 }; ((o).n) = 2;", &[]);
 }
 
-/// A mutating method mutates its receiver, and `Object.assign` mutates its
-/// first argument even when that argument is spelled as a bare name — the one
-/// shape where a write reaching an identifier directly is still a mutation
-/// rather than a reassignment.
+/// `Object.assign` on a bare name is the one direct-identifier write that is a mutation.
 #[test]
 fn splits_a_mutated_receiver_and_an_assign_target_into_the_mutation_set() {
   assert_mutated("const items = []; items.push(1);", &["items"]);
@@ -431,9 +400,7 @@ fn splits_a_mutated_receiver_and_an_assign_target_into_the_mutation_set() {
   assert_mutated("const o = {}; Object.assign(o, { a: 1 });", &["o"]);
   assert_mutated("const o = {}; Object.assign((o), { a: 1 });", &["o"]);
 
-  // A receiver reached through a member of its own is one hop further down,
-  // which `splits_a_write_below_the_first_member_into_the_deep_mutation_set`
-  // pins: the method mutates `state.items`, and `state` only holds it.
+  // One hop further down (the deep set): the method mutates `state.items`, not `state`.
   assert_mutated("const state = { items: [] }; state.items.push(1);", &[]);
   assert_mutated("const o = { a: {} }; Object.assign(o.a, {});", &[]);
 
@@ -441,9 +408,7 @@ fn splits_a_mutated_receiver_and_an_assign_target_into_the_mutation_set() {
   assert_reassigned("const o = {}; Object.assign(o, { a: 1 });", &[]);
 }
 
-/// One name can reach both sets, and each records it independently: the
-/// evaluator refuses on the first probe either way, so the value of keeping
-/// them apart is that each step answers for itself.
+/// Each step answers for itself, though the evaluator refuses on the first probe either way.
 #[test]
 fn records_a_name_both_rebound_and_mutated_in_both_sets() {
   let code = "let o = { n: 1 }; o.n = 2; o = { n: 3 };";
@@ -468,9 +433,7 @@ fn keeps_shadowed_bindings_distinct() {
   );
 }
 
-/// The same invariant for the other set. Splitting the writes in two doubled the
-/// places a shadowed binding could be confused with the one it shadows, so both
-/// sets have to answer, not just the one that happened to be asserted.
+/// Splitting the writes doubled the places shadowing could be confused, so both sets must answer.
 #[test]
 fn keeps_shadowed_bindings_distinct_for_mutations_too() {
   assert_only_the_shadowing_binding_is_written(
@@ -487,9 +450,7 @@ fn keeps_shadowed_bindings_distinct_for_mutations_too() {
   );
 }
 
-/// Collects `code`, reads the set `pick` names, and asserts the only `tokens`
-/// recorded there is the inner one — under an `Id` distinct from the module-level
-/// binding's.
+/// Asserts the only `tokens` in the `pick` set is the inner one, under a distinct `Id`.
 #[track_caller]
 fn assert_only_the_shadowing_binding_is_written(
   code: &str,
@@ -518,8 +479,7 @@ fn assert_only_the_shadowing_binding_is_written(
   });
 }
 
-/// `Id` of the first module-level `var`/`let`/`const` binding, used to assert
-/// that a write to a shadowing binding is recorded under a different `Id`.
+/// `Id` of the first module-level `var`/`let`/`const` binding.
 fn first_top_level_binding(module: &Module) -> Id {
   module
     .body
@@ -535,11 +495,8 @@ fn first_top_level_binding(module: &Module) -> Id {
     .expect("fixture declares a top-level binding")
 }
 
-// ==================== the bindings the module declares ====================
-//
-// The `Id`-keyed set the evaluator's globals step reads. Unlike the two write
-// sets, it is filled in both of the collector's modes, so every case here runs
-// under `writes_only` — the mode that collects *less* — to pin that.
+// The bindings the module declares: the evaluator's globals set, filled in both modes, so
+// cases run under the leaner `writes_only` mode.
 
 fn bound_names(code: &str) -> FxHashSet<String> {
   names(collect(code, |collector| {
@@ -552,14 +509,8 @@ fn assert_binds(code: &str, expected: &[&str]) {
   assert_names(bound_names(code), expected, code);
 }
 
-/// Every binding form JavaScript spells, in the one place a reader would look
-/// for the list. A name missing here is a global the evaluator would fold where
-/// the module had taken the name over.
-///
-/// TypeScript's own three -- `enum`, `namespace` and `import x = require()` --
-/// are deliberately not among them. One parse reads both languages, so what
-/// keeps a TypeScript form out of this list is the case below, which pins each
-/// of the three as binding nothing: added here, a form would fail there.
+/// A missing form is a global the evaluator would fold where the module took the name over.
+/// TypeScript's own three forms are pinned by `records_nothing_for_typescript_only_binding_forms`.
 #[test]
 fn records_every_javascript_binding_form() {
   assert_binds("const a = 1; let b = 2; var c = 3;", &["a", "b", "c"]);
@@ -584,9 +535,7 @@ fn records_every_javascript_binding_form() {
   assert_binds("import * as ns from 'm';", &["ns"]);
 }
 
-/// A reference is not a binding. Nothing here declares anything, so nothing is
-/// recorded — the set would otherwise answer `true` for every name the module
-/// mentions and the globals step would refuse every global.
+/// Otherwise the globals step would refuse every global the module mentions.
 #[test]
 fn records_nothing_for_a_module_that_declares_nothing() {
   assert_binds("f(NaN, Infinity, undefined);", &[]);
@@ -595,27 +544,17 @@ fn records_nothing_for_a_module_that_declares_nothing() {
   assert_binds("", &[]);
 }
 
-/// TypeScript's three binding forms are not collected, because they do not
-/// reach this walk: `typescript_strip` runs ahead of the StyleX pass and lowers
-/// each one to a `var` or a `const`, which `visit_binding_ident` then records
-/// like any other. Pinned as absent rather than left unstated, so the day the
-/// strip moves the gap reads as a failing test instead of a global folding
-/// where the module had bound the name.
-///
-/// The one place the gap is real is this crate's own test transform, which runs
-/// the resolver alone and no strip. Every input in that suite is JavaScript, so
-/// nothing there reaches it.
+/// `typescript_strip` lowers them to `var`/`const` before the StyleX pass; pinned absent so a
+/// moved strip fails here. Only this crate's test transform (resolver only) skips the strip.
 #[test]
 fn records_nothing_for_typescript_only_binding_forms() {
   assert_binds("enum NaN { a }", &[]);
   assert_binds("import NaN = require('m');", &[]);
-  // The `namespace` name itself is not recorded; the `const` inside it is, by
-  // the same `visit_binding_ident` that records every other declarator.
+  // The `namespace` name is not recorded; the `const` inside it is.
   assert_binds("namespace NaN { export const a = 1; }", &["a"]);
 }
 
-/// The three names the globals step asks about are ordinary bindings to the
-/// collector, in every position one can be written.
+/// The three names the globals step asks about, in every position one can be written.
 #[test]
 fn records_a_binding_that_takes_a_global_name_over() {
   assert_binds("const NaN = 1;", &["NaN"]);
@@ -625,10 +564,7 @@ fn records_a_binding_that_takes_a_global_name_over() {
   assert_binds("import { x as NaN } from 'm';", &["NaN"]);
 }
 
-/// Two bindings of one name are two entries, because the set is keyed by `Id`.
-/// This is what keeps a reference to the global apart from a reference to the
-/// parameter that took its name: the resolver gives them different contexts and
-/// the reference carries the one it resolved to.
+/// Keyed by `Id`, so a parameter shadowing a global stays apart from the global.
 #[test]
 fn keeps_two_bindings_of_one_name_apart() {
   GLOBALS.set(&Globals::default(), || {
@@ -653,9 +589,7 @@ fn keeps_two_bindings_of_one_name_apart() {
   });
 }
 
-/// The set survives the collector's cheaper mode, which is the mode most
-/// modules are scanned in — the `sx` prop is off by default, and the evaluator
-/// runs either way.
+/// Most modules are scanned in the cheaper mode: the `sx` prop is off by default.
 #[test]
 fn collects_bindings_in_both_modes() {
   GLOBALS.set(&Globals::default(), || {
@@ -676,12 +610,9 @@ fn collects_bindings_in_both_modes() {
   });
 }
 
-// ================== the wrappers and casts TypeScript adds ==================
+// The wrappers and casts TypeScript adds
 
-/// Names written in `code`, read with JSX off.
-///
-/// One of the five wrappers is the angle-bracket cast, and `<any>value` opens
-/// an element where JSX is on, so the whole group is read the one way.
+/// Names written in `code`, read with JSX off (where `<any>value` would open an element).
 #[track_caller]
 fn assert_ts_written(code: &str, expected: &[&str]) {
   let recorded = names(collect_ts(code, |collector| {
@@ -696,14 +627,8 @@ fn assert_ts_written(code: &str, expected: &[&str]) {
   assert_names(recorded, expected, code);
 }
 
-/// A TypeScript wrapper is a node in the tree and nothing at run time, so a
-/// write through one writes the binding the bare spelling writes. Each of the
-/// five is spelled here both as the whole target, which the assignment-target
-/// match unwraps, and inside a member chain, which the walk unwraps a hop
-/// further down.
-///
-/// Read bare, the write is never recorded and the evaluator folds a declaration
-/// the module had already overwritten.
+/// A TypeScript wrapper is nothing at run time. Each of the five is spelled as the whole target
+/// and inside a member chain; missed, the evaluator folds an already-overwritten declaration.
 #[test]
 fn looks_through_typescript_wrappers_on_a_write_target() {
   assert_ts_written("let a = 1; (a as any) = 2;", &["a"]);
@@ -711,8 +636,7 @@ fn looks_through_typescript_wrappers_on_a_write_target() {
   assert_ts_written("let a = 1; a! = 2;", &["a"]);
   assert_ts_written("let a = 1; (<any>a) = 2;", &["a"]);
 
-  // Parenthesised, the cast is a `Paren` target the walk unwraps a hop later;
-  // bare, it is the assignment target itself, which is a separate arm.
+  // Parenthesised, the cast is a `Paren` target; bare, it is the target itself (separate arm).
   assert_ts_written("let a = 1; a as any = 2;", &["a"]);
   assert_ts_written("let a = 1; a satisfies any = 2;", &["a"]);
   assert_ts_written("let a = 1; <any>a = 2;", &["a"]);
@@ -729,9 +653,7 @@ fn looks_through_typescript_wrappers_on_a_write_target() {
   );
 }
 
-/// The same five wrappers around the operand of a `delete`, which is read by
-/// the member walk rather than by the assignment-target match. `delete (o.x)`
-/// and `delete (o.x as any)` remove the same property, so both mutate `o`.
+/// The `delete` operand is read by the member walk, not the assignment-target match.
 #[test]
 fn looks_through_typescript_wrappers_to_a_deleted_member() {
   assert_ts_written("const o = { x: 1 }; delete (o.x as any);", &["o"]);
@@ -741,9 +663,7 @@ fn looks_through_typescript_wrappers_to_a_deleted_member() {
   assert_ts_written("const o = { x: 1 }; delete (o.x<number>);", &["o"]);
 }
 
-/// A call result owns no binding, so a write that lands on one invalidates
-/// nothing. Both spellings the optional chain gives are here: the chain the
-/// write reaches through, and the chain the `delete` operand is.
+/// Both optional-chain spellings: the chain a write reaches through, and a `delete` operand.
 #[test]
 fn records_nothing_for_a_write_into_a_call_result() {
   assert_written("const a = { b: () => ({ c: 1 }) }; a?.b().c = 1;", &[]);
@@ -751,25 +671,19 @@ fn records_nothing_for_a_write_into_a_call_result() {
   assert_written("const o = { f: () => ({}) }; o?.f() = 1;", &[]);
 }
 
-/// A private method names no binding of the module, and its name cannot be one
-/// of the mutating methods either, so the call is passed over rather than
-/// deopting the receiver.
+/// Passed over rather than deopting the receiver.
 #[test]
 fn records_nothing_for_a_private_method_call() {
   assert_written("class K { #p() {} m() { this.#p(1); } }", &[]);
 }
 
-/// `super.x = 1` writes a property of the prototype chain, which no binding of
-/// this module names.
+/// It writes the prototype chain, which no binding of this module names.
 #[test]
 fn records_nothing_for_a_super_property_write() {
   assert_written("class K extends L { m() { super.x = 1; } }", &[]);
 }
 
-/// A `for-in` / `for-of` head carries a pattern, which is where the destructuring
-/// shapes reach the walk as `Pat` rather than as an assignment target. Every
-/// shape one can hold is here, including the member target, which mutates the
-/// object it is reached through instead of rebinding a name.
+/// Loop-head patterns reach the walk as `Pat` rather than as an assignment target.
 #[test]
 fn records_the_writes_a_loop_head_pattern_performs() {
   assert_written("let a; for ([a] of []) {}", &["a"]);
@@ -777,27 +691,16 @@ fn records_the_writes_a_loop_head_pattern_performs() {
   assert_written("let rest; for ([...rest] of []) {}", &["rest"]);
   assert_written("let a; for ([a = 1] of []) {}", &["a"]);
   assert_written("const o = {}; for ([o.x] of []) {}", &["o"]);
-  // A wrapped member is the same target as the bare one, here as everywhere.
   assert_written("const o = {}; [(o.x)] = [];", &["o"]);
   assert_ts_written("const o = {}; [(o.x as any)] = [];", &["o"]);
-  // A call result owns no binding to invalidate, and a call is not a member
-  // read at all.
   assert_written("const o = {}; [f().x] = [];", &[]);
   assert_written("const o = {}; [f()] = [];", &[]);
-  // An optional member inside a pattern is recorded as invalid by the parser,
-  // and an invalid node names nothing. The target cannot be assigned to at run
-  // time either.
+  // The parser records an optional member in a pattern as invalid; it names nothing.
   assert_written("const o = {}; [o?.x] = [];", &[]);
 }
 
-/// The two invalid nodes, handed to the collector directly.
-///
-/// One of them a module reaches, and the case reads it from a module rather
-/// than claiming it: the parser writes a `Pat::Invalid` for the optional member
-/// in `[o?.x] = []`. The other is a node no module the pass runs over holds,
-/// because an assignment target the parser could not read is a syntax error.
-/// Both are pinned as no-ops rather than left unstated: the alternative to a
-/// no-op is recording a write against a binding that was never named.
+/// Both invalid nodes are no-ops. `Pat::Invalid` comes from `[o?.x] = []`; the other is
+/// unreachable from a module (a syntax error), so it is built directly.
 #[test]
 fn records_nothing_for_an_invalid_pattern() {
   GLOBALS.set(&Globals::default(), || {
@@ -829,10 +732,7 @@ fn records_nothing_for_an_invalid_pattern() {
   });
 }
 
-/// The first element of the array pattern `code` assigns to.
-///
-/// Reads the node the parser built, so a case about a shape only the parser can
-/// make says what that shape is instead of describing it.
+/// The first element of the array pattern `code` assigns to, as the parser built it.
 fn first_array_pattern_element(code: &str) -> Pat {
   let module = resolved_module(code);
 
@@ -853,11 +753,7 @@ fn first_array_pattern_element(code: &str) -> Pat {
   }
 }
 
-/// An anonymous class expression binds no name of its own, and a unary operator
-/// other than `delete` mutates nothing. Both sit beside the shape they are the
-/// other half of, in one module, because llvm-cov scores a function on its
-/// best-covered instantiation: split over two modules, neither visitor reads as
-/// wholly exercised.
+/// Kept in one module because llvm-cov scores a function on its best-covered instantiation.
 #[test]
 fn records_nothing_for_an_anonymous_class_or_a_non_deleting_unary() {
   assert_binds(
@@ -867,8 +763,7 @@ fn records_nothing_for_an_anonymous_class_or_a_non_deleting_unary() {
   assert_written("const o = { x: 1 }; void o; delete o.x;", &["o"]);
 }
 
-/// A callee that is not an expression — the `super(…)` of a constructor and a
-/// dynamic `import(…)` — has no receiver a method could mutate.
+/// `super(…)` and dynamic `import(…)` have no receiver a method could mutate.
 #[test]
 fn records_nothing_for_a_call_with_no_callee_expression() {
   assert_written("class K extends L { constructor() { super(1); } }", &[]);

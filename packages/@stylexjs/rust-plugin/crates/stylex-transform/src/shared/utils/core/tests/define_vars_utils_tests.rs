@@ -1,4 +1,4 @@
-//! Tests for the CSS a variable group is written out as.
+//! The CSS a variable group is written out as.
 
 use indexmap::IndexMap;
 use stylex_enums::{css_syntax::CSSSyntax, value_with_default::ValueWithDefault};
@@ -15,12 +15,10 @@ use stylex_types::{
 use crate::shared::utils::core::define_vars_utils::collect_vars_by_at_rules;
 use crate::tests::support::expr;
 
-/// A variable whose value is the expression `code` spells.
 fn variable(code: &str) -> FlatCompiledStylesValue {
   FlatCompiledStylesValue::Tuple("xhash".to_owned(), Box::new(expr(code)), None)
 }
 
-/// A typed variable, whose declared syntax carries the value `code` spells.
 fn typed_variable(code: &str, value: ValueWithDefault) -> FlatCompiledStylesValue {
   FlatCompiledStylesValue::Tuple(
     "xhash".to_owned(),
@@ -60,15 +58,12 @@ fn writes_a_number_the_way_javascript_spells_it() {
   assert_eq!(collect(&variable("1e21"))["default"], ["--xhash:1e+21;"]);
 }
 
-/// A value written as absent declares nothing, so the group carries no entry
-/// for it at all.
 #[test]
 fn writes_nothing_for_an_absent_value() {
   assert!(collect(&variable("null")).is_empty());
 }
 
-/// An object gives one value per at-rule, and the at-rules are kept in the name
-/// of the key they are written under.
+/// The at-rules are kept in the key's name.
 #[test]
 fn writes_one_value_for_each_at_rule_an_object_names() {
   let collection = collect(&variable("{ default: '8px', '@media print': '0px' }"));
@@ -77,8 +72,7 @@ fn writes_one_value_for_each_at_rule_an_object_names() {
   assert_eq!(collection["@media print"], ["--xhash:0px;"]);
 }
 
-/// Nested at-rules are joined under one key, sorted, so the same two rules
-/// written in either order name one place.
+/// Sorted, so the same two rules in either order name one place.
 #[test]
 fn joins_nested_at_rules_into_one_key() {
   let collection = collect(&variable(
@@ -94,46 +88,36 @@ fn joins_nested_at_rules_into_one_key() {
   );
 }
 
-/// An object of at-rules with no `default` leaves the variable undeclared
-/// outside those rules, which is a fault the author is told about by name.
+/// The author is told about the missing `default` by name.
 #[test]
 #[should_panic(expected = "cornerRadius")]
 fn refuses_an_object_that_names_no_default() {
   collect(&variable("{ '@media print': '0px' }"));
 }
 
-/// A variable takes one value. An array spells several, and there is no rule to
-/// pick one of them.
 #[test]
 #[should_panic(expected = "Array values are not supported in defineVars()")]
 fn refuses_an_array_value() {
   collect(&variable("['8px', '0px']"));
 }
 
-/// A literal that spells no text cannot be written into a declaration.
 #[test]
 #[should_panic(expected = "Expected a CSS custom property (variable) reference.")]
 fn refuses_a_literal_that_spells_no_text() {
   collect(&variable("/re/"));
 }
 
-/// Only a variable and its value can be collected. Anything else means the
-/// group was not compiled.
 #[test]
 #[should_panic(expected = "The values argument must be a plain object.")]
 fn refuses_a_value_that_is_not_a_variable() {
   collect(&FlatCompiledStylesValue::Bool(true));
 }
 
-/// A value the compiler could not fold is left out, because there is nothing to
-/// write for it.
 #[test]
 fn writes_nothing_for_a_value_that_did_not_fold() {
   assert!(collect(&variable("a + b")).is_empty());
 }
 
-/// A typed variable records the syntax it was declared with, and the value the
-/// syntax falls back to.
 #[test]
 fn records_the_declared_syntax_of_a_typed_variable() {
   let mut typed_variables = InjectableStylesMap::new();
@@ -164,8 +148,6 @@ fn records_the_declared_syntax_of_a_typed_variable() {
   );
 }
 
-/// A nested syntax value is read down to the value the innermost `default`
-/// names.
 #[test]
 fn reads_the_initial_value_through_a_nested_default() {
   let mut inner: IndexMap<String, ValueWithDefault> = IndexMap::new();
@@ -192,8 +174,6 @@ fn reads_the_initial_value_through_a_nested_default() {
   });
 }
 
-/// A declared syntax with no `default` has no value to fall back to, which
-/// leaves the variable undefined until something sets it.
 #[test]
 #[should_panic(expected = "CSS type requires a default value but none was provided.")]
 fn refuses_a_declared_syntax_that_names_no_default() {
@@ -203,8 +183,6 @@ fn refuses_a_declared_syntax_that_names_no_default() {
   ));
 }
 
-/// A syntax whose value is not a set of named values has no `default` to read
-/// at all.
 #[test]
 #[should_panic(expected = "Value must be a map")]
 fn refuses_a_declared_syntax_that_names_no_values() {

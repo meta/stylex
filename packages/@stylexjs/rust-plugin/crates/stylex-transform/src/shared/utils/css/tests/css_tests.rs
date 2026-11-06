@@ -7,8 +7,7 @@ mod common_css_tests {
 
   #[test]
   fn should_transform_css_property_value() {
-    // Only a number takes the property's unit suffix; a numeric-looking string
-    // is emitted as authored.
+    // Only a number takes the unit suffix; a numeric-looking string is emitted as authored.
     assert_eq!(
       transform_value_cached(
         "padding",

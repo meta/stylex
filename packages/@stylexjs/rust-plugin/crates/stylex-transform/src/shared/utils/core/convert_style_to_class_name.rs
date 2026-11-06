@@ -15,14 +15,8 @@ use stylex_utils::{
   string::{dashify, is_blank_css_text},
 };
 
-/// Compiles a resolved property/value pair into the class name that carries it
-/// and the rule that class name injects.
-///
-/// `None` when the transformed value carries no CSS text: the declaration would
-/// be `color:`, which is invalid CSS a browser discards, so the property is left
-/// undeclared instead. The test is on the *transformed* value rather than the
-/// authored one, because transformation is what decides whether a blank value
-/// spells anything -- a blank `content` is quoted into `""`, which does.
+/// Compiles a resolved property/value pair into its class name and injected rule.
+/// `None` when the *transformed* value is blank (e.g. `color:`); a blank `content` becomes `""`.
 pub(crate) fn convert_style_to_class_name(
   obj_entry: (&str, &PreRuleValue),
   pseudos: &mut [String],
@@ -38,15 +32,10 @@ pub(crate) fn convert_style_to_class_name(
     dashify(key)
   };
 
-  // A declaration with no condition -- most of them -- has nothing to sort or
-  // join, and its modifier is the constant below.
   let modifier_hash_string: Cow<'static, str> =
     if pseudos.is_empty() && at_rules.is_empty() && const_rules.is_empty() {
       Cow::Borrowed("null")
     } else {
-      // `sort_pseudos` takes a slice and copies what it needs; copying into a
-      // binding it never mutates first was a second copy of the list, per
-      // property per namespace per call.
       let sorted_pseudos = sort_pseudos(pseudos);
 
       let mut combined_at_rules = Vec::with_capacity(at_rules.len() + const_rules.len());
@@ -60,8 +49,7 @@ pub(crate) fn convert_style_to_class_name(
       let pseudo_hash_string = sorted_pseudos.join("");
 
       if at_rule_hash_string.is_empty() && pseudo_hash_string.is_empty() {
-        // NOTE: 'null' is used to keep existing hashes stable.
-        // This should be removed in a future version.
+        // NOTE: 'null' is used to keep existing hashes stable. Remove in a future version.
         Cow::Borrowed("null")
       } else {
         // TODO: set correct order when will be answer from the Meta team
@@ -73,21 +61,14 @@ pub(crate) fn convert_style_to_class_name(
   let value: Vec<String> = match raw_value {
     PreRuleValue::Raw(raw_value) => vec![transform_value_cached(key, raw_value, state)],
     PreRuleValue::Vec(values) => {
-      // A blank entry drops before the fallback chain is built, so the class
-      // name is hashed from the entries that survive: a blank beside `red`
-      // yields the class name a lone `red` yields. It also has to go before
-      // `variable_fallbacks`, which requires the `var()` entries it composes to
-      // be contiguous.
+      // Drop blank entries before hashing and before `variable_fallbacks`, which needs
+      // contiguous `var()` entries.
       let values: Vec<String> = values
         .iter()
         .map(|each_value| transform_value_cached(key, each_value, state))
         .filter(|value| !is_blank_css_text(value))
         .collect();
 
-      // The position is what the composer needs, and asking for it answers the
-      // same question as asking whether there is one. Handing it over is what
-      // lets the composer read a set it is told holds a `var()` entry, rather
-      // than defaulting each end to a position no call reaches.
       match values.iter().position(|value| is_css_var(value)) {
         Some(first_var) => variable_fallbacks(&values, first_var),
         None => values,
@@ -96,15 +77,12 @@ pub(crate) fn convert_style_to_class_name(
     PreRuleValue::Expr(_) | PreRuleValue::Null => stylex_panic!("{}", ILLEGAL_PROP_VALUE),
   };
 
-  // A lone value is judged here; a fallback array arrives with its blank
-  // entries already gone, so `all` over no values -- also `true` -- is what
-  // answers for an array that emptied.
+  // Fallback arrays arrive without blanks, so an emptied array is also all-blank.
   if value.iter().all(|text| is_blank_css_text(text)) {
     return None;
   }
 
-  // `<>`, the key, the values joined by `, ` and the modifier, laid down in
-  // one buffer sized for them rather than through the formatter.
+  // `<>`, key, values joined by `, `, modifier, in one presized buffer.
   let values_len = value.iter().map(String::len).sum::<usize>() + 2 * value.len().saturating_sub(1);
   let mut string_to_hash =
     String::with_capacity(2 + dashed_key.len() + values_len + modifier_hash_string.len());
@@ -142,28 +120,14 @@ pub(crate) fn convert_style_to_class_name(
   ))
 }
 
-/// Whether a value is one whole `var()` reference.
-///
-/// Not the `IS_CSS_VAR` expression, and the difference is deliberate. That one
-/// asks for a custom property name -- `var(--name)`, with the name spelled from
-/// a fixed set of characters -- because the caller it serves asks a different
-/// question. The fallback chain asks only that the value opens with `var(` and
-/// closes the bracket, which is the test the reference makes here, so a
-/// `var(x)` is a link in the chain to both compilers.
+/// Whether a value is one whole `var()` reference (looser than `IS_CSS_VAR`, matching the
+/// reference implementation).
 fn is_css_var(value: &str) -> bool {
   value.starts_with("var(") && value.ends_with(')')
 }
 
-/// The fallback chain a set of values spells, given the position of its first
-/// `var()` entry.
-///
-/// The position comes from the caller, which found it deciding whether there
-/// was a chain to build at all. That makes the entry part of what this reads
-/// rather than something it has to look for and then account for not finding.
+/// The fallback chain a set of values spells, given the position of its first `var()` entry.
 fn variable_fallbacks(values: &[String], first_var: usize) -> Vec<String> {
-  // `values[first_var]` is a `var()` entry, so a search back over the tail that
-  // starts with it always answers -- and 0, the entry itself, is the answer for
-  // a tail holding only that one.
   let last_var = first_var
     + values[first_var..]
       .iter()
@@ -172,8 +136,7 @@ fn variable_fallbacks(values: &[String], first_var: usize) -> Vec<String> {
 
   let values_before_first_var = &values[..first_var];
 
-  // Non-empty: `first_var <= last_var`, so the range holds at least the entry
-  // the caller found.
+  // Non-empty: `first_var <= last_var`.
   let mut var_values: Vec<String> = values[first_var..=last_var]
     .iter()
     .rev()
@@ -199,9 +162,7 @@ fn variable_fallbacks(values: &[String], first_var: usize) -> Vec<String> {
   let mut result = Vec::with_capacity(result_capacity);
 
   if !values_before_first_var.is_empty() {
-    // The var prefix is the same for every iteration, so it is laid down once
-    // and only the trailing value is swapped — rather than cloning the whole
-    // prefix per value, which is what this cost before.
+    // Lay down the shared var prefix once and swap only the trailing value.
     let mut to_push = Vec::with_capacity(var_values.len() + 1);
     to_push.extend_from_slice(&var_values);
     to_push.push(String::new());
@@ -215,7 +176,6 @@ fn variable_fallbacks(values: &[String], first_var: usize) -> Vec<String> {
       result.push(compose_vars(&to_push[0], &to_push[1..]));
     }
   } else {
-    // At least one entry, for the reason the slice above states.
     result.push(compose_vars(&var_values[0], &var_values[1..]));
   }
 
@@ -227,11 +187,6 @@ fn variable_fallbacks(values: &[String], first_var: usize) -> Vec<String> {
 }
 
 /// The `var(a, var(b, c))` chain a set of values spells.
-///
-/// The first value is asked for on its own, so a caller cannot spell a chain of
-/// nothing: [`variable_fallbacks`] slices a set that holds at least the `var()`
-/// entry its caller found, and the recursion goes on only while there is a rest
-/// to go on with.
 fn compose_vars(first: &str, rest: &[String]) -> String {
   if let Some((next, tail)) = rest.split_first() {
     let fallback = compose_vars(next, tail);

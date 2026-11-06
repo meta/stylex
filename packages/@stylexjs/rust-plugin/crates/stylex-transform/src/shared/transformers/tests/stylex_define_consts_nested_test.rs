@@ -207,8 +207,7 @@ mod stylex_define_consts_nested {
         InjectableStyleKind::Regular(_) => None,
       })
       .collect::<Vec<_>>();
-    // The rule carries the constant as JSON, so a number stays a number all
-    // the way to the reader of the metadata.
+    // The rule carries the constant as JSON.
     assert!(const_values.contains(&"480"));
     assert!(const_values.contains(&"768"));
   }
@@ -234,8 +233,7 @@ mod stylex_define_consts_nested {
         InjectableStyleKind::Regular(_) => None,
       })
       .collect::<Vec<_>>();
-    // A number stays a number and text arrives quoted, because the rule
-    // carries the constant as JSON.
+    // The rule carries the constant as JSON.
     assert!(const_values.contains(&"8"));
     assert!(const_values.contains(&"\"px\""));
   }
@@ -277,7 +275,6 @@ mod stylex_define_consts_nested {
       stylex_define_consts_nested(&single_nested_consts_fixture(), &mut nested_state);
     let (_, flat_meta) = stylex_define_consts(&equivalent_flat_consts_fixture(), &mut flat_state);
 
-    // Same number of entries.
     assert_eq!(nested_meta.len(), flat_meta.len());
 
     let nested_const_val = match nested_meta.values().next().map(|style| style.as_ref()) {
@@ -289,7 +286,6 @@ mod stylex_define_consts_nested {
       _ => panic!("expected const style"),
     };
 
-    // Same constVal.
     assert_eq!(nested_const_val, flat_const_val);
   }
 }

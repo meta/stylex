@@ -49,8 +49,7 @@ where
 
       let evaluated_arg = evaluate_with_functions(first_arg, &mut self.state, function_map);
 
-      // The original plugin refuses a keyframes() argument it cannot read, and
-      // a frame that is not an object, at the declarator.
+      // Matches Babel: unreadable arguments and non-object frames are refused at the declarator.
       let value = reported_at(var_decl.span, || {
         folded_style_object(
           evaluated_arg,

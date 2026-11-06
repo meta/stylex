@@ -1,6 +1,5 @@
-//! Differential creation contracts against the unchanged current Babel plugin.
-//! These tests exercise the public Rust visitors; no frozen old-port snapshots
-//! or Babel compiler fallback contributes to the native result.
+//! Differential creation contracts against the unchanged current Babel plugin, through the
+//! public Rust visitors; no snapshots or Babel fallback contribute to the native result.
 use std::{
   io::Write,
   path::PathBuf,
@@ -424,8 +423,8 @@ fn current_babel_first_that_works_nullish_fallbacks() {
 
 #[test]
 fn current_native_generic_computed_prototype_key_is_an_own_property() {
-  // JavaScript Object.keys includes a computed own __proto__ key. This is
-  // deliberately separate from StyleX's namespace-assignment compatibility.
+  // JavaScript `Object.keys` includes a computed own `__proto__` key; separate from StyleX's
+  // namespace-assignment compatibility.
   let source = "import * as stylex from '@stylexjs/stylex';export const styles=stylex.create({root:{content:Object.keys({['__proto__']:1,regular:2}).join(',')}});";
   let output = native(
     source,

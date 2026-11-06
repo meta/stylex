@@ -1,4 +1,4 @@
-//! Tests for the small readers the transform asks about an expression.
+//! Small readers the transform asks about an expression.
 
 use stylex_enums::top_level_expression::TopLevelExpressionKind;
 use stylex_state::state_manager::StateManager;
@@ -13,7 +13,6 @@ use crate::shared::utils::ast::helpers::{
 };
 use crate::tests::support::{expr, module};
 
-/// A state that has read the export statements `code` spells.
 fn state_exporting(code: &str) -> StateManager {
   let mut state = StateManager::default();
 
@@ -30,8 +29,7 @@ fn statement_named(name: &str) -> TopLevelExpression {
   TopLevelExpression(TopLevelExpressionKind::Stmt, expr("1"), Some(name.into()))
 }
 
-/// An expression the compiler already read as a named export needs no export
-/// statement to confirm it, and it answers the name it is written with.
+/// An already-read named export needs no export statement to confirm it.
 #[test]
 fn a_named_export_answers_its_own_name() {
   let expression = TopLevelExpression(
@@ -46,9 +44,7 @@ fn a_named_export_answers_its_own_name() {
   );
 }
 
-/// Anything else is looked up by the name it is bound to. An expression bound
-/// to nothing has no name to look up, which is the one shape a default export
-/// takes.
+/// An expression bound to nothing has no name to look up (the default-export shape).
 #[test]
 fn an_unnamed_statement_answers_no_name() {
   let expression = TopLevelExpression(TopLevelExpressionKind::Stmt, expr("1"), None);
@@ -76,8 +72,6 @@ fn a_statement_no_export_names_answers_no_name() {
   assert_eq!(named_export_name(&statement_named("styles"), &state), None);
 }
 
-/// An export under another name is a different export, and so is one that
-/// takes its value from another module. Neither names this expression.
 #[test]
 fn a_renamed_or_re_exported_name_is_not_this_export() {
   let renamed = state_exporting("const styles = 1; export { styles as theme };");
@@ -93,7 +87,6 @@ fn a_renamed_or_re_exported_name_is_not_this_export() {
   );
 }
 
-/// A star export names nothing, so it decides nothing about this expression.
 #[test]
 fn a_star_export_names_no_variable() {
   let state = state_exporting("export * as everything from './other';");
@@ -108,7 +101,6 @@ fn reads_a_property_that_is_keyed_by_a_name() {
   assert!(get_property_by_key(&object, "color").is_some());
 }
 
-/// A key written as a string names the same property as one written as a name.
 #[test]
 fn reads_a_property_that_is_keyed_by_a_string() {
   let object = expr("{ 'background-color': 'red' }");
@@ -122,15 +114,13 @@ fn reads_no_property_under_a_key_the_object_does_not_hold() {
   assert!(get_property_by_key(&expr("{}"), "color").is_none());
 }
 
-/// A computed key spells no name to compare, so it names no property here even
-/// when it would fold to the key that is asked for.
+/// Even when the computed key would fold to the requested key.
 #[test]
 fn reads_no_property_under_a_computed_key() {
   assert!(get_property_by_key(&expr("{ ['color']: 'red' }"), "color").is_none());
 }
 
-/// A spread and a shorthand method are not key-value pairs, and neither holds
-/// the value the caller asks for.
+/// Spreads and shorthand methods are not key-value pairs.
 #[test]
 fn reads_past_a_property_that_is_not_a_key_value_pair() {
   let object = expr("{ ...rest, get color() { return 1 }, size: 1 }");
@@ -139,7 +129,6 @@ fn reads_past_a_property_that_is_not_a_key_value_pair() {
   assert!(get_property_by_key(&object, "size").is_some());
 }
 
-/// Only an object holds properties to read.
 #[test]
 fn reads_no_property_of_something_that_is_not_an_object() {
   assert!(get_property_by_key(&expr("[1, 2]"), "color").is_none());
@@ -156,8 +145,6 @@ fn finds_an_arrow_wherever_it_is_written() {
   assert!(expr_contains_arrow(&expr("f(1, () => 2)")));
 }
 
-/// The search stops at the first arrow, and everything written after it is left
-/// unread.
 #[test]
 fn stops_at_the_first_arrow() {
   assert!(expr_contains_arrow(&expr(

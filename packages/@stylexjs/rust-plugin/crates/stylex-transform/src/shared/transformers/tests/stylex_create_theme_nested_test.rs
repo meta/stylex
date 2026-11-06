@@ -141,7 +141,6 @@ mod stylex_create_theme_nested {
       })
       .collect::<String>();
     assert!(all_css.contains("red"));
-    // Only one override property, so only one var declaration in the generated CSS
     assert!(!all_css.contains("blue"));
   }
 
@@ -303,9 +302,7 @@ mod stylex_create_theme_nested {
     assert!(theme_output.contains_key("$$css"));
   }
 
-  /// A nested theme can override the group a variable-defining module exports.
-  /// The group is handed on as it is, because it answers a name for any key,
-  /// and the flat names the overrides carry are the keys it is asked for.
+  /// The group answers a name for any key, so it is handed on as is.
   #[test]
   fn overrides_the_group_a_variable_defining_module_exports() {
     use stylex_state::theme_ref::ThemeRef;

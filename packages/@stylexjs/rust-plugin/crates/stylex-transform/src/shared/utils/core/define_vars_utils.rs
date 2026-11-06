@@ -78,8 +78,6 @@ pub(crate) fn collect_vars_by_at_rules(
 
     let initial_value = get_nitial_value_of_css_type(values);
 
-    // The rule a CSS-typed variable needs is written where the type is read,
-    // rather than kept as a value for a later pass to read a second time.
     let property = format!(
       "@property --{} {{ syntax: \"{}\"; inherits: true; initial-value: {} }}",
       hash_name, css_type.syntax, initial_value
@@ -141,10 +139,7 @@ pub(crate) fn collect_vars_by_at_rules(
 
         let value = key_value.value.clone();
 
-        // The variable's own name travels down the recursion, not the at-rule
-        // the level is standing on: an author looking for `cornerRadius` is
-        // told about `cornerRadius` however deep the object nests, which is
-        // the name the reference implementation carries down here too.
+        // Pass the variable's own name down (not the at-rule), as the reference does.
         collect_vars_by_at_rules(
           key,
           &FlatCompiledStylesValue::Tuple(hash_name.clone(), value, None),
@@ -158,39 +153,9 @@ pub(crate) fn collect_vars_by_at_rules(
   }
 }
 
-/// Whether an object written as a variable's value is refused for having no
-/// `default`.
-///
-/// Two questions, answered off one walk of the object's keys because the caller
-/// always asks both and `get_key_values_from_object` allocates the list it
-/// returns:
-///
-/// - A **CSS type** carries its own `value` under a `syntax`, so it is not a map
-///   of at-rules and has no `default` of its own to look for. The reference
-///   implementation tests for one ahead of the missing-default check for the
-///   same reason. The pair of keys is the test, because either alone appears on
-///   ordinary value maps. `get_css_value` in `utils/common.rs` owns pulling the
-///   pair back apart; this only has to recognise that it is one, which is why
-///   the test is here and not a second extraction.
-/// - Anything else is refused unless it carries `default`.
-///
-/// Shared with the step that expands a variable's value, which asks the same
-/// question one stage earlier: an object with no `default` is refused for the
-/// shape it is before anything looks at what it holds, which is the order the
-/// reference implementation checks in. Asked through one function so the two
-/// stages cannot come to disagree about what carrying a default means.
-/// The variable's value, and every object nested inside it, asked the question
-/// above.
-///
-/// The reference implementation recurses: `normalizeDefineVarsValue` checks a
-/// level for `default` and then walks into every branch of it, so a fold buried
-/// under an at-rule is refused for the same missing key the top level would be.
-/// Checking only the top level left that one level down still reading the
-/// sentence about zero-argument functions, which is the whole defect.
-///
-/// Stops at the first level that needs one, because that is the level the
-/// refusal is about -- and stops descending into a CSS type, whose `value` is
-/// its own shape and not a map of at-rules.
+/// Whether `value` or any nested object lacks a required `default`, as
+/// `normalizeDefineVarsValue` checks recursively. CSS types (`syntax` + `value`) are not
+/// at-rule maps and are not descended into.
 pub(crate) fn any_level_needs_a_default(value: &Expr) -> bool {
   let Some(obj) = value.as_object() else {
     return false;
@@ -200,9 +165,6 @@ pub(crate) fn any_level_needs_a_default(value: &Expr) -> bool {
     return true;
   }
 
-  // A CSS type's `value` is its own shape rather than a map of at-rules, so the
-  // descent stops here. The doc above said so before the code did: the `.any`
-  // below used to walk every key of a `syntax`/`value` pair, `syntax` included.
   if is_css_type_object(obj) {
     return false;
   }
@@ -212,10 +174,7 @@ pub(crate) fn any_level_needs_a_default(value: &Expr) -> bool {
     .any(|key_value| any_level_needs_a_default(&key_value.value))
 }
 
-/// Which of the three keys that decide these two questions `obj` carries.
-///
-/// One walk answering both, so the two cannot drift into disagreeing about what
-/// a CSS type looks like.
+/// Which of `default`, `syntax` and `value` `obj` carries.
 struct DefaultBearingKeys {
   syntax: bool,
   value: bool,
@@ -287,31 +246,14 @@ fn priority_for_at_rule(at_rule: &str) -> f64 {
 }
 
 /// Priority of a var group's rule at `at_rule`.
-///
-/// Neither this nor [`theme_override_priority`] rounds its result, and neither
-/// may start to. The computed value *is* the priority: the stylesheet sort
-/// compares priorities for equality and falls through to a by-content tie-break
-/// on a tie, so rounding one is not a cosmetic change — it moves rules relative
-/// to each other, and can collapse two priorities onto one.
-///
-/// A single at-rule makes that observable. This function returns exactly `0.6`
-/// five at-rules deep, while [`theme_override_priority`] returns
-/// `0.6000000000000001` for one at-rule; round either to a single decimal place
-/// and they tie, at which point the override can sort ahead of the rule it
-/// overrides — both declare the same custom property at equal specificity, so
-/// order decides the winner.
-///
-/// The gap is an artefact of the arithmetic, not a guarantee: at most depths
-/// `0.4 + n / 10.0` is exact and the two functions genuinely do collide (two
-/// at-rules against a group six deep both give exactly `0.7`). Nothing here
-/// separates that pair — only the sum's own precision does, where it has any.
+/// Never round this or [`theme_override_priority`]: ties fall through to a content sort.
 pub(crate) fn var_group_priority(at_rule: &str) -> f64 {
   priority_for_at_rule(at_rule) / 10.0
 }
 
 /// Priority of a theme override's rule at `at_rule`.
 ///
-/// See [`var_group_priority`] for why this result is never rounded.
+/// Never rounded; see [`var_group_priority`].
 pub(crate) fn theme_override_priority(at_rule: &str) -> f64 {
   0.4 + priority_for_at_rule(at_rule) / 10.0
 }

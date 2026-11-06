@@ -11,9 +11,7 @@ where
 {
   let mut function_map = FunctionMap::default();
 
-  // The marker is read here, before the name lists below are borrowed, and is
-  // then shared into each registration. One file pays for one build, even where
-  // no name registers the marker.
+  // Read the marker before the name lists are borrowed; built once per file.
   let marker_values = stylex_default_marker::shared_default_marker_values(&mut transform.state);
 
   let when_fn = FunctionConfigType::Regular(FunctionConfig {
@@ -58,9 +56,8 @@ where
     );
   }
 
-  // `when` is registered by name like the four above, but on the namespace it
-  // belongs in the fold rather than beside it: a `create` call spreads the
-  // namespace and reads `when` back out of what the spread answered.
+  // On the namespace, `when` is registered in the fold, since `create` spreads the namespace
+  // and reads `when` back out.
   if let Some(set) = transform.state.get_stylex_api_import(ImportKind::When) {
     for name in set {
       function_map
@@ -82,9 +79,7 @@ where
 
   register_env_in_namespace_fold(&transform.state, &mut function_map);
 
-  // Shared rather than owned. The fold below it asks the evaluator once per
-  // style property, and the evaluator has to own the map it hands to every
-  // callback it makes -- so a map given by reference was copied at each of
-  // those calls. One counted pointer is copied instead.
+  // `Rc` because the evaluator owns the map it passes to each callback; avoids a copy per
+  // style property.
   Rc::new(function_map)
 }

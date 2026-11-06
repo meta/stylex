@@ -7,28 +7,17 @@ use stylex_css::utils::pseudo::is_pseudo_selector;
 use stylex_state::types::{ClassPathsInNamespace, ClassPathsMap, DynamicFns, TInlineStyles};
 use swc_core::ecma::ast::{ArrowExpr, ArrowFunctionBody};
 
-/// The class-name expression one compiled property contributes, and whether it
-/// stayed static.
+/// Class-name expression one compiled property contributes, and whether it stayed static.
 struct PropClassNames {
   /// The concatenation the property's value becomes.
   joined: Expr,
-  /// False once any class name in the list became conditional, which is what
-  /// decides whether the property is emitted on the static object or the
-  /// conditional one.
+  /// False once any class name became conditional; picks the static or conditional object.
   is_static: bool,
-  /// The last unsafe value in the list; a single-class property is guarded
-  /// against undefined separately from its null-to-empty-string class branch.
+  /// Last unsafe value; a single-class property is guarded against undefined separately.
   controlling_expr: Option<Expr>,
 }
 
 /// Assemble one compiled property's class names into the expression it emits.
-///
-/// Lifted out of `apply_dynamic_style_functions`, which reached about thirty
-/// columns deep by the time it got here. The inputs are what the question
-/// actually needs -- the property's own class list, the dynamic styles that might
-/// claim one of them, the path map that says which does, the nullish fallbacks,
-/// and the injected rules to read a fallback out of -- and nothing about the call
-/// or the transform, which is why it can be read on its own.
 fn class_names_for_prop(
   class_list: &[String],
   dynamic_styles: &[DynamicStyle],
@@ -41,9 +30,6 @@ fn class_names_for_prop(
   let mut expr_list = Vec::with_capacity(class_list.len());
 
   for (index, cls) in class_list.iter().enumerate() {
-    // Read once. Inside the `find` closure the class name was hashed again for
-    // every dynamic style the namespace holds, to answer a question that does
-    // not change between them.
     let class_path = orig_class_paths.get(cls.as_str());
 
     let expr = dynamic_styles
@@ -59,9 +45,7 @@ fn class_names_for_prop(
       expr
     };
 
-    // The separator is appended where it is needed rather than into a vector
-    // built up front: the last class needs none, and its entry there was a
-    // clone `create_string_expr` then copied again into an `Atom`.
+    // The last class needs no trailing separator.
     let cls_with_space: Cow<'_, str> = if index + 1 == class_list.len() {
       Cow::Borrowed(cls.as_str())
     } else {
@@ -81,9 +65,6 @@ fn class_names_for_prop(
     }
   }
 
-  // `reduce` already answers `None` for exactly the empty case the outer `if`
-  // was testing, so the two branches asked one question twice and the panic arm
-  // between them was unreachable.
   let joined = expr_list
     .into_iter()
     .reduce(|acc, curr| create_bin_expr(BinaryOp::Add, acc, curr))
@@ -97,21 +78,8 @@ fn class_names_for_prop(
 }
 
 /// The dynamic styles one namespace declares, keyed by the path each claims.
-///
-/// A path is the chain of selectors above the declaration, joined with `_`, and
-/// `key` is that chain cut after the first step that is neither a pseudo
-/// selector nor an at-rule -- the property the value belongs to.
-///
-/// Two things follow, and the shorthand expansion in `helpers.rs` rewrites a
-/// path by both. A key is a prefix of its path. And a key names a property, so
-/// it is never empty: a declaration is written under a property, and a property
-/// is neither a pseudo selector nor an at-rule.
-/// `a_key_is_a_prefix_of_its_path_that_ends_at_a_property` measures both.
-///
-/// The second one is what the rewrite needs and the first one does not give.
-/// The rewrite replaces the key at the head of the path, and an empty key would
-/// match at every step instead. So a path holding no property must stay
-/// something this walk does not write.
+/// Each `key` is a non-empty prefix of its path ending at a property; the shorthand rewrite
+/// in `helpers.rs` relies on both.
 fn dynamic_styles_of_namespace(
   inline_styles: &TInlineStyles,
   style_resolution: &StyleResolution,
@@ -143,20 +111,8 @@ fn dynamic_styles_of_namespace(
   }
 }
 
-/// The class paths of one namespace, each joined into the single path the
-/// dynamic styles are keyed by.
-///
-/// The class name is read from the namespace and not copied out of it. Only
-/// the joined path is new text.
-///
-/// A namespace that compiled to no class name answers the empty map, and so
-/// does a name the compiler holds no entry for at all -- both say the same
-/// thing, which is that no class name of this namespace claims a path.
-///
-/// Only the first of the two is ever read: `stylex_create_set` writes the
-/// paths and the namespaces in one pass over the same names, which
-/// `answers_class_paths_for_every_namespace_it_compiles` asserts where they
-/// are written rather than here.
+/// One namespace's class paths, each joined into the path dynamic styles are keyed by.
+/// A missing or class-less namespace yields an empty map.
 fn joined_class_paths(namespace: Option<&Rc<ClassPathsInNamespace>>) -> IndexMap<&str, String> {
   namespace
     .into_iter()
@@ -165,13 +121,8 @@ fn joined_class_paths(namespace: Option<&Rc<ClassPathsInNamespace>>) -> IndexMap
     .collect()
 }
 
-/// The arrow function one dynamic namespace becomes.
-///
-/// A dynamic entry is authored as a function, so the compiled namespace is
-/// emitted as a function too: it answers the class names its arguments select,
-/// beside the inline custom properties that carry the authored values. The
-/// class names that no argument can change are hoisted to a module constant,
-/// because they are the same for every call.
+/// The arrow function a dynamic namespace becomes; argument-independent class names are
+/// hoisted to a module constant.
 fn dynamic_namespace_fn(
   state: &mut StateManager,
   original: &ArrowExpr,
@@ -219,11 +170,8 @@ fn dynamic_namespace_fn(
       })
       .unwrap_or_default();
 
-    // No guard on an empty class list. A property whose compiled value carries
-    // no class name -- an absent value, which is how a style unsets an earlier
-    // declaration of the same property when two styles merge -- still owns its
-    // key, and the `joined` fallback spells it `""`. Skipping the property
-    // instead dropped the key, and a key that is not there unsets nothing.
+    // No guard on an empty class list: a property with no class name (an unset) must keep its
+    // key, spelled `""`, to unset earlier declarations when styles merge.
     let PropClassNames {
       joined,
       is_static,
@@ -250,8 +198,7 @@ fn dynamic_namespace_fn(
     }
   }
 
-  // The custom properties the authored values are passed through, which is what
-  // the function answers when no class name depends on an argument.
+  // The custom properties carrying the authored values.
   let mut fn_value = create_object_expression(
     inline_styles
       .iter()
@@ -259,8 +206,6 @@ fn dynamic_namespace_fn(
       .collect(),
   );
 
-  // Left empty rather than given a capacity: a dynamic entry that declares no
-  // class name pushes nothing, and the first push takes one allocation anyway.
   let mut array_elements = Vec::new();
 
   if !static_props.is_empty() {
@@ -315,13 +260,7 @@ fn dynamic_namespace_fn(
   Expr::Arrow(function)
 }
 
-/// The compiled style object, with every namespace a dynamic entry declared
-/// rewritten as the function that entry is called as.
-///
-/// The namespaces arrive as the named list
-/// [`compiled_namespaces`](crate::shared::utils::core::js_to_ast::compiled_namespaces)
-/// wrote a step earlier, so the shape of each one is settled by its type and
-/// nothing here asks about it again.
+/// The compiled style object, with each dynamic namespace rewritten as its function.
 pub(super) fn apply_dynamic_style_functions(
   state: &mut StateManager,
   namespaces: CompiledNamespaces<'_>,

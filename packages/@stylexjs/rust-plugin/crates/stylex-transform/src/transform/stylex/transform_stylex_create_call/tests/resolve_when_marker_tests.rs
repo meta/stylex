@@ -1,9 +1,5 @@
-//! How `stylex.when.*` reads the marker it is given as a second argument.
-//!
-//! Unit tests rather than a compiled module, because the answer for a marker
-//! the compiler cannot read is a warning, and a warning's words are built only
-//! when a logger admits the level. The integration binary admits none, so a
-//! module compiled there runs the report and reads nothing back.
+//! How `stylex.when.*` reads its second-argument marker. Unit tests, because the warning's
+//! words are built only when a logger admits the level, and the integration binary admits none.
 
 use log::Level;
 use stylex_state::{evaluate_result_value::EvaluateResultValue, state_manager::StateManager};
@@ -17,12 +13,10 @@ fn state() -> StateManager {
   StateManager::new(StyleXOptions::default())
 }
 
-/// The marker `code` spells, as the evaluator would have folded it.
 fn marker(code: &str) -> EvaluateResultValue {
   EvaluateResultValue::Expr(expr(code))
 }
 
-/// A class name written as a string is used as it stands, and says nothing.
 #[test]
 fn a_class_name_resolves_without_a_word() {
   let state = state();
@@ -40,7 +34,7 @@ fn a_class_name_resolves_without_a_word() {
   );
 }
 
-/// A compiled marker object is read through its class key, and says nothing.
+/// Read through its class key.
 #[test]
 fn a_compiled_marker_resolves_without_a_word() {
   let state = state();
@@ -58,11 +52,8 @@ fn a_compiled_marker_resolves_without_a_word() {
   );
 }
 
-/// A marker that is none of the three readable shapes is handed on all the
-/// same, and the report says which function read it and what the fallback
-/// means. Handing it on rather than refusing is what the reference
-/// implementation does, so the warning is the whole of the answer -- and its
-/// words are the only thing that tells an author why the style never applied.
+/// Handed on rather than refused, as the reference implementation does, so the warning
+/// naming the function and the fallback is the author's only clue.
 #[test]
 fn a_marker_the_compiler_cannot_read_is_reported_by_name() {
   let state = state();
@@ -85,8 +76,7 @@ fn a_marker_the_compiler_cannot_read_is_reported_by_name() {
   );
 }
 
-/// An absent marker is the options, and no report: leaving the argument out is
-/// how an author asks for the configured default, not a mistake.
+/// Leaving the argument out is how an author asks for the configured default.
 #[test]
 fn an_absent_marker_takes_the_options_without_a_word() {
   let state = state();
@@ -101,7 +91,6 @@ fn an_absent_marker_takes_the_options_without_a_word() {
   );
 }
 
-/// A marker written as `null` is the absent one, for the same reason.
 #[test]
 fn a_null_marker_takes_the_options_without_a_word() {
   let state = state();

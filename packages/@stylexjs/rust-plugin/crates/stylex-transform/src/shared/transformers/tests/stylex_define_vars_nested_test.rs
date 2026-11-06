@@ -234,7 +234,6 @@ mod stylex_define_vars_nested {
       stylex_define_vars_nested(&simple_nested_vars_fixture(), &mut nested_state);
     let (_, flat_css) = stylex_define_vars(&equivalent_flat_vars_fixture(), &mut flat_state);
 
-    // Same number of injectable style entries.
     assert_eq!(nested_css.len(), flat_css.len());
 
     let nested_ltr = nested_css
@@ -273,7 +272,6 @@ mod stylex_define_vars_nested {
       _ => panic!("expected flat __varGroupHash__ string"),
     };
 
-    // Same group hash because same exportId.
     assert_eq!(nested_hash, flat_hash);
   }
 }

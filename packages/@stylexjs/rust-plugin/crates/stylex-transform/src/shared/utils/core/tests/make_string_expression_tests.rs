@@ -1,9 +1,5 @@
-//! Tests for the answer a merge behind conditions is written out as.
-//!
-//! The compiler cannot know which conditions hold, so it writes every answer
-//! once and lets the runtime read the one its conditions name. This is the
-//! reading: the key each answer is filed under, and the expression that builds
-//! that key.
+//! The answer table a conditional merge is written out as: every combination once, keyed by
+//! the conditions the runtime reads.
 
 use swc_core::ecma::ast::{Expr, Lit, MemberProp, PropName, PropOrSpread};
 
@@ -15,7 +11,6 @@ use crate::shared::utils::core::{
 };
 use crate::tests::support::expr;
 
-/// A style behind the condition `test`, holding one class for `property`.
 fn behind(test: &str, property: &str, class_name: &str) -> ResolvedArg {
   ResolvedArg::conditional(
     expr(test),
@@ -24,7 +19,6 @@ fn behind(test: &str, property: &str, class_name: &str) -> ResolvedArg {
   )
 }
 
-/// The answer table and the expression that reads it.
 fn table_of(values: &[ResolvedArg]) -> (Vec<(String, String)>, String) {
   let member = match make_string_expression(values, stylex) {
     Expr::Member(member) => member,
@@ -59,10 +53,7 @@ fn answer_of(prop: &PropOrSpread) -> (String, String) {
   (key, rendered(&key_value.value))
 }
 
-/// An expression as the text a case can name it by.
-///
-/// Only the shapes this answer is built from: a string, a number, a name, and
-/// the two operators that pack the conditions into one number.
+/// An expression as text; only strings, numbers, names and the two bit-packing operators.
 fn rendered(expr: &Expr) -> String {
   match expr {
     Expr::Lit(Lit::Str(text)) => match text.value.as_str() {
@@ -83,8 +74,6 @@ fn rendered(expr: &Expr) -> String {
   }
 }
 
-/// With no condition there is one answer, so it is written out directly rather
-/// than filed in a table the runtime has to read.
 #[test]
 fn writes_one_answer_directly_when_nothing_is_conditional() {
   let values = [ResolvedArg::style_object(StyleObject::style(compiled(&[
@@ -94,7 +83,6 @@ fn writes_one_answer_directly_when_nothing_is_conditional() {
   assert_eq!(rendered(&make_string_expression(&values, stylex)), "xa");
 }
 
-/// One condition names two answers: the one with the style and the one without.
 #[test]
 fn writes_both_answers_of_one_condition() {
   let (answers, key) = table_of(&[behind("flag", "color", "xa")]);
@@ -109,8 +97,7 @@ fn writes_both_answers_of_one_condition() {
   assert_eq!(key, "!!flag << 0");
 }
 
-/// Each condition gets a bit of its own, and the first one written is the
-/// highest, so the key reads in the order the author wrote the arguments.
+/// So the key reads in the order the author wrote the arguments.
 #[test]
 fn gives_the_first_condition_the_highest_bit() {
   let (answers, key) = table_of(&[behind("p", "color", "xa"), behind("q", "margin", "xb")]);
@@ -119,14 +106,8 @@ fn gives_the_first_condition_the_highest_bit() {
   assert_eq!(key, "!!p << 1 | !!q << 0");
 }
 
-/// Each answer holds the classes the conditions of its key name, in the order
-/// the arguments were written.
-///
-/// The answers are written in the order the combinations are walked, which is
-/// not the order of their keys: the walk counts the first condition in the
-/// lowest bit and the key reads it in the highest. The runtime reads the table
-/// by key, so the order it is written in is not part of the answer -- the set
-/// is.
+/// The table is written in walk order (first condition in the lowest bit), not key order; the
+/// runtime reads by key, so only the set matters.
 #[test]
 fn files_each_answer_under_the_conditions_that_name_it() {
   let (mut answers, _) = table_of(&[behind("p", "color", "xa"), behind("q", "margin", "xb")]);
@@ -144,8 +125,6 @@ fn files_each_answer_under_the_conditions_that_name_it() {
   );
 }
 
-/// A style written outside every condition is in every answer, because it
-/// applies whichever way the conditions go.
 #[test]
 fn keeps_an_unconditional_style_in_every_answer() {
   let (answers, _) = table_of(&[
@@ -159,7 +138,6 @@ fn keeps_an_unconditional_style_in_every_answer() {
   );
 }
 
-/// Every combination is written once, so four conditions name sixteen answers.
 #[test]
 fn writes_one_answer_for_every_combination() {
   let (answers, key) = table_of(&[
@@ -173,12 +151,8 @@ fn writes_one_answer_for_every_combination() {
   assert_eq!(key, "!!p << 3 | !!q << 2 | !!r << 1 | !!s << 0");
 }
 
-/// Every answer is filed as a key-value prop under a plain name.
-///
-/// `static_jsx_attr_from_prop` in `stylex_merge` reads these props and answers
-/// nothing for a spread or a computed key. No table can hold one, and this is
-/// where that is true: the invariant is asserted where the table is built,
-/// rather than argued at the reader.
+/// `static_jsx_attr_from_prop` in `stylex_merge` answers nothing for a spread or computed key;
+/// the invariant is asserted here where the table is built.
 #[test]
 fn files_every_answer_as_a_key_value_under_a_name() {
   let table = match make_string_expression(

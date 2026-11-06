@@ -38,15 +38,8 @@ pub(crate) fn obj_from_entries(entries: &[OrderPair]) -> IndexMap<String, TRawVa
   map
 }
 
-/// Maps each key and converts each raw value to its final CSS text.
-///
-/// The two steps are fused because their order is observable: the key is
-/// dashified before the value is transformed, so the property name that decides
-/// the unit suffix is the dashed one.
-///
-/// Two keys that map to the same name are one declaration, and the value
-/// written last wins, so the pairs are collected through a map before they are
-/// answered.
+/// Maps each key and converts each raw value to its final CSS text; the last duplicate wins.
+/// Keys are dashified first, so the dashed name decides the unit suffix.
 pub(crate) fn obj_map_keys_and_transform_values(
   entries: &IndexMap<String, TRawValue>,
   state: &mut StateManager,
@@ -67,9 +60,8 @@ pub(crate) fn obj_map_keys_and_transform_values(
     .collect()
 }
 
-/// Keyframes and view-transition classes normalize against the original,
-/// expanded property name before dashifying it. The camelCase name selects
-/// the numeric suffix and property-specific value conversions in Babel.
+/// Transforms values against the camelCase name before dashifying keys, as Babel does for
+/// keyframes and view-transition classes.
 pub(crate) fn obj_transform_values_then_map_keys(
   entries: &IndexMap<String, TRawValue>,
   state: &mut StateManager,

@@ -3,29 +3,12 @@ use std::borrow::Cow;
 use super::*;
 use stylex_ast::ast::convertors::normalize_expr;
 
-/// The value a shorthand is expanded with.
-///
-/// An expansion needs a value to work on, and this one says nothing about the
-/// style it stands for. Only which declarations an expansion answers matters
-/// here, so the value is read for nothing but whether it is there.
-///
-/// It is one token holding a digit, which is what keeps it silent: `listStyle`
-/// is the one expansion that sorts its value, and it sorts this one into the
-/// slot a keyword would not take.
-///
-/// **One constant where the reference writes `'p' + i`.** The two agree only
-/// because no expansion reads the index: `legacy-expand-shorthands.js` branches
-/// on how many tokens a value holds and never on what a token spells. That is
-/// an assumption about code this repository does not own, so it is written down
-/// here. An expansion that starts reading the index -- one that treats `p1`
-/// differently from `p0` -- makes this constant wrong, and the answer would be
-/// to carry the index again rather than to change the token.
+/// Placeholder value shorthands are expanded with; only which declarations result matters.
+/// Matches `legacy-expand-shorthands.js` (`'p' + i`) only because no expansion reads the index.
 const SHORTHAND_MARKER: &str = "p0";
 
 pub(super) fn legacy_expand_shorthands(dynamic_styles: Vec<DynamicStyle>) -> Vec<DynamicStyle> {
-  // The same options for every style, so they are built once. Building them
-  // inside the loop made two strings, a counted pointer and two collections for
-  // each style, to answer one question that never changes.
+  // Same options for every style, so build them once.
   let options =
     StyleXStateOptions::default().with_style_resolution(StyleResolution::LegacyExpandShorthands);
 
@@ -37,26 +20,18 @@ pub(super) fn legacy_expand_shorthands(dynamic_styles: Vec<DynamicStyle>) -> Vec
         PreRuleValue::string(SHORTHAND_MARKER),
       );
 
-      // The style each expanded declaration came from is carried beside it,
-      // because this loop knows which style it is expanding.
       flat_map_expanded_shorthands(obj_entry, &options)
         .into_iter()
         .map(move |pair| (dynamic_style, pair))
     })
     .filter_map(|(that_dyn_style, OrderPair(key, value))| {
-      // An expansion nulls out the properties the shorthand replaces --
-      // `marginInline` unsets `marginLeft` and `marginRight` -- and a
-      // declaration with no value declares nothing for a dynamic style to
-      // claim.
+      // Skip properties the expansion nulled out (e.g. `marginInline` unsets `marginLeft`).
       value?;
 
       let key = key.into_owned();
       Some(DynamicStyle {
         key: key.clone(),
-        // A key names a property and is a prefix of its path, so a path longer
-        // than its key continues with a `_` and holds the key only at its head.
-        // `dynamic_styles_of_namespace` states both halves of that rule, and
-        // says what an empty key would do to this line.
+        // A key is a non-empty prefix of its path (see `dynamic_styles_of_namespace`).
         path: if that_dyn_style.path == that_dyn_style.key {
           key
         } else {
@@ -132,10 +107,6 @@ pub(super) fn has_explicit_nullish_fallback(expr: &Expr) -> bool {
 }
 
 /// The nullish fallback of the first variable `rule` names that has one.
-///
-/// A search rather than a walk with two guards in it: the capture group the
-/// pattern names is not optional, and a variable the map does not hold is the
-/// next one to look at rather than a case of its own.
 pub(super) fn extract_expr_from_rule(
   rule: &str,
   nullish_var_expressions: &FxHashMap<String, Expr>,
@@ -147,16 +118,8 @@ pub(super) fn extract_expr_from_rule(
     .find_map(|var_match| nullish_var_expressions.get(var_match.as_str()).cloned())
 }
 
-/// Hoist an expression to the module level as a `const` declaration.
-///
-/// The declaration is queued before the current original program statement;
-/// the returned identifier stands for the expression at the call site.
-/// `stem` is what the generated name is built on.
-///
-/// The name is answered as the identifier it is, not as an expression holding
-/// one. A caller that needs the name -- the dynamic-style rewrite declares it
-/// beside the call -- used to read it back out of the expression and guard a
-/// shape the hoist cannot answer.
+/// Hoist an expression to a module-level `const` queued before the current statement.
+/// `stem` seeds the generated name; returns the identifier.
 fn hoist_to_module_level(
   stem: &'static str,
   ast_expression: Expr,
@@ -186,17 +149,8 @@ pub(crate) fn hoist_expression(
   hoist_to_module_level("temp", ast_expression, state)
 }
 
-/// Hoist the compiled styles object of a `stylex.create` call that is not a
-/// module-level statement to a `_styles` constant.
-///
-/// # A dynamic entry can hold a reference the module level does not
-///
-/// A value the compiler cannot fold becomes an inline style that holds the
-/// authored expression as it is written, and no rule says that expression may
-/// name only the parameters of the entry. So an entry that reads a constant of
-/// the enclosing scope carries that name to the module level, where it is not
-/// declared:
-///
+/// Hoist a non-module-level `stylex.create` styles object to a `_styles` constant.
+/// A dynamic entry may reference an enclosing-scope binding that is undeclared at module level:
 /// ```js
 /// export function render() {
 ///   const gap = compute();
@@ -205,11 +159,8 @@ pub(crate) fn hoist_expression(
 /// }
 /// ```
 ///
-/// The module still loads, because the body of the entry runs only when it is
-/// called. The call is what fails, which puts the fault a long way from its
-/// cause. The snapshot
-/// `a_nested_dynamic_entry_keeps_a_reference_to_the_scope_it_left` records the
-/// output as it is.
+/// The module loads but the call fails; recorded by
+/// `a_nested_dynamic_entry_keeps_a_reference_to_the_scope_it_left`.
 pub(crate) fn hoist_styles_object(
   ast_expression: Expr,
   state: &mut stylex_state::state_manager::StateManager,

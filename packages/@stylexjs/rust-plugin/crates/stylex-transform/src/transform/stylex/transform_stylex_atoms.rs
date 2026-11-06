@@ -36,22 +36,11 @@ use stylex_types::structures::{injectable_style::InjectableStyle, style_key::Rul
 
 use super::transform_stylex_create_call::{build_runtime_function_map, hoist_expression};
 
-/// The namespace an atom is compiled under.
-///
-/// An atom declares one property, and the create pipeline compiles namespaces,
-/// so the property is wrapped in a namespace of this name and read back out of
-/// the compiled map under it. The name is written once, because the write and
-/// the read have to agree.
+/// Namespace an atom is compiled under; the write and the read back must agree.
 pub(crate) const INLINE_NAMESPACE: &str = "__inline__";
 
 /// The compiled namespace an atom was written into.
-///
-/// This is the whole of what is left out of the coverage measurement, and it
-/// computes nothing -- it chooses between answers the caller has already worked
-/// out. The name read here is the one the object above was written with, and
-/// the create pipeline answers a namespace under the name it was given, which
-/// `answers_a_namespace_under_the_name_it_was_given` measures.
-/// `guidelines/stack/RUST.md` describes the allowance.
+/// Excluded from coverage: only picks between precomputed answers (`guidelines/stack/RUST.md`).
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn or_refuse_missing_atom_namespace(
   namespace: Option<&Rc<FlatCompiledStyles>>,
@@ -66,13 +55,8 @@ impl<C> StyleXTransform<C>
 where
   C: Comments,
 {
-  /// Runs the atoms transform pass over the module, rewriting inline atomic
-  /// styles (`css.display.flex`, `css.color(value)`) into compiled style
-  /// objects or hoisted dynamic-style calls.
-  ///
-  /// The `create_utility_styles_visitor` pass executes between the producer
-  /// (`stylex.create`) and consumer (`stylex.props`) passes so that atoms are
-  /// already compiled when `stylex.props` processes them.
+  /// Rewrites inline atoms (`css.display.flex`, `css.color(value)`) into compiled styles.
+  /// Runs between the `stylex.create` and `stylex.props` passes.
   pub(crate) fn transform_atoms(&mut self, module: &mut Module) {
     if self.state.atom_imports.is_empty() {
       return;
@@ -106,21 +90,12 @@ where
 
     let function_map = build_runtime_function_map(self);
 
-    // Save/restore rather than force `false`, so a future re-entrant caller that
-    // was already mid-create is not silently knocked out of create mode. (Today
-    // the atoms pass runs between the create and props passes, so the prior
-    // value is always `false`.)
+    // Save/restore rather than force `false`, in case a caller is already mid-create.
     let prev_in_stylex_create = self.state.in_stylex_create;
     self.state.in_stylex_create = true;
     let evaluated = evaluate_stylex_create_arg(&mut first_arg, &mut self.state, &function_map);
 
-    // The atom is left as the author wrote it, for the runtime, where the fold
-    // answers nothing. The object is two string literals, so the fold reads it
-    // whenever it is allowed to descend that far. `maxEvaluationDepth` is what
-    // says how far, and a project can set it to one.
-    //
-    // The `in_stylex_create` flag is restored here too, so a later pass is not
-    // left in create mode.
+    // Leave the atom for the runtime when the fold fails (e.g. `maxEvaluationDepth` of one).
     let Some(value_result) = evaluated.value else {
       self.state.in_stylex_create = prev_in_stylex_create;
       return None;
@@ -138,7 +113,6 @@ where
     }
     self.state.in_stylex_create = prev_in_stylex_create;
 
-    // Borrowed, because both readers below only read it.
     let namespace = or_refuse_missing_atom_namespace(compiled.get(INLINE_NAMESPACE));
 
     let compiled_ast = convert_values_to_ast(namespace);

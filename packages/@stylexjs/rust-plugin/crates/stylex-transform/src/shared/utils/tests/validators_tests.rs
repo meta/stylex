@@ -1,4 +1,4 @@
-//! Tests for the refusals the compiler makes before it reads a StyleX call.
+//! Refusals the compiler makes before it reads a StyleX call.
 
 use stylex_state::{evaluate_result_value::EvaluateResultValue, state_manager::StateManager};
 
@@ -9,7 +9,6 @@ use super::{
 use crate::shared::enums::data_structures::theme_vars::ThemeVars;
 use crate::tests::support::expr;
 
-/// The folded value `code` spells, as the evaluator would hand it over.
 fn folded(code: &str) -> EvaluateResultValue {
   EvaluateResultValue::Expr(expr(code))
 }
@@ -23,8 +22,6 @@ fn a_keyframe_is_an_object_of_objects() {
   assert_valid_keyframes(&folded("{}"), &mut StateManager::default());
 }
 
-/// Each step of a keyframe holds the declarations of that step, so a step that
-/// is not an object declares nothing.
 #[test]
 #[should_panic(expected = "Every frame within a keyframes() call must be an object")]
 fn refuses_a_keyframe_step_that_is_not_an_object() {
@@ -37,7 +34,6 @@ fn refuses_a_keyframes_argument_that_is_not_an_object() {
   assert_valid_keyframes(&folded("'red'"), &mut StateManager::default());
 }
 
-/// A value the compiler could not fold is not a keyframe it can read.
 #[test]
 #[should_panic(expected = "Only static values are allowed inside of a keyframes() call.")]
 fn refuses_a_keyframes_argument_that_did_not_fold() {
@@ -95,8 +91,7 @@ fn refuses_a_key_a_call_does_not_name() {
   );
 }
 
-/// A value that is not an object names no keys to check, so there is nothing to
-/// refuse here and the reader beside this one reports it.
+/// The reader beside this one reports a non-object.
 #[test]
 fn checks_no_key_of_a_value_that_names_none() {
   assert_valid_properties(
@@ -113,7 +108,6 @@ fn checks_no_key_of_a_value_that_names_none() {
   );
 }
 
-/// The first property of the object `code` spells.
 fn first_pair(code: &str) -> swc_core::ecma::ast::KeyValueProp {
   match crate::tests::support::object(code).props.into_iter().next() {
     Some(prop) => match prop.prop().and_then(|prop| prop.key_value()) {
@@ -124,8 +118,7 @@ fn first_pair(code: &str) -> swc_core::ecma::ast::KeyValueProp {
   }
 }
 
-/// A condition holds declarations, a nested condition, or a name the compiler
-/// resolves later.
+/// A condition holds declarations, a nested condition, or a name resolved later.
 #[test]
 fn a_condition_holds_a_value_or_a_nested_condition() {
   for code in [
@@ -140,8 +133,7 @@ fn a_condition_holds_a_value_or_a_nested_condition() {
   }
 }
 
-/// A key that names neither a pseudo selector nor an at-rule names no
-/// condition, so the declarations under it would never apply.
+/// The declarations under it would never apply.
 #[test]
 #[should_panic(expected = "Invalid pseudo or at-rule")]
 fn refuses_a_key_that_names_no_condition() {
@@ -152,8 +144,7 @@ fn refuses_a_key_that_names_no_condition() {
   );
 }
 
-/// One condition written twice on one path is a declaration that shadows
-/// itself, which is a mistake rather than a rule.
+/// A condition repeated on one path shadows itself.
 #[test]
 #[should_panic(expected = "The same pseudo selector or at-rule cannot be used more than once.")]
 fn refuses_a_condition_that_is_already_in_the_path() {
@@ -164,7 +155,6 @@ fn refuses_a_condition_that_is_already_in_the_path() {
   );
 }
 
-/// A condition holds a declaration, not a shape with no CSS value.
 #[test]
 #[should_panic(expected = "A style value can only contain an array, string or number.")]
 fn refuses_a_condition_holding_a_value_that_is_not_a_style_value() {
@@ -175,8 +165,7 @@ fn refuses_a_condition_holding_a_value_that_is_not_a_style_value() {
   );
 }
 
-/// A theme overrides a variable group, which is named by the hash the group
-/// carries. A value that is not a group cannot be overridden.
+/// A group is named by the hash it carries.
 #[test]
 #[should_panic(expected = "Can only override variables theme created with defineVars().")]
 fn refuses_a_theme_target_that_is_not_a_variable_group() {
@@ -189,7 +178,6 @@ fn refuses_a_theme_target_that_carries_no_group_hash() {
   validate_theme_variables(&folded("{ color: 'red' }"), &StateManager::default());
 }
 
-/// A group hash that spells no text names no group.
 #[test]
 #[should_panic(expected = "Can only override variables theme created with defineVars().")]
 fn refuses_a_group_hash_that_is_empty() {
@@ -199,7 +187,6 @@ fn refuses_a_group_hash_that_is_empty() {
   );
 }
 
-/// A group hash the compiler could not fold names no group either.
 #[test]
 #[should_panic(expected = "Can only override variables theme created with defineVars().")]
 fn refuses_a_group_hash_that_did_not_fold() {

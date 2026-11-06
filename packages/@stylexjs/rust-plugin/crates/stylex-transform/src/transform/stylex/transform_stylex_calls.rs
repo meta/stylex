@@ -18,14 +18,12 @@ where
 {
   pub(crate) fn transform_stylex_fns(&mut self, call_expr: &mut CallExpr) -> Option<Expr> {
     if self.state.cycle == TransformationCycle::TransformProducers {
-      // Every producer below reads the call without changing it, so its key is
-      // computed at most once and shared with the `create` transform.
+      // Producers only read the call, so its key is computed once and shared.
       let call: &CallExpr = call_expr;
       let key = OnceCell::new();
       let call_key = || *key.get_or_init(|| stable_hash_unspanned_call(call));
 
-      // Only these three producers read the declarator, so it is copied for
-      // them alone rather than with every style object it initialises.
+      // Only these three producers need the declarator, so copy it for them alone.
       let parent_var_decl = self
         .state
         .find_call_declaration_keyed(call, call_key)

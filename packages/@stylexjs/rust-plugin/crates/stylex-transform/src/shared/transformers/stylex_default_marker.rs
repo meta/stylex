@@ -9,15 +9,9 @@ use stylex_state::{
 };
 use stylex_structures::stylex_state_options::StyleXStateOptions;
 
-/// The default marker's entries: the marker class name as both key and value,
-/// and the `$$css` marker set to true.
-///
-/// A `stylex.props` call carrying this marker adds the class an ancestor or
-/// sibling state observer looks for.
+/// The default marker's entries: the marker class name as key and value, plus `$$css: true`.
 fn default_marker_values(options: &StyleXStateOptions) -> FlatCompiledStyles {
-  // NOTE: the prefix is always applied, including when it is empty — an
-  // unset `classNamePrefix` arrives here already defaulted to `x`, so an
-  // empty one was asked for explicitly and keeps its separator.
+  // `classNamePrefix` is already defaulted to `x`, so an empty prefix is explicit and keeps `-`.
   let prefix = format!("{}-", options.class_name_prefix);
 
   let marker_class = format!("{}default-marker", prefix);
@@ -37,12 +31,8 @@ fn default_marker_values(options: &StyleXStateOptions) -> FlatCompiledStyles {
   result
 }
 
-/// This file's default marker, built on the first call and shared after it.
-///
-/// A `create` call, every call of the `props` family and `defaultMarker()`
-/// itself all ask for it, and the first two register it again under every name
-/// the file imports it by. See [`StateManager::cached_default_marker_values`]
-/// for why one answer serves them all.
+/// This file's default marker, built on first use and shared after.
+/// See [`StateManager::cached_default_marker_values`].
 pub(crate) fn shared_default_marker_values(state: &mut StateManager) -> Rc<FlatCompiledStyles> {
   if let Some(values) = state.cached_default_marker_values() {
     return Rc::clone(values);

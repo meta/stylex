@@ -29,9 +29,6 @@ pub(crate) enum CompiledResult {
 
 impl CompiledResult {
   /// Gets the styles in this result. Gives `None` for a null result.
-  // Kept by ticket 31. No production code calls it, because the rest of the
-  // crate reads the enum with a match. The compiler warns without the
-  // attribute.
   #[allow(dead_code)]
   pub(crate) fn as_computed_styles(&self) -> Option<&Vec<ComputedStyle>> {
     match self {
@@ -42,20 +39,10 @@ impl CompiledResult {
 }
 
 pub(crate) trait PreRule: Debug {
-  // Load-bearing, measured: the only calls to `get_value` come from
-  // `PreRuleSet::get_value`, which is one of its own three implementations. The
-  // compiler reads that cycle as dead and warns without this line.
   #[allow(dead_code)]
   fn get_value(&self) -> Option<PreRuleValue>;
   fn compiled(&mut self, state: &mut StateManager) -> CompiledResult;
-  /// Whether `other` is the same rule.
-  ///
-  /// `other` is the [`PreRules`] enum and not a trait object, so an
-  /// implementation can read the fields of its own kind and answer `false` for
-  /// the other two -- the kind test the reference implementation spells as
-  /// `instanceof`.
-  // Load-bearing, measured: `equals` is reached only through `PreRules::equals`,
-  // which the same cycle makes unreachable to the lint.
+  /// Whether `other` is the same rule (the reference implementation's `instanceof` check).
   #[allow(dead_code)]
   fn equals(&self, other: &PreRules) -> bool;
 }
@@ -69,9 +56,6 @@ pub(crate) enum PreRules {
 
 impl PreRules {
   /// [`PreRule::equals`], asked of whichever rule this variant holds.
-  // Load-bearing, measured: the one caller is `PreRuleSet::equals`, which is an
-  // implementation of the trait method this dispatches to. Neither end of the
-  // cycle has an outside caller, so the lint fires on both without the line.
   #[allow(dead_code)]
   pub(crate) fn equals(&self, other: &PreRules) -> bool {
     match self {
@@ -93,11 +77,7 @@ pub(crate) struct StylesPreRule {
 }
 
 impl StylesPreRule {
-  /// Collects the key path segments a rule kind owns, in authored order.
-  ///
-  /// Each of the three kinds walks the same path and keeps a disjoint slice of
-  /// it, so the filter is passed in rather than the path being cloned once per
-  /// kind.
+  /// Collects the key path segments `keep` selects, in authored order.
   fn select_key_path(key_path: &Option<Vec<String>>, keep: impl Fn(&str) -> bool) -> Vec<String> {
     key_path
       .iter()
@@ -108,8 +88,7 @@ impl StylesPreRule {
   }
 
   fn get_pseudos(key_path: &Option<Vec<String>>) -> Vec<String> {
-    // The single colon is deliberate: selector assembly needs both kinds, so
-    // narrowing this to `::` would drop every pseudo class on the floor.
+    // Single colon on purpose: selectors need pseudo classes as well as pseudo elements.
     let unsorted_pseudos = Self::select_key_path(key_path, |key| {
       is_pseudo_selector(key) || key.starts_with('[')
     });
@@ -123,8 +102,7 @@ impl StylesPreRule {
     sort_at_rules(&unsorted_at_rules)
   }
 
-  /// Placeholder wrappers preserve the authored path. The combined condition
-  /// list is independently sorted when the class name is hashed.
+  /// Placeholder wrappers keep the authored path; conditions are sorted when hashing.
   fn get_const_rules(key_path: &Option<Vec<String>>) -> Vec<String> {
     Self::select_key_path(key_path, |key| key.starts_with("var(--"))
   }
@@ -140,14 +118,7 @@ impl StylesPreRule {
       key_path: key_path.unwrap_or_default(),
     }
   }
-  // The three functions below read the fields of a rule that is already built.
-  // Kept by ticket 31. No production code calls them, because the crate builds
-  // a rule and then reads it through the `PreRule` trait. The compiler warns
-  // without the attributes.
-  //
-  // Each name shows its field. The two associated functions above already use
-  // the names `get_pseudos` and `get_at_rules`. Those functions take a key
-  // path and select from it, which is a different task.
+  // Field getters below are unused in production.
 
   /// Gets the CSS property name of this rule.
   #[allow(dead_code)]
@@ -169,8 +140,6 @@ impl StylesPreRule {
 }
 
 impl PreRule for StylesPreRule {
-  // Reached only through the trait object, which the transform builds and
-  // nothing else asks for a value from.
   #[cfg_attr(coverage_nightly, coverage(off))]
   fn get_value(&self) -> Option<PreRuleValue> {
     Some(self.value.to_owned())
@@ -184,7 +153,6 @@ impl PreRule for StylesPreRule {
       &mut self.const_rules,
       state,
     ) else {
-      // The value carries no CSS text, so there is no declaration to name.
       return CompiledResult::Null;
     };
 
@@ -199,9 +167,7 @@ impl PreRule for StylesPreRule {
     )])
   }
 
-  /// The property, the value and the two sorted key-path slices. The key path
-  /// itself and the `var(--…)` rules are not compared, because both are read
-  /// out of the key path the other four already stand for.
+  /// Compares property, value and the two sorted key-path slices.
   fn equals(&self, other: &PreRules) -> bool {
     match other {
       PreRules::StylesPreRule(other) => {

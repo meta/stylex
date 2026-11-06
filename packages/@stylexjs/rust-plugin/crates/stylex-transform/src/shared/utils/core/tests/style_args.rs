@@ -1,7 +1,4 @@
-//! Style arguments the merge cases below are built from.
-//!
-//! `styleq`, `props` and `attrs` are one chain read by three sets of names, so
-//! they are given their inputs by one set of builders.
+//! Style-argument builders shared by the `styleq`, `props` and `attrs` cases.
 
 use std::rc::Rc;
 
@@ -17,11 +14,6 @@ use crate::shared::enums::data_structures::fn_result::FnResult;
 use crate::shared::utils::core::parse_nullable_style::{ResolvedArg, StyleObject};
 
 /// Reads a result the way a case wants to name it.
-///
-/// A trait rather than two free functions, so a case reads a result the way it
-/// reads every other value. Here rather than beside the type, because the arm
-/// that answers for the kind a result does not hold is a question only a case
-/// asks.
 pub(crate) trait ResultReader {
   fn as_class_name(&self) -> Option<&Expr>;
   fn as_values(&self) -> Option<&FlatCompiledStyles>;
@@ -43,8 +35,7 @@ impl ResultReader for FnResult {
   }
 }
 
-/// A compiled namespace: the marker every compiled style carries, and the
-/// properties given as `(property, class name)`.
+/// A compiled namespace: the marker plus `(property, class name)` pairs.
 pub(crate) fn compiled(properties: &[(&str, &str)]) -> FlatCompiledStyles {
   let mut styles = inline(properties);
 
@@ -57,9 +48,7 @@ pub(crate) fn compiled(properties: &[(&str, &str)]) -> FlatCompiledStyles {
   styles
 }
 
-/// A style the compiler did not compile: the same properties, carrying no
-/// marker, so the merge writes it out as an inline style rather than as
-/// classes.
+/// An uncompiled style (no marker), which the merge writes out inline.
 pub(crate) fn inline(properties: &[(&str, &str)]) -> FlatCompiledStyles {
   let mut styles: FlatCompiledStyles = IndexMap::new();
 
@@ -73,10 +62,6 @@ pub(crate) fn inline(properties: &[(&str, &str)]) -> FlatCompiledStyles {
   styles
 }
 
-/// An inline style holding one declaration of the given kind.
-///
-/// The builder above spells text alone, and an inline style holds every kind
-/// the author can write.
 pub(crate) fn inline_value(property: &str, value: FlatCompiledStylesValue) -> FlatCompiledStyles {
   let mut styles: FlatCompiledStyles = IndexMap::new();
 
@@ -85,12 +70,8 @@ pub(crate) fn inline_value(property: &str, value: FlatCompiledStylesValue) -> Fl
   styles
 }
 
-/// An inline style holding a value kind no inline style can hold.
-///
-/// An injectable style is written where a rule is collected, never where a
-/// declaration is, so it stands for the kinds the two writers of an inline
-/// style have no spelling for. It is built here because no source produces
-/// one in this place.
+/// An inline style holding an injectable style, which neither inline writer can spell. No
+/// source produces one here.
 pub(crate) fn inline_unwritable(property: &str) -> FlatCompiledStyles {
   inline_value(
     property,
@@ -102,12 +83,10 @@ pub(crate) fn inline_unwritable(property: &str) -> FlatCompiledStyles {
   )
 }
 
-/// One style argument holding the given namespace.
 pub(crate) fn style_of(properties: &[(&str, &str)]) -> ResolvedArg {
   ResolvedArg::style_object(StyleObject::style(compiled(properties)))
 }
 
-/// One style argument holding the given namespace as it is.
 pub(crate) fn styles(styles: FlatCompiledStyles) -> ResolvedArg {
   ResolvedArg::style_object(StyleObject::style(styles))
 }

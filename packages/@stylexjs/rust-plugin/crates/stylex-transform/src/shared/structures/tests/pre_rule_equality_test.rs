@@ -1,9 +1,5 @@
-//! What `PreRule::equals` answers, for every pair of the three rule kinds.
-//!
-//! The expectations are read off the reference implementation's own `equals`
-//! methods: a kind test first, then the property, the value and the two sorted
-//! key-path slices for a styles rule, and length plus an element-wise compare
-//! for a set.
+//! `PreRule::equals` for every pair of the three rule kinds, matching the reference
+//! implementation's `equals` methods.
 
 #[cfg(test)]
 mod pre_rule_equality {
@@ -65,8 +61,7 @@ mod pre_rule_equality {
 
     #[test]
     fn ignores_a_pseudo_authored_in_another_order() {
-      // Both slices are sorted by the constructor, so the authored order of two
-      // pseudos cannot make two otherwise identical rules differ.
+      // The constructor sorts both slices, so authored pseudo order cannot matter.
       let left = styles("color", "red", &[":hover", ":focus"]);
 
       assert!(left.equals(&rule("color", "red", &[":focus", ":hover"])));
@@ -74,9 +69,7 @@ mod pre_rule_equality {
 
     #[test]
     fn ignores_the_var_keys_and_the_rest_of_the_key_path() {
-      // `var(--…)` keys and the raw key path are read out of the same path the
-      // four compared fields already stand for, and the reference
-      // implementation leaves both out of its comparison.
+      // The reference implementation leaves `var(--…)` keys and the raw key path out.
       let left = styles("color", "red", &["var(--a)", "someNamespace"]);
 
       assert!(left.equals(&rule("color", "red", &["var(--b)", "otherNamespace"])));
@@ -142,9 +135,7 @@ mod pre_rule_equality {
   mod a_rule_set {
     use super::*;
 
-    /// `PreRuleSet::create` collapses zero rules to a null rule and one rule to
-    /// that rule, so those two answers come from the collapsed kind and never
-    /// from a set at all.
+    /// `PreRuleSet::create` collapses zero and one rules, so those never compare as sets.
     #[test]
     fn is_never_built_from_fewer_than_two_rules() {
       assert!(matches!(
@@ -187,9 +178,7 @@ mod pre_rule_equality {
 
     #[test]
     fn compares_its_members_by_their_own_equals() {
-      // The two sets differ only in a member's `var(--…)` key, which a member's
-      // own `equals` ignores. A field-by-field compare of the sets would
-      // answer differently.
+      // A member's own `equals` ignores `var(--…)` keys; a field-by-field compare would not.
       let left = set(vec![rule("color", "red", &["var(--a)"]), null()]);
       let right = set(vec![rule("color", "red", &["var(--b)"]), null()]);
 
@@ -218,7 +207,7 @@ mod pre_rule_equality {
       };
 
       assert!(build(None).equals(&build(None)));
-      // The one member that differs is the last, so the walk has to reach it.
+      // Only the last member differs.
       assert!(!build(None).equals(&build(Some(19_999))));
     }
   }

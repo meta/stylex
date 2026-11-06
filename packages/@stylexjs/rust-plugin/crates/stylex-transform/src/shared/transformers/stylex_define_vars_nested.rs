@@ -30,7 +30,6 @@ pub(crate) fn stylex_define_vars_nested(
   let flat_variables = expr_map_to_evaluate_result(flat_variables);
   let (flat_result, injectable_styles) = stylex_define_vars(&flat_variables, state);
 
-  // The group name carries no separator and is written last, so unflattening
-  // leaves it a leaf in the place it was already in.
+  // The separator-free group name stays a leaf when unflattened.
   (unflatten_object(&flat_result), injectable_styles)
 }

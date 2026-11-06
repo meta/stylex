@@ -207,12 +207,8 @@ impl HasBase for TransformList {
     }
   }
 }
-/// Rewrites every number the value holds with `transform_number`, and walks a
-/// map to reach the numbers below it.
-///
-/// A string is parsed first, because an author can write a number as a string
-/// and the reference implementation converts it the same way. A string that
-/// does not read as a number is kept as it was written.
+/// Rewrites every number in the value with `transform_number`, recursing into maps.
+/// Numeric strings are converted too, as in the reference; other strings are kept.
 fn convert_number_to_string_using(
   transform_number: fn(f64) -> ValueWithDefault,
   value: ValueWithDefault,

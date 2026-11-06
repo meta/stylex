@@ -39,8 +39,6 @@ pub(crate) fn stylex_create_set(
     None => stylex_panic!("{}", VALUES_MUST_BE_OBJECT),
   };
 
-  // Sized up front: the maps are filled one entry per namespace or per rule,
-  // and growing them from empty reallocates as they go.
   let mut resolved_namespaces = IndexMap::with_capacity(namespaces.len());
   let mut injected_styles_map = IndexMap::new();
   let mut namespace_to_class_paths = IndexMap::with_capacity(namespaces.len());
@@ -48,8 +46,7 @@ pub(crate) fn stylex_create_set(
   for (namespace_name, namespace) in namespaces {
     validate_namespace(namespace, &[], traversal_state);
 
-    // The flattener answers a map, so a property written twice is already one
-    // entry, in the place it was first written.
+    // Flattened map: a repeated property keeps its first position.
     let mut flattened_namespace =
       flatten_raw_style_object(namespace, state, traversal_state, functions);
 
@@ -85,7 +82,6 @@ pub(crate) fn stylex_create_set(
       })
       .collect::<Vec<(String, CompiledResult)>>();
 
-    // One entry per compiled key, and the compiled marker.
     let mut namespace_obj: FlatCompiledStyles =
       IndexMap::with_capacity(compiled_namespace_tuples.len() + 1);
     let mut class_paths_in_namespace: ClassPathsInNamespace =

@@ -1,8 +1,7 @@
-//! Tests for the debug class names a dev build adds to each style namespace.
+//! Debug class names a dev build adds to each style namespace.
 
 use super::{dev_class_name, dev_class_name_prefix, file_basename};
 
-/// Shorthand for the name built from a namespace, a variable name and a file.
 fn name(namespace: &str, var_name: Option<&str>, filename: &str) -> String {
   let prefix = dev_class_name_prefix(&var_name.map(str::to_owned), filename);
 
@@ -22,8 +21,7 @@ fn leaves_out_the_variable_when_there_is_none() {
   assert_eq!(name("root", None, "MyComponent"), "MyComponent__root");
 }
 
-/// A class name holds one class. A space in the name would make it two, and the
-/// first of the two is the name of another namespace of the same variable.
+/// A space would split the name into two classes, the first naming another namespace.
 #[test]
 fn removes_a_character_that_a_class_name_cannot_hold() {
   assert_eq!(name("p+1", Some("c"), "input"), "input__c.p1");
@@ -35,10 +33,7 @@ fn keeps_the_characters_a_class_name_can_hold() {
   assert_eq!(name("a-b_c.d", None, "input"), "input__a-b_c.d");
 }
 
-/// Two namespaces that differ only in a character no class name can hold get
-/// the same debug name. The name is a label for a person to read, so a
-/// duplicate is acceptable; a space, which silently adds a second class, is
-/// not.
+/// The name is a label for a person, so a duplicate is acceptable; a stray space is not.
 #[test]
 fn two_namespaces_can_share_a_name() {
   assert_eq!(
@@ -61,8 +56,7 @@ fn reads_the_file_name_out_of_a_path() {
   );
 }
 
-/// The compiler does not always know the file. The name still has to say which
-/// part is the file, or every file gives the same name.
+/// The name still has to mark the file part, or every unknown file gives the same name.
 #[test]
 fn names_an_unknown_file() {
   assert_eq!(name("base", Some("styles"), ""), "UnknownFile__styles.base");
@@ -70,15 +64,11 @@ fn names_an_unknown_file() {
   assert_eq!(name("base", None, "/"), "UnknownFile__base");
 }
 
-/// Every character of the namespace can be one a class name cannot hold. The
-/// name then says the file and the variable and nothing more.
 #[test]
 fn accepts_a_namespace_that_is_left_empty() {
   assert_eq!(name("+++", Some("c"), "input"), "input__c.");
 }
 
-/// A class name holds no letter outside the ASCII range, so an accented letter
-/// goes and the plain letters beside it stay.
 #[test]
 fn removes_the_accented_letters_of_a_namespace() {
   assert_eq!(name("ünïcödé", None, "input"), "input__ncd");
@@ -94,8 +84,6 @@ fn accepts_a_very_long_namespace() {
   );
 }
 
-/// Every character is one to remove, so the work is a full rewrite of a large
-/// string rather than a copy of it.
 #[test]
 fn accepts_a_very_long_namespace_that_is_left_empty() {
   let namespace = "+".repeat(100_000);
@@ -125,8 +113,7 @@ mod test_styles {
     convert_theme_to_dev_styles, convert_theme_to_test_styles, convert_to_test_styles,
   };
 
-  /// A state that reads the given file, which is the only part of the state a
-  /// debug name depends on.
+  /// The filename is the only part of the state a debug name depends on.
   fn state_of(filename: &str) -> StateManager {
     let mut state = StateManager::default();
 
@@ -161,7 +148,6 @@ mod test_styles {
     obj
   }
 
-  /// The keys of a namespace, in the order the map holds them.
   fn keys_of(obj: &StylesObjectMap, namespace: &str) -> Vec<String> {
     match obj.get(namespace) {
       Some(styles) => styles.keys().cloned().collect(),
@@ -169,9 +155,7 @@ mod test_styles {
     }
   }
 
-  /// A test build keeps the debug name and the compiled marker, and drops every
-  /// style the namespace held. The class the element gets is then the name a
-  /// person reads in the snapshot.
+  /// The element's class is then the name a person reads in the snapshot.
   #[test]
   fn a_test_style_holds_its_name_and_the_marker_only() {
     let result = convert_to_test_styles(
@@ -197,8 +181,6 @@ mod test_styles {
     );
   }
 
-  /// Every namespace is named for itself, and the namespaces keep the order the
-  /// author wrote them in.
   #[test]
   fn a_test_style_names_every_namespace_in_order() {
     let result = convert_to_test_styles(
@@ -215,7 +197,6 @@ mod test_styles {
     assert_eq!(keys_of(&result, "root2")[0], "Card__s.root2");
   }
 
-  /// Styles bound to no variable still get a name, and it says the file only.
   #[test]
   fn a_test_style_of_no_variable_is_named_after_its_file() {
     let result = convert_to_test_styles(namespaces_of(&["root"]), &None, &state_of("src/Card.tsx"));
@@ -223,8 +204,6 @@ mod test_styles {
     assert_eq!(keys_of(&result, "root")[0], "Card__root");
   }
 
-  /// No namespace is no work, and the answer is an empty map rather than a
-  /// map holding an empty namespace.
   #[test]
   fn a_test_style_of_no_namespace_is_empty() {
     let result = convert_to_test_styles(
@@ -236,8 +215,7 @@ mod test_styles {
     assert!(result.is_empty());
   }
 
-  /// Two namespaces that share a debug name keep their own entries. The name is
-  /// a label, so the duplicate is acceptable; a lost namespace is not.
+  /// The name is a label, so the duplicate is acceptable; a lost namespace is not.
   #[test]
   fn two_test_namespaces_can_share_a_name() {
     let result = convert_to_test_styles(
@@ -268,8 +246,7 @@ mod test_styles {
     );
   }
 
-  /// The theme name is not sanitized, so a variable holding a character no
-  /// class name can hold reaches the answer as it was written.
+  /// The theme name is not sanitized.
   #[test]
   fn a_theme_dev_style_keeps_the_variable_name_as_it_was_written() {
     let result = convert_theme_to_dev_styles(
@@ -281,8 +258,7 @@ mod test_styles {
     assert_eq!(result.keys().cloned().collect::<Vec<_>>(), ["input__a+b"]);
   }
 
-  /// An override that is keyed by the debug name replaces it, because the
-  /// overrides are put in after the name.
+  /// Overrides are put in after the name.
   #[test]
   fn an_override_keyed_by_the_debug_name_wins() {
     let overrides = styles_of(&[("Theme__t", "override")]);
@@ -296,17 +272,14 @@ mod test_styles {
     );
   }
 
-  /// A theme is always bound to a variable. Without one there is no name to
-  /// build, so the call is refused rather than answered with a name every theme
-  /// would share.
+  /// Refused rather than answered with a name every theme would share.
   #[test]
   #[should_panic(expected = "The variable name could not be determined.")]
   fn a_theme_dev_style_needs_a_variable_name() {
     convert_theme_to_dev_styles(&None, &FlatCompiledStyles::new(), "Theme.ts");
   }
 
-  /// Babel's test branch replaces the overrides with a debug label and marker.
-  /// Source: unchanged 2d42d72, visitors/stylex-create-theme.js:185-192.
+  /// Babel's test branch (unchanged 2d42d72, visitors/stylex-create-theme.js:185-192).
   #[test]
   fn a_theme_test_style_replaces_real_theme_classes_and_overrides() {
     let overrides = styles_of(&[
@@ -329,7 +302,6 @@ mod test_styles {
     );
   }
 
-  /// A test theme replaces real overrides with its label and compiled marker.
   #[test]
   fn a_theme_test_style_adds_the_compiled_marker_last() {
     let overrides = styles_of(&[("--color", "red")]);
@@ -346,7 +318,6 @@ mod test_styles {
     );
   }
 
-  /// Test-mode overrides cannot alter the marker or its label-first order.
   #[test]
   fn a_theme_test_style_holds_one_compiled_marker() {
     let overrides = styles_of(&[(COMPILED_KEY, "not a marker"), ("--color", "red")]);

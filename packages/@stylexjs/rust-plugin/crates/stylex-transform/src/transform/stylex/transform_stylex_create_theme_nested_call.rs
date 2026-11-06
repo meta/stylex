@@ -67,12 +67,8 @@ where
 
     let evaluated_arg1 = evaluate(first_arg, &mut self.state, &FunctionMap::default());
 
-    // The fold's two failures are read once. A refusal is the reachable one, and
-    // it reads the sentence and the position it always did. A confident answer
-    // with no value is the other: the evaluator's memo is its only known
-    // producer, and no source through this producer reaches it, so it reads this
-    // sentence rather than one of its own. `folded_style_object_lit` reads the
-    // two the same way for the producers that share it.
+    // A refusal keeps its own message and position; a confident fold with no value (only the
+    // evaluator's memo produces one, unreachable here) uses this message.
     let Some(variables) = evaluated_arg1.value.filter(|_| evaluated_arg1.confident) else {
       stylex_panic!(
         "{}",
@@ -107,10 +103,7 @@ where
     let function_map = Rc::new(build_eval_config(&mut self.state));
     let evaluated_arg2 = evaluate_with_functions(second_arg, &mut self.state, function_map);
 
-    // The three answers the second argument can give -- the fold refused, it
-    // answered nothing, it answered something that is not an object -- read
-    // through the reader the producers of one object share. This handler wrote
-    // all three out, with the same two sentences.
+    // The shared one-object reader reports refused, empty and non-object folds.
     let overrides = folded_style_object(
       evaluated_arg2,
       call,
@@ -154,9 +147,8 @@ fn validate_nested_theme_variables(value: &EvaluateResultValue) {
       let mut theme_ref = theme_ref.clone();
       let value = theme_ref.get(VAR_GROUP_HASH_KEY);
 
-      // Asked for the refusal alone. `createTheme` reads the same key off the
-      // same shape and needs the name; here only the check is wanted, and one
-      // reader answers both so the two report the same sentence.
+      // Only the refusal is needed; sharing the reader keeps the message identical to
+      // `createTheme`.
       or_refuse_nameless_group(value.as_css_var());
     },
     _ => validate_nested_theme_variables_object(value),

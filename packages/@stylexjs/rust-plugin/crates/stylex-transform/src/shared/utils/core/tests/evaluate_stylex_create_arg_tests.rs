@@ -1,11 +1,5 @@
-//! What the create-argument reader answers for an object no author wrote.
-//!
-//! The atoms pass builds its own argument -- one namespace holding one
-//! property, both written as string literals -- and compiles the atom only when
-//! the fold reads it. The shape of that argument is measured here, so the
-//! reader it relies on cannot change under it in silence. What the pass does
-//! when the fold answers nothing is measured beside the pass, by
-//! `inline_static_the_fold_cannot_reach_is_left_for_the_runtime`.
+//! The create-argument reader on the atoms pass's own argument: one namespace, one property,
+//! both string literals. The pass compiles the atom only when the fold reads it.
 
 use std::rc::Rc;
 
@@ -30,8 +24,7 @@ fn a_namespace_of_string_literals(namespace: &str, property: &str, value: &str) 
 
 #[test]
 fn a_namespace_of_two_string_literals_folds() {
-  // A CSS property and value, and a pair that names neither. The fold reads the
-  // shape and leaves what the strings mean to the steps after it.
+  // The fold reads the shape and leaves what the strings mean to later steps.
   for (property, value) in [("display", "flex"), ("notAProperty", "notAValue")] {
     let mut argument = a_namespace_of_string_literals(INLINE_NAMESPACE, property, value);
 

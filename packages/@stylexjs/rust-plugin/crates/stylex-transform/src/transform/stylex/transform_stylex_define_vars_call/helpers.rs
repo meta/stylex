@@ -35,38 +35,22 @@ use stylex_state::{
 pub(super) struct NamedVariable<'a> {
   /// The name the variable is declared under.
   name: Atom,
-  /// The key as the fold wrote it, kept so a group that is written back keeps
-  /// the spelling it arrived with.
+  /// The key as folded, so a group written back keeps its original spelling.
   key: &'a PropName,
-  /// What is declared under the name: a value, or a zero-argument function that
-  /// answers one.
+  /// The declared value, or a zero-argument function returning one.
   value: &'a Expr,
 }
 
-/// The variables a `defineVars` call declares, in the order they were written.
-///
-/// Read once, from the object the fold answered, and then handed to every step
-/// below. The evaluator rebuilds every object it folds as key-values under
-/// named keys, so a spread, a method, a computed key and a private name are
-/// shapes it cannot hand on -- and this is where that is read. Both steps below
-/// used to ask for themselves, and each answered a property it could not name
-/// differently: one skipped it, one copied it through.
+/// The variables a `defineVars` call declares, in source order, read once from the fold.
 pub(super) struct VariableGroup<'a> {
-  /// The span of the object the variables were read from, so a group that is
-  /// written back still points at the source it came from.
+  /// Span of the source object, kept for groups written back.
   span: Span,
   variables: Vec<NamedVariable<'a>>,
 }
 
 impl<'a> VariableGroup<'a> {
-  /// The variables the folded argument declares.
-  ///
-  /// An arrow function value is validated here, before either step below reads
-  /// one, so both can take a function value as taking no argument.
-  ///
-  /// A key the fold could not name is refused here too, on the sentence
-  /// `named_key_value` gives. No source reaches it: the evaluator rebuilds
-  /// every object it folds under named keys.
+  /// The variables the folded argument declares; validates arrow values and refuses unnamed
+  /// keys (unreachable: the evaluator always folds named keys).
   pub(super) fn read(object: &'a ObjectLit) -> Self {
     let variables: Vec<NamedVariable<'a>> = object
       .props
@@ -87,14 +71,8 @@ impl<'a> VariableGroup<'a> {
       variables,
     };
 
-    // A function value takes no argument. Every one is read before any body is
-    // walked, so a group that holds both faults reports the same one whatever
-    // order it was written in.
-    //
-    // One rule, where there used to be two: the walk refused a parameter the
-    // parser could read and let a placeholder through, and the step after it
-    // refused the placeholder on the same sentence. The stricter of the two is
-    // what an author read either way.
+    // Check every function value before walking any body, so the reported fault doesn't depend
+    // on source order.
     for (_, arrow) in group.function_values() {
       if !arrow.params.is_empty() {
         stylex_panic!("{}", invalid_define_vars_function_value());
@@ -104,12 +82,7 @@ impl<'a> VariableGroup<'a> {
     group
   }
 
-  /// The variables whose value is a function, each with the name it is
-  /// declared under.
-  ///
-  /// One place says what a function value is. The rule above and the
-  /// dependency walk below both read it, and a value that is not a function
-  /// declares no dependency and takes no parameter.
+  /// The variables whose value is a function, with their names.
   fn function_values(&self) -> impl Iterator<Item = (&Atom, &'a ArrowExpr)> + '_ {
     self
       .variables
@@ -121,26 +94,20 @@ impl<'a> VariableGroup<'a> {
   }
 }
 
-/// The dependency map of a variable group: `name -> the same-group names its
-/// function body reads`.
-///
-/// A name that is read but declared nowhere in the group is refused with
-/// `unknown_define_vars_reference`.
+/// Map of each name to the same-group names its function body reads.
+/// Refuses undeclared names with `unknown_define_vars_reference`.
 pub(super) fn collect_dependencies(
   group: &VariableGroup<'_>,
   export_name: &str,
 ) -> FxHashMap<Atom, FxHashSet<Atom>> {
   let mut function_values = group.function_values().peekable();
 
-  // Only a function body can read another variable of the group. A group that
-  // holds no function declares no dependency, so the set of declared names
-  // below is never built for one.
+  // Only function bodies can read other variables.
   if function_values.peek().is_none() {
     return FxHashMap::default();
   }
 
-  // Sized up front. A group can hold hundreds of variables, and a set that
-  // grows into them hashes each name it already holds again at every step.
+  // Presized: groups can hold hundreds of variables.
   let mut declared: FxHashSet<&Atom> =
     FxHashSet::with_capacity_and_hasher(group.variables.len(), Default::default());
 
@@ -171,19 +138,8 @@ pub(super) fn collect_dependencies(
   dep_map
 }
 
-/// The expression an arrow function value's body is.
-///
-/// A block body is a body the evaluator has no reading for, so it refuses the
-/// whole variable group before either reader here sees the object it produced:
-/// every arrow that arrives carries an expression. Both readers used to ask
-/// this question for themselves, and each one wrote its own refusal for an
-/// answer neither can get.
-///
-/// The exclusion covers this step and nothing else, and the step computes
-/// nothing -- it chooses between the body and the refusal. The claim above is
-/// measured by `a_function_value_with_a_block_body_is_refused`, which is the
-/// case that would start failing if the evaluator ever folded one.
-/// `guidelines/stack/RUST.md` describes the allowance.
+/// The expression body of an arrow value; block bodies are refused earlier by the evaluator.
+/// Excluded from coverage: only picks between precomputed answers (`guidelines/stack/RUST.md`).
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn arrow_body_expr(arrow: &ArrowExpr) -> &Expr {
   match arrow.body.as_ref() {
@@ -194,11 +150,7 @@ fn arrow_body_expr(arrow: &ArrowExpr) -> &Expr {
   }
 }
 
-/// SWC `Visit` implementation that walks any expression sub-tree and records
-/// every `exportName.key` member access (both `obj.prop` and `obj["prop"]`).
-/// Uses `Visit` (read-only) for completeness: SWC automatically dispatches to
-/// `visit_children_with` for sub-nodes we don't override, so all expression
-/// kinds (Cond, Logical, Array, Seq, TaggedTpl, New, …) are covered.
+/// Records every `exportName.key` / `exportName["key"]` access in an expression subtree.
 struct DependencyVisitor<'a> {
   export_name: &'a str,
   deps: FxHashSet<Atom>,
@@ -227,10 +179,8 @@ impl Visit for DependencyVisitor<'_> {
   }
 }
 
-/// Refuses a group whose dependency map holds a cycle.
-///
-/// The names are walked in sorted order so the reported cycle is the same on
-/// every platform.
+/// Refuses a group whose dependency map holds a cycle; names are walked in sorted order so
+/// the reported cycle is deterministic.
 pub(super) fn assert_no_define_vars_cycles(dependency_map: &FxHashMap<Atom, FxHashSet<Atom>>) {
   let mut visited: FxHashSet<Atom> = FxHashSet::default();
 
@@ -251,14 +201,8 @@ pub(super) fn assert_no_define_vars_cycles(dependency_map: &FxHashMap<Atom, FxHa
   }
 }
 
-/// The cycle the walk from `node` reaches, spelled as the path it closes.
-///
-/// `in_stack` holds the position of each name on `stack`, so the name a back
-/// edge points at is found together with where the cycle starts. The two used
-/// to be a set and a search over the stack, which left the walk answering
-/// `true` and the caller reading the path back out of the stack -- with two
-/// fall-throughs for a stack that cannot be empty and a name that cannot be
-/// missing.
+/// The cycle reachable from `node`, as the path it closes. `in_stack` maps names to `stack`
+/// positions.
 fn find_cycle(
   node: &Atom,
   dependency_map: &FxHashMap<Atom, FxHashSet<Atom>>,
@@ -296,12 +240,8 @@ fn find_cycle(
   None
 }
 
-/// The group with every zero-argument function value replaced by the value its
-/// body folds to, or nothing where the group holds no function at all.
-///
-/// A function value is only read at the top level: a nested one is refused,
-/// which is what `allowCSSType = false` means at depth in the reference
-/// implementation.
+/// The group with zero-argument function values replaced by their folded bodies, or `None`
+/// if it holds no function. Nested functions are refused (`allowCSSType = false` upstream).
 pub(super) fn normalize_define_vars_functions(
   group: &VariableGroup<'_>,
   state: &mut StateManager,
@@ -309,7 +249,7 @@ pub(super) fn normalize_define_vars_functions(
   call: &CallExpr,
   first_arg: &Expr,
 ) -> Option<EvaluateResultValue> {
-  // Nothing is copied until there is a rewrite to make.
+  // Copy nothing until a rewrite is needed.
   if !group
     .variables
     .iter()
@@ -325,16 +265,7 @@ pub(super) fn normalize_define_vars_functions(
       let value = match variable.value {
         Expr::Arrow(arrow) => fold_function_value(arrow, state, function_map, call, first_arg),
         other => {
-          // An object with no `default` key is refused for the shape it is,
-          // before anything looks at what it holds -- the order the reference
-          // implementation checks in, and the one that decides which sentence an
-          // author reads. Looking at the values first answered a folded function
-          // map, which materializes as `{ fn: … }`, with a sentence about
-          // zero-argument functions where they wrote a name.
-          //
-          // The name is always there to report, because the group is named
-          // where it is read. This rule used to read a key with no name too,
-          // and report a sentence that named no variable.
+          // Matches upstream: an object without `default` is refused before its values are checked.
           if any_level_needs_a_default(other) {
             stylex_panic!("{}", missing_default_value(&variable.name));
           }
@@ -368,9 +299,7 @@ fn fold_function_value(
 ) -> Expr {
   let result = evaluate(arrow_body_expr(arrow), state, function_map);
 
-  // A body the fold refused and a body that folded to something other than an
-  // expression are the same mistake -- neither leaves a value to declare -- so
-  // both read one sentence at one position.
+  // A refused fold and a non-expression result report the same error.
   let Some(EvaluateResultValue::Expr(expr)) = result.value.filter(|_| result.confident) else {
     let deopt = refusal_site(result.deopt.as_ref(), first_arg);
 
@@ -391,12 +320,7 @@ fn fold_function_value(
   expr
 }
 
-/// Panics with `invalid_define_vars_function_value` if any `Expr::Arrow`
-/// appears anywhere inside `expr` (after evaluation). Function values are
-/// rejected at depth > 0; only top-level zero-param arrows are expanded.
-///
-/// Uses an SWC `Visit` traversal so any expression subtree (parens, arrays,
-/// conditionals, calls, sequences, …) is covered, not just object literals.
+/// Panics with `invalid_define_vars_function_value` if any arrow appears inside `expr`.
 fn assert_no_nested_arrows(expr: &Expr) {
   if expr_contains_arrow(expr) {
     stylex_panic!("{}", invalid_define_vars_function_value());

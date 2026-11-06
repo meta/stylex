@@ -11,10 +11,7 @@ use stylex_state::flat_compiled_styles_value::FlatCompiledStylesValue;
 use super::{parse_nullable_style::ResolvedArg, props::props_map};
 
 /// The HTML attributes a `stylex.attrs(...)` call is replaced by.
-///
-/// Written in the order the runtime writes them -- `class`, then `style`, then
-/// `data-style-src`. The object literal is printed in this order, so the order
-/// is part of the emitted code and of every comparison made against it.
+/// Order is `class`, `style`, `data-style-src`, matching the runtime; it is part of the output.
 pub(crate) fn attrs(styles: &[ResolvedArg]) -> FnResult {
   let attrs = props_map(styles);
 
@@ -24,10 +21,7 @@ pub(crate) fn attrs(styles: &[ResolvedArg]) -> FnResult {
     attrs_map.insert("class".to_string(), class_name.clone());
   }
 
-  // An attribute is text, so the inline style is written out as the CSS a
-  // `style` attribute holds, with every value spelled the way JavaScript
-  // spells it. `props_map` writes that entry as an object and nothing else, so
-  // there is no other shape to read here.
+  // Serialize the inline style object as `style` attribute CSS text.
   if let Some(FlatCompiledStylesValue::Object(style)) = attrs.get("style").map(Rc::as_ref) {
     let declarations = style
       .iter()
