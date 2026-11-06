@@ -1,0 +1,28 @@
+{
+  "name": "@stylexjs/swc-plugin",
+  "version": "0.18.2",
+  "description": "StyleX SWC plugin.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/facebook/stylex.git"
+  },
+  "license": "MIT",
+  "keywords": [
+    "swc-plugin",
+    "stylex"
+  ],
+  "scripts": {
+    "build": "shx rm -rf dist && cargo build --manifest-path Cargo.toml --target wasm32-wasip1 --release && shx mkdir -p dist && shx cp ./target/wasm32-wasip1/release/stylex_swc_plugin.wasm ./dist/stylex_swc_plugin.wasm",
+    "test": "cargo test --manifest-path Cargo.toml --quiet",
+    "prepack": "npm run build"
+  },
+  "main": "dist/stylex_swc_plugin.wasm",
+  "files": [
+    "README.md",
+    "dist/stylex_swc_plugin.wasm"
+  ],
+  "peerDependencies": {
+    "@swc/core": "*"
+  },
+  "preferUnplugged": true
+}

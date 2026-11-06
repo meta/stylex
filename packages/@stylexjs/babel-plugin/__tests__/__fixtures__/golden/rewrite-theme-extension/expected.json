@@ -1,0 +1,20 @@
+{
+  "code": "import { tokens } from \"./tokens.stylex\";\nexport { tokens };",
+  "entry": "input.js",
+  "errors": [],
+  "finalCss": "",
+  "fixtureName": "rewrite-theme-extension",
+  "metadataStylex": [],
+  "pluginOptions": {
+    "rewriteAliases": true,
+    "unstable_moduleResolution": {
+      "type": "commonJS"
+    }
+  },
+  "processOptions": {
+    "enableLTRRTLComments": false,
+    "useLayers": false
+  },
+  "status": "ok",
+  "warnings": []
+}

@@ -1,0 +1,26 @@
+{
+  "code": "import _inject from \"@stylexjs/stylex/lib/stylex-inject\";\nvar _inject2 = _inject;\nimport * as stylex from '@stylexjs/stylex';\n_inject2({\n  ltr: \".x1e2nbdu{color:red}\",\n  priority: 3000\n});\nexport const styles = {\n  root: {\n    kMwMTN: \"x1e2nbdu\",\n    $$css: true\n  }\n};",
+  "entry": "input.js",
+  "errors": [],
+  "finalCss": ".x1e2nbdu{color:red}",
+  "fixtureName": "runtime-injection",
+  "metadataStylex": [
+    [
+      "x1e2nbdu",
+      {
+        "ltr": ".x1e2nbdu{color:red}",
+        "rtl": null
+      },
+      3000
+    ]
+  ],
+  "pluginOptions": {
+    "runtimeInjection": true
+  },
+  "processOptions": {
+    "enableLTRRTLComments": false,
+    "useLayers": false
+  },
+  "status": "ok",
+  "warnings": []
+}

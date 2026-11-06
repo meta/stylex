@@ -1,0 +1,32 @@
+{
+  "code": "import * as stylex from '@stylexjs/stylex';\nexport const styles = {\n  root: {\n    kWkggS: \"xrkmrrc\",\n    kMwMTN: \"xju2f9n\",\n    $$css: true\n  }\n};",
+  "entry": "input.js",
+  "errors": [],
+  "finalCss": ".xrkmrrc{background-color:red}\n.xju2f9n{color:blue}",
+  "fixtureName": "create-basic",
+  "metadataStylex": [
+    [
+      "xrkmrrc",
+      {
+        "ltr": ".xrkmrrc{background-color:red}",
+        "rtl": null
+      },
+      3000
+    ],
+    [
+      "xju2f9n",
+      {
+        "ltr": ".xju2f9n{color:blue}",
+        "rtl": null
+      },
+      3000
+    ]
+  ],
+  "pluginOptions": {},
+  "processOptions": {
+    "enableLTRRTLComments": false,
+    "useLayers": false
+  },
+  "status": "ok",
+  "warnings": []
+}

@@ -1,0 +1,19 @@
+{
+  "code": "export const value = 1;",
+  "entry": "input.js",
+  "errors": [
+    "[@stylexjs/babel-plugin] Expected (options.enableFontSizePxToRem) to be a boolean, but got `\"true\"`."
+  ],
+  "finalCss": "",
+  "fixtureName": "options-warning",
+  "metadataStylex": [],
+  "pluginOptions": {
+    "enableFontSizePxToRem": "true"
+  },
+  "processOptions": {
+    "enableLTRRTLComments": false,
+    "useLayers": false
+  },
+  "status": "ok",
+  "warnings": []
+}

@@ -1,0 +1,6 @@
+{
+  "entry": "input.js",
+  "pluginOptions": {
+    "enableFontSizePxToRem": "true"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "entry": "input.jsx",
+  "parserOpts": {
+    "flow": "all",
+    "plugins": ["jsx"]
+  }
+}

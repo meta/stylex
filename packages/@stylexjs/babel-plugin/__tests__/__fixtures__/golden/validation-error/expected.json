@@ -1,0 +1,16 @@
+{
+  "entry": "input.js",
+  "error": {
+    "message": "<FIXTURE_ROOT>/input.js: create() can only accept an object.\n  1 | import * as stylex from '@stylexjs/stylex';\n  2 |\n> 3 | export const styles = stylex.create(1);\n    |                       ^^^^^^^^^^^^^^^^\n  4 |",
+    "name": "SyntaxError"
+  },
+  "errors": [],
+  "fixtureName": "validation-error",
+  "pluginOptions": {},
+  "processOptions": {
+    "enableLTRRTLComments": false,
+    "useLayers": false
+  },
+  "status": "error",
+  "warnings": []
+}

@@ -1,0 +1,32 @@
+{
+  "code": "import * as stylex from '@stylexjs/stylex';\nimport React from 'react';\nexport function Button(props) {\n  return <button {...{\n    0: {\n      className: \"x1e2nbdu\"\n    },\n    1: {\n      className: \"x1e2nbdu x17z2mba\"\n    }\n  }[!!props.active << 0]} />;\n}",
+  "entry": "input.jsx",
+  "errors": [],
+  "finalCss": ".x1e2nbdu{color:red}\n.x17z2mba:hover{color:blue}",
+  "fixtureName": "props-and-merge",
+  "metadataStylex": [
+    [
+      "x1e2nbdu",
+      {
+        "ltr": ".x1e2nbdu{color:red}",
+        "rtl": null
+      },
+      3000
+    ],
+    [
+      "x17z2mba",
+      {
+        "ltr": ".x17z2mba:hover{color:blue}",
+        "rtl": null
+      },
+      3130
+    ]
+  ],
+  "pluginOptions": {},
+  "processOptions": {
+    "enableLTRRTLComments": false,
+    "useLayers": false
+  },
+  "status": "ok",
+  "warnings": []
+}

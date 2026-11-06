@@ -18,7 +18,7 @@ jobs:
           cache: 'yarn'
           cache-dependency-path: yarn.lock
       - run: corepack prepare yarn@1.22.22 --activate
-      - run: yarn install --frozen-lockfile
+      - run: yarn install --frozen-lockfile --ignore-scripts
       - run: yarn flow
 
   packages:
@@ -30,8 +30,12 @@ jobs:
           node-version: '22.x'
           cache: 'yarn'
           cache-dependency-path: yarn.lock
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
       - run: corepack prepare yarn@1.22.22 --activate
-      - run: yarn install --frozen-lockfile
+      - run: yarn install --frozen-lockfile --ignore-scripts
+      - run: yarn build
       - run: yarn test:packages
       - run: yarn workspace @stylexjs/devtools-extension build
       - run: yarn workspace @stylexjs/devtools-extension verify:build
@@ -47,7 +51,7 @@ jobs:
           cache: 'yarn'
           cache-dependency-path: yarn.lock
       - run: corepack prepare yarn@1.22.22 --activate
-      - run: yarn install --frozen-lockfile
+      - run: yarn install --frozen-lockfile --ignore-scripts
       - run: yarn prettier:report
 
   lint:
@@ -60,7 +64,7 @@ jobs:
           cache: 'yarn'
           cache-dependency-path: yarn.lock
       - run: corepack prepare yarn@1.22.22 --activate
-      - run: yarn install --frozen-lockfile
+      - run: yarn install --frozen-lockfile --ignore-scripts
       - run: yarn lint:report
 
   spelling:

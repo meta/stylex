@@ -1,0 +1,9 @@
+{
+  "entry": "input.js",
+  "pluginOptions": {
+    "rewriteAliases": true,
+    "unstable_moduleResolution": {
+      "type": "commonJS"
+    }
+  }
+}
