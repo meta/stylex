@@ -38,6 +38,28 @@ fn deep_arrows_compile_on_a_2_mib_thread() {
     assert_eq!(run_on_small_thread(prefix, 2 * 1024 * 1024), Ok(1));
 }
 
+/// The nesting the crates' own deep fixtures use -- calls, member chains,
+/// destructuring patterns and blocks -- through the public entry point on a
+/// thread the size of a default test thread, so a depth the public parser
+/// accepts compiles rather than overflowing the caller.
+#[test]
+fn deep_calls_members_patterns_and_blocks_compile_on_a_2_mib_thread() {
+    let stack = 2 * 1024 * 1024;
+    for prefix in [
+        format!("const x = a{};", "()".repeat(1000)),
+        format!("const x = a{};", ".b".repeat(1000)),
+        format!(
+            "const {}c{} = theme;",
+            "{ outer: ".repeat(500),
+            " }".repeat(500)
+        ),
+        format!("{}const y = 1;{}", "{".repeat(1000), "}".repeat(1000)),
+    ] {
+        let shape = prefix[..prefix.len().min(24)].to_owned();
+        assert_eq!(run_on_small_thread(prefix, stack), Ok(1), "{shape}");
+    }
+}
+
 #[test]
 fn over_limit_input_fails_catchably_on_a_small_thread() {
     let prefix = format!("const x = {}1{};", "(".repeat(20_000), ")".repeat(20_000));
