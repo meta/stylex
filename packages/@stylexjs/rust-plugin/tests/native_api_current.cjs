@@ -1512,3 +1512,38 @@ test('debug labels inside, outside and without a root, and in a package, equal B
     fs.rmSync(base, { recursive: true, force: true });
   }
 });
+
+test('an input source map leaves the debug label as Babel writes it', () => {
+  const babel = require('@babel/core');
+  const filename = appFile('src/Card.js');
+  const source = `${header}export const styles = stylex.create({\n  root: { color: 'red' },\n});\n`;
+  // Every generated line maps to Original.js line 42 onward. The Babel plugin
+  // never consults it (its addSourceMapData reads hub.file.codeMap, which
+  // @babel/core 7 does not define), so the label is the compiled file and the
+  // generated line.
+  const inputSourceMap = {
+    version: 3,
+    sources: ['Original.js'],
+    names: [],
+    mappings: 'AAyCA;AACA;AACA;AACA',
+  };
+  const options = { dev: true, unstable_moduleResolution: { type: 'commonJS' } };
+  const labels = (code) =>
+    [...code.matchAll(/\$\$css: ?"([^"]*)"/g)].map((match) => match[1]);
+  const viaBabel = (plugin) =>
+    babel.transformSync(source, {
+      filename,
+      babelrc: false,
+      configFile: false,
+      inputSourceMap,
+      plugins: [[plugin, options]],
+    }).code;
+  const expected = labels(viaBabel(require('@stylexjs/babel-plugin')));
+  assert.equal(expected.length, 1);
+  assert.ok(expected[0].endsWith(':3'), expected[0]);
+  assert.deepEqual(labels(viaBabel(require(path.join(__dirname, '..', 'babel')))), expected);
+  assert.deepEqual(
+    labels(transformSync(source, { ...options, filename, inputSourceMap }).code),
+    expected,
+  );
+});
