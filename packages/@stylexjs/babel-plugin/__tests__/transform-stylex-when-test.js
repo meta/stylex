@@ -76,7 +76,7 @@ describe('@stylexjs/babel-plugin', () => {
           [
             "x148kuu",
             {
-              "ltr": ".x148kuu.x148kuu:where(.x-default-marker:hover *){background-color:red}",
+              "ltr": ".x148kuu.x148kuu:where(.x-default-marker:hover .x148kuu){background-color:red}",
               "rtl": null,
             },
             3011.3,
@@ -125,7 +125,7 @@ describe('@stylexjs/babel-plugin', () => {
           [
             "x1i6rnlt",
             {
-              "ltr": ".x1i6rnlt.x1i6rnlt:where(.x-default-marker:focus ~ *){background-color:red}",
+              "ltr": ".x1i6rnlt.x1i6rnlt:where(.x-default-marker:focus ~ .x1i6rnlt){background-color:red}",
               "rtl": null,
             },
             3031.5,
@@ -178,7 +178,7 @@ describe('@stylexjs/babel-plugin', () => {
           [
             "x148kuu",
             {
-              "ltr": ".x148kuu.x148kuu:where(.x-default-marker:hover *){background-color:red}",
+              "ltr": ".x148kuu.x148kuu:where(.x-default-marker:hover .x148kuu){background-color:red}",
               "rtl": null,
             },
             3011.3,
@@ -186,7 +186,7 @@ describe('@stylexjs/babel-plugin', () => {
           [
             "xpijypl",
             {
-              "ltr": ".xpijypl.xpijypl:where(.x-default-marker:focus ~ *){background-color:green}",
+              "ltr": ".xpijypl.xpijypl:where(.x-default-marker:focus ~ .xpijypl){background-color:green}",
               "rtl": null,
             },
             3031.5,
@@ -194,7 +194,7 @@ describe('@stylexjs/babel-plugin', () => {
           [
             "xoev4mv",
             {
-              "ltr": ".xoev4mv.xoev4mv:where(.x-default-marker:active ~ *, :has(~ .x-default-marker:active)){background-color:yellow}",
+              "ltr": ".xoev4mv.xoev4mv:where(.x-default-marker:active ~ .xoev4mv, :has(~ .x-default-marker:active)){background-color:yellow}",
               "rtl": null,
             },
             3021.7,
@@ -260,7 +260,7 @@ describe('@stylexjs/babel-plugin', () => {
           [
             "x148kuu",
             {
-              "ltr": ".x148kuu.x148kuu:where(.x-default-marker:hover *){background-color:red}",
+              "ltr": ".x148kuu.x148kuu:where(.x-default-marker:hover .x148kuu){background-color:red}",
               "rtl": null,
             },
             3011.3,
@@ -268,7 +268,7 @@ describe('@stylexjs/babel-plugin', () => {
           [
             "xpijypl",
             {
-              "ltr": ".xpijypl.xpijypl:where(.x-default-marker:focus ~ *){background-color:green}",
+              "ltr": ".xpijypl.xpijypl:where(.x-default-marker:focus ~ .xpijypl){background-color:green}",
               "rtl": null,
             },
             3031.5,
@@ -389,7 +389,7 @@ describe('@stylexjs/babel-plugin', () => {
           [
             "x11omtej",
             {
-              "ltr": ".x11omtej.x11omtej:where(.x-default-marker[data-panel-state="open"] *){background-color:red}",
+              "ltr": ".x11omtej.x11omtej:where(.x-default-marker[data-panel-state="open"] .x11omtej){background-color:red}",
               "rtl": null,
             },
             3040,
@@ -447,6 +447,197 @@ describe('@stylexjs/babel-plugin', () => {
       `);
     });
   });
+  describe('[transform] rule subject of relational selectors', () => {
+    function rulesFor(styles) {
+      const { metadata } = transform(`
+        import * as stylex from '@stylexjs/stylex';
+        import { marker } from 'marker.stylex';
+        const styles = stylex.create({ root: ${styles} });
+      `);
+      return metadata.stylex
+        .map(([, { ltr, rtl }]) => (rtl != null ? [ltr, rtl] : [ltr]))
+        .flat();
+    }
+
+    test('uses the class of the rule for each when function', () => {
+      expect(
+        rulesFor(`{
+          color: {
+            default: null,
+            [stylex.when.ancestor(':hover')]: 'red',
+            [stylex.when.descendant(':hover')]: 'red',
+            [stylex.when.anySibling(':hover')]: 'red',
+            [stylex.when.siblingBefore(':hover')]: 'red',
+            [stylex.when.siblingAfter(':hover')]: 'red',
+          },
+        }`),
+      ).toMatchInlineSnapshot(`
+        [
+          ".xq6e253.xq6e253:where(.x-default-marker:hover .xq6e253){color:red}",
+          ".x1a02quk.x1a02quk:where(:has(.x-default-marker:hover)){color:red}",
+          ".x1o23vnx.x1o23vnx:where(.x-default-marker:hover ~ .x1o23vnx, :has(~ .x-default-marker:hover)){color:red}",
+          ".xbbeoq7.xbbeoq7:where(.x-default-marker:hover ~ .xbbeoq7){color:red}",
+          ".x2lv340.x2lv340:where(:has(~ .x-default-marker:hover)){color:red}",
+        ]
+      `);
+    });
+
+    test('keeps a * inside the pseudo', () => {
+      expect(
+        rulesFor(`{
+          color: {
+            default: null,
+            [stylex.when.ancestor(':has(> *)')]: 'red',
+            [stylex.when.descendant(':has(> *)')]: 'red',
+            [stylex.when.anySibling(':has(> *)')]: 'red',
+            [stylex.when.siblingBefore(':has(> *)')]: 'red',
+            [stylex.when.siblingAfter(':has(> *)')]: 'red',
+          },
+        }`),
+      ).toMatchInlineSnapshot(`
+        [
+          ".x12usrbt.x12usrbt:where(.x-default-marker:has(> *) .x12usrbt){color:red}",
+          ".xcsahcs.xcsahcs:where(:has(.x-default-marker:has(> *))){color:red}",
+          ".xkzyb0y.xkzyb0y:where(.x-default-marker:has(> *) ~ .xkzyb0y, :has(~ .x-default-marker:has(> *))){color:red}",
+          ".xq63kg.xq63kg:where(.x-default-marker:has(> *) ~ .xq63kg){color:red}",
+          ".x3zjb07.x3zjb07:where(:has(~ .x-default-marker:has(> *))){color:red}",
+        ]
+      `);
+    });
+
+    test('handles pseudos that contain a relational selector', () => {
+      expect(
+        rulesFor(`{
+          color: {
+            default: null,
+            [stylex.when.ancestor(':is(.a ~ *)')]: 'red',
+            [stylex.when.anySibling(':is(.a ~ *, :has(~ .b))')]: 'red',
+            [stylex.when.siblingBefore('[data-state=" *)"]')]: 'red',
+          },
+        }`),
+      ).toMatchInlineSnapshot(`
+        [
+          ".x1y6kcpl.x1y6kcpl:where(.x-default-marker:is(.a ~ *) .x1y6kcpl){color:red}",
+          ".xp47wy.xp47wy:where(.x-default-marker:is(.a ~ *, :has(~ .b)) ~ .xp47wy, :has(~ .x-default-marker:is(.a ~ *, :has(~ .b)))){color:red}",
+          ".x1d40om3.x1d40om3:where(.x-default-marker[data-state=" *)"] ~ .x1d40om3){color:red}",
+        ]
+      `);
+    });
+
+    test('uses the class of the rule with a custom marker', () => {
+      expect(
+        rulesFor(`{
+          color: {
+            default: null,
+            [stylex.when.ancestor(':hover', marker)]: 'red',
+            [stylex.when.anySibling(':hover', marker)]: 'red',
+          },
+        }`),
+      ).toMatchInlineSnapshot(`
+        [
+          ".x1amvw37.x1amvw37:where(.x147num5:hover .x1amvw37){color:red}",
+          ".xr1k07e.xr1k07e:where(.x147num5:hover ~ .xr1k07e, :has(~ .x147num5:hover)){color:red}",
+        ]
+      `);
+    });
+
+    test('puts pseudo-elements after the relational selector', () => {
+      expect(
+        rulesFor(`{
+          '::before': {
+            color: {
+              default: null,
+              [stylex.when.ancestor(':hover')]: 'red',
+            },
+          },
+        }`),
+      ).toMatchInlineSnapshot(`
+        [
+          ".xpnb0uc.xpnb0uc:where(.x-default-marker:hover .xpnb0uc)::before{color:red}",
+        ]
+      `);
+    });
+
+    test('applies to every ::thumb variant', () => {
+      expect(
+        rulesFor(`{
+          '::thumb': {
+            color: {
+              default: null,
+              [stylex.when.siblingBefore(':hover')]: 'red',
+            },
+          },
+        }`),
+      ).toMatchInlineSnapshot(`
+        [
+          ".x54era8.x54era8:where(.x-default-marker:hover ~ .x54era8)::-webkit-slider-thumb, .x54era8.x54era8:where(.x-default-marker:hover ~ .x54era8)::-moz-range-thumb, .x54era8.x54era8:where(.x-default-marker:hover ~ .x54era8)::-ms-thumb{color:red}",
+        ]
+      `);
+    });
+
+    test('applies inside at-rules', () => {
+      expect(
+        rulesFor(`{
+          color: {
+            default: null,
+            '@media (min-width: 100px)': {
+              default: null,
+              [stylex.when.anySibling(':hover')]: 'red',
+            },
+          },
+        }`),
+      ).toMatchInlineSnapshot(`
+        [
+          "@media (min-width: 100px){.x1p8m4z5.x1p8m4z5.x1p8m4z5:where(.x-default-marker:hover ~ .x1p8m4z5, :has(~ .x-default-marker:hover)){color:red}}",
+        ]
+      `);
+    });
+
+    test('applies next to other pseudos', () => {
+      expect(
+        rulesFor(`{
+          color: {
+            default: null,
+            ':focus': {
+              default: null,
+              [stylex.when.ancestor(':hover')]: 'red',
+            },
+            [stylex.when.ancestor(':hover')]: {
+              default: null,
+              [stylex.when.siblingBefore(':active')]: 'blue',
+            },
+          },
+        }`),
+      ).toMatchInlineSnapshot(`
+        [
+          ".xcycu7v.xcycu7v:focus:where(.x-default-marker:hover .xcycu7v){color:red}",
+          ".xjymhjz.xjymhjz:where(.x-default-marker:active ~ .xjymhjz):where(.x-default-marker:hover .xjymhjz){color:blue}",
+        ]
+      `);
+    });
+
+    test('applies to both ltr and rtl rules', () => {
+      expect(
+        rulesFor(`{
+          marginInlineStart: {
+            default: null,
+            [stylex.when.ancestor(':hover')]: 10,
+          },
+          float: {
+            default: null,
+            [stylex.when.ancestor(':hover')]: 'start',
+          },
+        }`),
+      ).toMatchInlineSnapshot(`
+        [
+          ".xms7qp0.xms7qp0:where(.x-default-marker:hover .xms7qp0){margin-inline-start:10px}",
+          ".x1ss12aw.x1ss12aw:where(.x-default-marker:hover .x1ss12aw){float:left}",
+          ".x1ss12aw.x1ss12aw:where(.x-default-marker:hover .x1ss12aw){float:right}",
+        ]
+      `);
+    });
+  });
+
   describe('[transform] using stylex.defaultMarker', () => {
     test('named import', () => {
       const { code } = transform(`
@@ -511,7 +702,7 @@ describe('@stylexjs/babel-plugin', () => {
           priority: 3000
         });
         _inject2({
-          ltr: ".x7rpj1w.x7rpj1w:where(.x1lc2aw:hover *){background-color:red}",
+          ltr: ".x7rpj1w.x7rpj1w:where(.x1lc2aw:hover .x7rpj1w){background-color:red}",
           priority: 3011.3
         });
         const container = stylex.props(customMarker);
