@@ -47,7 +47,7 @@ where
       None => {
         jsx_opening_element.visit_mut_children_with(self);
         return;
-      },
+      }
     };
 
     // Only transform lowercase JSX element names (HTML elements, not React
@@ -78,7 +78,7 @@ where
         JSXAttrOrSpread::JSXAttr(jsx_attr) => match &jsx_attr.name {
           JSXAttrName::Ident(name) if name.sym.as_str() == sx_prop_name.as_str() => {
             Some((idx, jsx_attr.value.as_ref()))
-          },
+          }
           _ => None,
         },
         JSXAttrOrSpread::SpreadElement(_) => None,
@@ -273,7 +273,7 @@ where
   ///    import source was found or a `stylex` binding already exists,
   ///    otherwise plain `stylex`.
   /// 5. Prepend the namespace import, register it, and return the local name.
-  fn get_stylex_runtime_binding(&mut self, site: Span) -> String {
+  fn get_stylex_runtime_binding(&mut self, site: Span) -> swc_core::ecma::ast::Ident {
     let local_rebinding_shadows_site = |name: &str| {
       if site.is_dummy() {
         // Generated compiled-JSX/Solid calls can carry DUMMY spans. Without a
@@ -290,13 +290,14 @@ where
     //    whose local name is shadowed by a non-import binding in scope at the
     //    `sx` site. The shadow check is position-aware, using the pre-scanned
     //    scope spans and the `sx` site span.
-    if let Some(local_name) = self
+    if let Some(binding) = self
       .state
-      .stylex_import_names()
-      .find(|name| !local_rebinding_shadows_site(name))
-      .map(str::to_string)
+      .namespace_bindings()
+      .iter()
+      .find(|id| !local_rebinding_shadows_site(id.0.as_ref()))
+      .cloned()
     {
-      return local_name;
+      return swc_core::ecma::ast::Ident::new(binding.0, DUMMY_SP, binding.1);
     }
 
     // 2. First existing import declaration (incl. type-only) whose source is
@@ -353,7 +354,9 @@ where
     // `bound_names` does not see injected imports otherwise.
     self.state.bound_names.insert(stylex_local_name.clone());
 
-    stylex_local_name
+    let binding = create_ident(&stylex_local_name);
+    self.state.insert_stylex_namespace_binding(binding.to_id());
+    binding
   }
 }
 
@@ -369,10 +372,13 @@ fn sx_value_to_props_args(value_expr: Expr) -> Vec<ExprOrSpread> {
 /// Build a `<stylex_local_name>.props(args...)` call expression, where
 /// `stylex_local_name` is the value-level namespace binding resolved by
 /// [`StyleXTransform::get_stylex_runtime_binding`].
-fn build_stylex_props_call(stylex_local_name: String, args: Vec<ExprOrSpread>) -> CallExpr {
+fn build_stylex_props_call(
+  stylex_local_name: swc_core::ecma::ast::Ident,
+  args: Vec<ExprOrSpread>,
+) -> CallExpr {
   let member = MemberExpr {
     span: DUMMY_SP,
-    obj: Box::new(Expr::Ident(create_ident(&stylex_local_name))),
+    obj: Box::new(Expr::Ident(stylex_local_name)),
     prop: MemberProp::Ident(create_ident_name(STYLEX_PROPS)),
   };
   create_member_call_expr(member, args)
@@ -408,7 +414,7 @@ fn find_sx_prop(props: &[PropOrSpread], sx_prop_name: &str) -> Option<(usize, Ex
         .then(|| key_value.value.as_ref().clone()),
       Prop::Shorthand(ident) => {
         (ident.sym.as_str() == sx_prop_name).then(|| Expr::Ident(ident.clone()))
-      },
+      }
       _ => None,
     }?;
 
@@ -434,7 +440,7 @@ fn is_jsx_runtime_call(call: &CallExpr) -> bool {
         let name = name.strip_prefix('_').unwrap_or(name);
 
         RUNTIME_JSX_CALL_NAMES.contains(&name)
-      },
+      }
       Expr::Member(member) => {
         if let (Expr::Ident(obj), MemberProp::Ident(prop)) =
           (normalize_expr(&member.obj), &member.prop)
@@ -443,7 +449,7 @@ fn is_jsx_runtime_call(call: &CallExpr) -> bool {
         } else {
           false
         }
-      },
+      }
       _ => false,
     },
     _ => false,

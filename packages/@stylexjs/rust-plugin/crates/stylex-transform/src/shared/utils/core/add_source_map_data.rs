@@ -67,12 +67,12 @@ pub(crate) fn add_source_map_data(
             style_node_paths.entry(key_string).or_insert(key_value);
           }
         }
-      },
+      }
       _ => stylex_panic!("{}", EXPECTED_OBJECT_EXPRESSION),
     },
     _ => {
       stylex_panic!("{}", illegal_argument_length("add_source_map_data", 1));
-    },
+    }
   };
 
   // Everything a namespace lookup needs that belongs to the *call*, built once.
@@ -140,7 +140,7 @@ pub(crate) fn add_source_map_data(
                 package_json_seen,
                 functions,
               );
-            },
+            }
             None => {
               if log::log_enabled!(log::Level::Debug) {
                 debug!(
@@ -156,7 +156,7 @@ pub(crate) fn add_source_map_data(
                   *NEXTJS_HYDRATION_WARNING
                 );
               };
-            },
+            }
           },
           Err(e) => {
             if log::log_enabled!(log::Level::Debug) {
@@ -173,7 +173,7 @@ pub(crate) fn add_source_map_data(
                 state.get_filename()
               );
             };
-          },
+          }
         }
 
         if !inner_map.contains_key(&COMPILED_KEY.to_owned()) {
@@ -184,11 +184,11 @@ pub(crate) fn add_source_map_data(
         }
 
         result.insert(key, Rc::new(inner_map));
-      },
+      }
       _ => {
         // Fallback in case no sourcemap data is found
         result.insert(key, Rc::new(inner_map));
-      },
+      }
     };
   }
 
@@ -205,22 +205,31 @@ fn insert_compiled_entry(
   package_json_seen: &mut FxHashMap<String, PackageJsonExtended>,
   functions: &FunctionMap,
 ) {
-  // Cached per path: the debug path asks for the same filename once per style
-  // namespace, and shortening one reads the package boundaries around it.
-  let raw_short_filename = match state.cached_short_filename(filename) {
-    Some(short_filename) => short_filename.to_owned(),
-    None => {
-      let short_filename = create_short_filename(filename, state, package_json_seen);
-
-      state.insert_cached_short_filename(filename.to_owned(), short_filename.clone());
-
-      short_filename
-    },
-  };
-  let short_filename_expr = if let Some(ref f) = state.options.debug_file_path {
-    f.call(vec![create_string_expr(&raw_short_filename)])
+  let short_filename_expr = if let Some(namer) = state.options.core.debug_file_namer.clone() {
+    // Custom callbacks run once per annotated namespace, as in Babel; their
+    // results may be stateful and must not share the filesystem-name cache.
+    let name = match namer.debug_file_name(filename) {
+      Ok(name) => name,
+      // A throwing callback aborts the transform at this first call, as its
+      // exception aborts Babel's; the host latch rethrows the original value.
+      // Never an empty name: '' is a successful answer (no label).
+      Err(error) => stylex_panic!("{}", error),
+    };
+    create_string_expr(&name)
+  } else if let Some(ref function) = state.options.debug_file_path {
+    // The legacy public option also receives the original filename, not the
+    // package-shortened label. The host-namer branch must not call this again.
+    function.call(vec![create_string_expr(filename)])
   } else {
-    create_string_expr(&raw_short_filename)
+    let short = match state.cached_short_filename(filename) {
+      Some(short) => short.to_owned(),
+      None => {
+        let short = create_short_filename(filename, state, package_json_seen);
+        state.insert_cached_short_filename(filename.to_owned(), short.clone());
+        short
+      }
+    };
+    create_string_expr(&short)
   };
 
   let short_filename = convert_expr_to_str(&short_filename_expr, state, functions);
@@ -404,16 +413,32 @@ fn create_short_filename(
 
   let path = Path::new(absolute_path);
   let cwd = state.cwd();
-  let cwd_package = cwd
-    .as_deref()
-    .and_then(Path::to_str)
-    .and_then(|cwd| StateManager::get_package_name_and_path(cwd, package_json_seen));
-  let package_details = StateManager::get_package_name_and_path(absolute_path, package_json_seen);
+  let cwd_path = cwd.as_deref().unwrap_or(Path::new("."));
+  let effective_path = if path.is_absolute() {
+    path.to_path_buf()
+  } else {
+    cwd_path.join(path)
+  };
+  // Babel treats both inputs as file paths: cwd looks up from dirname(cwd),
+  // while dirname('') is '.', so an unnamed file looks up from cwd itself.
+  let cwd_lookup = cwd_path.parent().unwrap_or(cwd_path).join("package.json");
+  let cwd_package = cwd_lookup
+    .to_str()
+    .and_then(|file| StateManager::get_package_name_and_path(file, package_json_seen));
+  let file_directory = if absolute_path.is_empty() {
+    cwd_path
+  } else {
+    effective_path.parent().unwrap_or(&effective_path)
+  };
+  let file_lookup = file_directory.join("package.json");
+  let package_details = file_lookup
+    .to_str()
+    .and_then(|file| StateManager::get_package_name_and_path(file, package_json_seen));
 
   // If package details exist, use package-relative path
   if let Some((package_name_opt, package_root_path)) = package_details {
     let package_root = Path::new(&package_root_path);
-    let relative_path = path
+    let relative_path = effective_path
       .strip_prefix(package_root)
       .map_or(absolute_path.to_string(), to_posix_path);
 

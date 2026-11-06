@@ -39,7 +39,7 @@ pub(crate) fn stylex_create_theme(
 ) -> (FlatCompiledStyles, InjectableStylesMap) {
   // The group name and the source of every variable name come out of one read,
   // which also refuses anything that is no variable group.
-  let theme_group = validate_theme_variables(theme_vars);
+  let theme_group = validate_theme_variables(theme_vars, state);
 
   stylex_create_theme_from_group(theme_group, variables, state, typed_variables)
 }
@@ -68,8 +68,16 @@ pub(crate) fn stylex_create_theme_from_group(
   // Sorted by the name each key is written under, read by borrow. A sort asks
   // for that name about twice per element per level, and the owned form copied
   // it every time.
-  variables_key_values
-    .sort_unstable_by(|left, right| key_value_name(left).cmp(&key_value_name(right)));
+  variables_key_values.sort_unstable_by(|left, right| {
+    let (left, right) = (key_value_name(left), key_value_name(right));
+    // UTF-16 order is byte order for ASCII text, so ASCII names compare as
+    // bytes without being re-encoded.
+    if left.is_ascii() && right.is_ascii() {
+      left.as_bytes().cmp(right.as_bytes())
+    } else {
+      left.encode_utf16().cmp(right.encode_utf16())
+    }
+  });
 
   for key_value in variables_key_values.into_iter() {
     let key = convert_key_value_to_str(&key_value);
@@ -93,7 +101,7 @@ pub(crate) fn stylex_create_theme_from_group(
           Some(s) => s,
           None => stylex_panic!("{}", EXPRESSION_IS_NOT_A_STRING),
         }
-      },
+      }
       ThemeVars::Group(theme_ref) => match theme_ref.get(key.as_str()).as_css_var() {
         Some(v) => v.to_string(),
         None => stylex_panic!("{}", EXPECTED_CSS_VAR),

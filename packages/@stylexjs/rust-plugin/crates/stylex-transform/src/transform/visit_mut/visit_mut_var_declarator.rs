@@ -128,6 +128,7 @@ where
 
     match &var_declarator.name {
       Pat::Ident(local) if !has_named_import_source => {
+        self.state.insert_stylex_namespace_binding(local.id.to_id());
         self.state.insert_import_path(source_path);
         self
           .state
@@ -145,13 +146,14 @@ where
         self.state.insert_import_path(source_path);
 
         for prop in &object.props {
-          let Some((imported_name, local_name, _local_id)) = destructured_require_prop(prop) else {
+          let Some((imported_name, local_name, local_id)) = destructured_require_prop(prop) else {
             continue;
           };
 
           match &import_alias {
             Some(alias) => {
               if imported_name == *alias {
+                self.state.insert_stylex_namespace_binding(local_id);
                 self
                   .state
                   .insert_stylex_import(ImportSources::Regular(local_name.to_string()));
@@ -159,6 +161,7 @@ where
             },
             None => {
               if let Some(kind) = ImportKind::from_import_name(imported_name.as_str()) {
+                self.state.insert_stylex_api_binding(kind, local_id);
                 self.state.insert_stylex_api_import(kind, local_name);
               }
             },
@@ -179,7 +182,7 @@ where
       return;
     };
 
-    if !is_atoms_require(call) {
+    if !is_atoms_require(call, &self.state) {
       return;
     }
 
@@ -307,10 +310,13 @@ where
 ///
 /// One reader for both the StyleX source and the atoms source, so the two
 /// cannot come to answer a spelling differently.
-fn required_module(call: &CallExpr) -> Option<String> {
+fn required_module(
+  call: &CallExpr,
+  state: &stylex_state::state_manager::StateManager,
+) -> Option<String> {
   let is_require_call = matches!(
     &call.callee,
-    Callee::Expr(callee) if normalize_expr(callee).as_ident().is_some_and(|ident| ident.sym == "require")
+    Callee::Expr(callee) if normalize_expr(callee).as_ident().is_some_and(|ident| ident.sym == "require" && !state.declares_binding(ident))
   );
 
   if !is_require_call {
@@ -333,14 +339,14 @@ fn get_stylex_require_source(
   call: &CallExpr,
   state: &stylex_state::state_manager::StateManager,
 ) -> Option<String> {
-  let source_path = required_module(call)?;
+  let source_path = required_module(call, state)?;
 
   state.is_import_source(&source_path).then_some(source_path)
 }
 
 /// Whether a call expression is `require('@stylexjs/atoms')`.
-fn is_atoms_require(call: &CallExpr) -> bool {
-  required_module(call).is_some_and(|source_path| source_path == ATOMS_SOURCE)
+fn is_atoms_require(call: &CallExpr, state: &stylex_state::state_manager::StateManager) -> bool {
+  required_module(call, state).is_some_and(|source_path| source_path == ATOMS_SOURCE)
 }
 
 fn destructured_require_prop(
@@ -376,10 +382,25 @@ fn retain_style_props(style_object: &mut ObjectLit, nulls_to_keep: &[Atom]) {
     // rather than expanded first: expanding one can never answer this
     // question, and the copy it needs was paid for every prop of every style.
     PropOrSpread::Prop(prop) => match &**prop {
-      Prop::KeyValue(key_value) => match (&key_value.key, key_value.value.as_lit()) {
-        (PropName::Ident(ident), Some(Lit::Null(_))) => nulls_to_keep.contains(&ident.sym),
-        _ => true,
+      Prop::KeyValue(key_value)
+        if key_value
+          .value
+          .as_lit()
+          .is_some_and(|value| matches!(value, Lit::Null(_))) =>
+      {
+        // Babel's Program.exit sweep reads Identifier, StringLiteral and numeric
+        // keys before pruning a null reset (2d42d72 src/index.js:267-289).
+        // Debug keys are quoted strings; their representation is not a reason
+        // to preserve an otherwise unused cancellation.
+        match &key_value.key {
+          PropName::Ident(_) | PropName::Str(_) | PropName::Num(_) => {
+            namespace_name_from_prop_key(&key_value.key)
+              .is_none_or(|key| nulls_to_keep.contains(&key))
+          },
+          _ => true,
+        }
       },
+      Prop::KeyValue(_) => true,
       _ => true,
     },
     PropOrSpread::Spread(_) => true,

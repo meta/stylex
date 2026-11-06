@@ -66,7 +66,30 @@ use swc_core::common::Span;
 /// the sentence differs; closing it means recording a declaration's whole span
 /// beside its name, which `declarations_state` does not carry.
 fn reads_before_its_declaration(reference: &Ident, declaration: Span) -> bool {
-  !reference.span.is_dummy() && !declaration.is_dummy() && reference.span.lo < declaration.hi
+  !declaration.is_dummy()
+    && stylex_js::native::execution_position().map_or_else(
+      || !reference.span.is_dummy() && reference.span.lo < declaration.hi,
+      |position| position < declaration.hi.0,
+    )
+}
+
+/// Whether `ident` spells a local name the module gave the StyleX `env` import
+/// without being bound by the evaluation itself (a callback parameter is).
+///
+/// Such a name is answered by [`resolve_reference`] by the binding's full id
+/// rather than by the function map's by-name entry, so a parameter or local
+/// that shadows the import -- the same symbol, a different binding -- is never
+/// read as the configured env object, and the import itself is read through
+/// its write checks.
+pub(super) fn spells_the_env_import(
+  ident: &Ident,
+  state: &EvaluationState,
+  traversal_state: &StateManager,
+) -> bool {
+  !state.functions.bindings.contains_key(&ident.to_id())
+    && traversal_state
+      .get_stylex_api_import(stylex_state::state_manager::ImportKind::Env)
+      .is_some_and(|names| names.contains(&ident.sym))
 }
 
 /// Resolve `reference` to the binding it names, and fold that binding to a
@@ -115,6 +138,29 @@ pub(super) fn resolve_reference(
   // 0.19.0 lines 600-605) is the same question steps 2 and this one's own
   // namespace arm answer. The order is upstream's either way — neither of the
   // other two specifier kinds resolves a theme reference here.
+  // The StyleX `env` object imported by name (`import { env } from
+  // '@stylexjs/stylex'`, or `env as runtime`) is the same object as
+  // `stylex.env`, not an export of a theme file. Recognised by the binding's
+  // full id, so a local that shadows the import is not it. A configured `env`
+  // option is registered on the function map by name and answered before this
+  // step; with the option unset the object is empty, and a member read off it
+  // is `undefined` for the style validator to refuse -- as the namespace
+  // spelling already is, and as the reference implementation answers both.
+  //
+  // The object is read-only. A write to the import or through it -- `env.brand
+  // = …` -- refuses, as a write to any other binding does at steps 3 and 4,
+  // rather than folding a value the module has since changed.
+  if traversal_state.matches_method(ident, stylex_state::state_manager::ImportKind::Env) {
+    if traversal_state.has_binding_reassignment(ident)
+      || traversal_state.has_binding_mutation(ident)
+    {
+      return deopt_at_declaration(path, &ident.sym, state, traversal_state, NON_CONSTANT);
+    }
+    return Some(EvaluateResultValue::EnvObject(Rc::clone(
+      &traversal_state.options.env,
+    )));
+  }
+
   if let Some((import_path, specifier)) = traversal_state.import_binding(ident) {
     // Which single export of the imported file this reference names, or `None`
     // where the specifier names no single export and the step therefore does
@@ -176,13 +222,19 @@ pub(super) fn resolve_reference(
       && !state.functions.disable_imports
     {
       let abs_path = traversal_state.import_path_resolver(
-        convert_atom_to_str_ref(&import_path.src.value),
+        match import_path.src.value.as_str() {
+          Some(value) => value,
+          None => return deopt(path, state, IMPORT_PATH_RESOLUTION_ERROR),
+        },
         &mut FxHashMap::default(),
       );
 
       let imported_name = match imported {
         ModuleExportName::Ident(ident) => ident.sym.to_string(),
-        ModuleExportName::Str(strng) => convert_atom_to_string(&strng.value),
+        ModuleExportName::Str(strng) => match strng.value.as_str() {
+          Some(value) => value.to_owned(),
+          None => return deopt(path, state, IMPORT_PATH_RESOLUTION_ERROR),
+        },
       };
 
       let return_value = match abs_path {
@@ -213,18 +265,20 @@ pub(super) fn resolve_reference(
       // It comes back the day this compiler evaluates an imported file in its
       // own right, which is the same capability the globals step's cross-file
       // gap waits on.
-      let import_path_src = convert_atom_to_string(&import_path.src.value);
+      let import_path_src = match import_path.src.value.as_str() {
+        Some(value) => value.to_owned(),
+        None => return deopt(path, state, IMPORT_PATH_RESOLUTION_ERROR),
+      };
 
       if !state.added_imports.contains(&import_path_src)
         && traversal_state.get_treeshake_compensation()
       {
-        let prepend_import_module_item = add_import_expression(&import_path_src);
-        // Theme side-effect imports go under ThemeImports — the slot whose
-        // flush position matches the legacy `prepend_import_module_items`
-        // placement (between the runtime helpers and the existing import block,
-        // regardless of producer queue order). Dedup is by stable hash on the
-        // StateManager so it survives across evaluations.
-        traversal_state.queue_theme_import_if_absent(prepend_import_module_item);
+        // Babel inserts compensation immediately before the declaration that
+        // owns the confidently read binding (evaluate-path.js:764-773).
+        // Preserve that exact site and its original source token, not the first
+        // import whose module text happens to match.
+        let owning_import = import_path.clone();
+        traversal_state.queue_theme_import_at(&owning_import);
 
         state.added_imports.insert(import_path_src);
       }
@@ -414,24 +468,58 @@ pub(super) fn resolve_reference(
   // one: what a refusal records is the binding's *name*, which the code frame
   // resolves against the module it re-parses. Measured on 0.19.0: `let NaN;`
   // above a `zIndex: NaN` frames the `NaN` in the declaration on both sides.
+  // Real lexical bindings win over global spellings, including undefined,
+  // NaN and Infinity. Mutation and TDZ checks above still run first.
   if let Some(value) = global_identifier_to_value(ident) {
-    return if traversal_state.declares_binding(ident) {
-      deopt_at_declaration(
+    if !traversal_state.declares_binding(ident) {
+      return Some(EvaluateResultValue::Expr(value));
+    }
+    // A binding that took the name over with no initializer to read -- a
+    // declaration without one, a dynamic style's parameter, a namespace
+    // import -- holds nothing to fold. Refused as upstream refuses it, with
+    // `UNINITIALIZED_CONST` against the binding (line 673), rather than
+    // falling to the tail's `UNDEFINED_CONST`, which names a reference that
+    // resolved to nothing: this one resolved to a binding.
+    if declarator
+      .as_ref()
+      .and_then(|(_, init)| init.as_ref())
+      .is_none()
+    {
+      return deopt_at_declaration(
         path,
         &ident.sym,
         state,
         traversal_state,
-        UNINITIALIZED_CONST,
-      )
-    } else {
-      Some(EvaluateResultValue::Expr(value))
-    };
+        stylex_constants::constants::evaluation_errors::UNINITIALIZED_CONST,
+      );
+    }
   }
 
   // ── 8. the declarator's initializer, else the class / function refusals ───
   //      (685-690)
   if let Some(init) = declarator.and_then(|(_, init)| init) {
-    return evaluate_cached(&init, state, traversal_state, fns);
+    let id = ident.to_id();
+    let observed = super::member_observer::active()
+      && super::member_observer::needs_events(&init, stable_hash_unspanned(&init));
+    if !observed && let Some(value) = stylex_js::native::binding_value::<EvaluateResultValue>(&id) {
+      return Some((*value).clone());
+    }
+    let value = stylex_js::native::with_execution_position(
+      (!init.span().is_dummy()).then_some(init.span().lo.0),
+      || evaluate_cached(&init, state, traversal_state, fns),
+    );
+    let value = if traversal_state.host_environment().is_some() {
+      value.map(super::heap_values::share)
+    } else {
+      value
+    };
+    if state.confident
+      && !observed
+      && let Some(value) = value.as_ref()
+    {
+      stylex_js::native::remember_binding(id, Rc::new(value.clone()));
+    }
+    return value;
   }
 
   // Asked of the state, which owns both lists, and answered as a `Copy` verdict

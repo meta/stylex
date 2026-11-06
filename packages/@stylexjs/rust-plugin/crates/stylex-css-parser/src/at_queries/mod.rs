@@ -6,6 +6,7 @@ Includes support for complex media query parsing, validation, and transformation
 */
 
 pub mod media_query;
+mod media_types;
 pub mod media_query_transform;
 pub mod messages;
 

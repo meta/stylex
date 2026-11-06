@@ -1,5 +1,4 @@
 use super::super::*;
-use stylex_macros::deopt_unsupported;
 use swc_core::ecma::ast::CondExpr;
 
 pub(in super::super) fn evaluate(
@@ -37,8 +36,9 @@ pub(in super::super) fn evaluate(
   // Read as `false` instead, `[<nothing>][0] ? 'red' : 'blue'` folded to the
   // alternate arm and wrote a colour the source does not describe. The value
   // means "nothing resolved this", which has no arm to name.
-  let Some(takes_the_consequent) = evaluate_result_to_js_boolean(&test_value) else {
-    deopt_unsupported!(deopt, &Expr::Cond(cond.clone()), state, ILLEGAL_PROP_VALUE);
+  let takes_the_consequent = match super::super::truthiness::truthy(&test_value, traversal_state) {
+    Ok(value) => value,
+    Err(error) => return deopt(&Expr::Cond(cond.clone()), state, &error.message),
   };
 
   match takes_the_consequent {

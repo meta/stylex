@@ -171,6 +171,10 @@ pub(crate) fn parse_nullable_style(
         if let Some(style_value) = namespaces.get(prop_name.as_ref()) {
           return StyleObject::style(Rc::clone(style_value));
         }
+        // A known compiler-generated style object with an unknown namespace
+        // remains a runtime call. Generic JS missing gets still yield
+        // undefined; that is not authored null input/provenance for StyleX.
+        return StyleObject::Other;
       }
 
       StyleObject::Other
@@ -186,7 +190,7 @@ pub(crate) fn parse_nullable_style(
     {
       let mut compiled_styles: IndexMap<String, Rc<FlatCompiledStylesValue>> = IndexMap::new();
 
-      if let Some(value) = parse_compiled_styles(&mut compiled_styles, result) {
+      if let Some(value) = parse_compiled_styles(&mut compiled_styles, result, state) {
         return value;
       }
     }
@@ -198,55 +202,61 @@ pub(crate) fn parse_nullable_style(
 fn parse_compiled_styles(
   compiled_styles: &mut IndexMap<String, Rc<FlatCompiledStylesValue>>,
   result: &EvaluateResultValue,
+  state: &StateManager,
 ) -> Option<StyleObject> {
-  match result {
-    EvaluateResultValue::Vec(arr) => {
-      read_array(compiled_styles, arr);
-
-      if compiled_styles.is_empty() {
-        return Some(StyleObject::Other);
-      }
-      // Taken rather than copied. The caller drops the map as soon as this
-      // answers, so a copy of every name it holds was made only to be thrown
-      // away on the next line.
-      return Some(StyleObject::style(std::mem::take(compiled_styles)));
-    },
-    EvaluateResultValue::Expr(expr) => {
-      if expr.is_object() {
-        parse_nullable_object(compiled_styles, expr);
-        return Some(StyleObject::style(std::mem::take(compiled_styles)));
-      }
-    },
-    EvaluateResultValue::ThemeRef(_) => {
-      return Some(StyleObject::Other);
-    },
-    _ => {
-      stylex_unimplemented!("Encountered a style argument the compiler cannot read.");
-    },
+  if matches!(result, EvaluateResultValue::ThemeRef(_)) {
+    return Some(StyleObject::Other);
   }
-  None
+  let value = match stylex_evaluator::evaluate::materialize_result(result, state) {
+    Ok(Some(value)) => value,
+    Ok(None)
+      if matches!(
+        result,
+        EvaluateResultValue::Vec(_)
+          | EvaluateResultValue::SharedArray(_)
+          | EvaluateResultValue::NativeArray(_)
+      ) =>
+    {
+      stylex_unimplemented!("Encountered an element of a style list the compiler cannot read.")
+    },
+    Ok(None) => stylex_unimplemented!("Encountered a style argument the compiler cannot read."),
+    Err(error) => stylex_macros::stylex_panic!("{}", error.message),
+  };
+  match normalize_expr(&value) {
+    Expr::Object(_) => {
+      parse_nullable_object(compiled_styles, &value);
+      Some(StyleObject::style(std::mem::take(compiled_styles)))
+    },
+    Expr::Array(array) => {
+      read_array(compiled_styles, array);
+      if compiled_styles.is_empty() {
+        Some(StyleObject::Other)
+      } else {
+        Some(StyleObject::style(std::mem::take(compiled_styles)))
+      }
+    },
+    _ => None,
+  }
 }
-
-/// Reads every style one array of evaluated arguments holds into
-/// `compiled_styles`.
-///
-/// Split from the answer above so the map is taken once, where the reading is
-/// finished. It also reads a nested array where it stands, rather than
-/// rebuilding it as an evaluation result first, which copied every element of
-/// it.
+/// Flatten the materialized data once in authored/iterated order. Null slots
+/// stay nullable rather than becoming missing keys or reordered styles.
 fn read_array(
   compiled_styles: &mut IndexMap<String, Rc<FlatCompiledStylesValue>>,
-  arr: &[EvaluateResultValue],
+  array: &swc_core::ecma::ast::ArrayLit,
 ) {
-  for item in arr.iter() {
-    match item {
-      EvaluateResultValue::Expr(expr) => parse_nullable_object(compiled_styles, expr),
-      EvaluateResultValue::Vec(arr) => read_array(compiled_styles, arr),
-      EvaluateResultValue::Null => {},
-      _ => {
-        stylex_unimplemented!("Encountered an element of a style list the compiler cannot read.");
-      },
+  for element in &array.elems {
+    let Some(element) = element else {
+      continue;
     };
+    match normalize_expr(&element.expr) {
+      Expr::Object(_) => parse_nullable_object(compiled_styles, &element.expr),
+      Expr::Array(array) => read_array(compiled_styles, array),
+      Expr::Lit(Lit::Null(_)) => {},
+      Expr::Ident(id) if is_js_undefined(id) => {},
+      _ => {
+        stylex_unimplemented!("Encountered an element of a style list the compiler cannot read.")
+      },
+    }
   }
 }
 

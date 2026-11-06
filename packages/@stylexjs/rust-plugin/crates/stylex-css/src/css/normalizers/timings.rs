@@ -5,7 +5,7 @@
 use postcss_value_parser::ValueParser;
 use stylex_utils::number::{parse_js_float, to_js_string};
 
-use super::dimensions::walk_dimensions;
+use super::dimensions::walk_dimensions_outside_urls;
 
 /// Rewrites a duration of ten milliseconds or more as seconds.
 ///
@@ -16,7 +16,7 @@ use super::dimensions::walk_dimensions;
 /// Anything under ten milliseconds is left alone, so `9ms` stays `9ms` — the
 /// conversion would spell it `.009s`, which is longer than what it replaced.
 pub fn normalize_timings(ast: &mut ValueParser, _key: &str) {
-  walk_dimensions(ast, |word, dimension| {
+  walk_dimensions_outside_urls(ast, |word, dimension| {
     if dimension.unit != "ms" {
       return None;
     }

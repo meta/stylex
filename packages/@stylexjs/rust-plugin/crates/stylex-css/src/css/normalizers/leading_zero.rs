@@ -18,6 +18,9 @@ use stylex_utils::number::{parse_js_float, to_js_string};
 pub fn normalize_leading_zero(ast: &mut ValueParser, _key: &str) {
   ast.walk(
     |node, _| {
+      if node.kind == NodeKind::Function && node.value.eq_ignore_ascii_case("url") {
+        return false;
+      }
       if node.kind != NodeKind::Word {
         return true;
       }

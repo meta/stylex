@@ -260,6 +260,20 @@ pub fn create_null_expr() -> Expr {
 }
 
 fn should_wrap_prop_name_key_with_quotes(key: &str) -> bool {
+  // Every reserved word is spelled in lowercase ASCII letters alone, so an
+  // ASCII identifier holding any other character is a name `verify_symbol`
+  // accepts, answered without its reserved-word lookups.
+  if let Some((&first, rest)) = key.as_bytes().split_first()
+    && first.is_ascii()
+    && Ident::is_valid_ascii_start(first)
+    && rest
+      .iter()
+      .all(|byte| byte.is_ascii() && Ident::is_valid_ascii_continue(*byte))
+    && key.bytes().any(|byte| !byte.is_ascii_lowercase())
+  {
+    return false;
+  }
+
   if Ident::verify_symbol(key).is_ok() {
     return false;
   }

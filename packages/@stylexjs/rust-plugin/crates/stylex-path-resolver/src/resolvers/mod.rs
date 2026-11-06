@@ -26,18 +26,22 @@ pub const EXTENSIONS: [&str; 8] = [".tsx", ".ts", ".jsx", ".js", ".mjs", ".cjs",
 pub static FILE_PATTERN: Lazy<Regex> =
   Lazy::new(|| Regex::new(r#"\.(jsx?|tsx?|mdx?|mjs|cjs)$"#).unwrap());
 
-#[cfg(test)]
+/// The directory package.json lookups start from: the resolution's root
+/// directory. (Upstream used the literal relative path `cwd` outside its unit
+/// tests, which resolved against the process working directory.)
 fn resolve_path_cwd(root_dir: &Path) -> PathBuf {
   root_dir.to_path_buf()
 }
 
-/// Production code path — `cfg(test)` is false when this crate is compiled
-/// as a dependency, so this variant is instrumented but never executed
-/// during testing.
-#[cfg(not(test))]
-#[cfg_attr(coverage_nightly, coverage(off))]
-fn resolve_path_cwd(_root_dir: &Path) -> PathBuf {
-  "cwd".into()
+/// Paths returned by [`resolve_path`] use `/` on every platform. On Windows
+/// `Path` components are rebuilt with `\`, which would leak into module ids;
+/// elsewhere `\` is an ordinary file-name character and is left alone.
+fn to_forward_slashes(path: String) -> String {
+  if cfg!(windows) {
+    path.replace('\\', "/")
+  } else {
+    path
+  }
 }
 
 pub fn resolve_path(
@@ -45,11 +49,27 @@ pub fn resolve_path(
   root_dir: &Path,
   package_json_seen: &mut FxHashMap<String, PackageJsonExtended>,
 ) -> String {
+  match try_resolve_path(processing_file, root_dir, package_json_seen) {
+    Ok(path) => path,
+    Err(path) => stylex_panic!("Path resolution failed: {}", path),
+  }
+}
+
+/// [`resolve_path`], answering `Err` with the package path instead of
+/// panicking when that path names nothing on disk. Upstream checked this only
+/// with an assert in its unit tests; callers that can fall back (an import
+/// that is not on disk is left unresolved) use this form.
+pub(crate) fn try_resolve_path(
+  processing_file: &Path,
+  root_dir: &Path,
+  package_json_seen: &mut FxHashMap<String, PackageJsonExtended>,
+) -> Result<String, String> {
   let is_match = processing_file
     .to_str()
     .and_then(|s| FILE_PATTERN.is_match(s).ok())
     .unwrap_or(false);
   if !is_match {
+    // The message names the path relative to the fixture root in unit tests.
     #[cfg(test)]
     let processing_path = root_dir
       .parent()
@@ -72,23 +92,19 @@ pub fn resolve_path(
   let path_by_package_json =
     match resolve_from_package_json(processing_file, root_dir, &cwd, package_json_seen) {
       Ok(value) => value,
-      Err(value) => return value,
+      Err(value) => return Ok(to_forward_slashes(value)),
     };
 
-  let resolved_path_by_package_name = path_by_package_json.clean().display().to_string();
+  let resolved_path_by_package_name =
+    to_forward_slashes(path_by_package_json.clean().display().to_string());
 
-  #[cfg(test)]
-  {
-    let cwd_resolved_path = format!("{}/{}", root_dir.display(), resolved_path_by_package_name);
-
-    assert!(
-      fs::metadata(&cwd_resolved_path).is_ok(),
-      "Path resolution failed: {}",
-      resolved_path_by_package_name
-    );
+  // A package path that names nothing on disk did not resolve.
+  let cwd_resolved_path = format!("{}/{}", root_dir.display(), resolved_path_by_package_name);
+  if fs::metadata(&cwd_resolved_path).is_err() {
+    return Err(resolved_path_by_package_name);
   }
 
-  resolved_path_by_package_name
+  Ok(resolved_path_by_package_name)
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -282,14 +298,15 @@ pub fn resolve_file_path(
   // Handle relative imports
   if import_path_str.starts_with('.') {
     if FILE_PATTERN.is_match(import_path_str).unwrap_or(false) {
-      let resolved = PathBuf::from(resolve_path(
+      if let Ok(resolved) = try_resolve_path(
         &source_file_dir.join(import_path_str),
         root_path,
         package_json_seen,
-      ));
-      let full_path = root_path.join(&resolved).clean();
-      if fs::metadata(&full_path).is_ok() {
-        return Ok(full_path);
+      ) {
+        let full_path = root_path.join(PathBuf::from(resolved)).clean();
+        if fs::metadata(&full_path).is_ok() {
+          return Ok(full_path);
+        }
       }
     } else {
       for ext in EXTENSIONS.iter() {
@@ -300,12 +317,11 @@ pub fn resolve_file_path(
           continue;
         }
 
-        let resolved = PathBuf::from(resolve_path(
-          &candidate_file_path,
-          root_path,
-          package_json_seen,
-        ));
-        let full_path = root_path.join(&resolved).clean();
+        let Ok(resolved) = try_resolve_path(&candidate_file_path, root_path, package_json_seen)
+        else {
+          continue;
+        };
+        let full_path = root_path.join(PathBuf::from(resolved)).clean();
         if fs::metadata(&full_path).is_ok() {
           return Ok(full_path);
         }

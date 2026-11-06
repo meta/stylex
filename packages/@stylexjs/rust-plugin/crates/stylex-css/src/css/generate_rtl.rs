@@ -1,10 +1,10 @@
+use postcss_value_parser::{NodeKind, ValueParser, stringify, unit};
 use std::borrow::Cow;
 use stylex_constants::constants::{
   cursor_flip::CURSOR_FLIP,
   logical_to_rtl::{INLINE_TO_RTL, LOGICAL_TO_RTL, LOGICAL_VALUE_TO_RTL},
 };
 use stylex_enums::style_resolution::StyleResolution;
-use stylex_regex::regex::LENGTH_UNIT_TESTER_REGEX;
 use stylex_structures::{
   pair::{Pair, PairCow},
   stylex_state_options::StyleXStateOptions,
@@ -64,7 +64,7 @@ fn property_to_rtl<'a>(pair: &'a Pair, options: &StyleXStateOptions) -> Option<P
         key: Cow::Borrowed(pair.key.as_str()),
         value: Cow::Owned(new_val),
       })
-    },
+    }
     "cursor" => {
       if !options.enable_legacy_value_flipping {
         return None;
@@ -74,7 +74,7 @@ fn property_to_rtl<'a>(pair: &'a Pair, options: &StyleXStateOptions) -> Option<P
         key: Cow::Borrowed(pair.key.as_str()),
         value: Cow::Borrowed(val),
       })
-    },
+    }
     _ => shadows_flip(pair.key.as_str(), pair.value.as_str(), options),
   }
 }
@@ -111,44 +111,47 @@ fn shadows_flip<'a>(key: &'a str, val: &str, options: &StyleXStateOptions) -> Op
         key: Cow::Borrowed(key),
         value: Cow::Owned(rtl_val),
       })
-    },
+    }
     _ => None,
   }
 }
 
 fn flip_shadow(value: &str) -> Option<String> {
-  let rtl = value
-    .split(',')
-    .map(|def| {
-      let parts: Vec<&str> = def.split_whitespace().collect();
-      // NOTE: temporary solution, need to implement unit parser
-      let flip_index = match parts.first() {
-        Some(first) if is_unit(first) => 0,
-        _ => 1,
-      };
-
-      let mut out = String::with_capacity(def.len() + 1);
-      for (i, part) in parts.iter().enumerate() {
-        if i > 0 {
-          out.push(' ');
-        }
-        if i == flip_index {
-          out.push_str(&flip_sign(part));
-        } else {
-          out.push_str(part);
-        }
+  let ast = ValueParser::new(value);
+  let mut groups = Vec::new();
+  let mut start = 0;
+  // Only top-level dividers separate shadow groups. A comma or slash inside
+  // rgb()/calc()/URL remains authored nested function text.
+  for (index, node) in ast.nodes.iter().enumerate() {
+    if node.kind == NodeKind::Div {
+      if start < index {
+        groups.push(stringify(&ast.nodes[start..index]));
       }
-      out
+      start = index + 1;
+    }
+  }
+  if start < ast.nodes.len() {
+    groups.push(stringify(&ast.nodes[start..]));
+  }
+  let rtl = groups
+    .into_iter()
+    .map(|definition| {
+      let mut parts: Vec<String> = definition.split(' ').map(str::to_owned).collect();
+      // Match postcss-value-parser unit(), including decimals, signs, exponent
+      // notation and unitless numbers. Do not invent a CSS length-unit whitelist.
+      let flip_index = if parts.first().is_some_and(|first| unit(first).is_some()) {
+        0
+      } else {
+        1
+      };
+      if let Some(part) = parts.get_mut(flip_index) {
+        *part = flip_sign(part);
+      }
+      parts.join(" ")
     })
     .collect::<Vec<_>>()
     .join(",");
-
   if rtl != value { Some(rtl) } else { None }
-}
-
-fn is_unit(input: &str) -> bool {
-  // Regex match failure is practically unreachable; default to false.
-  LENGTH_UNIT_TESTER_REGEX.is_match(input).unwrap_or(false)
 }
 
 fn flip_sign(value: &str) -> String {

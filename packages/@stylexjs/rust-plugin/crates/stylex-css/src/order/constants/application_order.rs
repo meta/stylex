@@ -1,4 +1,4 @@
-use stylex_structures::{order_pair::OrderPair, raw_value::TRawValue};
+use stylex_structures::{order::ExpansionFn, order_pair::OrderPair, raw_value::TRawValue};
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct Shorthands;
@@ -1187,7 +1187,7 @@ impl Shorthands {
     Ok(result)
   }
 
-  pub fn get(name: &str) -> Option<fn(Option<TRawValue>) -> Result<Vec<OrderPair>, String>> {
+  pub fn get(name: &str) -> Option<ExpansionFn> {
     match name {
       "all" => Some(Shorthands::all),
       "animation" => Some(Shorthands::animation),
@@ -1435,7 +1435,7 @@ impl Aliases {
     Ok(vec![OrderPair("bottom".into(), value)])
   }
 
-  pub fn get(name: &str) -> Option<fn(Option<TRawValue>) -> Result<Vec<OrderPair>, String>> {
+  pub fn get(name: &str) -> Option<ExpansionFn> {
     match name {
       // @Deprecated
       "borderHorizontal" => Some(Shorthands::border_inline),

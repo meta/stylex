@@ -37,7 +37,7 @@ use swc_core::{
 /// written earlier would send the reader to a declaration the refusal was never
 /// about. Among declarations at the same level the first in source order wins,
 /// which is the only order a module-wide resolution can be said to have.
-pub(crate) fn find_declaration_span(module: &Module, name: &Atom) -> Span {
+pub fn find_declaration_span(module: &Module, name: &Atom) -> Span {
   if let Some(span) = module_level_declaration(module, name) {
     return span;
   }

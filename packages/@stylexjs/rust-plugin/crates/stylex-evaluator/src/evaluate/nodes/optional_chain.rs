@@ -7,6 +7,16 @@ pub(in super::super) fn evaluate(
   traversal_state: &mut StateManager,
   fns: &FunctionMap,
 ) -> Option<EvaluateResultValue> {
+  // Optional member reads are supported, but optional calls remain an
+  // explicit refusal. Do not evaluate the callee as a builtin VALUE first:
+  // that would hide the OptionalCallExpression guard behind MemberExpression.
+  if matches!(opt_chain.base.as_ref(), OptChainBase::Call(_)) {
+    return deopt(
+      &Expr::OptChain(opt_chain.clone()),
+      state,
+      &unsupported_expression("OptionalCallExpression"),
+    );
+  }
   // Evaluate the base object/callee first
   let base_result = match opt_chain.base.as_ref() {
     OptChainBase::Member(member) => evaluate_cached(&member.obj, state, traversal_state, fns),

@@ -6,6 +6,10 @@ use swc_core::{
 use crate::StyleXTransform;
 use stylex_enums::core::TransformationCycle;
 
+#[cfg(test)]
+#[path = "tests/jsx_call_sites.rs"]
+mod current_jsx_call_sites;
+
 impl<C> StyleXTransform<C>
 where
   C: Comments,

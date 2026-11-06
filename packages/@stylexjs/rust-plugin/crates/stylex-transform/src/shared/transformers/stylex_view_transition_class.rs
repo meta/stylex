@@ -4,7 +4,7 @@ use indexmap::IndexMap;
 use stylex_macros::stylex_panic;
 
 use crate::shared::utils::object::{
-  obj_map_keys_and_transform_values, preprocess_object_properties,
+  obj_transform_values_then_map_keys, preprocess_object_properties,
 };
 use stylex_ast::ast::convertors::{convert_key_value_to_str, get_key_values_from_object};
 use stylex_constants::constants::messages::VALUES_MUST_BE_OBJECT;
@@ -41,7 +41,7 @@ pub(crate) fn stylex_view_transition_class(
 
     let entries = preprocess_object_properties(&key_value.value, state);
     let declarations =
-      obj_map_keys_and_transform_values(&entries, state, |key| dashify(key).into_owned());
+      obj_transform_values_then_map_keys(&entries, state, |key| dashify(key).into_owned());
 
     // An upper bound: the declarations that turn out to spell nothing are
     // dropped below, so this over-reserves rather than reallocating.

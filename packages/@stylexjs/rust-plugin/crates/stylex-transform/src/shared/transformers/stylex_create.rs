@@ -34,17 +34,19 @@ pub(crate) fn stylex_create_set(
   traversal_state: &mut StateManager,
   functions: &FunctionMap,
 ) -> (StylesObjectMap, InjectableStylesMap, ClassPathsMap) {
-  let mut resolved_namespaces = IndexMap::new();
-  let mut injected_styles_map = IndexMap::new();
-  let mut namespace_to_class_paths = IndexMap::new();
-
-  for (namespace_name, namespace) in match namespaces.as_map() {
+  let namespaces = match namespaces.as_map() {
     Some(map) => map,
     None => stylex_panic!("{}", VALUES_MUST_BE_OBJECT),
-  } {
-    validate_namespace(namespace, &[], traversal_state);
+  };
 
-    let mut class_paths_in_namespace: ClassPathsInNamespace = IndexMap::new();
+  // Sized up front: the maps are filled one entry per namespace or per rule,
+  // and growing them from empty reallocates as they go.
+  let mut resolved_namespaces = IndexMap::with_capacity(namespaces.len());
+  let mut injected_styles_map = IndexMap::new();
+  let mut namespace_to_class_paths = IndexMap::with_capacity(namespaces.len());
+
+  for (namespace_name, namespace) in namespaces {
+    validate_namespace(namespace, &[], traversal_state);
 
     // The flattener answers a map, so a property written twice is already one
     // entry, in the place it was first written.
@@ -55,12 +57,21 @@ pub(crate) fn stylex_create_set(
       .iter_mut()
       .map(|(key, value)| {
         let key = if traversal_state.options.enable_minified_keys && !key.starts_with("--") {
-          let hashed_key = create_short_hash(&format!("<>{}", key));
-          if traversal_state.options.debug {
-            format!("{}-k{}", key, hashed_key)
+          let mut hash_input = String::with_capacity(2 + key.len());
+          hash_input.push_str("<>");
+          hash_input.push_str(key);
+          let hashed_key = create_short_hash(&hash_input);
+          let debug = traversal_state.options.debug;
+          let mut minified =
+            String::with_capacity(if debug { key.len() + 2 } else { 1 } + hashed_key.len());
+          if debug {
+            minified.push_str(key);
+            minified.push_str("-k");
           } else {
-            format!("k{}", hashed_key)
+            minified.push('k');
           }
+          minified.push_str(&hashed_key);
+          minified
         } else {
           key.clone()
         };
@@ -74,7 +85,12 @@ pub(crate) fn stylex_create_set(
       })
       .collect::<Vec<(String, CompiledResult)>>();
 
-    let mut namespace_obj: FlatCompiledStyles = IndexMap::new();
+    // One entry per compiled key, and the compiled marker.
+    let mut namespace_obj: FlatCompiledStyles =
+      IndexMap::with_capacity(compiled_namespace_tuples.len() + 1);
+    let mut class_paths_in_namespace: ClassPathsInNamespace =
+      IndexMap::with_capacity(compiled_namespace_tuples.len());
+    injected_styles_map.reserve(compiled_namespace_tuples.len());
 
     for (key, value) in compiled_namespace_tuples {
       match value {

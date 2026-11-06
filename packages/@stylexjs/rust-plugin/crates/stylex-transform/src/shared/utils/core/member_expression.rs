@@ -15,7 +15,6 @@ use stylex_ast::ast::keys::{named_key_value, namespace_name_from_member_prop};
 
 use stylex_evaluator::evaluate::evaluate_with_functions;
 use stylex_state::{
-  evaluate_result_value::EvaluateResultValue,
   functions::FunctionMap,
   state_manager::{DeclId, StateManager},
 };
@@ -62,14 +61,26 @@ pub(crate) fn member_expression(
       *non_null_props = NonNullProps::True;
       style_non_null_props = NonNullProps::True;
     } else {
-      // Not `True` here: the branch above took that case, and nothing since has
-      // written to the counter.
-      style_non_null_props = non_null_props.clone();
-
-      if let NonNullProps::Vec(vec) = non_null_props
-        && let Some(EvaluateResultValue::Expr(Expr::Object(ObjectLit { props, .. }))) = style_value
+      // Reconstruct the one data view before computing retention metadata;
+      // an unknown/non-data result must conservatively keep cancellation keys.
+      let materialized = match style_value
+        .as_ref()
+        .map(|value| stylex_evaluator::evaluate::materialize_result(value, state))
       {
-        vec.extend(declared_namespaces(&props));
+        Some(Ok(Some(expression))) => Some(expression),
+        Some(Err(error)) => stylex_macros::stylex_panic!("{}", error.message),
+        _ => None,
+      };
+      if !matches!(materialized, Some(Expr::Object(_))) {
+        *non_null_props = NonNullProps::True;
+        style_non_null_props = NonNullProps::True;
+      } else {
+        style_non_null_props = non_null_props.clone();
+        if let NonNullProps::Vec(vec) = non_null_props
+          && let Some(Expr::Object(ObjectLit { props, .. })) = materialized
+        {
+          vec.extend(declared_namespaces(&props));
+        }
       }
     }
   }

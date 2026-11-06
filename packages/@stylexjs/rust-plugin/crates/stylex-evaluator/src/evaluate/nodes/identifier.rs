@@ -7,12 +7,18 @@ pub(in super::super) fn evaluate(
 ) -> Option<EvaluateResultValue> {
   let atom_ident_id = &ident.sym;
 
-  if let Some(func) = state.functions.identifiers.get(atom_ident_id) {
+  if let Some(func) = state
+    .functions
+    .bindings
+    .get(&ident.to_id())
+    .or_else(|| state.functions.identifiers.get(atom_ident_id))
+  {
     match func.as_ref() {
       FunctionConfigType::Regular(func) => match &func.fn_ptr {
         // The two shapes that encode a value rather than a callable: an
         // argument bound to an arrow parameter, and a theme file read through
         // its named exports. Each answers what it stands for.
+        FunctionType::ValueMapper(func) => return Some(func()),
         FunctionType::Mapper(func) => {
           return Some(EvaluateResultValue::Expr(func()));
         },

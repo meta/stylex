@@ -1,11 +1,33 @@
 use std::{borrow::Borrow, rc::Rc, sync::Arc};
+use swc_core::common::Spanned;
 
 mod binding;
+mod builtin_value;
 mod cache;
+mod enumerable_values;
+mod iterable_values;
+mod member_observer;
+mod primitive;
+mod text_boundary;
+mod truthiness;
+pub use member_observer::{MemberReadObserver, with_member_read_observer};
+mod callback_failure;
 mod deopt;
+#[path = "engine_free.rs"]
 mod engine_fold;
-mod engine_stylex_functions;
+mod function_scope;
 mod helpers;
+pub use function_scope::{evaluate_function_in_scope, evaluate_function_in_scope_observed};
+mod shallow_boundary;
+pub use shallow_boundary::materialize_result_shallow;
+mod heap_values;
+mod host_chain;
+mod host_dispatch;
+mod host_effects;
+mod host_operators;
+mod host_values;
+pub use host_values::{host_primitive_expr, materialize_result};
+mod native_call;
 mod nodes;
 mod rebuild;
 
@@ -16,13 +38,13 @@ pub use helpers::evaluate_result_is_nullish;
 use helpers::*;
 pub(crate) use nodes::binary_expression::binary_expr_to_num_or_str;
 pub use nodes::object_expression::spread_own_properties;
+#[cfg(test)]
+pub(crate) use rebuild::binds_a_parameter;
 // Named one by one rather than through a glob. The rebuild is a private module,
 // so this is the only route to its items, and a glob would publish whatever is
 // added there next.
 use rebuild::resolve_env_entry_to_result;
-pub(crate) use rebuild::{
-  array_element_expr, binds_a_parameter, evaluate_result_as_expr, fold_placeholder_function,
-};
+pub(crate) use rebuild::{array_element_expr, evaluate_result_as_expr, fold_placeholder_function};
 pub use rebuild::{evaluate_result_vec_to_array_expr, function_fold_to_object};
 
 use indexmap::IndexMap;
@@ -43,10 +65,11 @@ use swc_core::{
 
 use crate::convertors::expr_to_num;
 use crate::{evaluate_result::EvaluateResult, state::EvaluationState};
+#[cfg(test)]
+use stylex_ast::ast::convertors::convert_atom_to_string;
 use stylex_ast::ast::convertors::{
-  convert_atom_to_str_ref, convert_atom_to_string, convert_lit_to_string, create_big_int_expr,
-  create_bool_expr, create_number_expr, create_string_expr, expanded_shorthand_prop,
-  extract_tpl_cooked_value, is_js_undefined, key_value_name, normalize_expr,
+  create_big_int_expr, create_bool_expr, create_number_expr, create_string_expr, is_js_undefined,
+  key_value_name, normalize_expr,
 };
 use stylex_ast::ast::factories::{
   create_array_expression, create_expr_or_spread, create_ident_key_value_prop, create_object_lit,
@@ -54,11 +77,10 @@ use stylex_ast::ast::factories::{
 use stylex_ast::ast::objects::{assign_props, order_own_keys, remove_duplicates};
 use stylex_constants::constants::{
   evaluation_errors::{
-    CONCATENATION, FUNCTION_BODY_WITHOUT_VALUE, IMPORT_FILE_EVAL_ERROR,
-    IMPORT_PATH_RESOLUTION_ERROR, NON_CONSTANT, NUMERIC_CONVERSION, OBJECT_METHOD,
-    PATH_WITHOUT_NODE, SPREAD_ELEMENT, TEMPLATE_LITERAL, UNEXPECTED_MEMBER_LOOKUP,
-    UNINITIALIZED_CONST, USED_BEFORE_DECLARATION, grown_string_too_large, unfoldable_call,
-    unsupported_expression, unsupported_operator,
+    CONCATENATION, IMPORT_FILE_EVAL_ERROR, IMPORT_PATH_RESOLUTION_ERROR, NON_CONSTANT,
+    NUMERIC_CONVERSION, OBJECT_METHOD, PATH_WITHOUT_NODE, SPREAD_ELEMENT, UNEXPECTED_MEMBER_LOOKUP,
+    USED_BEFORE_DECLARATION, grown_string_too_large, unfoldable_call, unsupported_expression,
+    unsupported_operator,
   },
   messages::{
     ARGUMENT_NOT_EXPRESSION, EXPECTED_CSS_VAR, EXPRESSION_IS_NOT_A_STRING,
@@ -82,9 +104,8 @@ use stylex_state::{
   evaluate_result_value::EvaluateResultValue,
   functions::{FunctionConfig, FunctionConfigType, FunctionMap, FunctionType},
   seen_value::{SeenKey, SeenValue},
-  state_manager::{StateManager, add_import_expression},
+  state_manager::StateManager,
   theme_ref::ThemeRef,
-  types::{FunctionMapIdentifiers, FunctionMapMemberExpression},
 };
 use stylex_structures::named_import_source::ImportSources;
 use stylex_utils::string::utf16_length;
@@ -178,9 +199,25 @@ pub fn evaluate_with_functions(
   traversal_state: &mut StateManager,
   fns: Rc<FunctionMap>,
 ) -> Box<EvaluateResult> {
+  let input_bytes = traversal_state.input_source_file.as_ref().map_or_else(
+    || path.span().hi.0.saturating_sub(path.span().lo.0) as usize,
+    |source| source.src.len(),
+  );
+  stylex_js::native::with_evaluation_sized(input_bytes, || {
+    stylex_js::native::set_result_depth_limit(traversal_state.evaluation_ceiling());
+    evaluate_with_functions_inner(path, traversal_state, fns)
+  })
+}
+fn evaluate_with_functions_inner(
+  path: &Expr,
+  traversal_state: &mut StateManager,
+  fns: Rc<FunctionMap>,
+) -> Box<EvaluateResult> {
+  traversal_state.keep_evaluation_functions(Rc::clone(&fns));
   let mut state = Box::new(EvaluationState::with_functions(Rc::clone(&fns)));
 
   let mut value = evaluate_cached(path, &mut state, traversal_state, &fns);
+  traversal_state.replay_queued_evaluation_effects();
 
   if !state.confident {
     value = None;
@@ -217,6 +254,9 @@ fn _evaluate(
 
   let result: Option<EvaluateResultValue> = match normalized_path {
     Expr::Arrow(arrow) => nodes::arrow_function::evaluate(arrow, state),
+    // A name the module gave the StyleX `env` import is resolved by its binding
+    // below rather than by the function map's by-name entry.
+    Expr::Ident(ident) if binding::spells_the_env_import(ident, state, traversal_state) => None,
     Expr::Ident(ident) => nodes::identifier::evaluate(ident, state),
     Expr::TsSatisfies(ts_satisfaies) => {
       nodes::typescript_expression::evaluate(&ts_satisfaies.expr, state, traversal_state, fns)
@@ -414,8 +454,8 @@ mod unsupported_shape_tests;
 mod callee_shape_dispatch_tests;
 
 #[cfg(test)]
-#[path = "tests/engine_fold_tests.rs"]
-mod engine_fold_tests;
+#[path = "tests/native_builtin_conformance.rs"]
+mod native_builtin_conformance;
 
 #[cfg(test)]
 #[path = "tests/function_fold_object_tests.rs"]
@@ -436,10 +476,6 @@ mod fall_through_tests;
 #[cfg(test)]
 #[path = "tests/short_circuited_walk_tests.rs"]
 mod short_circuited_walk_tests;
-
-#[cfg(test)]
-#[path = "tests/thread_isolation_tests.rs"]
-mod thread_isolation_tests;
 
 #[cfg(test)]
 #[path = "tests/amplification_reading_tests.rs"]
@@ -468,3 +504,5 @@ mod evaluated_array_form_tests;
 #[cfg(test)]
 #[path = "tests/reported_message_tests.rs"]
 mod reported_message_tests;
+
+pub(crate) use callback_failure::with_isolated_causal_failures;

@@ -38,30 +38,37 @@ pub(crate) fn convert_style_to_class_name(
     dashify(key)
   };
 
-  // `sort_pseudos` takes a slice and copies what it needs; copying into a
-  // binding it never mutates first was a second copy of the list, per property
-  // per namespace per call.
-  let sorted_pseudos = sort_pseudos(pseudos);
+  // A declaration with no condition -- most of them -- has nothing to sort or
+  // join, and its modifier is the constant below.
+  let modifier_hash_string: Cow<'static, str> =
+    if pseudos.is_empty() && at_rules.is_empty() && const_rules.is_empty() {
+      Cow::Borrowed("null")
+    } else {
+      // `sort_pseudos` takes a slice and copies what it needs; copying into a
+      // binding it never mutates first was a second copy of the list, per
+      // property per namespace per call.
+      let sorted_pseudos = sort_pseudos(pseudos);
 
-  let mut combined_at_rules = Vec::with_capacity(at_rules.len() + const_rules.len());
+      let mut combined_at_rules = Vec::with_capacity(at_rules.len() + const_rules.len());
 
-  combined_at_rules.extend_from_slice(at_rules);
-  combined_at_rules.extend_from_slice(const_rules);
+      combined_at_rules.extend_from_slice(at_rules);
+      combined_at_rules.extend_from_slice(const_rules);
 
-  let sorted_at_rules = sort_at_rules(&combined_at_rules);
+      let sorted_at_rules = sort_at_rules(&combined_at_rules);
 
-  let at_rule_hash_string = sorted_at_rules.join("");
-  let pseudo_hash_string = sorted_pseudos.join("");
+      let at_rule_hash_string = sorted_at_rules.join("");
+      let pseudo_hash_string = sorted_pseudos.join("");
 
-  let modifier_hash_string = if at_rule_hash_string.is_empty() && pseudo_hash_string.is_empty() {
-    // NOTE: 'null' is used to keep existing hashes stable.
-    // This should be removed in a future version.
-    "null".to_string()
-  } else {
-    // TODO: set correct order when will be answer from the Meta team
-    // Link to discussion: https://github.com/facebook/stylex/discussions/744
-    format!("{}{}", pseudo_hash_string, at_rule_hash_string)
-  };
+      if at_rule_hash_string.is_empty() && pseudo_hash_string.is_empty() {
+        // NOTE: 'null' is used to keep existing hashes stable.
+        // This should be removed in a future version.
+        Cow::Borrowed("null")
+      } else {
+        // TODO: set correct order when will be answer from the Meta team
+        // Link to discussion: https://github.com/facebook/stylex/discussions/744
+        Cow::Owned(pseudo_hash_string + &at_rule_hash_string)
+      }
+    };
 
   let value: Vec<String> = match raw_value {
     PreRuleValue::Raw(raw_value) => vec![transform_value_cached(key, raw_value, state)],
@@ -96,16 +103,27 @@ pub(crate) fn convert_style_to_class_name(
     return None;
   }
 
-  let string_to_hash = format!(
-    "<>{}{}{}",
-    dashed_key.as_ref(),
-    value.join(", "),
-    modifier_hash_string
-  );
+  // `<>`, the key, the values joined by `, ` and the modifier, laid down in
+  // one buffer sized for them rather than through the formatter.
+  let values_len = value.iter().map(String::len).sum::<usize>() + 2 * value.len().saturating_sub(1);
+  let mut string_to_hash =
+    String::with_capacity(2 + dashed_key.len() + values_len + modifier_hash_string.len());
+  string_to_hash.push_str("<>");
+  string_to_hash.push_str(dashed_key.as_ref());
+  for (index, each_value) in value.iter().enumerate() {
+    if index > 0 {
+      string_to_hash.push_str(", ");
+    }
+    string_to_hash.push_str(each_value);
+  }
+  string_to_hash.push_str(&modifier_hash_string);
 
   let prefix = &state.options.class_name_prefix;
+  let hash = create_hash(string_to_hash.as_str());
 
-  let class_name_hashed = format!("{}{}", prefix, create_hash(string_to_hash.as_str()));
+  let mut class_name_hashed = String::with_capacity(prefix.len() + hash.len());
+  class_name_hashed.push_str(prefix);
+  class_name_hashed.push_str(&hash);
 
   let css_rules = generate_css_rule(
     class_name_hashed.as_str(),

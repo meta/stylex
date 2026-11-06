@@ -12,6 +12,8 @@ use crate::{
   token_parser::{TokenParser, tokens},
   token_types::{SimpleToken, TokenList},
 };
+use rustc_hash::FxHashMap;
+use std::cell::RefCell;
 use std::fmt::{self, Display};
 
 /// Fraction type for media query values like (aspect-ratio: 16/9)
@@ -278,7 +280,7 @@ pub struct MediaQuery {
 impl MediaQuery {
   pub fn new(queries: MediaQueryRule) -> Self {
     Self {
-      queries: Self::normalize(queries),
+      queries: super::media_types::resolve(Self::normalize(queries)),
     }
   }
 
@@ -366,12 +368,8 @@ impl MediaQuery {
         } else {
           ""
         };
-        let should_parenthesize = !is_top_level && !keyword.only && !keyword.not;
-        if should_parenthesize {
-          format!("{}({})", prefix, keyword.key)
-        } else {
-          format!("{}{}", prefix, keyword.key)
-        }
+        // A media type is never a boolean feature, including under an AND.
+        format!("{}{}", prefix, keyword.key)
       },
       MediaQueryRule::WordRule(word_rule) => {
         format!("({})", word_rule.key_value)
@@ -548,6 +546,33 @@ const MAX_QUERY_NESTING_DEPTH: usize = stylex_utils::nesting::MAX_NESTING_DEPTH;
 /// `not` is a whole rule, so a chain of them grows the stack with nothing for a
 /// text scan to count.
 pub fn validate_media_query(input: &str) -> Result<MediaQuery, String> {
+  // The answer depends on the text alone, and queries repeat: one breakpoint
+  // is written across namespaces, calls and files. Bounded so a long-lived
+  // host does not keep every query it has seen.
+  const CAPACITY: usize = 1024;
+  thread_local! {
+    static VALIDATED: RefCell<FxHashMap<String, Result<MediaQuery, String>>> =
+      RefCell::new(FxHashMap::default());
+  }
+
+  if let Some(known) = VALIDATED.with(|validated| validated.borrow().get(input).cloned()) {
+    return known;
+  }
+
+  let result = validate_media_query_uncached(input);
+
+  VALIDATED.with(|validated| {
+    let mut validated = validated.borrow_mut();
+    if validated.len() >= CAPACITY {
+      validated.clear();
+    }
+    validated.insert(input.to_owned(), result.clone());
+  });
+
+  result
+}
+
+fn validate_media_query_uncached(input: &str) -> Result<MediaQuery, String> {
   let structure = scan_query_structure(input);
 
   if !structure.parens_balanced {

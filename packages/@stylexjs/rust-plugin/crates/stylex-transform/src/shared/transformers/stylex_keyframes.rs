@@ -8,7 +8,7 @@ use swc_core::ecma::ast::{Expr, Lit};
 use crate::shared::transformers::named_rule::fold_to_rule_name;
 use crate::shared::utils::{
   core::flat_map_expanded_shorthands::flat_map_expanded_shorthands,
-  object::{obj_entries, obj_from_entries, obj_map_keys_and_transform_values},
+  object::{obj_entries, obj_from_entries, obj_transform_values_then_map_keys},
 };
 use stylex_ast::ast::convertors::{
   convert_key_value_to_str, get_key_values_from_object, normalize_expr,
@@ -59,7 +59,7 @@ pub(crate) fn stylex_keyframes(
 
     expanded_steps.insert(
       step,
-      obj_map_keys_and_transform_values(&entries, state, |key| dashify(key).into_owned()),
+      obj_transform_values_then_map_keys(&entries, state, |key| dashify(key).into_owned()),
     );
   }
 

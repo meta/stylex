@@ -5,7 +5,7 @@ use stylex_constants::constants::messages::expected_call_expression;
 use stylex_ast::ast::convertors::create_string_expr;
 use stylex_macros::stylex_panic;
 use swc_core::{
-  common::comments::Comments,
+  common::{Spanned, comments::Comments},
   ecma::ast::{Expr, VarDeclarator},
 };
 
@@ -15,7 +15,7 @@ use crate::{
     transformers::stylex_view_transition_class::stylex_view_transition_class,
     utils::validators::{
       argument_at, assert_valid_properties, assert_valid_view_transition_class,
-      folded_style_object, is_view_transition_class_call,
+      folded_producer_object, is_view_transition_class_call, reported_at,
       validate_stylex_view_transition_class_indent,
     },
   },
@@ -54,7 +54,7 @@ where
 
       let evaluated_arg = evaluate_with_functions(first_arg, &mut self.state, function_map);
 
-      let plain_object = folded_style_object(
+      let plain_object = folded_producer_object(
         evaluated_arg,
         call,
         first_arg,
@@ -62,13 +62,19 @@ where
         &mut self.state,
       );
 
-      assert_valid_view_transition_class(&plain_object, &mut self.state);
-      assert_valid_properties(
-        &plain_object,
-        &*VALID_VIEW_TRANSITION_CLASS_PROPERTIES,
-        VIEW_TRANSITION_CLASS_INVALID_PROPERTY,
-        &mut self.state,
-      );
+      // The original plugin refuses the folded value at the argument.
+      let argument = first_arg.span();
+      reported_at(argument, || {
+        assert_valid_view_transition_class(&plain_object, &mut self.state)
+      });
+      reported_at(argument, || {
+        assert_valid_properties(
+          &plain_object,
+          &*VALID_VIEW_TRANSITION_CLASS_PROPERTIES,
+          VIEW_TRANSITION_CLASS_INVALID_PROPERTY,
+          &mut self.state,
+        )
+      });
 
       let (view_transition_class_name, injectable_style) =
         stylex_view_transition_class(&plain_object, &mut self.state);

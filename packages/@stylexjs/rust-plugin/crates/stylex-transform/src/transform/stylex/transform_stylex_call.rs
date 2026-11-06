@@ -22,9 +22,9 @@ where
   pub(crate) fn transform_stylex_call(&mut self, call: &mut CallExpr) -> Option<Expr> {
     if let Callee::Expr(callee) = &call.callee
       && let Expr::Ident(ident) = callee.as_ref()
-      && self.state.is_regular_stylex_import(&ident.sym)
+      && self.state.matches_namespace(ident)
     {
-      return stylex_merge(call, stylex, hoist_expression, &mut self.state);
+      return stylex_merge(call, stylex, hoist_expression, false, &mut self.state);
     }
 
     None

@@ -20,6 +20,109 @@ pub(in super::super) fn evaluate(
     return logical_expression::evaluate(op, bin, state, traversal_state, fns);
   }
 
+  let host_before = stylex_js::native::host_epoch();
+  let mut left = evaluate_cached(&bin.left, state, traversal_state, fns)?;
+  let mut right = evaluate_cached(&bin.right, state, traversal_state, fns)?;
+  if matches!(
+    bin.op,
+    BinaryOp::EqEq | BinaryOp::NotEq | BinaryOp::EqEqEq | BinaryOp::NotEqEq
+  ) {
+    let reference_value = |value: &EvaluateResultValue| {
+      matches!(
+        value,
+        EvaluateResultValue::Object(_)
+          | EvaluateResultValue::Vec(_)
+          | EvaluateResultValue::SharedArray(_)
+          | EvaluateResultValue::NativeArray(_)
+          | EvaluateResultValue::Callback(_)
+          | EvaluateResultValue::ThemeRef(_)
+          | EvaluateResultValue::Expr(Expr::Object(_) | Expr::Array(_))
+      )
+    };
+    if reference_value(&left) && reference_value(&right) {
+      let fresh = |expression: &Expr| {
+        matches!(
+          normalize_expr(expression),
+          Expr::Object(_) | Expr::Array(_) | Expr::Arrow(_)
+        )
+      };
+      let distinct_fresh = fresh(&bin.left) && fresh(&bin.right);
+      let same_binding = match (normalize_expr(&bin.left), normalize_expr(&bin.right)) {
+        (Expr::Ident(left), Expr::Ident(right)) if left.to_id() == right.to_id() => {
+          fns.bindings.contains_key(&left.to_id())
+            || (traversal_state.declaration_of(left).is_some()
+              && !fns.identifiers.contains_key(&left.sym))
+        },
+        _ => false,
+      };
+      if distinct_fresh || same_binding {
+        // Both operands and their guards were evaluated once above. Fresh
+        // written allocations are distinct; a guarded lexical binding is the
+        // same instance. Everything else stays with the allocation/host proof.
+        let equal = same_binding;
+        let value = if matches!(bin.op, BinaryOp::NotEq | BinaryOp::NotEqEq) {
+          !equal
+        } else {
+          equal
+        };
+        return Some(EvaluateResultValue::Expr(create_bool_expr(value)));
+      }
+    }
+  }
+  let strict = matches!(
+    bin.op,
+    BinaryOp::EqEqEq | BinaryOp::NotEqEq | BinaryOp::In | BinaryOp::InstanceOf
+  );
+  let loose = matches!(bin.op, BinaryOp::EqEq | BinaryOp::NotEq);
+  let reference = |value: &EvaluateResultValue| {
+    matches!(
+      value,
+      EvaluateResultValue::Object(_)
+        | EvaluateResultValue::Vec(_)
+        | EvaluateResultValue::SharedArray(_)
+        | EvaluateResultValue::NativeArray(_)
+        | EvaluateResultValue::ThemeRef(_)
+        | EvaluateResultValue::Expr(Expr::Object(_) | Expr::Array(_))
+    )
+  };
+  if !(strict || loose && reference(&left) && reference(&right)) {
+    let hint = if bin.op == BinaryOp::Add || loose {
+      stylex_structures::stylex_env::PrimitiveHint::Default
+    } else {
+      stylex_structures::stylex_env::PrimitiveHint::Number
+    };
+    if reference(&left) {
+      left = match super::super::primitive::primitive(&left, hint, traversal_state, bin.span) {
+        Ok(value) => value,
+        Err(error) => return super::super::callback_failure::invocation_failure(error, state),
+      };
+    }
+    if reference(&right) {
+      right = match super::super::primitive::primitive(&right, hint, traversal_state, bin.span) {
+        Ok(value) => value,
+        Err(error) => return super::super::callback_failure::invocation_failure(error, state),
+      };
+    }
+  }
+  if matches!(left, EvaluateResultValue::Host(_)) || matches!(right, EvaluateResultValue::Host(_)) {
+    return match super::super::host_operators::binary_values(bin.op, &left, &right, traversal_state)
+    {
+      Ok(value) => Some(value),
+      Err(error) => deopt(&Expr::Bin(bin.clone()), state, &error.message),
+    };
+  }
+  if let Some(value) =
+    super::super::native_call::primitive_binary(bin.op, &left, &right, traversal_state)
+  {
+    return Some(value);
+  }
+  if stylex_js::native::host_epoch() != host_before {
+    return deopt(
+      &Expr::Bin(bin.clone()),
+      state,
+      &unsupported_expression("BinaryExpression"),
+    );
+  }
   folded_expr(fold_binary_expr(bin, state, traversal_state, fns)).map(EvaluateResultValue::Expr)
 }
 

@@ -28,12 +28,29 @@ use postcss_value_parser::{Dimension, Node, NodeKind, ValueParser, unit};
 /// rewrite hands the assignment back here, where the split is already done
 /// with. It also states the shape both callers already had: read, decide,
 /// build a string only when there is something to change.
-pub(super) fn walk_dimensions<F>(ast: &mut ValueParser, mut visit: F)
+pub(super) fn walk_dimensions<F>(ast: &mut ValueParser, visit: F)
+where
+  F: FnMut(&str, Dimension<'_>) -> Option<String>,
+{
+  walk_dimensions_impl(ast, visit, false);
+}
+
+pub(super) fn walk_dimensions_outside_urls<F>(ast: &mut ValueParser, visit: F)
+where
+  F: FnMut(&str, Dimension<'_>) -> Option<String>,
+{
+  walk_dimensions_impl(ast, visit, true);
+}
+
+fn walk_dimensions_impl<F>(ast: &mut ValueParser, mut visit: F, skip_urls: bool)
 where
   F: FnMut(&str, Dimension<'_>) -> Option<String>,
 {
   ast.walk(
     |node: &mut Node, _| {
+      if skip_urls && node.kind == NodeKind::Function && node.value.eq_ignore_ascii_case("url") {
+        return false;
+      }
       if node.kind != NodeKind::Word {
         return true;
       }

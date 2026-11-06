@@ -1,5 +1,6 @@
 mod dynamic_style_functions;
 mod helpers;
+mod hoist_safety;
 mod runtime_function_map;
 use dynamic_style_functions::apply_dynamic_style_functions;
 pub(crate) use helpers::hoist_expression;
@@ -20,7 +21,7 @@ use stylex_structures::pre_rule_value::PreRuleValue;
 use swc_core::{
   common::{DUMMY_SP, comments::Comments},
   ecma::ast::{
-    BinaryOp, Bool, CallExpr, Decl, Expr, Ident, Lit, ModuleItem, Pat, PropOrSpread, Stmt, UnaryOp,
+    BinaryOp, Bool, CallExpr, Decl, Expr, Ident, Lit, ModuleItem, PropOrSpread, Stmt, UnaryOp,
     VarDecl, VarDeclKind,
   },
 };
@@ -170,7 +171,13 @@ impl<C> StyleXTransform<C>
 where
   C: Comments,
 {
-  pub(crate) fn transform_stylex_create(&mut self, call: &CallExpr) -> Option<Expr> {
+  /// `call_key` answers the call's `stable_hash_unspanned_call`; the caller
+  /// shares the one it computed for its own lookups.
+  pub(crate) fn transform_stylex_create(
+    &mut self,
+    call: &CallExpr,
+    call_key: impl Fn() -> u128,
+  ) -> Option<Expr> {
     self.state.in_stylex_create = true;
     let mut package_json_seen: FxHashMap<String, PackageJsonExtended> = FxHashMap::default();
 
@@ -220,7 +227,7 @@ where
 
       if let Some(fns) = &evaluated_arg.fns {
         for (variable_name, inline_style) in
-          fns.values().flat_map(|(_, inline_styles)| inline_styles)
+          fns.values().flat_map(|function| &function.inline_styles)
         {
           // Pseudo elements can only access css vars via inheritance
           let has_pseudo_element_segment = inline_style
@@ -259,7 +266,19 @@ where
 
       injected_styles.extend(injected_inherit_styles);
 
-      let (var_name, parent_var_decl) = self.get_call_var_name(call);
+      // `register_styles` rewrites the style variable a call initialises to
+      // what the call compiled to only when the call has rules to register, and
+      // it rewrites the first one recorded under the call. So the variable is
+      // recorded already compiled only where it would have been that first one
+      // and been rewritten; otherwise it keeps the call and is recorded as
+      // before.
+      let registers_rules = !injected_styles.is_empty()
+        && self
+          .state
+          .style_var_for_call_keyed(call, &call_key)
+          .is_none();
+      let (var_name, parent_var_decl) =
+        self.create_call_var_name_keyed(call, &call_key, !registers_rules);
 
       if self.state.is_debug() && self.state.options.enable_debug_data_prop {
         compiled_styles = add_source_map_data(
@@ -279,9 +298,15 @@ where
         compiled_styles = convert_to_test_styles(compiled_styles, &var_name, &self.state);
       }
 
-      // Both come from `get_call_var_name`, which reads the name off the
-      // declarator: a name is only ever answered together with the declarator
-      // it was read from, so asking for the pair asks one question.
+      // Both come from `create_call_var_name_keyed`, which reads the name off
+      // the declarator: a name is only ever answered together with the
+      // declarator it was read from, so asking for the pair asks one question.
+      //
+      // Where the call registers rules, the declarator is recorded as a style
+      // variable once the call has compiled, holding what it compiled to -- the
+      // initializer `register_styles` used to rewrite it to. Nothing between
+      // here and there reads the style variables.
+      let mut style_var = None;
       if is_program_level
         && let Some(var_name) = var_name.as_ref()
         && let Some(parent_var_decl) = parent_var_decl
@@ -309,9 +334,13 @@ where
             .insert(var_name.clone(), dynamic_namespaces);
         }
 
-        self
-          .state
-          .insert_style_var(var_name.clone(), parent_var_decl);
+        if registers_rules {
+          style_var = Some((var_name.clone(), parent_var_decl));
+        } else {
+          self
+            .state
+            .insert_style_var(var_name.clone(), parent_var_decl);
+        }
       }
 
       // The rewrite of the dynamic entries reads the namespaces as the named
@@ -328,20 +357,26 @@ where
       // A call that is not a module-level statement is hoisted to one and the
       // call site becomes a reference. The hash of the object goes on, so the
       // runtime injection calls still find the declaration they belong to.
-      let (result_ast, fallback_ast_hash) = if is_program_level {
-        (styles_ast, None)
-      } else {
-        let fallback_ast_hash = stable_hash_unspanned(&styles_ast);
+      let (result_ast, fallback_ast_hash) =
+        if is_program_level || !hoist_safety::can_hoist_to_module(&styles_ast, &self.state) {
+          (styles_ast, None)
+        } else {
+          let fallback_ast_hash = stable_hash_unspanned(&styles_ast);
 
-        (
-          hoist_styles_object(styles_ast, &mut self.state),
-          Some(fallback_ast_hash),
-        )
-      };
+          (
+            hoist_styles_object(styles_ast, &mut self.state),
+            Some(fallback_ast_hash),
+          )
+        };
 
       self
         .state
-        .register_styles(call, &injected_styles, &result_ast, fallback_ast_hash);
+        .register_styles_keyed(call, &injected_styles, &result_ast, fallback_ast_hash, &call_key);
+
+      if let Some((var_name, mut declarator)) = style_var {
+        declarator.init = Some(Box::new(result_ast.clone()));
+        self.state.insert_style_var(var_name, declarator);
+      }
 
       Some(result_ast)
     } else {
@@ -353,6 +388,10 @@ where
     result
   }
 }
+
+#[cfg(test)]
+#[path = "tests/current_babel.rs"]
+mod current_babel;
 
 #[cfg(test)]
 #[path = "tests/resolve_when_marker_tests.rs"]

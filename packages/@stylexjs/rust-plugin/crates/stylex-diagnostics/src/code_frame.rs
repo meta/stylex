@@ -215,12 +215,33 @@ fn read_source_file(file_name: &FileName) -> Result<String, std::io::Error> {
   }
 }
 
+/// Records where the error about to be raised is reported, for a host that
+/// renders its own code frame: the fault's span in the compiler's source map,
+/// and the binding whose declaration the refusal framed (see
+/// [`frame_declaration_of`]).
+fn record_fault(fault_expression: &Expr, state: &impl DiagnosticState) {
+  use swc_core::common::Spanned;
+  let span = fault_expression.span();
+  if !span.is_dummy() {
+    stylex_macros::stylex_error::record_panic_span(span.lo.0, span.hi.0);
+  }
+  if let Some(name) = framed_declaration_of(fault_expression, state) {
+    stylex_macros::stylex_error::record_panic_declaration(name.as_str());
+  }
+}
+
 pub fn build_code_frame_error<'a>(
   wrapped_expression: &'a Expr,
   fault_expression: &'a Expr,
   error_message: &'a str,
   state: &mut impl DiagnosticState,
 ) -> &'a str {
+  record_fault(fault_expression, state);
+  // A host that catches the error renders its own code frame from the
+  // recorded span; nothing is printed to stderr then.
+  if stylex_macros::stylex_error::is_panic_stderr_suppressed() {
+    return error_message;
+  }
   match get_span_from_source_code(wrapped_expression, fault_expression, state) {
     Ok((code_frame, span)) => {
       code_frame.emit_error(span, error_message);
@@ -1016,16 +1037,31 @@ pub fn build_code_frame_error_and_panic(
   state: &mut impl DiagnosticState,
 ) -> ! {
   let caller_location = std::panic::Location::caller();
+  record_fault(fault_expression, state);
 
   // Emit the code frame diagnostic to stderr (already [StyleX]-prefixed)
-  let (file, line) = match get_span_from_source_code(wrapped_expression, fault_expression, state) {
+  // A host that catches the error renders its own code frame from the
+  // recorded span; nothing is printed to stderr then.
+  let quiet = stylex_macros::stylex_error::is_panic_stderr_suppressed();
+  let located = if quiet {
+    // The host frames the error itself; the re-read and re-parse below only
+    // serve the printed frame and its line.
+    Err(anyhow::anyhow!("code frame left to the host"))
+  } else {
+    get_span_from_source_code(wrapped_expression, fault_expression, state)
+  };
+  let (file, line) = match located {
     Ok((code_frame, span)) => {
-      code_frame.emit_error(span, error_message);
+      if !quiet {
+        code_frame.emit_error(span, error_message);
+      }
       let line_num = code_frame.try_get_span_line_number(span);
       (Some(state.get_filename().to_owned()), line_num)
     },
     Err(error) => {
-      warn_no_code_frame(&error, state.get_filename(), fault_expression);
+      if !quiet {
+        warn_no_code_frame(&error, state.get_filename(), fault_expression);
+      }
       (Some(state.get_filename().to_owned()), None)
     },
   };
@@ -1040,6 +1076,29 @@ pub fn build_code_frame_error_and_panic(
   };
 
   __stylex_panic(err)
+}
+
+/// Like [`build_code_frame_error_and_panic_at`], but the error is reported at
+/// `reported` (the node the Babel plugin throws at, e.g. the variable
+/// declarator of a top-level call) rather than at `expr`.
+#[track_caller]
+#[cold]
+pub fn build_code_frame_error_and_panic_reported_at(
+  expr: &Expr,
+  reported: swc_core::common::Span,
+  error_message: &str,
+  state: &mut impl DiagnosticState,
+) -> ! {
+  let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
+    build_code_frame_error_and_panic(expr, expr, error_message, state)
+  }));
+  let Err(payload) = outcome;
+  if !reported.is_dummy() {
+    // The caller names the node the error is about; a binding the fault
+    // expression's refusal framed is not it.
+    stylex_macros::stylex_error::report_panic_at(reported.lo.0, reported.hi.0);
+  }
+  std::panic::resume_unwind(payload)
 }
 
 #[track_caller]

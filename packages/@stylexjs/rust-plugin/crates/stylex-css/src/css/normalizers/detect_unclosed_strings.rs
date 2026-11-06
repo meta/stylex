@@ -5,7 +5,7 @@
 use postcss_value_parser::{NodeKind, ValueParser};
 use stylex_constants::constants::messages::LINT_UNCLOSED_STRING;
 
-use super::reject_value;
+use stylex_macros::stylex_panic;
 
 /// Rejects a value carrying a string that was never closed.
 ///
@@ -13,10 +13,9 @@ use super::reject_value;
 /// is the only thing standing between an unterminated string and a declaration
 /// that swallows whatever followed it.
 ///
-/// Rejects through [`super::reject_value`], the same way [`super::detect_unclosed_fns`]
-/// does, so the two unfinished-construct reports quote the rule identically.
-/// That is why this reads the key, which it otherwise has no use for.
-pub fn detect_unclosed_strings(ast: &mut ValueParser, key: &str) {
+/// The public compatibility diagnostic is the same bare message as Babel;
+/// source/code-frame context is added by the owning host layer.
+pub fn detect_unclosed_strings(ast: &mut ValueParser, _key: &str) {
   let mut unclosed = false;
 
   ast.walk(
@@ -31,6 +30,6 @@ pub fn detect_unclosed_strings(ast: &mut ValueParser, key: &str) {
   );
 
   if unclosed {
-    reject_value(ast, key, LINT_UNCLOSED_STRING);
+    stylex_panic!("{}", LINT_UNCLOSED_STRING);
   }
 }

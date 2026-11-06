@@ -3,7 +3,7 @@ use std::cell::OnceCell;
 use super::super::engine_fold::{refusal_for_a_property_name, refusal_for_a_property_read};
 use super::super::*;
 use stylex_ast::ast::convertors::{
-  atom_utf16_char_at, atom_utf16_length, convert_member_prop_to_string, normalize_expr,
+  atom_utf16_length, convert_member_prop_to_string, normalize_expr,
 };
 use stylex_state::evaluate_result_value::string_key_of_expr;
 use swc_core::ecma::ast::MemberExpr;
@@ -205,12 +205,17 @@ fn read_theme_member(
   path: &Expr,
   state: &mut EvaluationState,
 ) -> Option<EvaluateResultValue> {
+  let receiver = EvaluateResultValue::ThemeRef(theme_ref.clone());
   let value = theme_ref.get(key);
+  if matches!(&value, stylex_enums::theme_ref::ThemeRefResult::Proxy) {
+    return Some(EvaluateResultValue::Expr(create_bool_expr(true)));
+  }
 
   let Some(css_var) = value.as_css_var() else {
     deopt_unsupported!(deopt, path, state, EXPECTED_CSS_VAR);
   };
 
+  super::super::member_observer::notify(&receiver, key);
   Some(EvaluateResultValue::Expr(create_string_expr(css_var)))
 }
 
@@ -258,7 +263,7 @@ fn written_slot_count_of(obj: &Expr, items: &[EvaluateResultValue]) -> usize {
     // not evaluate. A spread cannot be among them: an array carrying one
     // refuses to fold at all, so no receiver holding one ever evaluated into
     // the list beside it.
-    Some(ArrayLit { elems, .. }) => elems.len(),
+    Some(ArrayLit { elems, .. }) => written_slot_count(elems).unwrap_or(items.len()),
     None => items.len(),
   }
 }
@@ -292,10 +297,21 @@ fn is_written_length(prop: &MemberProp) -> bool {
 fn holey_receiver_elems(obj: &Expr) -> Option<&[Option<ExprOrSpread>]> {
   let ArrayLit { elems, .. } = normalize_expr(obj).as_array()?;
 
-  elems
-    .iter()
-    .any(Option::is_none)
-    .then_some(elems.as_slice())
+  // A spread cannot provide a written slot count and must retain its own
+  // refusal. Only all-inert, spread-free elements may bypass evaluation to
+  // answer a count; arbitrary elements still take the normal evaluator path.
+  (elems.iter().any(Option::is_none)
+    && (elems
+      .iter()
+      .flatten()
+      .any(|element| element.spread.is_some())
+      || elems.iter().flatten().all(|element| {
+        matches!(
+          normalize_expr(&element.expr),
+          Expr::Lit(Lit::Str(_) | Lit::Num(_) | Lit::Bool(_) | Lit::Null(_))
+        )
+      })))
+  .then_some(elems.as_slice())
 }
 
 /// The entries the function map holds for a StyleX namespace this name stands
@@ -388,6 +404,12 @@ pub(in super::super) fn evaluate(
   traversal_state: &mut StateManager,
   fns: &FunctionMap,
 ) -> Option<EvaluateResultValue> {
+  if let Some(result) = super::super::host_chain::evaluate(member, state, traversal_state, fns) {
+    return match result {
+      Ok(value) => Some(value),
+      Err(error) => deopt(&Expr::Member(member.clone()), state, &error.message),
+    };
+  }
   let path = Expr::Member(member.clone());
   let path = &path;
 
@@ -397,11 +419,15 @@ pub(in super::super) fn evaluate(
   // receiver is evaluated, for the reason the fold's own walk answers it first —
   // the name decides it, and no receiver could make it safe.
   if let Some(refusal) = refusal_for_a_property_read(&member.prop) {
-    return deopt(path, state, &refusal);
+    return deopt(&property_frame(&member.prop, path), state, &refusal);
   }
 
   let parent_is_call_expr = traversal_state.is_member_call_callee(member);
 
+  if !parent_is_call_expr && super::super::builtin_value::static_read(member, traversal_state, fns)
+  {
+    return super::super::builtin_value::refuse(path, state);
+  }
   let evaluated_value = if parent_is_call_expr {
     None
   } else {
@@ -470,6 +496,7 @@ pub(in super::super) fn evaluate(
         "a fold answered a value while not confident",
       );
 
+      let object = super::super::heap_values::promoted(&object, traversal_state).unwrap_or(object);
       let prop_path = &member.prop;
 
       let property = match prop_path {
@@ -530,9 +557,14 @@ pub(in super::super) fn evaluate(
         && let Some(refusal) =
           spelled_name(&spelled, &property).and_then(refusal_for_a_property_name)
       {
-        return deopt(path, state, &refusal);
+        return deopt(&property_frame(prop_path, path), state, &refusal);
       }
 
+      if spelled_name(&spelled, &property)
+        .is_some_and(|key| super::super::builtin_value::value_read(&object, key))
+      {
+        return super::super::builtin_value::refuse(path, state);
+      }
       match object {
         EvaluateResultValue::Expr(expr) => match &expr {
           // An evaluator-written array, which is what a fold hands back and
@@ -649,14 +681,18 @@ pub(in super::super) fn evaluate(
               atom_utf16_length(&strng.value) as f64,
             ))),
             ArrayLikeLookup::Missing => Some(js_undefined()),
-            ArrayLikeLookup::Index(slot) => Some(match atom_utf16_char_at(&strng.value, slot) {
-              Some(character) => {
-                EvaluateResultValue::Expr(create_string_expr(character.encode_utf8(&mut [0; 4])))
+            // Indexing a string yields one exact UTF-16 code unit. A lone
+            // surrogate remains WTF-8 until a later numeric/string operation.
+            ArrayLikeLookup::Index(slot) => Some(
+              match stylex_js::native::wtf_units(strng.value.code_points().map(|p| p.to_u32()))
+                .get(slot)
+              {
+                Some(unit) => {
+                  EvaluateResultValue::Expr(super::super::host_values::utf16_expr(&[*unit]))
+                },
+                None => js_undefined(),
               },
-              // Past the end is `undefined`, which is the answer an array
-              // already gives for a slot it does not hold.
-              None => js_undefined(),
-            }),
+            ),
             ArrayLikeLookup::Unreadable => {
               deopt_unsupported!(deopt, path, state, UNEXPECTED_MEMBER_LOOKUP);
             },
@@ -711,19 +747,6 @@ pub(in super::super) fn evaluate(
                 return Some(EvaluateResultValue::FunctionConfig(config.clone()));
               },
               FunctionConfigType::EnvObject(env_map) => {
-                // The name is a key of the namespace however the compiler is
-                // configured, so an unset option is reported as the option
-                // being unset rather than as a property nobody can find --
-                // which would send an author looking in their source.
-                if env_map.is_empty() {
-                  deopt_unsupported!(
-                    deopt,
-                    path,
-                    state,
-                    "The stylex.env object is not configured. Check that the 'env' option is set in your StyleX configuration."
-                  );
-                }
-
                 return Some(EvaluateResultValue::EnvObject(env_map.clone()));
               },
               FunctionConfigType::Map(nested) => {
@@ -785,20 +808,72 @@ pub(in super::super) fn evaluate(
         EvaluateResultValue::ThemeRef(mut theme_ref) => {
           let key = match &property {
             EvaluateResultValue::Expr(Expr::Ident(Ident { sym, .. })) => sym.to_string(),
-            EvaluateResultValue::Expr(Expr::Lit(lit)) => match convert_lit_to_string(lit) {
-              Some(key) => key,
-              None => deopt_unsupported!(deopt, path, state, UNEXPECTED_MEMBER_LOOKUP),
+            EvaluateResultValue::Expr(Expr::Lit(lit @ (Lit::Str(_) | Lit::Num(_)))) => {
+              match super::super::text_boundary::literal_text(lit) {
+                Some(key) => key,
+                None => deopt_unsupported!(deopt, path, state, UNEXPECTED_MEMBER_LOOKUP),
+              }
+            },
+            EvaluateResultValue::Expr(Expr::Lit(_)) => {
+              deopt_unsupported!(deopt, path, state, UNEXPECTED_MEMBER_LOOKUP)
             },
             _ => deopt_unsupported!(deopt, path, state, MEMBER_NOT_RESOLVED),
           };
 
           read_theme_member(&mut theme_ref, &key, path, state)
         },
+        EvaluateResultValue::SharedArray(values) => {
+          match classify_lookup(spelled_name(&spelled, &property)) {
+            ArrayLikeLookup::Length => Some(EvaluateResultValue::Expr(create_number_expr(
+              values.len() as f64,
+            ))),
+            ArrayLikeLookup::Index(index) => {
+              Some(values.get(index).cloned().unwrap_or_else(js_undefined))
+            },
+            ArrayLikeLookup::Missing => Some(js_undefined()),
+            ArrayLikeLookup::Unreadable => deopt(path, state, UNEXPECTED_MEMBER_LOOKUP),
+          }
+        },
+        EvaluateResultValue::NativeArray(values) => {
+          match classify_lookup(spelled_name(&spelled, &property)) {
+            ArrayLikeLookup::Length => Some(EvaluateResultValue::Expr(create_number_expr(
+              values.len() as f64,
+            ))),
+            ArrayLikeLookup::Index(index) => values
+              .get(index)
+              .cloned()
+              .and_then(super::super::native_call::native_result)
+              .or_else(|| Some(js_undefined())),
+            ArrayLikeLookup::Missing => Some(js_undefined()),
+            ArrayLikeLookup::Unreadable => deopt(path, state, UNEXPECTED_MEMBER_LOOKUP),
+          }
+        },
+        EvaluateResultValue::Object(value) => {
+          let Some(key) = spelled_name(&spelled, &property) else {
+            return deopt(path, state, UNEXPECTED_MEMBER_LOOKUP);
+          };
+          Some(value.entries.get(key).cloned().unwrap_or_else(js_undefined))
+        },
+        EvaluateResultValue::Host(value) => {
+          let Some(key) = spelled_name(&spelled, &property) else {
+            return deopt(path, state, UNEXPECTED_MEMBER_LOOKUP);
+          };
+          match super::super::host_dispatch::get(&value, key, traversal_state) {
+            Ok(value) => Some(value),
+            Err(error) => deopt(path, state, &error.message),
+          }
+        },
         EvaluateResultValue::EnvObject(env_map) => {
           let Some(key) = spelled_name(&spelled, &property) else {
             deopt_unsupported!(deopt, path, state, UNEXPECTED_MEMBER_LOOKUP);
           };
 
+          // An unset environment has no value for the requested key. Leave
+          // that undefined value to the style validator, as Babel does, rather
+          // than creating a member diagnostic with a code frame here.
+          if env_map.is_empty() {
+            return Some(js_undefined());
+          }
           let Some(entry) = env_map.get(key) else {
             deopt_unsupported!(
               deopt,
@@ -812,7 +887,21 @@ pub(in super::super) fn evaluate(
             );
           };
 
-          Some(resolve_env_entry_to_result(entry, &env_map))
+          let value = resolve_env_entry_to_result(entry, &env_map);
+          Some(match value {
+            EvaluateResultValue::Host(mut value) => {
+              if let Some(environment) = traversal_state.host_environment() {
+                value.receiver = environment
+                  .env
+                  .as_ref()
+                  .map_or(stylex_structures::stylex_env::HostValue::Undefined, |r| {
+                    stylex_structures::stylex_env::HostValue::Ref(r.clone())
+                  });
+              }
+              EvaluateResultValue::Host(value)
+            },
+            value => value,
+          })
         },
         // An evaluated value the member path reads no properties from: a
         // callback, an entries map, a raw function configuration.
@@ -876,3 +965,18 @@ pub(in crate::evaluate) fn theme_ref_base(base: &Expr) -> Option<&Ident> {
 #[cfg(test)]
 #[path = "tests/member_lookup_tests.rs"]
 mod member_lookup_tests;
+
+/// The node a blocked property read is framed on: the property itself, as the
+/// reference implementation frames it (`deopt(propPath, state,
+/// BLOCKED_PROPERTY_ACCESS)`, `lib/index.js:6579`) -- the name the author has
+/// to change, not the whole read. A dot key is its identifier, a computed key
+/// the expression inside the brackets.
+fn property_frame(prop: &MemberProp, read: &Expr) -> Expr {
+  match prop {
+    MemberProp::Ident(name) => {
+      Expr::Ident(Ident::new(name.sym.clone(), name.span, Default::default()))
+    },
+    MemberProp::Computed(key) => (*key.expr).clone(),
+    MemberProp::PrivateName(_) => read.clone(),
+  }
+}

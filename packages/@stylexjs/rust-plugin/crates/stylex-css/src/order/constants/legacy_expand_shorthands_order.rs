@@ -3,7 +3,7 @@ use crate::values::{
   parser::split_value_parts,
 };
 use stylex_constants::constants::common::{LOGICAL_FLOAT_END_VAR, LOGICAL_FLOAT_START_VAR};
-use stylex_structures::{order_pair::OrderPair, raw_value::TRawValue};
+use stylex_structures::{order::ExpansionFn, order_pair::OrderPair, raw_value::TRawValue};
 use stylex_utils::string::json_stringify;
 
 /// Whether `part` is spellable as a `list-style-type`.
@@ -391,7 +391,10 @@ impl Shorthands {
   }
 
   fn list_style(raw_value: Option<TRawValue>) -> Result<Vec<OrderPair>, String> {
-    let Some(raw_value_str) = raw_value.as_ref().map(TRawValue::as_css_text) else {
+    let Some(raw_value_str) = raw_value.as_ref().and_then(|value| match value {
+      TRawValue::Number(_) => None,
+      value => Some(value.as_css_text()),
+    }) else {
       return Ok(vec![
         OrderPair("listStyleType".into(), None),
         OrderPair("listStylePosition".into(), None),
@@ -546,7 +549,7 @@ impl Shorthands {
     ])
   }
 
-  pub fn get(name: &str) -> Option<fn(Option<TRawValue>) -> Result<Vec<OrderPair>, String>> {
+  pub fn get(name: &str) -> Option<ExpansionFn> {
     match name {
       "border" => Some(Shorthands::border),
       "borderColor" => Some(Shorthands::border_color),
@@ -753,7 +756,7 @@ impl Aliases {
     Ok(vec![OrderPair("clear".into(), value)])
   }
 
-  pub fn get(name: &str) -> Option<fn(Option<TRawValue>) -> Result<Vec<OrderPair>, String>> {
+  pub fn get(name: &str) -> Option<ExpansionFn> {
     match name {
       "insetBlockStart" => Some(Aliases::inset_block_start),
       "insetBlockEnd" => Some(Aliases::inset_block_end),

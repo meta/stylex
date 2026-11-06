@@ -26,23 +26,21 @@ pub const IS_PROXY_KEY: &str = "__IS_PROXY";
 /// other key names a variable derived from the group's identity and that key.
 pub fn var_group_member(base_id: &str, class_name_prefix: &str, key: &str) -> String {
   if key.starts_with("--") {
-    return format!("var({})", key);
+    return ["var(", key, ")"].concat();
   }
 
   let is_group_hash = key == VAR_GROUP_HASH_KEY;
 
   // NOTE: derive the per-key identifier by concatenation rather than calling
   // `gen_file_based_identifier` (which would rebuild the `file//export` prefix).
-  let str_to_hash = match is_group_hash {
-    true => base_id.to_string(),
-    false => format!("{}.{}", base_id, key),
+  let hash = match is_group_hash {
+    true => create_hash(base_id),
+    false => create_hash(&[base_id, ".", key].concat()),
   };
 
-  let var_name = format!("{}{}", class_name_prefix, create_hash(&str_to_hash));
-
   match is_group_hash {
-    true => var_name,
-    false => format!("var(--{})", var_name),
+    true => [class_name_prefix, hash.as_str()].concat(),
+    false => ["var(--", class_name_prefix, hash.as_str(), ")"].concat(),
   }
 }
 
@@ -65,6 +63,12 @@ pub struct ThemeRef {
 }
 
 impl ThemeRef {
+  /// Whether `other` is this same reference (a clone of it) rather than an
+  /// equal one built separately: clones share one cache allocation.
+  pub fn same_instance(&self, other: &Self) -> bool {
+    Rc::ptr_eq(&self.map, &other.map)
+  }
+
   pub fn new(
     file_name: impl Into<String>,
     export_name: impl Into<String>,
@@ -147,5 +151,21 @@ impl PartialEq for ThemeRef {
     stylex_panic!("Theme references cannot be compared directly.");
     // self.file_name == other.file_name && self.export_name ==
     // other.export_name
+  }
+}
+
+#[cfg(test)]
+mod same_instance_tests {
+  use super::ThemeRef;
+
+  #[test]
+  fn clones_are_the_same_instance_and_separate_constructions_are_not() {
+    let theme = ThemeRef::new("/app/tokens.stylex.js", "vars", "x");
+    let clone = theme.clone();
+    let separate = ThemeRef::new("/app/tokens.stylex.js", "vars", "x");
+
+    assert!(theme.same_instance(&clone));
+    assert!(clone.same_instance(&theme));
+    assert!(!theme.same_instance(&separate));
   }
 }

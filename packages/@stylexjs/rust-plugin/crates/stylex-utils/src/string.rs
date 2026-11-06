@@ -13,8 +13,23 @@ use std::borrow::Cow;
 /// to something other than itself while satisfying neither `is_uppercase` nor
 /// `is_lowercase` — a titlecase scalar such as `ǅ` lowercases to `ǆ`.
 pub fn dashify(s: &str) -> Cow<'_, str> {
-  if s.is_ascii() && !s.bytes().any(|byte| byte.is_ascii_uppercase()) {
-    return Cow::Borrowed(s);
+  if s.is_ascii() {
+    if !s.bytes().any(|byte| byte.is_ascii_uppercase()) {
+      return Cow::Borrowed(s);
+    }
+
+    // ASCII lowercases byte by byte, with none of the context the note below
+    // is about, so the hyphens and the lowercasing are one pass here.
+    let mut dashed = String::with_capacity(s.len() + 4);
+    let mut previous_lowercase = true;
+    for byte in s.bytes() {
+      if byte.is_ascii_uppercase() && previous_lowercase {
+        dashed.push('-');
+      }
+      dashed.push(char::from(byte.to_ascii_lowercase()));
+      previous_lowercase = byte.is_ascii_lowercase();
+    }
+    return Cow::Owned(dashed);
   }
 
   // The input's length plus room for the hyphens this inserts. A CSS property

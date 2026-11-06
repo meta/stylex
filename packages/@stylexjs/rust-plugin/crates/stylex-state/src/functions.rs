@@ -32,6 +32,7 @@ pub enum FunctionType {
   StylexFnsFactory(fn(input: String) -> StylexTypeFn),
 
   Mapper(Rc<dyn Fn() -> Expr + 'static>),
+  ValueMapper(Rc<dyn Fn() -> EvaluateResultValue + 'static>),
   ThemeRefMapper(Rc<dyn Fn() -> ThemeRef + 'static>),
   /// A function the module wrote, called with evaluated arguments.
   ///
@@ -56,6 +57,7 @@ impl Clone for FunctionType {
       Self::StylexFnsFactory(e) => Self::StylexFnsFactory(*e),
       Self::Callback(v) => Self::Callback(v.clone()),
       Self::Mapper(c) => Self::Mapper(Rc::clone(c)),
+      Self::ValueMapper(c) => Self::ValueMapper(Rc::clone(c)),
       Self::ThemeRefMapper(c) => Self::ThemeRefMapper(Rc::clone(c)),
       Self::DefaultMarker(e) => Self::DefaultMarker(Arc::clone(e)),
       Self::EnvFunction(e) => Self::EnvFunction(e.clone()),
@@ -73,6 +75,7 @@ impl std::fmt::Debug for FunctionType {
       FunctionType::StylexTypeFn(_) => write!(f, "StylexExprFn"),
       FunctionType::StylexFnsFactory(_) => write!(f, "StylexFnsFactory"),
       FunctionType::Mapper(_) => write!(f, "Mapper"),
+      FunctionType::ValueMapper(_) => write!(f, "ValueMapper"),
       FunctionType::ThemeRefMapper(_) => write!(f, "ThemeRefMapper"),
       FunctionType::Callback(_) => write!(f, "Callback"),
       FunctionType::DefaultMarker(_) => write!(f, "DefaultMarker"),
@@ -83,13 +86,22 @@ impl std::fmt::Debug for FunctionType {
 
 #[cfg_attr(coverage_nightly, coverage(off))]
 impl PartialEq for FunctionType {
-  /// Two `FunctionType` values compare equal when they have the same variant.
-  /// We cannot compare the inner function pointers / `Rc<dyn Fn>` payloads, so
-  /// discriminant equality is the strongest invariant we can uphold while
-  /// satisfying `a == a` reflexivity. (This pairs with the discriminant-based
-  /// `Hash` impl below so values can be used as map keys.)
+  /// Equality names the callable instance, never merely its enum variant.
   fn eq(&self, other: &Self) -> bool {
-    std::mem::discriminant(self) == std::mem::discriminant(other)
+    match (self, other) {
+      (Self::ArrayArgs(a), Self::ArrayArgs(b)) => std::ptr::fn_addr_eq(*a, *b),
+      (Self::StylexExprFn(a), Self::StylexExprFn(b)) => std::ptr::fn_addr_eq(*a, *b),
+      (Self::StylexWhenFn(a), Self::StylexWhenFn(b)) => std::ptr::fn_addr_eq(*a, *b),
+      (Self::StylexFnsFactory(a), Self::StylexFnsFactory(b)) => std::ptr::fn_addr_eq(*a, *b),
+      (Self::StylexTypeFn(a), Self::StylexTypeFn(b)) => Rc::ptr_eq(a, b),
+      (Self::Mapper(a), Self::Mapper(b)) => Rc::ptr_eq(a, b),
+      (Self::ValueMapper(a), Self::ValueMapper(b)) => Rc::ptr_eq(a, b),
+      (Self::ThemeRefMapper(a), Self::ThemeRefMapper(b)) => Rc::ptr_eq(a, b),
+      (Self::Callback(a), Self::Callback(b)) => a == b,
+      (Self::DefaultMarker(a), Self::DefaultMarker(b)) => Arc::ptr_eq(a, b),
+      (Self::EnvFunction(a), Self::EnvFunction(b)) => a.same_instance(b),
+      _ => false,
+    }
   }
 }
 
@@ -97,6 +109,19 @@ impl PartialEq for FunctionType {
 impl std::hash::Hash for FunctionType {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
     std::mem::discriminant(self).hash(state);
+    match self {
+      Self::ArrayArgs(f) => (*f as usize).hash(state),
+      Self::StylexExprFn(f) => (*f as usize).hash(state),
+      Self::StylexWhenFn(f) => (*f as usize).hash(state),
+      Self::StylexFnsFactory(f) => (*f as usize).hash(state),
+      Self::StylexTypeFn(f) => (Rc::as_ptr(f) as *const () as usize).hash(state),
+      Self::Mapper(f) => (Rc::as_ptr(f) as *const () as usize).hash(state),
+      Self::ValueMapper(f) => (Rc::as_ptr(f) as *const () as usize).hash(state),
+      Self::ThemeRefMapper(f) => (Rc::as_ptr(f) as *const () as usize).hash(state),
+      Self::Callback(expr) => expr.hash(state),
+      Self::DefaultMarker(f) => (Arc::as_ptr(f) as usize).hash(state),
+      Self::EnvFunction(f) => f.identity().hash(state),
+    }
   }
 }
 
@@ -156,7 +181,7 @@ impl PartialEq for FunctionConfigType {
     match (self, other) {
       (Self::Regular(a), Self::Regular(b)) => a == b,
       (Self::Map(a), Self::Map(b)) => a == b,
-      (Self::IndexMap(a), Self::IndexMap(b)) => a == b,
+      (Self::IndexMap(a), Self::IndexMap(b)) => Rc::ptr_eq(a, b),
       // One pointer compare, and an exact answer rather than a conservative
       // one. The payload was a bare map when this arm was written, where
       // answering meant a deep compare per probe; it is shared from the options
@@ -167,6 +192,27 @@ impl PartialEq for FunctionConfigType {
   }
 }
 
+impl std::hash::Hash for FunctionConfigType {
+  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    self.kind_tag().hash(state);
+    match self {
+      Self::Regular(config) => config.hash(state),
+      Self::Map(map) => {
+        use std::hash::Hasher;
+        let mut sum = 0u64;
+        for (name, config) in map {
+          let mut entry = rustc_hash::FxHasher::default();
+          name.hash(&mut entry);
+          config.hash(&mut entry);
+          sum = sum.wrapping_add(entry.finish());
+        }
+        sum.hash(state);
+      },
+      Self::IndexMap(map) => (Rc::as_ptr(map) as usize).hash(state),
+      Self::EnvObject(map) => (Rc::as_ptr(map) as usize).hash(state),
+    }
+  }
+}
 impl FunctionConfigType {
   /// Which variant this is, for the memo fingerprint: a name bound to a
   /// callable and the same name bound to a style object are two entries.
@@ -190,6 +236,7 @@ impl FunctionConfigType {
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct FunctionMap {
   pub identifiers: FunctionMapIdentifiers,
+  pub bindings: rustc_hash::FxHashMap<swc_core::ecma::ast::Id, Box<FunctionConfigType>>,
   pub member_expressions: FunctionMapMemberExpression,
   /// If `true`, disables the generation or processing of imports for this
   /// function map. Set to `true` when imports should not be generated (e.g.,
@@ -213,22 +260,30 @@ impl FunctionMap {
   ///
   /// Entry order does not matter: each entry is hashed on its own and the
   /// hashes are summed, so two maps built in different orders read the same.
-  /// The entries' functions are not part of it; a name is bound to one
-  /// function throughout a module, so the name stands for it.
+  /// Every entry includes its actual callable/value identity. The module's
+  /// StateManager retains the function maps alongside memo entries, so pointer
+  /// identities cannot be freed and reused while a key remains reachable.
   pub fn memo_fingerprint(&self) -> u64 {
     use std::hash::{Hash, Hasher};
 
-    fn entry_hash(parts: &[&str], tag: u8) -> u64 {
+    fn entry_hash(parts: &[&str], tag: u8, config: &FunctionConfigType) -> u64 {
       let mut hasher = rustc_hash::FxHasher::default();
       parts.hash(&mut hasher);
       tag.hash(&mut hasher);
+      config.hash(&mut hasher);
       hasher.finish()
     }
 
     let mut sum: u64 = 0;
 
+    for (id, config) in &self.bindings {
+      let mut entry = rustc_hash::FxHasher::default();
+      id.hash(&mut entry);
+      config.hash(&mut entry);
+      sum = sum.wrapping_add(entry.finish());
+    }
     for (name, config) in &self.identifiers {
-      sum = sum.wrapping_add(entry_hash(&[name.as_str()], config.kind_tag()));
+      sum = sum.wrapping_add(entry_hash(&[name.as_str()], config.kind_tag(), config));
     }
 
     for (source, members) in &self.member_expressions {
@@ -241,6 +296,7 @@ impl FunctionMap {
         sum = sum.wrapping_add(entry_hash(
           &[source_name, member.as_str()],
           config.kind_tag() | 0x80,
+          config,
         ));
       }
     }

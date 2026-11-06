@@ -54,7 +54,23 @@ pub(in super::super) fn evaluate(
     // expression node for the spread itself and the array is the nearest node
     // that contains the `...`.
     if elem.spread.is_some() {
-      return deopt(&Expr::Array(arr_path.clone()), state, SPREAD_ELEMENT);
+      let value = evaluate_with_functions(&elem.expr, traversal_state, Rc::clone(&state.functions));
+      if !value.confident {
+        return deopt(
+          &elem.expr,
+          state,
+          value.reason.as_deref().unwrap_or(SPREAD_ELEMENT),
+        );
+      }
+      let Some(value) = value.value else {
+        return deopt(&elem.expr, state, SPREAD_ELEMENT);
+      };
+      match super::super::iterable_values::iterable_values(&value, traversal_state) {
+        Ok(Some(values)) => arr.extend(values),
+        Ok(None) => return deopt(&elem.expr, state, SPREAD_ELEMENT),
+        Err(error) => return deopt(&elem.expr, state, &error.message),
+      }
+      continue;
     }
 
     let elem_value =

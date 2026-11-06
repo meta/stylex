@@ -26,6 +26,13 @@
 //! itself calls, so its fallback ordering lives here rather than with the
 //! transformers the visitor drives.
 
+pub fn with_isolated_evaluation<T>(operation: impl FnOnce() -> T) -> T {
+  stylex_state::state_manager::evaluation_scope::with_isolated_evaluation_effects(|| {
+    evaluate::with_isolated_causal_failures(|| {
+      stylex_js::native::with_isolated_evaluation(operation)
+    })
+  })
+}
 pub(crate) mod check_declaration;
 pub mod convertors;
 pub mod evaluate;

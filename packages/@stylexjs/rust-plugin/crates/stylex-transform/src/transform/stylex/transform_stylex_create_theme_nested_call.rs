@@ -21,7 +21,8 @@ use crate::{
         js_to_ast::convert_values_to_ast,
       },
       validators::{
-        argument_at, folded_style_object, or_refuse_nameless_group, validate_define_call,
+        argument_at, folded_style_object, or_refuse_nameless_group, reported_at,
+        validate_define_call,
       },
     },
   },
@@ -84,7 +85,24 @@ where
       )
     };
 
-    validate_nested_theme_variables(&variables);
+    let variables = if matches!(variables, EvaluateResultValue::ThemeRef(_)) {
+      variables
+    } else {
+      match stylex_evaluator::evaluate::materialize_result(&variables, &self.state) {
+        Ok(Some(expression)) => EvaluateResultValue::Expr(expression),
+        Ok(None) => stylex_panic!(
+          "{}",
+          build_code_frame_error(
+            &Expr::Call(call.clone()),
+            &Expr::Call(call.clone()),
+            ONLY_OVERRIDE_DEFINE_VARS_NESTED,
+            &mut self.state,
+          )
+        ),
+        Err(error) => stylex_panic!("{}", error),
+      }
+    };
+    reported_at(call.span, || validate_nested_theme_variables(&variables));
 
     let function_map = Rc::new(build_eval_config(&mut self.state));
     let evaluated_arg2 = evaluate_with_functions(second_arg, &mut self.state, function_map);
@@ -108,7 +126,7 @@ where
       &mut IndexMap::default(),
     );
 
-    let (var_name, _) = self.get_call_var_name(call);
+    let var_name = self.call_var_name(call);
 
     if self.state.is_test() {
       overrides_obj =

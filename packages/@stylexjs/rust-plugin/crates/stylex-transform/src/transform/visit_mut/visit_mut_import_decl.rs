@@ -16,6 +16,7 @@ where
 {
   pub(crate) fn visit_mut_import_decl_impl(&mut self, import_decl: &mut ImportDecl) {
     if self.state.cycle == TransformationCycle::Discover {
+      self.state.record_authored_import_span(import_decl.span);
       if import_decl.type_only {
         return;
       }
@@ -34,14 +35,17 @@ where
                 .state
                 .atom_imports
                 .insert(import_specifier.local.to_id(), "*".to_string());
-            },
+            }
             ImportSpecifier::Default(import_specifier) => {
               self
                 .state
                 .atom_imports
                 .insert(import_specifier.local.to_id(), "*".to_string());
-            },
+            }
             ImportSpecifier::Named(import_specifier) => {
+              if import_specifier.is_type_only {
+                continue;
+              }
               let local_name = import_specifier.local.sym.to_string();
               let imported_name = match &import_specifier.imported {
                 Some(ModuleExportName::Ident(ident)) => ident.sym.to_string(),
@@ -52,7 +56,7 @@ where
                 .state
                 .atom_imports
                 .insert(import_specifier.local.to_id(), imported_name);
-            },
+            }
           }
         }
 
@@ -72,9 +76,12 @@ where
 
               self
                 .state
+                .insert_stylex_namespace_binding(import_specifier.local.to_id());
+              self
+                .state
                 .insert_stylex_import(ImportSources::Regular(local_name));
             }
-          },
+          }
           ImportSpecifier::Namespace(import_specifier) => {
             if is_import_source && !has_named_import_source {
               let local_name = import_specifier.local.sym.to_string();
@@ -83,10 +90,16 @@ where
 
               self
                 .state
+                .insert_stylex_namespace_binding(import_specifier.local.to_id());
+              self
+                .state
                 .insert_stylex_import(ImportSources::Regular(local_name));
             }
-          },
+          }
           ImportSpecifier::Named(import_specifier) => {
+            if import_specifier.is_type_only {
+              continue;
+            }
             if is_import_source {
               let local_name = import_specifier.local.sym.to_string();
 
@@ -103,7 +116,7 @@ where
                     &local_name,
                     import_specifier,
                   );
-                },
+                }
                 None => {
                   let imported_name = import_specifier.local.sym.to_string();
 
@@ -113,10 +126,10 @@ where
                     &local_name,
                     import_specifier,
                   );
-                },
+                }
               }
             }
-          },
+          }
         };
       }
     }
@@ -134,7 +147,10 @@ where
     let import_alias_matches = import_alias.is_some_and(|alias| alias.eq(&imported_name));
 
     if import_alias_matches {
-      self.state.insert_import_path(imported_name.clone());
+      self
+        .state
+        .insert_stylex_namespace_binding(import_specifier.local.to_id());
+      self.state.insert_import_path(source_path.to_owned());
 
       self
         .state
@@ -147,6 +163,9 @@ where
       let local_name_ident_atom = import_specifier.local.clone().sym;
 
       if let Some(kind) = ImportKind::from_import_name(imported_name.as_str()) {
+        self
+          .state
+          .insert_stylex_api_binding(kind, import_specifier.local.to_id());
         self
           .state
           .insert_stylex_api_import(kind, local_name_ident_atom);

@@ -11,11 +11,11 @@ use stylex_utils::{math::round_f64, number::to_js_string, string::is_blank_css_t
 /// `gridTemplateColumns: '1'` stays `1` rather than becoming a `1px` track.
 pub(crate) fn transform_value(key: &str, raw_value: &TRawValue, state: &StateManager) -> String {
   let value = match raw_value.as_number() {
-    Some(number) => format!(
-      "{0}{1}",
-      to_js_string(round_f64(number, 4)),
-      get_number_suffix(key)
-    ),
+    Some(number) => {
+      let mut value = to_js_string(round_f64(number, 4));
+      value.push_str(get_number_suffix(key));
+      value
+    },
     None => raw_value.as_css_text().into_owned(),
   };
 
@@ -48,9 +48,9 @@ pub(crate) fn transform_value_cached(
   // Keyed by JS identity, not CSS text: `width: 1` and `width: '1'` read the
   // same but compile to different declarations.
   //
-  // Two allocations, not one: this reserves the property and its colon exactly,
-  // and `write_identity_key` reserves what it appends. Growing exactly once
-  // beats guessing a headroom constant, and this runs once per declaration.
+  // One allocation, sized for the property, its colon and the identity
+  // `write_identity_key` appends (a number's spelling rarely passes 24 bytes), so
+  // the key does not grow. This runs once per declaration.
   //
   // The result is returned owned rather than borrowed from the cache because
   // every caller needs an owned value immediately — a `Pair`, or an entry in
@@ -58,7 +58,12 @@ pub(crate) fn transform_value_cached(
   // would move that allocation to the call sites rather than remove it; making
   // it disappear means carrying `Rc<str>` through `Pair` and the hash pipeline,
   // which is a change to the class-name path and not a caching concern.
-  let mut cache_key = String::with_capacity(key.len() + 1);
+  let identity_len = match value.as_number() {
+    // A tag and room for a JS number's spelling.
+    Some(_) => 1 + 24,
+    None => 1 + value.as_css_text().len(),
+  };
+  let mut cache_key = String::with_capacity(key.len() + 1 + identity_len);
   cache_key.push_str(key);
   cache_key.push(':');
   value.write_identity_key(&mut cache_key);

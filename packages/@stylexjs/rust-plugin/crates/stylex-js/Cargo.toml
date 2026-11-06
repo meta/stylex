@@ -13,6 +13,9 @@ crate-type = ["rlib"]
 doctest = false
 
 [dependencies]
+icu_normalizer.workspace = true
+indexmap.workspace = true
+ryu-js = "1.0.2"
 swc_core = { workspace = true, features = ["common", "ecma_ast", "swc_atoms"] }
 
 stylex_constants = { path = "../stylex-constants" }

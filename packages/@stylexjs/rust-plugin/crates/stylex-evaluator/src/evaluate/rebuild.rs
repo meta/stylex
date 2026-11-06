@@ -38,6 +38,7 @@ pub(super) fn resolve_env_entry_to_result(
   parent_map: &Rc<IndexMap<String, EnvEntry>>,
 ) -> EvaluateResultValue {
   match entry {
+    EnvEntry::Host(value) => super::host_dispatch::host_result(value.clone(), None),
     EnvEntry::Expr(expr) => EvaluateResultValue::Expr(expr.clone()),
     // A function entry answers the object it was read off, so the call site
     // below resolves the function rather than the read.
@@ -103,27 +104,23 @@ pub(crate) fn array_element_expr(entry: &EvaluateResultValue) -> Option<Expr> {
 /// functions: `String(fn)` is its source text, and this evaluator keeps none.
 pub(crate) fn evaluate_result_as_expr(value: &EvaluateResultValue) -> Option<Expr> {
   match value {
+    EvaluateResultValue::SharedArray(values) => evaluate_result_vec_to_array_expr(values),
+    EvaluateResultValue::Object(values) => {
+      let mut props = Vec::new();
+      for (key, value) in &values.entries {
+        if matches!(value, EvaluateResultValue::Callback(_)) {
+          return None;
+        }
+        props.push(stylex_ast::ast::factories::create_ident_key_value_prop(
+          key,
+          evaluate_result_as_expr(value)?,
+        ));
+      }
+      Some(Expr::Object(create_object_lit(props)))
+    },
+    EvaluateResultValue::NativeArray(values) => super::native_call::native_array_expr(values),
     EvaluateResultValue::Vec(items) => evaluate_result_vec_to_array_expr(items),
     value => value.as_expr().cloned(),
-  }
-}
-
-/// Whether an argument has a form an arrow's parameter can be bound to.
-///
-/// Two of them. Most values bind as the expression they write down. A theme
-/// reference writes none — it is this compiler's own value — and binds through
-/// the same factory a module's own token import binds through, so a parameter
-/// holding one answers a member read exactly as the imported name does.
-///
-/// An argument with neither form binds nothing and leaves the parameter unbound,
-/// which is what the language does with an argument nobody passed. This is asked
-/// only to tell the two refusals apart afterwards: a body that then failed to
-/// fold has an argument to name, where a body that failed with everything bound
-/// has only the call.
-pub(crate) fn binds_a_parameter(value: &EvaluateResultValue) -> bool {
-  match value {
-    EvaluateResultValue::ThemeRef(_) => true,
-    value => evaluate_result_as_expr(value).is_some(),
   }
 }
 
@@ -235,5 +232,13 @@ pub fn function_fold_to_object(value: &EvaluateResultValue) -> Option<ObjectLit>
       &FunctionConfigType::Regular(config.clone()),
     )),
     _ => None,
+  }
+}
+
+#[cfg(test)]
+pub(crate) fn binds_a_parameter(value: &EvaluateResultValue) -> bool {
+  match value {
+    EvaluateResultValue::ThemeRef(_) => true,
+    value => evaluate_result_as_expr(value).is_some(),
   }
 }

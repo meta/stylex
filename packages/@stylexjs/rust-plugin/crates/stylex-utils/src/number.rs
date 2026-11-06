@@ -134,6 +134,26 @@ pub fn write_js_number(out: &mut impl fmt::Write, value: f64) -> fmt::Result {
     return out.write_str("0");
   }
 
+  // An integer below 2^53 is exact, and JS prints it as its decimal digits:
+  // the general path below would arrive at the same text through `{:e}`.
+  if value.fract() == 0.0 && value.abs() < 9_007_199_254_740_992.0 {
+    let mut digits = [0u8; 20];
+    let mut cursor = digits.len();
+    let mut rest = value.abs() as u64;
+    while rest > 0 {
+      cursor -= 1;
+      digits[cursor] = b'0' + (rest % 10) as u8;
+      rest /= 10;
+    }
+    if value < 0.0 {
+      out.write_char('-')?;
+    }
+    for digit in &digits[cursor..] {
+      out.write_char(char::from(*digit))?;
+    }
+    return Ok(());
+  }
+
   if value < 0.0 {
     out.write_char('-')?;
   }

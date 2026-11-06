@@ -4,8 +4,8 @@ use stylex_ast::ast::convertors::{convert_lit_to_string, key_value_name, normali
 
 use swc_core::ecma::{
   ast::{
-    BinExpr, BinaryOp, CallExpr, CondExpr, Expr, ExprOrSpread, Ident, JSXAttrOrSpread,
-    JSXAttrValue, Lit, ObjectLit, Prop, PropName, PropOrSpread,
+    BinExpr, BinaryOp, CallExpr, CondExpr, Expr, Ident, JSXAttrOrSpread, JSXAttrValue, Lit,
+    ObjectLit, Prop, PropName, PropOrSpread,
   },
   visit::{VisitMut, VisitMutWith, VisitWith},
 };
@@ -35,6 +35,7 @@ pub(crate) fn stylex_merge(
   call: &mut CallExpr,
   transform: fn(&[ResolvedArg]) -> FnResult,
   hoist_expression: fn(Expr, &mut StateManager) -> Ident,
+  flatten_array_arguments: bool,
   state: &mut StateManager,
 ) -> Option<Expr> {
   let mut bail_out = false;
@@ -85,15 +86,15 @@ pub(crate) fn stylex_merge(
   // `stylex.props(([a, b]))` was not flattened into its elements and
   // `stylex.props((styles.root))` reached no arm of the match below, so both
   // handed the whole merge back to the runtime.
-  let args_path = call
-    .args
-    .iter()
-    .flat_map(|arg| match normalize_expr(&arg.expr) {
-      Expr::Array(arr) => arr.elems.clone(),
-      _ => vec![Some(arg.clone())],
-    })
-    .flatten()
-    .collect::<Vec<ExprOrSpread>>();
+  let mut args_path = Vec::with_capacity(call.args.len());
+  for arg in &call.args {
+    match normalize_expr(&arg.expr) {
+      Expr::Array(array) if flatten_array_arguments => {
+        args_path.extend(array.elems.iter().flatten())
+      }
+      _ => args_path.push(arg),
+    }
+  }
   let mut resolved_args = Vec::with_capacity(args_path.len());
 
   for arg_path in args_path.iter() {
@@ -130,7 +131,7 @@ pub(crate) fn stylex_merge(
         if merges {
           resolved_args.push(ResolvedArg::style_object(resolved));
         }
-      },
+      }
       Expr::Cond(CondExpr {
         test,
         cons: consequent,
@@ -152,7 +153,7 @@ pub(crate) fn stylex_merge(
 
           conditional += 1;
         }
-      },
+      }
       Expr::Bin(BinExpr {
         left: left_path,
         op,
@@ -179,11 +180,11 @@ pub(crate) fn stylex_merge(
             conditional += 1;
           }
         }
-      },
+      }
       _ => {
         bail_out_index = Some(current_index);
         bail_out = true;
-      },
+      }
     }
 
     if conditional > 4 {
@@ -318,7 +319,13 @@ impl VisitMut for CompiledStyleObjectHoister<'_> {
     if let Expr::Object(object) = expr
       && object_has_css_marker(object)
     {
-      *expr = Expr::Ident((self.hoist_expression)(expr.clone(), self.state));
+      let object = std::mem::replace(
+        expr,
+        Expr::Invalid(swc_core::ecma::ast::Invalid {
+          span: swc_core::common::DUMMY_SP,
+        }),
+      );
+      *expr = Expr::Ident((self.hoist_expression)(object, self.state));
     }
   }
 }
@@ -326,23 +333,38 @@ impl VisitMut for CompiledStyleObjectHoister<'_> {
 /// Whether an object literal carries a `$$css: true` property, marking it as a
 /// compiled StyleX style object.
 fn object_has_css_marker(object: &ObjectLit) -> bool {
-  object.props.iter().any(|prop| {
-    let PropOrSpread::Prop(prop) = prop else {
+  let mut compiled = false;
+  for property in &object.props {
+    let PropOrSpread::Prop(property) = property else {
       return false;
     };
-    let Prop::KeyValue(key_value) = prop.as_ref() else {
+    let Prop::KeyValue(property) = property.as_ref() else {
       return false;
     };
-
-    let is_css_key = match &key_value.key {
-      PropName::Ident(ident) => ident.sym.as_ref() == COMPILED_KEY,
-      PropName::Str(strng) => strng.value.as_str() == Some(COMPILED_KEY),
-      _ => false,
+    let key = match &property.key {
+      PropName::Ident(key) => key.sym.as_ref(),
+      PropName::Str(key) => match key.value.as_str() {
+        Some(key) => key,
+        None => return false,
+      },
+      _ => return false,
     };
-
-    is_css_key
-      && matches!(key_value.value.as_ref(), Expr::Lit(Lit::Bool(bool_lit)) if bool_lit.value)
-  })
+    if key == COMPILED_KEY {
+      compiled = matches!(property.value.as_ref(), Expr::Lit(Lit::Bool(value)) if value.value)
+        || matches!(property.value.as_ref(), Expr::Lit(Lit::Str(_)));
+      if !compiled {
+        return false;
+      }
+    } else if !matches!(
+      property.value.as_ref(),
+      Expr::Lit(Lit::Str(_) | Lit::Null(_))
+    ) {
+      // A compiled object containing a local reference or expression belongs
+      // to that scope and must never be moved to the module as a static hoist.
+      return false;
+    }
+  }
+  compiled
 }
 
 #[cfg(test)]

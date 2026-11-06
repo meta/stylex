@@ -21,9 +21,16 @@ use crate::evaluate_result_value::EvaluateResultValue;
 /// the module, which is what makes it pay for itself, so the map is part of
 /// the key instead, as `FunctionMap::memo_fingerprint` spells it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum MemoExpressionKey {
+  /// Content fallback for rebuilt or otherwise unretained expressions.
+  SubtreeHash(u128),
+  /// Exact immutable initializer root whose Rc owner the state retains.
+  RetainedInitializer(usize),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SeenKey {
-  /// `stable_hash_unspanned` of the folded expression.
-  pub subtree: u128,
+  pub subtree: MemoExpressionKey,
   /// `FunctionMap::memo_fingerprint` of the fold's map.
   pub functions: u64,
 }

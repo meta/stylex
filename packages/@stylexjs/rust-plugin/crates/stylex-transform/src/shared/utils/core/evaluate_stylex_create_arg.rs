@@ -22,7 +22,7 @@ use stylex_ast::ast::convertors::{
 };
 use stylex_ast::ast::factories::{
   create_arrow_expression_with_params, create_bin_expr, create_call_expr, create_cond_expr,
-  create_expr_or_spread, create_key_value_prop, create_object_expression,
+  create_expr_or_spread, create_key_value_prop, create_object_expression, create_object_lit,
 };
 use stylex_constants::constants::{
   length_units::LENGTH_UNITS,
@@ -44,7 +44,7 @@ use stylex_state::{
   evaluate_result_value::EvaluateResultValue,
   functions::FunctionMap,
   state_manager::StateManager,
-  types::{DynamicFns, TInlineStyles},
+  types::{DynamicFns, DynamicFunction, TInlineStyles},
 };
 use stylex_structures::inline_style::InlineStyle;
 use stylex_utils::hash::create_hash;
@@ -128,57 +128,6 @@ fn namespace_key_of(key: &Expr) -> Option<&str> {
     .and_then(|name| name.value.as_str())
 }
 
-/// `reason`, named after the key the refused value was written under.
-///
-/// One reader for both places that name a reason, so a key of either kind is
-/// answered the same way in each.
-///
-/// The choice between the two answers is what is left out of the coverage
-/// measurement, and only that. The naming itself is `prepend_key_to_reason`,
-/// which is its own measured function and is asserted by
-/// `a > flexGrow > unknown error` in `logical_operators.rs`; the read that
-/// produces the name stays at the call site.
-///
-/// The second arm has no source that reaches it: `evaluate_obj_key` answers a
-/// string literal for every key it accepts, and a key that spells no name is
-/// refused where it is read, which `a_namespace_key_that_spells_no_name_is_-
-/// refused` measures. Making the parameter a `String` would remove the arm and
-/// turn that deopt into a stopped build, which is the worse trade.
-/// `guidelines/stack/RUST.md` describes the allowance.
-#[cfg_attr(coverage_nightly, coverage(off))]
-fn reason_under_key(key_name: Option<String>, reason: Option<String>) -> Option<String> {
-  match key_name {
-    Some(key_name) => prepend_key_to_reason(&key_name, reason),
-    None => reason,
-  }
-}
-
-/// Prepends a key name to an existing error reason to provide context
-/// about which property path triggered the evaluation failure.
-///
-/// **A deliberate divergence, kept on purpose.** The reference compiler prefixes
-/// nothing: a nullish refusal is `unknown error` there where it is
-/// `a > flexGrow > unknown error` here, and its object-property deopt is
-/// `deopt(prop, state, state.deoptReason ?? 'unknown error')` with no key path
-/// anywhere in it. Both were measured by running the two compilers on the same
-/// source, not inferred.
-///
-/// It is kept because the divergence costs nothing and pays for itself. This
-/// text is a build-failure message: no class name is hashed from it, no CSS
-/// differs, and no output a consumer can observe moves. What it buys is the one
-/// thing `unknown error` withholds -- which of a namespace's properties the
-/// build stopped on. Most of the diagnostics that carry a path are this
-/// compiler's own additions anyway (`Expression is too deeply nested` has no
-/// counterpart upstream, which raises no error for it at all), so for those
-/// there is nothing to be faithful to.
-///
-/// Removing it was tried and reverted. If it is proposed again, the question to
-/// answer first is what an author gains from the shorter sentence, because the
-/// last two attempts could not name anything.
-fn prepend_key_to_reason(key: &str, reason: Option<String>) -> Option<String> {
-  reason.map(|r| format!("{} > {}", key, r))
-}
-
 /// The expression a style value carries, materializing a folded function map as
 /// the object it stands for.
 ///
@@ -211,10 +160,8 @@ fn prepend_key_to_reason(key: &str, reason: Option<String>) -> Option<String> {
 /// the old message. Each is a refusal of its own rather than a fold this
 /// understands, and the set is not audited here.
 ///
-/// Both refusals report at the value the author wrote, with a code frame:
-/// everything reaching them is author input, and
-/// `stylex-evaluator/docs/adr/0002-a-refusal-and-a-broken-invariant-are-separate-constructs.md`
-/// reserves a bare abort for an invariant this code established itself.
+/// Expression refusals report at authored input. A known data container with
+/// a non-materializable CSS leaf instead raises Babel's plain style-value Error.
 fn materialize_style_value(
   value: Option<EvaluateResultValue>,
   value_path: &Expr,
@@ -222,6 +169,21 @@ fn materialize_style_value(
 ) -> Expr {
   match value {
     Some(EvaluateResultValue::Expr(expr)) => expr,
+    Some(
+      value @ (EvaluateResultValue::Host(_)
+      | EvaluateResultValue::Object(_)
+      | EvaluateResultValue::SharedArray(_)
+      | EvaluateResultValue::NativeArray(_)),
+    ) => match stylex_evaluator::evaluate::materialize_result(&value, traversal_state) {
+      Ok(Some(expr)) => expr,
+      Ok(None) => {
+        // Babel rejects a non-materializable style leaf with a plain Error,
+        // not a namespace-shape error or an evaluated-expression code frame.
+        stylex_macros::stylex_error::mark_panic_plain();
+        stylex_panic!("{}", ILLEGAL_PROP_VALUE)
+      },
+      Err(error) => stylex_panic!("{}", error),
+    },
     Some(EvaluateResultValue::ThemeRef(_)) => {
       build_code_frame_error_and_panic_at(value_path, ILLEGAL_PROP_VALUE, traversal_state)
     },
@@ -267,7 +229,10 @@ pub fn evaluate_stylex_create_arg(
                 let key_result = evaluate_obj_key(key_value_prop, traversal_state, functions);
 
                 if !key_result.confident {
-                  return Box::new(EvaluateResult::refused(key_result.deopt, key_result.reason));
+                  // Babel's create-argument reader deliberately omits the
+                  // evaluator reason for a namespace key (but keeps its deopt
+                  // node), so the create visitor reports its generic message.
+                  return Box::new(EvaluateResult::refused(key_result.deopt, None));
                 }
 
                 let key_expr = or_refuse_unfolded_key(
@@ -290,11 +255,6 @@ pub fn evaluate_stylex_create_arg(
                     let all_params = fn_path.params.clone();
                     validate_dynamic_style_params(fn_path, &all_params, traversal_state);
 
-                    let params = all_params
-                      .into_iter()
-                      .filter_map(|param| param.as_ident().cloned())
-                      .collect::<Vec<BindingIdent>>();
-
                     match fn_path.body.as_ref() {
                       ArrowFunctionBody::Expr(expr) => {
                         if let Expr::Object(fn_body_object) = normalize_expr(expr) {
@@ -306,10 +266,7 @@ pub fn evaluate_stylex_create_arg(
                           );
 
                           if !eval_result.confident {
-                            let reason = reason_under_key(
-                              convert_expr_to_str(key_expr, traversal_state, functions),
-                              eval_result.reason,
-                            );
+                            let reason = eval_result.reason;
                             // Not `EvaluateResult::refused`, and the difference
                             // is the point: this refusal carries the value the
                             // evaluation did reach, which the constructor
@@ -335,7 +292,13 @@ pub fn evaluate_stylex_create_arg(
 
                           let key = key_text_of(key_expr, traversal_state, functions);
 
-                          fns.insert(key, (params, eval_result.inline_styles.unwrap_or_default()));
+                          fns.insert(
+                            key,
+                            DynamicFunction {
+                              original: fn_path.clone(),
+                              inline_styles: eval_result.inline_styles.unwrap_or_default(),
+                            },
+                          );
 
                           result_value.insert(
                             key_expr.clone(),
@@ -356,26 +319,27 @@ pub fn evaluate_stylex_create_arg(
                           );
                         }
                       },
+                      // A block body is not an object either: the reference
+                      // plugin re-evaluates the whole argument, as for any
+                      // body that is not an object (lib/index.js:7016-7019),
+                      // so the arrow is refused where the evaluator refuses
+                      // it, with its sentence and frame.
                       _ => {
-                        return Box::new(EvaluateResult::refused(
-                          None,
-                          Some(
-                            "Block statement is not allowed in Dynamic Style functions".to_string(),
-                          ),
-                        ));
+                        return evaluate_with_functions(
+                          path,
+                          traversal_state,
+                          Rc::clone(functions),
+                        );
                       },
                     }
                   },
                   _ => {
-                    let mut val =
+                    let val =
                       evaluate_with_functions(value_path, traversal_state, Rc::clone(functions));
 
                     if !val.confident {
-                      val.reason = reason_under_key(
-                        convert_expr_to_str(key_expr, traversal_state, functions),
-                        val.reason,
-                      );
-
+                      // Ordinary namespace-value refusals retain the evaluator's
+                      // message and deopt node verbatim, without a key prefix.
                       return val;
                     }
 
@@ -390,6 +354,42 @@ pub fn evaluate_stylex_create_arg(
                     let value_to_insert = match val.value.as_ref() {
                       Some(EvaluateResultValue::Expr(Expr::Object(obj_expr))) => {
                         key_value_props_of(obj_expr)
+                      },
+                      Some(
+                        value @ (EvaluateResultValue::Host(_) | EvaluateResultValue::Object(_)),
+                      ) => {
+                        match stylex_evaluator::evaluate::materialize_result_shallow(
+                          value,
+                          traversal_state,
+                        ) {
+                          Ok(Some(EvaluateResultValue::Object(object))) => {
+                            // A known namespace remains an object even when a
+                            // nested leaf cannot be represented as CSS data.
+                            let properties = object
+                              .entries
+                              .iter()
+                              .map(|(key, value)| {
+                                create_key_value_prop(
+                                  key,
+                                  materialize_style_value(
+                                    Some(value.clone()),
+                                    value_path,
+                                    traversal_state,
+                                  ),
+                                )
+                              })
+                              .collect();
+                            key_value_props_of(&create_object_lit(properties))
+                          },
+                          Ok(Some(EvaluateResultValue::Expr(Expr::Object(object)))) => {
+                            key_value_props_of(&object)
+                          },
+                          Ok(_) => {
+                            stylex_macros::stylex_error::mark_panic_plain();
+                            stylex_panic!("{}", ILLEGAL_NAMESPACE_VALUE)
+                          },
+                          Err(error) => stylex_panic!("{}", error),
+                        }
                       },
                       // A folded function map written where a namespace
                       // belongs, materialized as the object it stands for so
@@ -416,6 +416,12 @@ pub fn evaluate_stylex_create_arg(
           },
         }
       }
+
+      // Namespace assembly has JavaScript object-assignment semantics. A
+      // __proto__ assignment is not an enumerable namespace; its value has
+      // already been evaluated, so dropping the entry does not skip effects.
+      result_value.retain(|key, _| namespace_key_of(key) != Some("__proto__"));
+      fns.shift_remove("__proto__");
 
       // A `create` call collects its namespaces here rather than through the
       // object evaluator, so the ordering the evaluator applies inside a style
@@ -482,10 +488,8 @@ fn evaluate_partial_object_recursively(
           // dynamic value at all. The caller supplies `non_static_value` for
           // whichever call it is, and this function cannot know that.
           //
-          // `prepend_key_to_reason` is `reason.map(..)`, so it is a no-op on
-          // `None` and the arrow and nested-object branches forward the erased
-          // reason unchanged. The deopt path is kept either way, so the code
-          // frame still points where it did.
+          // The deopt node survives even when the visitor selects its own
+          // fallback message, so the code frame still identifies the refusal.
           return Box::new(EvaluateResult::refused(result.deopt, None));
         }
         // `Object.assign(obj, result.value)` upstream

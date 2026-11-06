@@ -22,28 +22,6 @@ pub(crate) fn inject_dev_class_names(
   with_dev_class_names(obj, |key| dev_class_name(&prefix, key))
 }
 
-/// The debug name of a compiled `sx` value.
-///
-/// Such a value is bound to no variable, and the one namespace it holds is a
-/// name the compiler keys on rather than one the author wrote. So the name says
-/// `sx`, which is what an author reads in the source of every default build.
-///
-/// Written out rather than read from `STYLEX_SX`, which is the default of the
-/// `sxPropName` option: this is a fixed label and that is a configurable value,
-/// and sharing one spelling would have a change to the option's default move
-/// the label with it. An author who configured another name reads that name and
-/// this label still says `sx` -- recorded as
-/// `modules-1272-a-renamed-sx-prop-keeps-the-sx-debug-name`.
-pub(crate) fn inject_sx_dev_class_name(
-  obj: StylesObjectMap,
-  state: &StateManager,
-) -> StylesObjectMap {
-  let prefix = dev_class_name_prefix(&None, state.get_short_filename().as_str());
-  let name = dev_class_name(&prefix, "sx");
-
-  with_dev_class_names(obj, |_| name.clone())
-}
-
 /// Puts the name `label` gives each namespace in front of the styles of that
 /// namespace, keyed by itself.
 ///
@@ -180,11 +158,15 @@ pub(crate) fn convert_theme_to_dev_styles(
 
 pub(crate) fn convert_theme_to_test_styles(
   variable_name: &Option<String>,
-  overrides_obj: &FlatCompiledStyles,
+  _overrides_obj: &FlatCompiledStyles,
   filename: &str,
 ) -> FlatCompiledStyles {
-  let mut overrides_obj_extended =
-    convert_theme_to_dev_styles(variable_name, overrides_obj, filename);
+  let variable_name = variable_name
+    .as_deref()
+    .unwrap_or_else(|| stylex_panic!("The variable name could not be determined."));
+  // Test mode replaces the real theme object, rather than extending it.
+  // Unchanged Babel 2d42d72 visitors/stylex-create-theme.js:185-192.
+  let mut overrides_obj_extended = convert_theme_to_base_styles(variable_name, filename);
 
   overrides_obj_extended.insert(
     COMPILED_KEY.to_string(),

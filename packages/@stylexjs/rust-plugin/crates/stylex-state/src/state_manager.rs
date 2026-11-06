@@ -1,7 +1,10 @@
+#[path="evaluation_scope.rs"]
+pub mod evaluation_scope;
+pub use evaluation_scope::EvaluationHeap;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cell::OnceCell;
 use std::{borrow::Cow, env, option::Option, path::Path, rc::Rc, sync::Arc};
-use stylex_macros::{stylex_panic, stylex_unimplemented};
+use stylex_macros::stylex_panic;
 
 use indexmap::{IndexMap, IndexSet};
 use log::{debug, warn};
@@ -12,7 +15,7 @@ use stylex_path_resolver::{
 };
 use swc_core::{
   atoms::Atom,
-  common::{DUMMY_SP, EqIgnoreSpan, FileName, SourceFile, Span, SyntaxContext},
+  common::{DUMMY_SP, EqIgnoreSpan, FileName, SourceFile, Span, Spanned, SyntaxContext},
   ecma::{
     ast::{
       ArrowExpr, BindingIdent, CallExpr, Callee, Constructor, Decl, Expr, ExprStmt, Function,
@@ -51,7 +54,7 @@ use stylex_constants::constants::{
 };
 use stylex_diagnostics::{memo::DiagnosticMemo, state::DiagnosticState};
 use stylex_enums::{
-  core::TransformationCycle, counter_mode::CounterMode, declaration_type::DeclarationType,
+  core::TransformationCycle, declaration_type::DeclarationType,
   import_path_resolution::ImportPathResolution,
 };
 use stylex_state_index::{
@@ -78,7 +81,6 @@ use stylex_structures::{
   plugin_pass::PluginPass,
   stylex_options::{CheckModuleResolution, StyleXOptions},
   stylex_state_options::StyleXStateOptions,
-  uid_generator::UidGenerator,
 };
 use stylex_types::structures::meta_data::MetaData;
 
@@ -88,7 +90,23 @@ use stylex_types::structures::meta_data::MetaData;
 // Arc<T> would add atomic-RMW on every clone with no benefit.
 const TRANSFORMED_VARS_FILE_EXTENSION: &str = ".transformed";
 
+fn babel_uid_hint(hint:&str)->String {
+  let normalized=hint.chars().map(|character| {
+    if Ident::is_valid_continue(character)||matches!(character,'\u{200c}'|'\u{200d}') {character}else{'-'}
+  }).collect::<String>();
+  let mut value=String::new();let mut capitalize=false;
+  for character in normalized.chars().skip_while(|c|*c=='-'||c.is_ascii_digit()) {
+    if character=='-'||character.is_whitespace() {capitalize=true;continue;}
+    if capitalize {value.extend(character.to_uppercase());capitalize=false;}else{value.push(character);}
+  }
+  value.trim_start_matches('_').trim_end_matches(|c:char|c.is_ascii_digit()).to_owned()
+}
+
 type AtomHashSet = FxHashSet<Atom>;
+
+#[cfg(test)]
+#[path = "current_public_imports.rs"]
+mod current_public_imports;
 
 /// Stable identifier for a top-level declarator. Carries the symbol's
 /// `Atom` together with its `SyntaxContext` so shadowed bindings remain
@@ -118,10 +136,18 @@ pub enum InsertionSlot {
   /// runtime helpers because they always followed them, regardless
   /// of which producer ran first.
   ThemeImports,
+  /// A confident read keeps the exact declaration whose binding was evaluated.
+  ThemeImportAt(Span),
   /// Hoisted dynamic-style constants. Emitted after the existing
   /// import block, before the rest of the body. Mirrors the legacy
   /// `hoisted_module_items` placement.
   AfterImports,
+  /// A generated item that belongs immediately before this original statement.
+  BeforeStatement(Span),
+  /// An existing import receives the generated specifiers without changing its source token.
+  AugmentImport(Span),
+  /// An injection alias follows the import selected by Babel's helper.
+  AfterStatement(Span),
   /// Per-statement style metadata (the `_inject2(...)` calls) keyed by the
   /// stable hash of the object the call was replaced by. Emitted immediately
   /// before the first statement that holds that object, wherever in the
@@ -230,6 +256,9 @@ pub(crate) struct ImportState {
   /// deterministically.
   stylex_import: IndexSet<ImportSources>,
   stylex_api_imports: FxHashMap<ImportKind, AtomHashSet>,
+  namespace_bindings: IndexSet<Id>,
+  api_bindings: FxHashMap<Id, ImportKind>,
+  authored_import_order: Vec<Span>,
 }
 
 impl ImportState {
@@ -353,9 +382,20 @@ impl ModuleSourceState {
   }
 }
 
+#[derive(Clone, Debug)]
+struct CalleeMemberSites {
+  member: MemberExpr,
+  sites: FxHashMap<Span, u32>,
+}
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct CallExpressionState {
-  all_call_expressions: FxHashMap<u128, Callee>,
+  #[cfg(test)]
+  member_hash_queries: std::cell::Cell<usize>,
+  all_call_expressions: FxHashMap<(u128, Span), Callee>,
+  /// Cheap source-site rejection before hashing an ordinary member subtree.
+  /// Counts keep shared callee sites alive until their final call is replaced.
+  real_callee_spans: FxHashMap<Span, u32>,
   /// The member expressions that are the callee of some entry of
   /// [`Self::all_call_expressions`], bucketed by their structural key.
   ///
@@ -401,15 +441,18 @@ pub(crate) struct CallExpressionState {
   /// *different* calls can share a callee -- `a.b(1)` and `a.b(2)` -- and
   /// forgetting `a.b` when either is replaced would leave
   /// [`Self::is_member_callee`] answering `false` for a callee still live.
-  callee_members: FxHashMap<u128, Vec<(MemberExpr, u32)>>,
+  /// Member shapes remain compressed; counted root spans identify actual
+  /// callee sites. DUMMY generated sites share only the DUMMY entry, never an
+  /// authored member value read of the same shape.
+  callee_members: FxHashMap<u128, Vec<CalleeMemberSites>>,
 }
 
 impl CallExpressionState {
   fn add_call_expression(&mut self, call_expr: &CallExpr) {
-    let key = stable_hash_unspanned_call(call_expr);
+    let key = (stable_hash_unspanned_call(call_expr), call_expr.span);
 
-    // `insert` overwrites, so an existing entry's callee leaves the map here
-    // and its bucket entry has to go with it.
+    // Identical authored calls at different spans are separate occurrences;
+    // recording the same site again replaces its old callee and count.
     if let Some(replaced) = self
       .all_call_expressions
       .insert(key, call_expr.callee.clone())
@@ -424,6 +467,9 @@ impl CallExpressionState {
     let Some(member) = Self::callee_member(&call_expr.callee) else {
       return;
     };
+    if !member.span.is_dummy() {
+      *self.real_callee_spans.entry(member.span).or_default() += 1;
+    }
 
     let bucket = self
       .callee_members
@@ -432,28 +478,36 @@ impl CallExpressionState {
 
     match bucket
       .iter_mut()
-      .find(|(candidate, _)| candidate.eq_ignore_span(member))
+      .find(|candidate| candidate.member.eq_ignore_span(member))
     {
-      Some((_, count)) => *count += 1,
-      None => bucket.push((member.clone(), 1)),
+      Some(candidate) => *candidate.sites.entry(member.span).or_default() += 1,
+      None => bucket.push(CalleeMemberSites {
+        member: member.clone(),
+        sites: FxHashMap::from_iter([(member.span, 1)]),
+      }),
     }
   }
 
   fn is_member_callee(&self, member: &MemberExpr) -> bool {
+    if !member.span.is_dummy() && !self.real_callee_spans.contains_key(&member.span) {
+      return false;
+    }
+    #[cfg(test)]
+    self.member_hash_queries.set(self.member_hash_queries.get() + 1);
     self
       .callee_members
       .get(&stable_hash_unspanned_member(member))
       .is_some_and(|bucket| {
-        bucket
-          .iter()
-          .any(|(candidate, _)| candidate.eq_ignore_span(member))
+        bucket.iter().any(|candidate| {
+          candidate.sites.contains_key(&member.span) && candidate.member.eq_ignore_span(member)
+        })
       })
   }
 
-  fn replace_call_expression(&mut self, call: &CallExpr, ast: &Expr) {
+  fn replace_call_expression(&mut self, call: &CallExpr, call_key: u128, ast: &Expr) {
     if let Some(removed) = self
       .all_call_expressions
-      .remove(&stable_hash_unspanned_call(call))
+      .remove(&(call_key, call.span))
       && let Some(removed) = Self::callee_member(&removed)
     {
       self.release_member(removed);
@@ -494,12 +548,27 @@ impl CallExpressionState {
   /// for that: every caller hands back a callee taken out of the call map, and
   /// every member that map holds was bucketed when its call was recorded.
   fn release_member(&mut self, member: &MemberExpr) {
+    if !member.span.is_dummy()
+      && let Some(count) = self.real_callee_spans.get_mut(&member.span)
+    {
+      *count -= 1;
+      if *count == 0 {
+        self.real_callee_spans.remove(&member.span);
+      }
+    }
     let key = stable_hash_unspanned_member(member);
     let bucket = self.callee_members.entry(key).or_default();
 
-    bucket.retain_mut(|(candidate, count)| {
-      *count -= u32::from(candidate.eq_ignore_span(member));
-      *count > 0
+    bucket.retain_mut(|candidate| {
+      if candidate.member.eq_ignore_span(member)
+        && let Some(count) = candidate.sites.get_mut(&member.span)
+      {
+        *count -= 1;
+        if *count == 0 {
+          candidate.sites.remove(&member.span);
+        }
+      }
+      !candidate.sites.is_empty()
     });
 
     if bucket.is_empty() {
@@ -507,6 +576,10 @@ impl CallExpressionState {
     }
   }
 }
+
+#[cfg(test)]
+#[path = "tests/callee_span_prefilter_tests.rs"]
+mod callee_span_prefilter_tests;
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct CacheState {
@@ -626,10 +699,34 @@ fn earliest_confirmed(candidates: &[usize], confirm: impl Fn(usize) -> bool) -> 
 /// First writer wins, which is the answer the deduplicating push it replaces
 /// gave, and it is the first spelling of a name whose position a
 /// used-before-declaration diagnostic is about.
+/// A binding whose source declaration is intentionally not value-folded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OpaqueDeclarationKind {
+  VariableDeclarator,
+  Identifier,
+}
+
+impl OpaqueDeclarationKind {
+  pub fn babel_node_kind(self) -> &'static str {
+    match self {
+      Self::VariableDeclarator => "VariableDeclarator",
+      Self::Identifier => "Identifier",
+    }
+  }
+}
+
+/// Exact source attribution for an unsupported declaration, keyed by its Id.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OpaqueDeclarationFault {
+  pub kind: OpaqueDeclarationKind,
+  pub span: Span,
+}
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct DeclarationState {
   class_names: FxHashMap<Id, Span>,
   function_names: FxHashMap<Id, Span>,
+  opaque_faults: FxHashMap<Id, OpaqueDeclarationFault>,
 }
 
 impl DeclarationState {
@@ -659,7 +756,15 @@ impl DeclarationState {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct StyleInjectionState {
   inject_import_inserted: Option<InjectImportIdents>,
-  metadata: IndexMap<String, IndexSet<MetaData>>,
+  /// The rules deduplicated, first occurrence first, under `"stylex"`: derived
+  /// from `reported_rules` when first read rather than kept up per rule, since
+  /// nothing reads it while rules are being added. `add_style` clears it.
+  metadata: OnceCell<IndexMap<String, IndexSet<MetaData>>>,
+  /// Every rule in the order the transform produced it, repeats included.
+  /// This is the metadata a file reports, as the Babel plugin reports it: one
+  /// entry per rule per call, so the same rule compiled by two calls appears
+  /// twice. `metadata` deduplicates and only decides injection.
+  reported_rules: Vec<MetaData>,
   /// Transient dedup map for theme side-effect imports queued
   /// under `InsertionSlot::ThemeImports`. Tracks the imports that
   /// have already been queued so duplicates can be skipped. Lookups
@@ -687,12 +792,32 @@ pub(crate) struct StyleInjectionState {
 
 impl StyleInjectionState {
   fn metadata(&self) -> &IndexMap<String, IndexSet<MetaData>> {
-    &self.metadata
+    self.metadata.get_or_init(|| {
+      let mut metadata = IndexMap::new();
+      if !self.reported_rules.is_empty() {
+        metadata.insert(
+          "stylex".to_owned(),
+          self.reported_rules.iter().cloned().collect::<IndexSet<_>>(),
+        );
+      }
+      metadata
+    })
+  }
+
+  fn reported_rules(&self) -> &[MetaData] {
+    &self.reported_rules
   }
 }
 
 #[derive(Clone, Debug)]
+struct DeclarationInitializer {
+  span: Span,
+  value: Option<Rc<Expr>>,
+}
+
+#[derive(Clone, Debug)]
 pub struct StateManager {
+  evaluation_heap:Rc<std::cell::RefCell<EvaluationHeap>>,
   pub(crate) plugin_pass: PluginPass,
 
   /// The source file the compiler parsed, when the host makes it available.
@@ -727,7 +852,7 @@ pub struct StateManager {
   ///
   /// One count per file. A count shared between files would make the name of a
   /// hoisted expression depend on how many files came before it.
-  hoisted_ident_counts: FxHashMap<&'static str, usize>,
+  hoisted_ident_counts: FxHashMap<String, usize>,
 
   /// For each name bound by a non-import declaration (var/let/const,
   /// function/class names, params), the source spans of the scopes in which
@@ -755,6 +880,14 @@ pub struct StateManager {
   ///
   /// Shared rather than copied -- see [`Self::declaration_call_index`].
   declaration_index: Rc<FxHashMap<Id, usize>>,
+  /// Immutable initializer handles, created once per indexed declaration and
+  /// invalidated by its initializer writer. Callback state clones share handles,
+  /// not copies of every initializer subtree.
+  declaration_initializers: Rc<FxHashMap<usize, DeclarationInitializer>>,
+  /// Strong immutable owners for the initializer identities admitted to memo
+  /// keys. An arbitrary temporary expression address is never admitted.
+  initializer_roots: Rc<FxHashMap<usize, Rc<Expr>>>,
+  evaluation_input_revision: u64,
   /// Positions in [`Self::declarations`] of the declarators initialised by a
   /// given call, so pinning a call to its declarator is a hash probe rather
   /// than a walk of every declarator in the module comparing whole call
@@ -975,6 +1108,8 @@ pub struct StateManager {
   /// into the right slot in the final body. Replaces the trio of
   /// accumulator vecs above plus the per-decl `styles_to_inject` map.
   pub(crate) pending_module_items: Vec<PendingInsertion>,
+  current_statement_anchor: Option<Span>,
+  module_root_bindings: FxHashSet<Id>,
 
   pub other_injected_css_rules: InjectableStylesMap,
   /// How many times the file has filed a nested rule, counting every filing
@@ -1006,6 +1141,12 @@ pub struct StateManager {
   pub named_exports: FxHashSet<NamedExport>,
 
   pub cycle: TransformationCycle,
+  /// Function maps an evaluation's memo keys refer to by address, held for the
+  /// life of the module so no address is reused by a different map while a
+  /// memo entry still names it.
+  kept_function_maps: Vec<Rc<FunctionMap>>,
+  /// Addresses of `kept_function_maps`, so keeping a map is O(1).
+  kept_function_map_addresses: FxHashSet<usize>,
 }
 
 impl Default for StateManager {
@@ -1020,6 +1161,9 @@ impl StateManager {
 
     Self {
       plugin_pass: PluginPass::default(),
+      evaluation_heap:Rc::default(),
+      kept_function_maps: Vec::new(),
+      kept_function_map_addresses: FxHashSet::default(),
       input_source_file: None,
       input_source_map: None,
       imports: ImportState::default(),
@@ -1052,6 +1196,9 @@ impl StateManager {
 
       declarations: vec![],
       declaration_index: Rc::default(),
+      declaration_initializers: Rc::default(),
+      initializer_roots: Rc::default(),
+      evaluation_input_revision: 0,
       declaration_call_index: Rc::default(),
       declaration_span_index: Rc::default(),
       declarations_state: DeclarationState::default(),
@@ -1071,6 +1218,8 @@ impl StateManager {
 
       injection: StyleInjectionState::default(),
       pending_module_items: vec![],
+      current_statement_anchor: None,
+      module_root_bindings: FxHashSet::default(),
 
       other_injected_css_rules: IndexMap::new(),
       nested_rules_filed: 0,
@@ -1150,6 +1299,30 @@ impl StateManager {
     self.injection.metadata()
   }
 
+  /// Keeps `functions` alive until the module is done (see
+  /// `kept_function_maps`). Holding the same map twice is harmless.
+  pub fn keep_evaluation_functions(&mut self, functions: Rc<FunctionMap>) {
+    // The map is held here, so its address stays unique while it is kept.
+    if self
+      .kept_function_map_addresses
+      .insert(Rc::as_ptr(&functions) as usize)
+    {
+      self.kept_function_maps.push(functions);
+    }
+  }
+
+  /// The embedding host, when the transform runs under one (see
+  /// `StyleXOptionsParams::host_environment`).
+  pub fn host_environment(&self) -> Option<&stylex_structures::stylex_env::HostEnvironment> {
+    self.options.core.host_environment.as_ref()
+  }
+
+  /// The rules this file reports, in order and with repeats (see
+  /// `StyleInjectionState::reported_rules`).
+  pub fn reported_rules(&self) -> &[MetaData] {
+    self.injection.reported_rules()
+  }
+
   pub fn add_call_expression(&mut self, call_expr: &CallExpr) {
     self.call_expressions.add_call_expression(call_expr);
   }
@@ -1175,6 +1348,20 @@ impl StateManager {
     }
 
     None
+  }
+
+  /// Takes the unsupported-declaration faults collected once by discovery.
+  /// These records never provide a value or override a parameter overlay.
+  pub fn adopt_opaque_declaration_faults(
+    &mut self,
+    faults: FxHashMap<Id, OpaqueDeclarationFault>,
+  ) {
+    self.declarations_state.opaque_faults = faults;
+  }
+
+  /// The source node an unsupported binding resolves to, not a name lookup.
+  pub fn opaque_declaration_fault(&self, ident: &Ident) -> Option<OpaqueDeclarationFault> {
+    self.declarations_state.opaque_faults.get(&ident.to_id()).copied()
   }
 
   /// Takes the binding sets the `Discover` pre-scan collected.
@@ -1212,6 +1399,8 @@ impl StateManager {
   /// through [`Self::declarations`].
   pub fn push_declaration(&mut self, declarator: VarDeclarator) {
     let position = self.declarations.len();
+    self.seen.clear();
+    self.evaluation_input_revision = self.evaluation_input_revision.wrapping_add(1);
 
     if let Pat::Ident(binding) = &declarator.name {
       Rc::make_mut(&mut self.declaration_index)
@@ -1274,6 +1463,12 @@ impl StateManager {
   /// findable under the call it no longer holds, and unfindable under the one it
   /// now does.
   pub fn set_declaration_init(&mut self, position: usize, init: Expr) {
+    self.replace_declaration_init(position, init, None);
+  }
+
+  /// [`Self::set_declaration_init`], given the key the replaced initializer is
+  /// recorded under when the caller already holds it.
+  fn replace_declaration_init(&mut self, position: usize, init: Expr, replaced_key: Option<u128>) {
     let Some(declarator) = self.declarations.get_mut(position) else {
       return;
     };
@@ -1284,10 +1479,18 @@ impl StateManager {
     let replaced = declarator.init.replace(Box::new(init));
 
     Rc::make_mut(&mut self.declaration_call_index).move_entry(
-      call_key_of(replaced.as_deref()),
+      replaced_key.or_else(|| call_key_of(replaced.as_deref())),
       recorded,
       position,
     );
+    // Invalidate entries before releasing the immutable owner witnessing keys.
+    self.seen.clear();
+    self.evaluation_input_revision = self.evaluation_input_revision.wrapping_add(1);
+    if let Some(snapshot) = Rc::make_mut(&mut self.declaration_initializers).remove(&position)
+      && let Some(owner) = snapshot.value
+    {
+      Rc::make_mut(&mut self.initializer_roots).remove(&(Rc::as_ptr(&owner) as usize));
+    }
   }
 
   /// Appends an import declaration and records where each name it binds went.
@@ -1397,7 +1600,14 @@ impl StateManager {
 
   /// Replaces the expression recorded at `position`, keeping the call index in
   /// step. See [`Self::set_declaration_init`] for why it is the one way.
+  #[cfg(test)]
   pub(crate) fn set_top_level_expr(&mut self, position: usize, expr: Expr) {
+    self.replace_top_level_expr(position, expr, None);
+  }
+
+  /// `set_top_level_expr`, given the replaced expression's key when the caller
+  /// already holds it.
+  fn replace_top_level_expr(&mut self, position: usize, expr: Expr, replaced_key: Option<u128>) {
     let Some(entry) = self.top_level_expressions.get_mut(position) else {
       return;
     };
@@ -1410,7 +1620,7 @@ impl StateManager {
     // The name an entry binds does not change with its expression, so only the
     // call index needs repairing here.
     Rc::make_mut(&mut self.top_level_call_index).move_entry(
-      call_key_of_expr(&replaced),
+      replaced_key.or_else(|| call_key_of_expr(&replaced)),
       recorded,
       position,
     );
@@ -1433,7 +1643,14 @@ impl StateManager {
   /// Replaces the initializer of the declarator bound to `name`, keeping the
   /// call index in step. See [`Self::set_declaration_init`] for why it is the
   /// one way.
+  #[cfg(test)]
   pub(crate) fn set_style_var_init(&mut self, name: String, init: Expr) {
+    self.replace_style_var_init(name, init, None);
+  }
+
+  /// `set_style_var_init`, given the replaced initializer's key when the caller
+  /// already holds it.
+  fn replace_style_var_init(&mut self, name: String, init: Expr, replaced_key: Option<u128>) {
     let Some(declarator) = self.style_vars.get_mut(&name) else {
       return;
     };
@@ -1442,10 +1659,40 @@ impl StateManager {
     let replaced = declarator.init.replace(Box::new(init));
 
     Rc::make_mut(&mut self.style_var_call_index).move_entry(
-      call_key_of(replaced.as_deref()),
+      replaced_key.or_else(|| call_key_of(replaced.as_deref())),
       recorded,
       name,
     );
+  }
+
+  /// Indexed declaration metadata plus a retained, immutable initializer.
+  /// The span remains the original declaration's TDZ diagnostic metadata.
+  pub fn declaration_parts(&mut self, ident: &Ident) -> Option<(Span, Option<Rc<Expr>>)> {
+    let position = *self.declaration_index.get(&ident.to_id())?;
+    if let Some(snapshot) = self.declaration_initializers.get(&position) {
+      return Some((snapshot.span, snapshot.value.clone()));
+    }
+    let declaration = self.declarations.get(position)?;
+    let snapshot = DeclarationInitializer {
+      span: declaration.span,
+      value: declaration.init.as_deref().cloned().map(Rc::new),
+    };
+    if let Some(owner) = &snapshot.value {
+      Rc::make_mut(&mut self.initializer_roots)
+        .insert(Rc::as_ptr(owner) as usize, Rc::clone(owner));
+    }
+    let result = (snapshot.span, snapshot.value.clone());
+    Rc::make_mut(&mut self.declaration_initializers).insert(position, snapshot);
+    Some(result)
+  }
+
+  pub fn retained_initializer_site(&self, expression: &Expr) -> Option<usize> {
+    let address = expression as *const Expr as usize;
+    self.initializer_roots.contains_key(&address).then_some(address)
+  }
+
+  pub fn evaluation_input_revision(&self) -> u64 {
+    self.evaluation_input_revision
   }
 
   /// The declarator binding `ident`, by hash probe rather than by a scan of
@@ -1572,27 +1819,17 @@ impl StateManager {
   /// then `_temp2`. A name the module already binds is passed over: the
   /// generated declaration sits beside the author's own, and the two would
   /// print as one name.
-  pub fn next_hoisted_ident(&mut self, stem: &'static str) -> Ident {
+  pub fn next_hoisted_ident(&mut self, stem: &str) -> Ident {
+    let stem=babel_uid_hint(stem);
     loop {
-      let count = self.hoisted_ident_counts.entry(stem).or_insert(1);
-      let ordinal = *count;
-
+      let count = self.hoisted_ident_counts.entry(stem.clone()).or_default();
+      let index = *count;
       *count += 1;
-
-      let name = if ordinal < 2 {
-        format!("_{stem}")
-      } else {
-        format!("_{stem}{ordinal}")
-      };
-
-      if !self.has_binding(&name) {
-        // The declaration this name goes on is a binding of the module like any
-        // other, so anything that asks `has_binding` later reads it too.
-        let ident = Ident::from(name.as_str());
-
-        self.bound_names.insert(name);
-
-        return ident;
+      let suffix=if index>=11 {Some(index-1)}else if index>=9 {Some(index-9)}else if index>=1 {Some(index+1)}else{None};
+      let mut name=format!("_{stem}");
+      if let Some(suffix)=suffix {name.push_str(&suffix.to_string());}
+      if self.bound_names.insert(name.clone()) {
+        return Ident::new_no_ctxt(name.into(),DUMMY_SP);
       }
     }
   }
@@ -1641,19 +1878,20 @@ impl StateManager {
   /// Seeds an empty replacement entry for a JSX spread expression seen during
   /// discovery. The expression is stored alongside its (initially empty)
   /// replacement so later lookups can confirm structural equality and never act
-  /// on a bare hash collision. A structurally-identical spread already present
-  /// in the bucket is not duplicated.
+  /// on a bare hash collision. Authored spreads match their actual root span;
+  /// only generated DUMMY sites share a structurally-identical record.
   pub fn seed_jsx_spread_expr(&mut self, expr: &Expr) {
     let key = stable_hash_unspanned(expr);
     let bucket = self.jsx_spread_attr_exprs_map.entry(key).or_default();
 
-    if !bucket.iter().any(|(seen, _)| seen.eq_ignore_span(expr)) {
+    if !bucket.iter().any(|(seen, _)| seen.span() == expr.span() && seen.eq_ignore_span(expr)) {
       bucket.push((expr.clone(), Vec::new()));
     }
   }
 
   /// Whether `call` was recorded as a JSX spread expression during discovery,
-  /// confirmed by structural (`eq_ignore_span`) match, not just a hash hit.
+  /// confirmed by root span and structural (`eq_ignore_span`) match. A real
+  /// non-JSX call cannot match a generated sx call or a later authored spread.
   pub fn has_jsx_spread_call(&self, call: &CallExpr) -> bool {
     let key = stable_hash_unspanned_call(call);
     self
@@ -1662,7 +1900,7 @@ impl StateManager {
       .is_some_and(|bucket| {
         bucket
           .iter()
-          .any(|(seen, _)| matches!(seen, Expr::Call(seen_call) if seen_call.eq_ignore_span(call)))
+          .any(|(seen, _)| matches!(seen, Expr::Call(seen_call) if seen_call.span == call.span && seen_call.eq_ignore_span(call)))
       })
   }
 
@@ -1682,7 +1920,7 @@ impl StateManager {
       .and_then(|bucket| {
         bucket
           .iter_mut()
-          .find(|(seen, _)| matches!(seen, Expr::Call(seen_call) if seen_call.eq_ignore_span(call)))
+          .find(|(seen, _)| matches!(seen, Expr::Call(seen_call) if seen_call.span == call.span && seen_call.eq_ignore_span(call)))
       })
     else {
       return false;
@@ -1703,7 +1941,7 @@ impl StateManager {
       .jsx_spread_attr_exprs_map
       .get(&key)?
       .iter()
-      .find(|(seen, _)| seen.eq_ignore_span(expr))
+      .find(|(seen, _)| seen.span() == expr.span() && seen.eq_ignore_span(expr))
       .map(|(_, replacement)| replacement.as_slice())
   }
 
@@ -1772,6 +2010,46 @@ impl StateManager {
   /// Insert a symbol into the import set for the given kind.
   pub fn insert_stylex_api_import(&mut self, kind: ImportKind, sym: Atom) {
     self.imports.insert_stylex_api_import(kind, sym);
+  }
+
+  pub fn record_authored_import_span(&mut self,span:Span) {
+    self.imports.authored_import_order.push(span);
+  }
+
+  pub fn insert_stylex_namespace_binding(&mut self, id: Id) {
+    self.imports.namespace_bindings.insert(id);
+  }
+
+  pub fn insert_stylex_api_binding(&mut self, kind: ImportKind, id: Id) {
+    self.imports.api_bindings.insert(id, kind);
+  }
+
+  pub fn namespace_bindings(&self) -> &IndexSet<Id> {
+    &self.imports.namespace_bindings
+  }
+
+  pub fn matches_namespace(&self, ident: &Ident) -> bool {
+    self.imports.namespace_bindings.contains(&ident.to_id())
+  }
+
+  pub fn matches_method(&self, ident: &Ident, kind: ImportKind) -> bool {
+    self.imports.api_bindings.get(&ident.to_id()) == Some(&kind)
+  }
+
+  pub fn is_stylex_binding_for_current_cycle(&self, ident: &Ident) -> bool {
+    if self.matches_namespace(ident) {
+      return true;
+    }
+    let consumed = match self.cycle {
+      TransformationCycle::TransformProducers => false,
+      TransformationCycle::TransformConsumers => true,
+      _ => return false,
+    };
+    self
+      .imports
+      .api_bindings
+      .get(&ident.to_id())
+      .is_some_and(|kind| kind.is_read_by_the_consuming_cycle() == consumed)
   }
 
   /// Get the import set for the given kind, if any entries exist.
@@ -1909,12 +2187,12 @@ impl StateManager {
   pub fn import_as(&self, import: &str) -> Option<&str> {
     for import_source in &self.options.import_sources {
       match import_source {
-        ImportSources::Regular(_) => {},
+        ImportSources::Regular(_) => {}
         ImportSources::Named(named) => {
           if named.from.eq(import) {
             return Some(named.r#as.as_str());
           }
-        },
+        }
       }
     }
 
@@ -1977,6 +2255,16 @@ impl StateManager {
   /// without re-parsing. Set by hosts that own the parse (e.g. the NAPI
   /// compiler).
   pub fn set_input_source_file(&mut self, source_file: Arc<SourceFile>) {
+    if self
+      .input_source_file
+      .as_ref()
+      .is_none_or(|previous| !Arc::ptr_eq(previous, &source_file))
+    {
+      self.seen.clear();
+      self.evaluation_input_revision = self.evaluation_input_revision.wrapping_add(1);
+      self.declaration_initializers = Rc::default();
+      self.initializer_roots = Rc::default();
+    }
     self.input_source_file = Some(source_file);
   }
 
@@ -2007,7 +2295,7 @@ impl StateManager {
       return None;
     }
 
-    let consts_file_extension = format!("{}{}", theme_file_extension, CONSTS_FILE_EXTENSION);
+    let consts_file_extension = [theme_file_extension, CONSTS_FILE_EXTENSION].concat();
 
     let is_theme_file = matches_file_suffix(theme_file_extension, filename);
     let is_consts_only_file = matches_file_suffix(&consts_file_extension, filename);
@@ -2020,12 +2308,51 @@ impl StateManager {
       CheckModuleResolution::Haste { .. } => {
         let filename = FileName::Real(filename.into());
         extract_filename_with_ext_from_path(&filename).map(|s| s.to_string())
+      }
+      // `custom`: the host's `getCanonicalFilePath` names the file, as the
+      // Babel plugin asks it; a throw there aborts the transform.
+      CheckModuleResolution::Custom { .. } => match self
+        .options
+        .core
+        .import_resolver
+        .as_ref()
+        .map(|resolver| resolver.canonical_file_path(filename))
+      {
+        Some(Ok(Some(path))) => Some(path),
+        Some(Err(error)) => stylex_panic!("{}", error),
+        Some(Ok(None)) | None => Some(self.get_canonical_file_path(filename, package_json_seen)),
       },
       CheckModuleResolution::CommonJs { .. } | CheckModuleResolution::CrossFileParsing { .. } => {
-        Some(self.get_canonical_file_path(filename, package_json_seen))
-      },
+        Some(self.common_js_canonical_name(filename, package_json_seen))
+      }
+      // The Babel plugin hashes no file name without a module resolution.
+      CheckModuleResolution::Unconfigured => None,
     }
   }
+  /// The canonical name of `file_path` under `commonJS` resolution (and
+  /// `experimental_crossFileParsing`, which resolves as it). With a host
+  /// resolver installed the host names it, exactly as the Babel plugin's
+  /// `getCanonicalFilePath` does (a manifest without a `name` gives
+  /// `undefined:`, Windows paths keep their separators), so the theme file and
+  /// every consumer, however their imports resolved, hash the same name.
+  fn common_js_canonical_name(
+    &self,
+    file_path: &str,
+    package_json_seen: &mut FxHashMap<String, PackageJsonExtended>,
+  ) -> String {
+    match self
+      .options
+      .core
+      .import_resolver
+      .as_ref()
+      .map(|resolver| resolver.canonical_file_path(file_path))
+    {
+      Some(Ok(Some(name))) => name,
+      Some(Err(error)) => stylex_panic!("{}", error),
+      Some(Ok(None)) | None => self.get_canonical_file_path(file_path, package_json_seen),
+    }
+  }
+
   pub fn get_package_name_and_path(
     filepath: &str,
     package_json_seen: &mut FxHashMap<String, PackageJsonExtended>,
@@ -2108,7 +2435,7 @@ impl StateManager {
       .theme_file_extension()
       .unwrap_or(".stylex");
 
-    let consts_file_extension = format!("{}{}", theme_file_extension, CONSTS_FILE_EXTENSION);
+    let consts_file_extension = [theme_file_extension, CONSTS_FILE_EXTENSION].concat();
 
     let is_theme_file = matches_file_suffix(theme_file_extension, import_path);
     let is_consts_only_file = matches_file_suffix(&consts_file_extension, import_path);
@@ -2120,12 +2447,59 @@ impl StateManager {
       return ImportPathResolution::Unresolved;
     }
 
+    // A `custom` resolution is the host's configuration, so the host answers
+    // it. A relative `commonJS` import that exists on disk resolves natively;
+    // any other `commonJS` import (a package specifier, or a path the file
+    // system does not hold) is answered by the host, which resolves it with the
+    // Babel plugin's own resolver.
+    if let Some(resolver) = self.options.core.import_resolver.as_ref() {
+      let ask_host =
+        |resolver: &std::rc::Rc<dyn stylex_structures::import_resolver::ImportResolver>| {
+          match resolver.resolve_theme_import(import_path, source_file_path) {
+            Ok(Some(path)) => ImportPathResolution::Resolved { path },
+            Ok(None) | Err(_) => ImportPathResolution::Unresolved,
+          }
+        };
+      match &self.options.unstable_module_resolution {
+        CheckModuleResolution::Custom { .. } => return ask_host(resolver),
+        CheckModuleResolution::CommonJs { .. } | CheckModuleResolution::CrossFileParsing { .. } => {
+          let aliases = self.options.aliases.as_ref().cloned().unwrap_or_default();
+          let root_dir = self.options.unstable_module_resolution.root_dir();
+          match native_common_js_resolution(import_path, source_file_path, &aliases, root_dir) {
+            NativeResolution::Resolved(path) => {
+              return ImportPathResolution::Resolved {
+                path: self.common_js_canonical_name(&path, package_json_seen),
+              };
+            },
+            NativeResolution::NeedsHost => return ask_host(resolver),
+          }
+        },
+        _ => {}
+      }
+    }
+
     match &self.options.unstable_module_resolution {
-      CheckModuleResolution::CommonJs { .. } => {
+      CheckModuleResolution::Unconfigured | CheckModuleResolution::Custom { .. } => {
+        ImportPathResolution::Unresolved
+      }
+      // `experimental_crossFileParsing` resolves its imports as `commonJS` does
+      // and references the theme file's variables rather than re-reading it:
+      // the Babel plugin's own cross-file read rejects every parsed file (it
+      // tests the parsed file's empty `errors` array for truthiness), so the
+      // `commonJS` reading is the one that compiles.
+      CheckModuleResolution::CommonJs { .. } | CheckModuleResolution::CrossFileParsing { .. } => {
         let filename = self.get_filename();
 
-        let (_, root_dir) = StateManager::get_package_name_and_path(filename, package_json_seen)
-          .unwrap_or_else(|| stylex_panic!("Cannot get package name and path for: {}", filename));
+        // A file outside any package resolves against its own directory, as
+        // the Babel plugin's resolver does.
+        let root_dir = StateManager::get_package_name_and_path(filename, package_json_seen)
+          .map(|(_, root_dir)| root_dir)
+          .or_else(|| {
+            Path::new(filename)
+              .parent()
+              .map(|dir| dir.to_string_lossy().into_owned())
+          })
+          .unwrap_or_default();
 
         let aliases = self.options.aliases.as_ref().cloned().unwrap_or_default();
 
@@ -2141,7 +2515,7 @@ impl StateManager {
           Err(err) => {
             debug!("Could not resolve import path {}: {}", import_path, err);
             return ImportPathResolution::Unresolved;
-          },
+          }
         };
 
         debug!("Resolved import path: {}", resolved_file_path);
@@ -2152,12 +2526,9 @@ impl StateManager {
         ImportPathResolution::Resolved {
           path: resolved_file_path,
         }
-      },
+      }
       CheckModuleResolution::Haste { .. } => ImportPathResolution::Resolved {
         path: add_file_extension(import_path, source_file_path),
-      },
-      CheckModuleResolution::CrossFileParsing { .. } => {
-        stylex_unimplemented!("This module resolution strategy is not yet supported.")
       },
     }
   }
@@ -2187,10 +2558,18 @@ impl StateManager {
 
   /// Position of the earliest recorded top-level expression that is `call`.
   fn find_top_level_expr_index(&self, call: &CallExpr) -> Option<usize> {
+    self.find_top_level_expr_index_keyed(call, || stable_hash_unspanned_call(call))
+  }
+
+  /// [`Self::find_top_level_expr_index`] with the call's key supplied by the
+  /// caller, which asks the other indexes about the same call.
+  fn find_top_level_expr_index_keyed(
+    &self,
+    call: &CallExpr,
+    call_key: impl FnOnce() -> u128,
+  ) -> Option<usize> {
     earliest_confirmed(
-      self
-        .top_level_call_index
-        .candidates(|| stable_hash_unspanned_call(call)),
+      self.top_level_call_index.candidates(call_key),
       |position| {
         // A parenthesis is not a different expression, so the recorded call is
         // read through it.
@@ -2370,8 +2749,19 @@ impl StateManager {
   /// for, every `stylex.props` site among them, were the ones that paid for the
   /// whole of it.
   pub fn find_call_declaration(&self, call: &CallExpr) -> Option<&VarDeclarator> {
+    self.find_call_declaration_keyed(call, || stable_hash_unspanned_call(call))
+  }
+
+  /// [`Self::find_call_declaration`], with the call's key (its
+  /// `stable_hash_unspanned_call`) supplied by a caller that asks about the same
+  /// call more than once.
+  pub fn find_call_declaration_keyed(
+    &self,
+    call: &CallExpr,
+    call_key: impl FnOnce() -> u128,
+  ) -> Option<&VarDeclarator> {
     let found = self
-      .find_call_declaration_index(call)
+      .find_call_declaration_index_keyed(call, call_key)
       .and_then(|position| self.declarations.get(position));
 
     debug_assert_eq!(
@@ -2387,12 +2777,15 @@ impl StateManager {
     found
   }
 
-  /// Position of the earliest declarator `call` initialises.
-  fn find_call_declaration_index(&self, call: &CallExpr) -> Option<usize> {
+  /// Position of the earliest declarator `call` initialises, with the call's key
+  /// supplied by the caller.
+  fn find_call_declaration_index_keyed(
+    &self,
+    call: &CallExpr,
+    call_key: impl FnOnce() -> u128,
+  ) -> Option<usize> {
     earliest_confirmed(
-      self
-        .declaration_call_index
-        .candidates(|| stable_hash_unspanned_call(call)),
+      self.declaration_call_index.candidates(call_key),
       |position| {
         // A parenthesis is not a different initializer, so the recorded call is
         // read through it.
@@ -2412,10 +2805,31 @@ impl StateManager {
   /// which of a bucket's names comes first, because at most one of them can
   /// confirm: the moment a style variable's initializer is rewritten,
   /// [`Self::set_style_var_init`] moves it off this call's key.
-  fn find_style_var_name(&self, call: &CallExpr) -> Option<String> {
+  /// The style variable whose recorded initializer is `call`, which is the one
+  /// [`Self::register_styles_keyed`] would rewrite for it, with the call's key
+  /// supplied by the caller.
+  pub fn style_var_for_call_keyed(
+    &self,
+    call: &CallExpr,
+    call_key: impl FnOnce() -> u128,
+  ) -> Option<String> {
+    self.find_style_var_name(call, call_key)
+  }
+
+  /// The entries the two call indexes hold under `key`, for tests that compare
+  /// whole states.
+  #[cfg(test)]
+  pub(crate) fn call_index_candidates(&self, key: u128) -> (Vec<String>, Vec<usize>) {
+    (
+      self.style_var_call_index.candidates(|| key).to_vec(),
+      self.declaration_call_index.candidates(|| key).to_vec(),
+    )
+  }
+
+  fn find_style_var_name(&self, call: &CallExpr, call_key: impl FnOnce() -> u128) -> Option<String> {
     let found = self
       .style_var_call_index
-      .candidates(|| stable_hash_unspanned_call(call))
+      .candidates(call_key)
       .iter()
       .find(|name| {
         self
@@ -2496,6 +2910,21 @@ impl StateManager {
     ast: &Expr,
     fallback_ast_hash: Option<u128>,
   ) {
+    self.register_styles_keyed(call, style, ast, fallback_ast_hash, || {
+      stable_hash_unspanned_call(call)
+    });
+  }
+
+  /// [`Self::register_styles`], with the call's key supplied by a caller that
+  /// has already asked about the same call.
+  pub fn register_styles_keyed(
+    &mut self,
+    call: &CallExpr,
+    style: &InjectableStylesMap,
+    ast: &Expr,
+    fallback_ast_hash: Option<u128>,
+    key_of: impl Fn() -> u128,
+  ) {
     // Early return if there are no styles to process
     if style.is_empty() {
       return;
@@ -2507,15 +2936,21 @@ impl StateManager {
 
     // The keys are the same for every rule of one call, so they are read once
     // here rather than once per metadata in the loop.
-    let keys = placement_keys(ast, fallback_ast_hash);
+    //
+    // Without runtime injection the flush drops every `BeforeDecl` item, so
+    // none is built and the keys are not hashed.
+    let inject = self.options.runtime_injection.is_some();
+    let keys = placement_keys_for(ast, fallback_ast_hash, inject);
 
     for metadata in metadatas {
-      self.add_style(&metadata);
-      self.add_style_to_inject(&metadata, &inject_var_ident, &keys);
+      if inject {
+        self.add_style_to_inject(&metadata, &inject_var_ident, &keys);
+      }
+      self.add_style(metadata);
     }
 
     // Update all references to this call expression with the new AST
-    self.update_references(call, ast);
+    self.update_references(call, ast, key_of);
   }
 
   /// Registers injected styles produced by the atoms transform.
@@ -2541,107 +2976,82 @@ impl StateManager {
     };
 
     for metadata in metadatas {
-      self.add_style(&metadata);
-
       if let Some(ref inject_var_ident) = inject_var_ident {
         let item = build_atom_inject_item(&metadata, inject_var_ident);
-        self.queue_insertion(InsertionSlot::AfterImports, item);
+        self.queue_at_current_statement(item);
       }
+
+      self.add_style(metadata);
     }
   }
 
   fn setup_injection_imports(&mut self) -> Ident {
-    // Once the runtime helpers have been queued, the var-ident is
-    // cached on `inject_import_inserted` — return it on subsequent
-    // calls without re-queueing.
     if let Some(idents) = self.injection.inject_import_inserted.as_ref() {
       return idents.var.clone();
     }
-    let mut uid_generator = UidGenerator::new("inject", CounterMode::Local);
-
-    let runtime_injection = self
-      .options
-      .runtime_injection
-      .as_ref()
-      .cloned()
-      .unwrap_or(RuntimeInjectionState::Boolean(true));
-
-    // The early return above answers for every state that already holds the
-    // identifiers, so reaching here means there are none to read yet.
-    let module_ident = uid_generator.generate_ident();
-
-    let var_ident = match &runtime_injection {
-      RuntimeInjectionState::Regular(_) | RuntimeInjectionState::Boolean(_) => {
-        uid_generator.generate_ident()
-      },
-      RuntimeInjectionState::Named(NamedImportSource { r#as, .. }) => {
-        uid_generator = UidGenerator::new(r#as, CounterMode::Local);
-        uid_generator.generate_ident()
-      },
+    let runtime=self.options.runtime_injection.clone().unwrap_or(RuntimeInjectionState::Boolean(true));
+    let (source,name)=match runtime {
+      RuntimeInjectionState::Boolean(_)=>(DEFAULT_INJECT_PATH.to_owned(),None),
+      RuntimeInjectionState::Regular(source)=>(source,None),
+      RuntimeInjectionState::Named(NamedImportSource{from,r#as})=>(from,Some(r#as)),
     };
-
-    let idents = InjectImportIdents {
-      module: module_ident,
-      var: var_ident,
+    let module_ident=self.next_hoisted_ident("inject");
+    let var_ident=self.next_hoisted_ident(name.as_deref().unwrap_or("inject"));
+    let idents=InjectImportIdents{module:module_ident,var:var_ident};
+    self.injection.inject_import_inserted=Some(idents.clone());
+    let InjectImportIdents{module:module_ident,var:var_ident}=idents;
+    let import=match &name {
+      Some(name)=>add_inject_named_import_expression(&module_ident,name,&source),
+      None=>add_inject_default_import_expression(&module_ident,Some(&source)),
     };
-
-    self.injection.inject_import_inserted = Some(idents.clone());
-
-    let InjectImportIdents {
-      module: inject_module_ident,
-      var: inject_var_ident,
-    } = idents;
-
-    let module_items = match &runtime_injection {
-      RuntimeInjectionState::Boolean(_) => vec![
-        add_inject_default_import_expression(&inject_module_ident, None),
-        add_inject_var_decl_expression(&inject_var_ident, &inject_module_ident),
-      ],
-      RuntimeInjectionState::Regular(name) => vec![
-        add_inject_default_import_expression(&inject_module_ident, Some(name)),
-        add_inject_var_decl_expression(&inject_var_ident, &inject_module_ident),
-      ],
-      RuntimeInjectionState::Named(_) => vec![
-        add_inject_named_import_expression(&inject_module_ident, &inject_var_ident),
-        add_inject_var_decl_expression(&inject_var_ident, &inject_module_ident),
-      ],
-    };
-
-    // Each call queues into the BeforeImports slot. The early
-    // return above guards against re-queueing on the second call.
-    for item in module_items {
-      self.queue_insertion(InsertionSlot::BeforeImports, item);
+    let alias=add_inject_var_decl_expression(&var_ident,&module_ident);
+    // Babel's module-import helper reuses only the first value import, and
+    // merges a new specifier rather than reusing an existing local binding.
+    let compatible=self.top_imports.iter().find(|import|!import.type_only)
+      .filter(|import|import.src.value.as_str()==Some(source.as_str())
+        && !import.specifiers.iter().any(|specifier|matches!(specifier,ImportSpecifier::Namespace(_))))
+      .map(|import|(import.span,import.specifiers.iter().any(|specifier|matches!(specifier,ImportSpecifier::Default(_)))));
+    if let Some((span,has_default))=compatible {
+      let alias_span=if name.is_none()&&has_default {
+        self.imports.authored_import_order.last().copied().or_else(||self.top_imports.last().map(|import|import.span)).unwrap_or(span)
+      }else{span};
+      self.queue_insertion(InsertionSlot::AugmentImport(span),import);
+      self.queue_insertion(InsertionSlot::AfterStatement(alias_span),alias);
+    }else{
+      self.queue_insertion(InsertionSlot::BeforeImports,import);
+      self.queue_insertion(InsertionSlot::BeforeImports,alias);
     }
-    inject_var_ident
+    var_ident
   }
 
-  fn update_references(&mut self, call: &CallExpr, ast: &Expr) {
-    if let Some(position) = self.find_call_declaration_index(call) {
-      self.set_declaration_init(position, ast.clone());
+  fn update_references(&mut self, call: &CallExpr, ast: &Expr, key_of: impl Fn() -> u128) {
+    // The four lookups ask about the same call, so it is hashed at most once.
+    let key = OnceCell::new();
+    let call_key = || *key.get_or_init(&key_of);
+
+    // Each entry found was found in the bucket of the call's key, so that key is
+    // the one each replaced initializer was recorded under.
+    if let Some(position) = self.find_call_declaration_index_keyed(call, call_key) {
+      self.replace_declaration_init(position, ast.clone(), Some(call_key()));
     }
 
-    if let Some(name) = self.find_style_var_name(call) {
-      self.set_style_var_init(name, ast.clone());
+    if let Some(name) = self.find_style_var_name(call, call_key) {
+      self.replace_style_var_init(name, ast.clone(), Some(call_key()));
     }
 
-    if let Some(position) = self.find_top_level_expr_index(call) {
-      self.set_top_level_expr(position, ast.clone());
+    if let Some(position) = self.find_top_level_expr_index_keyed(call, call_key) {
+      self.replace_top_level_expr(position, ast.clone(), Some(call_key()));
     }
 
-    self.call_expressions.replace_call_expression(call, ast);
+    self
+      .call_expressions
+      .replace_call_expression(call, call_key(), ast);
   }
 
-  fn add_style(&mut self, metadata: &MetaData) {
-    let var_name = "stylex";
-    let value = self
-      .injection
-      .metadata
-      .entry(var_name.to_string())
-      .or_default();
-
-    if !value.contains(metadata) {
-      value.insert(metadata.clone());
-    }
+  fn add_style(&mut self, metadata: MetaData) {
+    // The deduplicated view is derived from this list when it is read.
+    self.injection.metadata.take();
+    self.injection.reported_rules.push(metadata);
   }
 
   /// Queues the injection call for one rule before each statement it belongs
@@ -2656,10 +3066,16 @@ impl StateManager {
     let const_key = metadata.get_const_key();
     let const_value = metadata.get_const_value();
 
-    let mut stylex_inject_args = vec![
-      create_string_key_value_prop("ltr", css_ltr),
-      create_key_value_prop("priority", create_number_expr(*priority)),
-    ];
+    // The Babel plugin writes `ltr`, then `rtl` when there is one, then
+    // `priority`, then the constant pair.
+    let mut stylex_inject_args = vec![create_string_key_value_prop("ltr", css_ltr)];
+    if let Some(rtl) = css_rtl {
+      stylex_inject_args.push(create_string_key_value_prop("rtl", rtl));
+    }
+    stylex_inject_args.push(create_key_value_prop(
+      "priority",
+      create_number_expr(*priority),
+    ));
 
     if let Some(const_key) = const_key
       && let Some(const_value) = const_value
@@ -2685,10 +3101,6 @@ impl StateManager {
       }
     }
 
-    if let Some(rtl) = css_rtl {
-      stylex_inject_args.push(create_string_key_value_prop("rtl", rtl));
-    }
-
     let stylex_inject_obj = create_object_expression(stylex_inject_args);
 
     // Read before the object is moved into the call. It is what tells one
@@ -2706,15 +3118,52 @@ impl StateManager {
       expr: Box::new(Expr::Call(stylex_call_expr)),
     }));
 
+    // The last statement that takes the item takes it by move.
+    let mut previous: Option<u128> = None;
     for key in keys {
-      if self.injection.queued_decl_rules.insert((*key, rule_key)) {
-        self.queue_insertion(InsertionSlot::BeforeDecl(*key), item.clone());
+      if self.injection.queued_decl_rules.insert((*key, rule_key))
+        && let Some(previous) = previous.replace(*key)
+      {
+        self.queue_insertion(InsertionSlot::BeforeDecl(previous), item.clone());
       }
+    }
+    if let Some(last) = previous {
+      self.queue_insertion(InsertionSlot::BeforeDecl(last), item);
     }
   }
 
   pub fn get_treeshake_compensation(&self) -> bool {
     self.options.treeshake_compensation
+  }
+
+  pub fn is_module_root_binding(&self,id:&Id)->bool {
+    self.module_root_bindings.contains(id)
+  }
+
+  pub fn adopt_module_root_bindings(&mut self,ids:FxHashSet<Id>) {
+    self.module_root_bindings=ids;
+  }
+
+  pub fn replace_statement_anchor(&mut self, span: Option<Span>) -> Option<Span> {
+    std::mem::replace(&mut self.current_statement_anchor, span)
+  }
+
+  pub fn current_statement_anchor(&self) -> Option<Span> {
+    self.current_statement_anchor
+  }
+
+  pub fn queue_before_program_statement(&mut self, span: Span, item: ModuleItem) {
+    let anchor = self.current_statement_anchor.unwrap_or(span);
+    let slot = if anchor.is_dummy() {
+      InsertionSlot::AfterImports
+    } else {
+      InsertionSlot::BeforeStatement(anchor)
+    };
+    self.queue_insertion(slot, item);
+  }
+
+  pub fn queue_at_current_statement(&mut self, item: ModuleItem) {
+    self.queue_before_program_statement(self.current_statement_anchor.unwrap_or(DUMMY_SP), item);
   }
 
   /// Queue a `ModuleItem` for placement in the final module body.
@@ -2755,9 +3204,38 @@ impl StateManager {
   /// is significantly cheaper than a full `stable_hash` walk over
   /// the AST in the typical case.
   pub fn queue_theme_import_if_absent(&mut self, item: ModuleItem) {
-    if !self.injection.queued_theme_imports.contains(&item) {
+    self.queue_theme_import_at_slot(InsertionSlot::ThemeImports, item);
+  }
+
+  pub fn queue_theme_import_at(&mut self, import: &ImportDecl) {
+    let mut item = add_import_expression(import.src.value.as_str().unwrap_or_default());
+    if let Some(bare) = item
+      .as_mut_module_decl()
+      .and_then(|decl| decl.as_mut_import())
+    {
+      bare.src = import.src.clone();
+      bare.src.span = DUMMY_SP;
+    }
+    self.queue_theme_import_at_slot(InsertionSlot::ThemeImportAt(import.span), item);
+  }
+
+  fn queue_theme_import_at_slot(&mut self, slot: InsertionSlot, item: ModuleItem) {
+    let source = item
+      .as_module_decl()
+      .and_then(|decl| decl.as_import())
+      .map(|import| &import.src.value);
+    if !self.injection.queued_theme_imports.iter().any(|existing| {
+      if let Some(source) = source {
+        existing
+          .as_module_decl()
+          .and_then(|decl| decl.as_import())
+          .is_some_and(|import| &import.src.value == source)
+      } else {
+        existing == &item
+      }
+    }) {
       self.injection.queued_theme_imports.push(item.clone());
-      self.queue_insertion(InsertionSlot::ThemeImports, item);
+      self.queue_insertion(slot, item);
     }
   }
 }
@@ -2808,6 +3286,9 @@ pub fn flush_pending_insertions(
   let mut theme_imports: Vec<ModuleItem> = Vec::new();
   let mut after_imports: Vec<ModuleItem> = Vec::new();
   let mut before_decl: FxHashMap<u128, Vec<ModuleItem>> = FxHashMap::default();
+  let mut before_statements: FxHashMap<Span, Vec<ModuleItem>> = FxHashMap::default();
+  let mut after_statements: FxHashMap<Span, Vec<ModuleItem>> = FxHashMap::default();
+  let mut augmented_imports: FxHashMap<Span, Vec<ModuleItem>> = FxHashMap::default();
 
   for PendingInsertion { slot, item } in pending {
     match slot {
@@ -2816,18 +3297,18 @@ pub fn flush_pending_insertions(
         if runtime_injection {
           before_imports.push(item);
         }
-      },
-      InsertionSlot::ThemeImports => {
-        if runtime_injection {
-          theme_imports.push(item);
-        }
-      },
+      }
+      InsertionSlot::ThemeImports => theme_imports.push(item),
+      InsertionSlot::ThemeImportAt(span) => before_statements.entry(span).or_default().push(item),
       InsertionSlot::AfterImports => after_imports.push(item),
+      InsertionSlot::BeforeStatement(span) => before_statements.entry(span).or_default().push(item),
+      InsertionSlot::AfterStatement(span) => after_statements.entry(span).or_default().push(item),
+      InsertionSlot::AugmentImport(span) => augmented_imports.entry(span).or_default().push(item),
       InsertionSlot::BeforeDecl(hash) => {
         if runtime_injection {
           before_decl.entry(hash).or_default().push(item);
         }
-      },
+      }
     }
   }
 
@@ -2836,6 +3317,70 @@ pub fn flush_pending_insertions(
   // body. Doing it here keeps the BeforeDecl iteration in step 4
   // walking the same shape the legacy `inject_runtime_styles` saw.
   let original = std::mem::take(module_body);
+  let mut themes = IndexMap::<String, ModuleItem>::new();
+  let mut unmatched_themes = Vec::new();
+  for item in theme_imports {
+    let source = item
+      .as_module_decl()
+      .and_then(|decl| decl.as_import())
+      .and_then(|import| import.src.value.as_str())
+      .map(str::to_owned);
+    if let Some(source) = source {
+      themes.entry(source).or_insert(item);
+    } else {
+      unmatched_themes.push(item);
+    }
+  }
+  let mut original_with_insertions = Vec::with_capacity(
+    original.len() + before_statements.values().map(Vec::len).sum::<usize>() + themes.len(),
+  );
+  for mut item in original {
+    let original_span=item.span();
+    if let Some(augmentations)=augmented_imports.remove(&original_span) {
+      let Some(target)=item.as_mut_module_decl().and_then(|decl|decl.as_mut_import()) else {
+        stylex_panic!("An import augmentation does not name an authored import.");
+      };
+      for augmentation in augmentations {
+        let ModuleItem::ModuleDecl(ModuleDecl::Import(mut source))=augmentation else{stylex_panic!("Invalid import augmentation.");};
+        if target.src.value!=source.src.value {stylex_panic!("An import augmentation names a different source.");}
+        if let Some(ImportSpecifier::Default(default))=source.specifiers.first().cloned() {
+          if target.specifiers.iter().any(|specifier|matches!(specifier,ImportSpecifier::Default(_))) {
+            source.specifiers[0]=ImportSpecifier::Named(ImportNamedSpecifier{span:DUMMY_SP,local:default.local,imported:Some(ModuleExportName::Ident(Ident::new_no_ctxt("default".into(),DUMMY_SP))),is_type_only:false});
+          } else {
+            target.specifiers.insert(0,source.specifiers.remove(0));
+          }
+        }
+        target.specifiers.extend(source.specifiers);
+      }
+    }
+    if let Some(items) = before_statements.remove(&item.span()) {
+      original_with_insertions.extend(items);
+    }
+    if let Some(import) = item
+      .as_module_decl()
+      .and_then(|decl| decl.as_import())
+      .filter(|import| !import.type_only)
+      && let Some(source) = import.src.value.as_str()
+      && let Some(mut bare) = themes.shift_remove(source)
+    {
+      // The authored source token (quote style/escapes included) is reused.
+      if let Some(bare) = bare
+        .as_mut_module_decl()
+        .and_then(|decl| decl.as_mut_import())
+      {
+        bare.src = import.src.clone();
+        bare.src.span = DUMMY_SP;
+      }
+      original_with_insertions.push(bare);
+    }
+    original_with_insertions.push(item);
+    if let Some(items)=after_statements.remove(&original_span) {original_with_insertions.extend(items);}
+  }
+  if !before_statements.is_empty() || !after_statements.is_empty() || !augmented_imports.is_empty() {
+    stylex_panic!("A generated insertion does not name an original program statement.");
+  }
+  unmatched_themes.extend(themes.into_values());
+  let original = original_with_insertions;
   let body_with_after_imports = if after_imports.is_empty() {
     original
   } else {
@@ -2887,7 +3432,7 @@ pub fn flush_pending_insertions(
   // regardless of which producer queued first.
   result.extend(prepend_imports);
   result.extend(before_imports);
-  result.extend(theme_imports);
+  result.extend(unmatched_themes);
 
   // Step 4: walk the rest, splicing the `BeforeDecl` metadata of every
   // registered object an item holds in front of that item. Consuming the
@@ -2938,19 +3483,29 @@ pub fn flush_pending_insertions(
 /// today -- a hoisted `create` is the one that hands over something else, and
 /// it hands the fallback over with it -- so the warning is for the producer
 /// written next, which would otherwise lose its rules in silence.
-fn placement_keys(ast: &Expr, fallback_ast_hash: Option<u128>) -> Vec<u128> {
+pub fn placement_keys(ast: &Expr, fallback_ast_hash: Option<u128>) -> Vec<u128> {
+  placement_keys_for(ast, fallback_ast_hash, true)
+}
+
+/// [`placement_keys`], or no keys at all when `hash` is false -- for a caller
+/// that places nothing -- with the same warning either way.
+fn placement_keys_for(ast: &Expr, fallback_ast_hash: Option<u128>, hash: bool) -> Vec<u128> {
   let mut keys = Vec::with_capacity(2);
 
-  if matches!(
+  let placeable = matches!(
     normalize_expr(ast),
     Expr::Object(_) | Expr::Lit(Lit::Str(_))
-  ) {
-    keys.push(stable_hash_unspanned(ast));
+  );
+
+  if hash {
+    if placeable {
+      keys.push(stable_hash_unspanned(ast));
+    }
+
+    keys.extend(fallback_ast_hash);
   }
 
-  keys.extend(fallback_ast_hash);
-
-  if keys.is_empty() {
+  if !placeable && fallback_ast_hash.is_none() {
     // The kind is read off the same expression the guard above read, so the
     // message names what was registered rather than a parenthesis around it.
     warn!(
@@ -3020,7 +3575,7 @@ impl RegisteredObjects<'_> {
       Some(metadata) => {
         self.placed.extend(metadata);
         true
-      },
+      }
       None => false,
     }
   }
@@ -3047,12 +3602,12 @@ impl Visit for RegisteredObjects<'_> {
       // different keys.
       Expr::Lit(Lit::Str(_)) => {
         self.place_metadata_of(expr);
-      },
+      }
       Expr::Object(_) => {
         if !self.place_metadata_of(expr) {
           expr.visit_children_with(self);
         }
-      },
+      }
       _ => expr.visit_children_with(self),
     }
   }
@@ -3084,14 +3639,14 @@ fn build_atom_inject_item(metadata: &MetaData, inject_var_ident: &Ident) -> Modu
   let css_ltr = metadata.get_css();
   let css_rtl = metadata.get_css_rtl();
 
-  let mut stylex_inject_args = vec![
-    create_string_key_value_prop("ltr", css_ltr),
-    create_key_value_prop("priority", create_number_expr(*priority)),
-  ];
-
+  let mut stylex_inject_args = vec![create_string_key_value_prop("ltr", css_ltr)];
   if let Some(rtl) = css_rtl {
     stylex_inject_args.push(create_string_key_value_prop("rtl", rtl));
   }
+  stylex_inject_args.push(create_key_value_prop(
+    "priority",
+    create_number_expr(*priority),
+  ));
 
   let stylex_inject_obj = create_object_expression(stylex_inject_args);
 
@@ -3139,19 +3694,19 @@ pub fn add_import_expression(path: &str) -> ModuleItem {
   }))
 }
 
-fn add_inject_named_import_expression(ident: &Ident, imported_ident: &Ident) -> ModuleItem {
+fn add_inject_named_import_expression(ident: &Ident, imported_name: &str, source: &str) -> ModuleItem {
   ModuleItem::ModuleDecl(ModuleDecl::Import(ImportDecl {
     span: DUMMY_SP,
     specifiers: vec![ImportSpecifier::Named(ImportNamedSpecifier {
       span: DUMMY_SP,
       local: ident.clone(),
-      imported: Some(ModuleExportName::Ident(imported_ident.clone())),
+      imported: Some(ModuleExportName::Ident(Ident::new_no_ctxt(imported_name.into(),DUMMY_SP))),
       is_type_only: false,
     })],
     src: Box::new(Str {
       span: DUMMY_SP,
       raw: None,
-      value: DEFAULT_INJECT_PATH.into(),
+      value: source.into(),
     }),
     type_only: false,
     with: None,
@@ -3163,7 +3718,8 @@ fn add_inject_var_decl_expression(decl_ident: &Ident, value_ident: &Ident) -> Mo
   ModuleItem::Stmt(Stmt::Decl(Decl::Var(Box::new(VarDecl {
     declare: false,
     decls: vec![VarDeclarator {
-      definite: true,
+      // `var _inject2 = _inject;` carries no TypeScript definite-assignment `!`.
+      definite: false,
       span: DUMMY_SP,
       name: Pat::from(create_binding_ident(decl_ident.clone())),
       init: Some(Box::new(Expr::from(value_ident.clone()))),
@@ -3212,7 +3768,7 @@ fn add_file_extension(imported_file_path: &str, source_file: &str) -> String {
     return imported_file_path.to_string();
   }
 
-  format!("{}.{}", imported_file_path, file_extension)
+  [imported_file_path, ".", file_extension].concat()
 }
 
 fn file_path_resolver(
@@ -3295,5 +3851,251 @@ impl DiagnosticState for StateManager {
 
   fn diagnostic_memo_mut(&mut self) -> &mut DiagnosticMemo {
     &mut self.diagnostic_memo
+  }
+}
+
+/// How far the native side can answer a `commonJS` theme import the way the
+/// Babel plugin's `filePathResolver` does.
+enum NativeResolution {
+  Resolved(String),
+  /// The answer needs Node's module resolution (a package specifier, or a
+  /// relative specifier with URL syntax): the host resolves the import.
+  NeedsHost,
+}
+
+const RESOLVER_CODE_EXTENSIONS: [&str; 6] = [".js", ".ts", ".tsx", ".jsx", ".mjs", ".cjs"];
+
+/// The Babel plugin's `getPossibleFilePaths`: the path as written, then the
+/// path without a code extension plus each code extension.
+fn possible_file_paths(file_path: &str) -> Vec<String> {
+  let extension = Path::new(file_path)
+    .extension()
+    .map(|ext| format!(".{}", ext.to_string_lossy()));
+  let stem = match extension {
+    Some(extension) if RESOLVER_CODE_EXTENSIONS.contains(&extension.as_str()) => {
+      &file_path[..file_path.len() - extension.len()]
+    },
+    _ => file_path,
+  };
+  std::iter::once(file_path.to_owned())
+    .chain(
+      RESOLVER_CODE_EXTENSIONS
+        .iter()
+        .map(|extension| format!("{stem}{extension}")),
+    )
+    .collect()
+}
+
+/// The Babel plugin's `possibleAliasedPaths`.
+fn possible_aliased_paths(
+  import_path: &str,
+  aliases: &FxHashMap<String, Vec<String>>,
+) -> Vec<String> {
+  let mut result = vec![import_path.to_owned()];
+  for (alias, targets) in aliases {
+    if let Some((before, after)) = alias.split_once('*') {
+      if import_path.starts_with(before)
+        && import_path.ends_with(after)
+        && import_path.len() >= before.len() + after.len()
+      {
+        let replacement = &import_path[before.len()..import_path.len() - after.len()];
+        result.extend(
+          targets
+            .iter()
+            .map(|target| target.split('*').collect::<Vec<_>>().join(replacement)),
+        );
+      }
+    } else if alias == import_path {
+      result.extend(targets.iter().cloned());
+    }
+  }
+  result
+}
+
+/// Whether Node could resolve `specifier` as a package from `source_file_path`:
+/// a `node_modules` directory above the file holds the package, or the nearest
+/// package.json names it (a self-reference), or it is a `#` import or a URL
+/// scheme. A specifier no package can answer fails in `moduleResolve`, and the
+/// Babel plugin moves on to its next candidate.
+fn package_may_resolve(specifier: &str, source_file_path: &str) -> bool {
+  if specifier.starts_with('#') || specifier.contains(':') {
+    return true;
+  }
+  let mut parts = specifier.split('/');
+  let first = parts.next().unwrap_or_default();
+  let name = if first.starts_with('@') {
+    match parts.next() {
+      Some(second) if first.len() > 1 && !second.is_empty() => format!("{first}/{second}"),
+      // `@` alone, or `@/…`, is not a package name.
+      _ => return false,
+    }
+  } else {
+    first.to_owned()
+  };
+  if name.is_empty() || name.starts_with('.') {
+    return false;
+  }
+  let mut directory = Path::new(source_file_path).parent();
+  let mut nearest_manifest_read = false;
+  while let Some(dir) = directory {
+    if dir.join("node_modules").join(&name).exists() {
+      return true;
+    }
+    if !nearest_manifest_read && let Ok(text) = std::fs::read_to_string(dir.join("package.json")) {
+      nearest_manifest_read = true;
+      let names_it = serde_json::from_str::<serde_json::Value>(&text)
+        .ok()
+        .and_then(|value| value.get("name").and_then(|v| v.as_str()).map(|v| v == name))
+        .unwrap_or(false);
+      if names_it {
+        return true;
+      }
+    }
+    directory = dir.parent();
+  }
+  false
+}
+
+/// `std::fs::canonicalize` returns Windows verbatim paths (`\\?\C:\...`,
+/// `\\?\UNC\server\share\...`). Node's `realpath` never does, so drop the
+/// prefix where the remainder is an ordinary drive or UNC path. Other
+/// platforms are unchanged.
+fn without_verbatim_prefix(path: std::path::PathBuf) -> std::path::PathBuf {
+  if !cfg!(windows) {
+    return path;
+  }
+  let text = path.to_string_lossy();
+  if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+    return std::path::PathBuf::from(format!(r"\\{rest}"));
+  }
+  if let Some(rest) = text.strip_prefix(r"\\?\") {
+    let bytes = rest.as_bytes();
+    if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+      return std::path::PathBuf::from(rest);
+    }
+  }
+  path
+}
+
+/// The Babel plugin's `filePathResolver`, answered natively where it reads the
+/// file system and deferred to the host where it calls `moduleResolve` on a
+/// specifier the file system alone cannot answer.
+fn native_common_js_resolution(
+  import_path: &str,
+  source_file_path: &str,
+  aliases: &FxHashMap<String, Vec<String>>,
+  root_dir: Option<&str>,
+) -> NativeResolution {
+  let source_dir = Path::new(source_file_path)
+    .parent()
+    .unwrap_or(Path::new(""));
+  for candidate in possible_file_paths(import_path) {
+    if candidate.starts_with('.') {
+      // `moduleResolve` reads a relative specifier as a URL.
+      if candidate.contains(['%', '#', '?']) {
+        return NativeResolution::NeedsHost;
+      }
+      let path = source_dir.join(&candidate);
+      if path.is_file() {
+        // Node resolves a relative import to its real path.
+        let real = std::fs::canonicalize(&path)
+          .map(without_verbatim_prefix)
+          .unwrap_or(path);
+        return NativeResolution::Resolved(real.to_string_lossy().into_owned());
+      }
+      continue;
+    }
+    for possible in possible_aliased_paths(&candidate, aliases) {
+      if let (Some(rest), Some(root_dir)) = (possible.strip_prefix("/ROOT/"), root_dir) {
+        let real = Path::new(root_dir).join(rest);
+        if let Some(found) = possible_file_paths(&real.to_string_lossy())
+          .into_iter()
+          .find(|path| Path::new(path).exists())
+        {
+          return NativeResolution::Resolved(found);
+        }
+        continue;
+      }
+      if Path::new(&possible).is_absolute() {
+        if let Some(found) = possible_file_paths(&possible)
+          .into_iter()
+          .find(|path| Path::new(path).exists())
+        {
+          return NativeResolution::Resolved(found);
+        }
+        continue;
+      }
+      if package_may_resolve(&possible, source_file_path) {
+        return NativeResolution::NeedsHost;
+      }
+    }
+  }
+  // Nothing on disk answered. The Babel plugin's verdict for the remaining
+  // candidates comes from `moduleResolve`, which the host runs.
+  NativeResolution::NeedsHost
+}
+
+#[cfg(test)]
+mod native_resolution_tests {
+  use super::*;
+
+  fn fixture(name: &str) -> std::path::PathBuf {
+    let root = std::env::temp_dir().join(format!(
+      "stylex-native-resolution-{}-{name}",
+      std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("src/theme")).unwrap();
+    std::fs::create_dir_all(root.join("node_modules/@scope/tokens")).unwrap();
+    std::fs::write(root.join("src/theme/tokens.stylex.js"), "").unwrap();
+    std::fs::write(root.join("src/theme/colors.stylex.ts"), "").unwrap();
+    std::fs::write(root.join("src/app.js"), "").unwrap();
+    root
+  }
+
+  fn aliases(root: &Path) -> FxHashMap<String, Vec<String>> {
+    let mut aliases = FxHashMap::default();
+    aliases.insert(
+      "@/*".to_owned(),
+      vec![root.join("src/*").to_string_lossy().into_owned()],
+    );
+    aliases
+  }
+
+  fn resolve(root: &Path, import: &str) -> String {
+    let source = root.join("src/app.js");
+    match native_common_js_resolution(import, &source.to_string_lossy(), &aliases(root), None) {
+      NativeResolution::Resolved(path) => {
+        let real_root = without_verbatim_prefix(std::fs::canonicalize(root).unwrap());
+        path
+          .strip_prefix(&*real_root.to_string_lossy())
+          .or_else(|| path.strip_prefix(&*root.to_string_lossy()))
+          .unwrap_or(&path)
+          // Compare with `/` on every platform; Windows paths use `\`.
+          .replace(std::path::MAIN_SEPARATOR, "/")
+      },
+      NativeResolution::NeedsHost => "host".to_owned(),
+    }
+  }
+
+  #[test]
+  fn relative_and_alias_imports_resolve_natively_in_babels_candidate_order() {
+    let root = fixture("order");
+    assert_eq!(resolve(&root, "./theme/tokens.stylex"), "/src/theme/tokens.stylex.js");
+    // `.js` written, `.ts` on disk: the extension is swapped like the Babel plugin does.
+    assert_eq!(resolve(&root, "./theme/colors.stylex.js"), "/src/theme/colors.stylex.ts");
+    assert_eq!(resolve(&root, "@/theme/tokens.stylex"), "/src/theme/tokens.stylex.js");
+    // A miss is the host's to confirm: `moduleResolve` answers it in Babel.
+    assert_eq!(resolve(&root, "./theme/missing.stylex"), "host");
+    assert_eq!(resolve(&root, "@/theme/missing.stylex"), "host");
+  }
+
+  #[test]
+  fn package_and_url_specifiers_go_to_the_host() {
+    let root = fixture("host");
+    assert_eq!(resolve(&root, "@scope/tokens/tokens.stylex"), "host");
+    assert_eq!(resolve(&root, "./theme/tokens%20x.stylex"), "host");
+    assert_eq!(resolve(&root, "#theme/tokens.stylex"), "host");
+    assert_eq!(resolve(&root, "unknown-pkg/tokens.stylex"), "host");
   }
 }

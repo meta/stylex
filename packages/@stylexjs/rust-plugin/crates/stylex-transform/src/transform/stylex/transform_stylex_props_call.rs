@@ -20,7 +20,7 @@ where
     let is_props_call = is_props_call(call, &self.state);
 
     if is_props_call {
-      return stylex_merge(call, props, hoist_expression, &mut self.state);
+      return stylex_merge(call, props, hoist_expression, true, &mut self.state);
     }
 
     None

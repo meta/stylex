@@ -23,15 +23,37 @@ use stylex_js::coercions::to_js_string;
 use stylex_structures::stylex_env::EnvEntry;
 use stylex_types::traits::WhenMarkerValue;
 
+/// A host value and its read-time method receiver. Receiver metadata is not
+/// JavaScript identity; aliases preserve it without re-reading the property.
+#[derive(Clone, Debug)]
+pub struct HostedValue {
+  pub value: stylex_structures::stylex_env::HostValue,
+  pub receiver: stylex_structures::stylex_env::HostValue,
+}
+impl PartialEq for HostedValue {
+  fn eq(&self, other: &Self) -> bool {
+    self.value == other.value
+  }
+}
+#[derive(Clone, Debug)]
+pub struct EvaluatedObject {
+  pub entries: IndexMap<String, EvaluateResultValue>,
+  pub null_prototype: bool,
+  pub custom_prototype: bool,
+}
 pub enum EvaluateResultValue {
   Null,
   Expr(Expr),
   Vec(Vec<EvaluateResultValue>),
+  NativeArray(Rc<Vec<stylex_js::native::Value>>),
+  SharedArray(Rc<Vec<EvaluateResultValue>>),
+  Object(Rc<EvaluatedObject>),
   Map(IndexMap<Expr, Vec<KeyValueProp>>),
   Callback(EvaluationCallback),
   FunctionConfig(FunctionConfig),
   FunctionConfigMap(FunctionConfigMap),
   ThemeRef(ThemeRef),
+  Host(HostedValue),
   /// An env object from the `env` config option.
   EnvObject(Rc<IndexMap<String, EnvEntry>>),
 }
@@ -43,6 +65,12 @@ impl Serialize for EvaluateResultValue {
     S: Serializer,
   {
     match self {
+      Self::NativeArray(_) | Self::SharedArray(_) | Self::Object(_) => Err(
+        serde::ser::Error::custom("typed values are not source serialization"),
+      ),
+      Self::Host(_) => Err(serde::ser::Error::custom(
+        "live host values cannot be serialized as source",
+      )),
       Self::Null => serializer.serialize_none(),
       Self::Expr(expr) => {
         let module = create_module(expr);
@@ -130,9 +158,13 @@ impl<'de> Deserialize<'de> for EvaluateResultValue {
 impl Clone for EvaluateResultValue {
   fn clone(&self) -> Self {
     match self {
+      Self::Host(value) => Self::Host(value.clone()),
       Self::Null => Self::Null,
       Self::Expr(e) => Self::Expr(e.clone()),
       Self::Vec(v) => Self::Vec(v.clone()),
+      Self::NativeArray(v) => Self::NativeArray(v.clone()),
+      Self::SharedArray(v) => Self::SharedArray(v.clone()),
+      Self::Object(v) => Self::Object(v.clone()),
       Self::Map(m) => Self::Map(m.clone()),
       Self::FunctionConfig(f) => Self::FunctionConfig(f.clone()),
       Self::FunctionConfigMap(f) => Self::FunctionConfigMap(f.clone()),
@@ -147,9 +179,13 @@ impl Clone for EvaluateResultValue {
 impl fmt::Debug for EvaluateResultValue {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
+      Self::Host(value) => f.debug_tuple("Host").field(value).finish(),
       Self::Null => f.debug_tuple("Null").finish(),
       Self::Expr(e) => f.debug_tuple("Expr").field(e).finish(),
       Self::Vec(v) => f.debug_tuple("Vec").field(v).finish(),
+      Self::NativeArray(v) => f.debug_tuple("NativeArray").field(v).finish(),
+      Self::SharedArray(v) => f.debug_tuple("SharedArray").field(v).finish(),
+      Self::Object(v) => f.debug_tuple("Object").field(v).finish(),
       Self::Map(m) => f.debug_tuple("Map").field(m).finish(),
       Self::FunctionConfig(e) => f.debug_tuple("FunctionConfig").field(e).finish(),
       Self::FunctionConfigMap(e) => f.debug_tuple("FunctionConfigMap").field(e).finish(),
@@ -164,9 +200,13 @@ impl fmt::Debug for EvaluateResultValue {
 impl PartialEq for EvaluateResultValue {
   fn eq(&self, other: &Self) -> bool {
     match (self, other) {
+      (Self::Host(a), Self::Host(b)) => a == b,
       (Self::Null, Self::Null) => true,
       (Self::Expr(e1), Self::Expr(e2)) => e1 == e2,
       (Self::Vec(v1), Self::Vec(v2)) => v1 == v2,
+      (Self::NativeArray(a), Self::NativeArray(b)) => Rc::ptr_eq(a, b),
+      (Self::SharedArray(a), Self::SharedArray(b)) => Rc::ptr_eq(a, b),
+      (Self::Object(a), Self::Object(b)) => Rc::ptr_eq(a, b),
       (Self::ThemeRef(v1), Self::ThemeRef(v2)) => v1 == v2,
       (Self::Map(m1), Self::Map(m2)) => m1 == m2,
       (Self::FunctionConfig(f1), Self::FunctionConfig(f2)) => f1 == f2,

@@ -8,6 +8,38 @@ pub(crate) fn evaluate_cached(
   traversal_state: &mut StateManager,
   fns: &FunctionMap,
 ) -> Option<EvaluateResultValue> {
+  if !state.confident {
+    return None;
+  }
+  let normalized = normalize_expr(path);
+  if matches!(
+    normalized,
+    Expr::Lit(Lit::Str(_) | Lit::Num(_) | Lit::Bool(_) | Lit::Null(_))
+  ) {
+    // A primitive leaf consumes work, not another recursive AST level. Atom
+    // cloning retains exact WTF-8, including lone UTF-16 surrogates.
+    let bytes = traversal_state.input_source_file.as_ref().map_or_else(
+      || path.span().hi.0.saturating_sub(path.span().lo.0) as usize,
+      |source| source.src.len(),
+    );
+    return stylex_js::native::with_evaluation_sized(bytes, || {
+      if traversal_state.evaluation_depth == 0 {
+        traversal_state.depth_refused = false;
+        stylex_js::native::set_result_limits(
+          traversal_state.character_ceiling(),
+          traversal_state.entry_ceiling(),
+        );
+      }
+      if stylex_js::native::budget_exhausted() || stylex_js::native::charge_work(1).is_none() {
+        return deopt(
+          path,
+          state,
+          "Static evaluation exceeded its resource limit.",
+        );
+      }
+      Some(EvaluateResultValue::Expr(normalized.clone()))
+    });
+  }
   folded_once(path, state, traversal_state, |state, traversal_state| {
     _evaluate(path, state, traversal_state, fns)
   })
@@ -25,6 +57,10 @@ pub(crate) trait Memoized: Sized {
 
   /// This value, as the one the memo stores.
   fn to_memo(&self) -> EvaluateResultValue;
+
+  fn can_memoize(&self) -> bool {
+    true
+  }
 }
 
 /// The evaluator's own value, which is what the memo holds, so both directions
@@ -36,6 +72,15 @@ impl Memoized for EvaluateResultValue {
 
   fn to_memo(&self) -> Self {
     self.clone()
+  }
+
+  fn can_memoize(&self) -> bool {
+    // Fresh containers/closures must retain per-invocation identity. Their
+    // binding values are shared by the guarded operation ledger, not this memo.
+    matches!(
+      self,
+      Self::Expr(Expr::Lit(_) | Expr::Ident(_)) | Self::Null | Self::ThemeRef(_)
+    )
   }
 }
 
@@ -60,9 +105,43 @@ pub(crate) fn folded_once<T: Memoized>(
   traversal_state: &mut StateManager,
   fold: impl FnOnce(&mut EvaluationState, &mut StateManager) -> Option<T>,
 ) -> Option<T> {
-  descend_one_level(path, state, traversal_state, |state, traversal_state| {
-    memoized_fold(path, state, traversal_state, fold)
-  })
+  let bytes = traversal_state.input_source_file.as_ref().map_or_else(
+    || path.span().hi.0.saturating_sub(path.span().lo.0) as usize,
+    |source| source.src.len(),
+  );
+  if !stylex_js::native::has_active_evaluation() {
+    traversal_state.keep_evaluation_functions(state.functions.clone());
+  }
+  let nesting = if traversal_state.evaluation_depth == 0 {
+    Some(growable_stack::nesting_of(path))
+  } else {
+    None
+  };
+  if nesting.is_some_and(|depth| !growable_stack::carriable(depth)) {
+    deopt(
+      path,
+      state,
+      "Static evaluation exceeded its resource limit.",
+    );
+    return None;
+  }
+  let operation = || {
+    stylex_js::native::with_evaluation_sized(bytes, || {
+      if traversal_state.evaluation_depth == 0 {
+        stylex_js::native::set_result_limits(
+          traversal_state.character_ceiling(),
+          traversal_state.entry_ceiling(),
+        );
+      }
+      descend_one_level(path, state, traversal_state, |state, traversal_state| {
+        memoized_fold(path, state, traversal_state, fold)
+      })
+    })
+  };
+  match nesting {
+    Some(depth) => growable_stack::grown_for_depth(depth, operation),
+    None => operation(),
+  }
 }
 
 /// The outer half of [`folded_once`]: `descend` costs a level of the evaluation
@@ -141,51 +220,93 @@ fn descend_one_level<T>(
   result
 }
 
-/// The fold itself, one level down from the budget check.
-///
-/// Split out so the increment and the decrement bracket every return path
-/// without a guard type: the counter borrows `traversal_state` mutably, which
-/// the fold needs for itself, so a `Drop` implementation holding that borrow
-/// could not coexist with the call it is guarding. A panic unwinding past the
-/// decrement leaves the counter high, which costs nothing -- the panic ends the
-/// file's transformation, and the state does not outlive it.
+// Only a literal string's repeat with inert literal arguments is proven pure
+// before evaluation. Alias receivers, getters and argument calls stay live.
+fn inert_literal_repeat(call: &CallExpr) -> bool {
+  let Callee::Expr(callee) = &call.callee else {
+    return false;
+  };
+  let Expr::Member(member) = normalize_expr(callee) else {
+    return false;
+  };
+  if !matches!(normalize_expr(&member.obj), Expr::Lit(Lit::Str(_))) {
+    return false;
+  }
+  let repeat = match &member.prop {
+    MemberProp::Ident(name) => name.sym == "repeat",
+    MemberProp::Computed(key) => {
+      matches!(normalize_expr(&key.expr), Expr::Lit(Lit::Str(name)) if name.value.as_str() == Some("repeat"))
+    }
+    MemberProp::PrivateName(_) => false,
+  };
+  repeat
+    && call.args.first().is_some_and(|arg| {
+      arg.spread.is_none() && matches!(normalize_expr(&arg.expr), Expr::Lit(Lit::Num(_)))
+    })
+    && call.args.iter().all(|arg| {
+      arg.spread.is_none()
+        && matches!(
+          normalize_expr(&arg.expr),
+          Expr::Lit(Lit::Str(_) | Lit::Num(_) | Lit::Bool(_) | Lit::Null(_))
+        )
+    })
+}
+
+/// The memo fold runs inside the caller's charged evaluation level.
 fn memoized_fold<T: Memoized>(
   path: &Expr,
   state: &mut EvaluationState,
   traversal_state: &mut StateManager,
   fold: impl FnOnce(&mut EvaluationState, &mut StateManager) -> Option<T>,
 ) -> Option<T> {
-  // Walks the whole remaining subtree, at every level, and is therefore nearly
-  // all of what folding a deep expression costs -- the memo that exists to avoid
-  // repeated work pays for the subtree to decide whether it can avoid it. Left
-  // that way deliberately: the numbers are
-  // `docs/adr/0005-the-memo-key-is-a-whole-subtree-hash.md`, and the incremental
-  // key that would remove the quadratic was built, measured 14-42% slower on
-  // every real fixture, and not kept --
-  // `docs/adr/0006-an-incremental-memo-key-was-built-and-measured-slower.md`.
-  //
-  // The lookup below acts on the key *alone* -- no `eq_ignore_span` confirms it,
-  // unlike the JSX-spread bucket -- so the key's width is what stands between a
-  // collision and a wrong folded value. It is 128 bits for that reason. A
-  // confirm here would cost a subtree compare on every hit and a stored clone of
-  // every memoized expression, which is the trade the ADR records rejecting.
-  //
-  // The function map's fingerprint rides beside the hash because the map is
-  // the input of the fold the subtree does not spell: an import binding folds
-  // to a theme reference where imports resolve and to a refusal where
-  // `disable_imports` holds the fold inside the module, and a helper call such
-  // as `stylex.firstThatWorks(...)` folds to a value where the helper is
-  // registered and stays a call where it is not. The memo outlives the
-  // evaluation, so an entry written under one map would otherwise answer a
-  // fold made under another -- which is how a `stylex.props` argument, read
-  // with the merge's bare map as the reference does, was handed the marker and
-  // the helper value a `create` call had folded earlier. `SeenKey` and
-  // `FunctionMap::memo_fingerprint` carry the rest of the reasoning.
+  // Calls/gets run live; identifiers reach the guarded operation binding ledger.
+  // Fresh literal/local allocations cannot become one instance across frames.
+  let normalized = normalize_expr(path);
+  if matches!(normalized, Expr::Call(call) if !inert_literal_repeat(call))
+    || matches!(
+      normalized,
+      Expr::Member(_)
+        | Expr::Ident(_)
+        | Expr::Object(_)
+        | Expr::Array(_)
+        | Expr::Arrow(_)
+        | Expr::Fn(_)
+    )
+  {
+    return fold(state, traversal_state);
+  }
+  // Retained immutable initializer roots use exact owned identity. Rebuilt
+  // expressions keep the structural fallback; no transient AST address is a
+  // memo key. Position, call-time context and limits remain distinct inputs.
+  use std::hash::{Hash, Hasher};
+  use stylex_state::seen_value::MemoExpressionKey;
+  if super::member_observer::active()
+    && super::member_observer::needs_events(path, stable_hash_unspanned(path))
+  {
+    return fold(state, traversal_state);
+  }
+  let input_revision = traversal_state.evaluation_input_revision();
+  let host_revision = stylex_js::native::memo_host_revision();
+  let expression = traversal_state.retained_initializer_site(path).map_or_else(
+    || MemoExpressionKey::SubtreeHash(stable_hash_unspanned(path)),
+    MemoExpressionKey::RetainedInitializer,
+  );
+  let mut context = rustc_hash::FxHasher::default();
+  state.memo_fingerprint().hash(&mut context);
+  traversal_state.character_ceiling().hash(&mut context);
+  traversal_state.entry_ceiling().hash(&mut context);
+  traversal_state.evaluation_ceiling().hash(&mut context);
+  path.span().hash(&mut context);
+  stylex_js::native::execution_position().hash(&mut context);
+  stylex_js::native::host_epoch().hash(&mut context);
+  host_revision.hash(&mut context);
+  stylex_js::native::model_refusal_epoch().hash(&mut context);
+  traversal_state.nested_rules_filed().hash(&mut context);
+  input_revision.hash(&mut context);
   let key = SeenKey {
-    subtree: stable_hash_unspanned(path),
-    functions: state.functions_fingerprint,
+    subtree: expression,
+    functions: context.finish(),
   };
-
   let existing = traversal_state.seen.get(&key);
 
   match existing {
@@ -199,9 +320,11 @@ fn memoized_fold<T: Memoized>(
       deopt(path, state, PATH_WITHOUT_NODE);
 
       None
-    },
+    }
     None => {
       let filings_before = traversal_state.nested_rules_filed();
+      let host_before = stylex_js::native::host_epoch();
+      let model_before = stylex_js::native::model_refusal_epoch();
       let val = fold(state, traversal_state);
 
       // A fold that filed a nested rule is not remembered. The memo answers a
@@ -224,22 +347,28 @@ fn memoized_fold<T: Memoized>(
       // fold, and the depth those ancestors can reach is the evaluation ceiling,
       // 32 by default. A name bound once and read many times is untouched: the
       // binding folds once and each use reads the stored value.
-      if traversal_state.nested_rules_filed() != filings_before {
+      if traversal_state.evaluation_input_revision() != input_revision
+        || stylex_js::native::memo_host_revision() != host_revision
+        || traversal_state.nested_rules_filed() != filings_before
+        || stylex_js::native::budget_exhausted()
+        || stylex_js::native::host_epoch() != host_before
+        || stylex_js::native::model_refusal_epoch() != model_before
+      {
         return val;
       }
 
-      if state.confident {
-        // The memo copy is built inside the closure, so an entry that is
-        // already there costs nothing. `to_memo` deep-clones the value, and
-        // this walk reaches a path it has already folded often enough for the
-        // copy to be worth not making.
+      if state.confident && val.as_ref().is_none_or(Memoized::can_memoize) {
+        traversal_state.keep_evaluation_functions(Rc::clone(&state.functions));
+        // Only primitive/shareable values reach this copy; allocating AST
+        // containers and callbacks are never cloned into the module memo.
         traversal_state.seen.entry(key).or_insert_with(|| {
           Rc::new(SeenValue {
             value: val.as_ref().map(T::to_memo),
             resolved: true,
           })
         });
-      } else if traversal_state.owns_its_refusals() {
+      } else if !state.confident && traversal_state.owns_its_refusals() {
+        traversal_state.keep_evaluation_functions(Rc::clone(&state.functions));
         // Recorded so the same refusal is not re-walked, but only where the
         // refusal was about the subtree itself -- which is the one question
         // `owns_its_refusals` answers, and where the reasons it can answer `false`
@@ -253,9 +382,17 @@ fn memoized_fold<T: Memoized>(
       }
 
       val
-    },
+    }
   }
 }
+
+#[cfg(test)]
+#[path = "tests/memo_owner_tests.rs"]
+mod memo_owner_tests;
+
+#[cfg(test)]
+#[path = "tests/primitive_leaf_tests.rs"]
+mod primitive_leaf_tests;
 
 #[cfg(test)]
 #[path = "tests/memo_tests.rs"]

@@ -128,8 +128,10 @@ pub fn create_authored_or_hashed_key(prefix: &str, namespace: &str, key: &str) -
 /// The assertion carries no formatted message on purpose: its arguments would be
 /// evaluated only on a failure no caller can reach, leaving regions that no test
 /// can ever cover.
-fn to_radix(mut value: u32, digits: &[u8], buf: &mut [u8]) -> String {
-  let radix = digits.len() as u32;
+// Generic over the digit count so each radix is a constant and the divisions
+// below compile to multiplications.
+fn to_radix<const RADIX: usize>(mut value: u32, digits: &[u8; RADIX], buf: &mut [u8]) -> String {
+  let radix = RADIX as u32;
   let mut idx = buf.len();
 
   debug_assert!(

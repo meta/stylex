@@ -63,6 +63,9 @@ pub fn normalize_whitespace(ast: &mut ValueParser, _key: &str) {
         NodeKind::Function => {
           node.before = Some(String::new());
           node.after = Some(String::new());
+          if node.value.eq_ignore_ascii_case("url") {
+            return false;
+          }
         },
         _ => {},
       }

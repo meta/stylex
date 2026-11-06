@@ -11,9 +11,9 @@ pub struct EvaluationState {
   pub deopt_path: Option<Expr>,
   pub added_imports: FxHashSet<String>,
   pub functions: Rc<FunctionMap>,
-  /// `functions.memo_fingerprint()`, read once per evaluation rather than once
-  /// per memo lookup: the lookup happens at every node of the fold.
-  pub functions_fingerprint: u64,
+  /// Computed only when a pure AST memo needs it. The retained immutable map
+  /// witnesses the cached fingerprint and prevents address reuse.
+  pub functions_fingerprint: Option<(Rc<FunctionMap>, u64)>,
   pub deopt_reason: Option<String>,
 }
 
@@ -28,17 +28,26 @@ impl EvaluationState {
     EvaluationState::default()
   }
 
+  pub fn memo_fingerprint(&mut self) -> u64 {
+    if let Some((owner, fingerprint)) = &self.functions_fingerprint
+      && Rc::ptr_eq(owner, &self.functions)
+    {
+      return *fingerprint;
+    }
+    let fingerprint = self.functions.memo_fingerprint();
+    self.functions_fingerprint = Some((Rc::clone(&self.functions), fingerprint));
+    fingerprint
+  }
+
   /// A fresh, confident state folding under `functions`.
   pub fn with_functions(functions: Rc<FunctionMap>) -> Self {
-    let functions_fingerprint = functions.memo_fingerprint();
-
     EvaluationState {
       confident: true,
       deopt_path: None,
       added_imports: FxHashSet::default(),
       deopt_reason: None,
       functions,
-      functions_fingerprint,
+      functions_fingerprint: None,
     }
   }
 }

@@ -6,8 +6,9 @@
 
 use swc_core::ecma::{
   ast::{
-    ArrowExpr, CallExpr, Constructor, Decl, Expr, ExprStmt, ForHead, Function, GetterProp, Module,
-    ModuleDecl, ModuleItem, SetterProp, Stmt, TsModuleBlock, VarDeclOrExpr, VarDeclarator,
+    ArrowExpr, CallExpr, Constructor, Decl, Expr, ExprStmt, ForHead, Function, GetterProp,
+    KeyValueProp, Module, ModuleDecl, ModuleItem, Prop, PropName, PropOrSpread, SetterProp, Stmt,
+    TsModuleBlock, VarDeclOrExpr, VarDeclarator,
   },
   visit::{Visit, VisitWith},
 };
@@ -32,7 +33,9 @@ pub fn fill_top_level_expressions(module: &Module, state: &mut StateManager) {
         }
       }
     },
-    ModuleItem::ModuleDecl(ModuleDecl::ExportDefaultExpr(export_decl)) => {
+    ModuleItem::ModuleDecl(ModuleDecl::ExportDefaultExpr(export_decl))
+      if !is_unmatchable_literal(&export_decl.expr) =>
+    {
       match export_decl.expr.as_paren() {
         Some(paren) => {
           state.push_top_level_expression(TopLevelExpression(
@@ -81,13 +84,67 @@ fn record_top_level_declarator(
     return;
   };
 
-  state.push_top_level_expression(TopLevelExpression(
-    kind,
-    decl_init.as_ref().clone(),
-    Some(ident.sym.clone()),
-  ));
+  if !is_unmatchable_literal(decl_init) {
+    state.push_top_level_expression(TopLevelExpression(
+      kind,
+      decl_init.as_ref().clone(),
+      Some(ident.sym.clone()),
+    ));
+  }
 
   fill_state_declarations(state, decl);
+}
+
+/// Whether a top-level expression is a literal no reader of the recorded
+/// expressions can ask for. The call lookups match only a call, and the named
+/// lookup compares against a style variable's initializer, which is a
+/// `stylex.*` call or what one compiled to. Recording one copied it whole --
+/// every style of a module that collects its `create` calls in one exported
+/// array, and every constant object a theme reads its values from.
+///
+/// - An array literal, which neither of those is.
+/// - An object literal that cannot equal a compiled `create`: what one compiles
+///   to is an object whose every property is a namespace -- an object holding
+///   the compiled marker `$$css`, or a function for a dynamic namespace -- or
+///   an empty object. An object with a property, no spread, and no property of
+///   either shape is none of those.
+fn is_unmatchable_literal(expr: &Expr) -> bool {
+  match expr {
+    Expr::Object(object) => {
+      !object.props.is_empty()
+        && object.props.iter().all(|prop| match prop {
+          PropOrSpread::Spread(_) => false,
+          PropOrSpread::Prop(prop) => match prop.as_ref() {
+            Prop::KeyValue(key_value) => !could_be_compiled_namespace(&key_value.value),
+            Prop::Shorthand(_) | Prop::Assign(_) => true,
+            Prop::Getter(_) | Prop::Setter(_) | Prop::Method(_) => false,
+          },
+        })
+    },
+    _ => matches!(normalize_expr(expr), Expr::Array(_)),
+  }
+}
+
+/// Whether a property value has a shape a compiled namespace has: a function,
+/// or an object literal holding a `$$css` key. Anything wrapped or computed is
+/// counted as one too, so only plainly different values decline.
+fn could_be_compiled_namespace(value: &Expr) -> bool {
+  match value {
+    Expr::Lit(_) | Expr::Ident(_) | Expr::Member(_) | Expr::Tpl(_) | Expr::Array(_) => false,
+    Expr::Object(object) => object.props.iter().any(|prop| match prop {
+      PropOrSpread::Spread(_) => true,
+      PropOrSpread::Prop(prop) => match prop.as_ref() {
+        Prop::KeyValue(KeyValueProp { key, .. }) => match key {
+          PropName::Ident(ident) => ident.sym == "$$css",
+          PropName::Str(text) => text.value.as_str() == Some("$$css"),
+          _ => true,
+        },
+        Prop::Shorthand(ident) => ident.sym == "$$css",
+        _ => true,
+      },
+    }),
+    _ => true,
+  }
 }
 
 /// Records one declarator, unless the state already holds it.

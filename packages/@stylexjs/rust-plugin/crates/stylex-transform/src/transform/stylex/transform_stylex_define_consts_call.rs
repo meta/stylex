@@ -18,7 +18,7 @@ use crate::{
       core::js_to_ast::convert_values_to_ast,
       validators::{
         argument_at, find_and_validate_stylex_define_consts, folded_style_object,
-        is_define_consts_call,
+        is_define_consts_call, reported_at,
       },
     },
   },
@@ -42,13 +42,17 @@ where
 
       let evaluated_arg = evaluate_with_functions(first_arg, &mut self.state, function_map);
 
-      let value = folded_style_object(
-        evaluated_arg,
-        call,
-        first_arg,
-        STYLEX_DEFINE_CONSTS,
-        &mut self.state,
-      );
+      // The original plugin refuses an argument it cannot read, or one that is
+      // no object, at the call.
+      let value = reported_at(call.span, || {
+        folded_style_object(
+          evaluated_arg,
+          call,
+          first_arg,
+          STYLEX_DEFINE_CONSTS,
+          &mut self.state,
+        )
+      });
 
       let file_name = match self
         .state

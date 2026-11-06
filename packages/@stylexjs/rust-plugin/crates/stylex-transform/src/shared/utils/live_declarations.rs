@@ -72,24 +72,24 @@ pub(crate) fn build_decl_use_graph(module: &Module, state: &mut StateManager) {
         for decl in &var_decl.decls {
           collect_decl_uses(state, decl);
         }
-      },
+      }
       ModuleItem::ModuleDecl(ModuleDecl::ExportDecl(export_decl)) => match &export_decl.decl {
         Decl::Var(var_decl) => {
           for decl in &var_decl.decls {
             collect_decl_uses(state, decl);
           }
-        },
+        }
         other_decl => {
           let mut visitor = CollectIdentsVisitor::default();
           other_decl.visit_with(&mut visitor);
           state.roots.extend(visitor.idents);
-        },
+        }
       },
       _ => {
         let mut visitor = CollectIdentsVisitor::default();
         item.visit_with(&mut visitor);
         state.roots.extend(visitor.idents);
-      },
+      }
     }
   }
 }
@@ -130,6 +130,11 @@ fn collect_decl_uses(state: &mut StateManager, decl: &VarDeclarator) {
 
   if let Pat::Ident(bind_ident) = &decl.name {
     let decl_id: DeclId = bind_ident.id.to_id();
+    // Non-StyleX declarations survive cleanup, so their initializer remains an
+    // observation point even if their value was inlined at another call site.
+    if !state.is_style_var_ident(&bind_ident.id) {
+      state.roots.insert(decl_id.clone());
+    }
     state
       .decl_uses
       .entry(decl_id)
@@ -195,7 +200,7 @@ impl VisitMut for MarkStyleVarsVisitor<'_> {
             // Not a recorded spread — keep the original spread element.
             None => vec![create_jsx_spread_attr(*spread.expr.clone())],
           }
-        },
+        }
         JSXAttrOrSpread::JSXAttr(attr) => vec![create_jsx_attr_or_spread(attr.clone())],
       })
       .collect();
@@ -212,7 +217,7 @@ fn is_stylex_consumer_call(call: &CallExpr, state: &StateManager) -> bool {
       .callee
       .as_expr()
       .and_then(|callee| callee.as_ident())
-      .is_some_and(|ident| state.is_regular_stylex_import(&ident.sym))
+      .is_some_and(|ident| state.matches_namespace(ident))
 }
 
 fn member_namespace_name(member_prop: &MemberProp) -> Option<NonNullProp> {

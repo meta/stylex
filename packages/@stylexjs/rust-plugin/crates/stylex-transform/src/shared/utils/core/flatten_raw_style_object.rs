@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use log::warn;
 use rustc_hash::FxHashSet;
 use stylex_css_parser::at_queries::media_query_transform::last_media_query_wins_transform;
@@ -158,6 +158,21 @@ pub(crate) fn flatten_raw_style_object_logic(
   traversal_state: &mut StateManager,
   fns: &FunctionMap,
 ) -> IndexMap<String, PreRules> {
+  flatten_raw_style_object_recording_order(style, key_path, state, traversal_state, fns, None)
+}
+
+// Babel's inner flatten produces an ordered list with duplicates. Most callers
+// need only the final keep-last map. Conditional-property aggregation also needs
+// the first appearance of each property before duplicate collapse; record it
+// only on that path, without changing final rule values or sorting any keys.
+fn flatten_raw_style_object_recording_order(
+  style: &[KeyValueProp],
+  key_path: &mut Vec<String>,
+  state: &mut EvaluationState,
+  traversal_state: &mut StateManager,
+  fns: &FunctionMap,
+  mut first_order: Option<&mut IndexSet<String>>,
+) -> IndexMap<String, PreRules> {
   let mut flattened: IndexMap<String, PreRules> = IndexMap::new();
 
   for property in style.iter() {
@@ -258,7 +273,12 @@ pub(crate) fn flatten_raw_style_object_logic(
           if values.is_empty() {
             let pre_rule = PreRules::NullPreRule(NullPreRule::new());
 
-            insert_or_update_rule_with_shifting_index(&mut flattened, &property, pre_rule);
+            insert_or_update_rule_with_shifting_index(
+              &mut flattened,
+              &mut first_order,
+              &property,
+              pre_rule,
+            );
           } else {
             // At least one value, because the empty set is the branch above.
             // Taken out of the set rather than copied out of it: the set is
@@ -280,7 +300,12 @@ pub(crate) fn flatten_raw_style_object_logic(
               pre_rule_value,
               Some(normalized_key_path),
             ));
-            insert_or_update_rule_with_shifting_index(&mut flattened, &property, pre_rule);
+            insert_or_update_rule_with_shifting_index(
+              &mut flattened,
+              &mut first_order,
+              &property,
+              pre_rule,
+            );
           }
         }
       },
@@ -315,10 +340,20 @@ pub(crate) fn flatten_raw_style_object_logic(
                 Some(normalized_key_path),
               ));
 
-              insert_or_update_rule_with_shifting_index(&mut flattened, &property, pre_rule);
+              insert_or_update_rule_with_shifting_index(
+                &mut flattened,
+                &mut first_order,
+                &property,
+                pre_rule,
+              );
             } else {
               let pre_rule = PreRules::NullPreRule(NullPreRule::new());
-              insert_or_update_rule_with_shifting_index(&mut flattened, &property, pre_rule);
+              insert_or_update_rule_with_shifting_index(
+                &mut flattened,
+                &mut first_order,
+                &property,
+                pre_rule,
+              );
             }
           }
         }
@@ -346,6 +381,9 @@ pub(crate) fn flatten_raw_style_object_logic(
           Some(normalized_key_path),
         ));
 
+        if let Some(order) = &mut first_order {
+          order.insert(css_property_key.to_string());
+        }
         flattened.insert(css_property_key.into_owned(), pre_rule);
       },
       Expr::Ident(ident) => match get_var_decl_by_ident(ident, traversal_state, fns) {
@@ -355,12 +393,13 @@ pub(crate) fn flatten_raw_style_object_logic(
           let mut property_cloned = property.clone();
           property_cloned.value = Box::new(var_decl_expr.clone());
 
-          let inner_flattened = flatten_raw_style_object_logic(
+          let inner_flattened = flatten_raw_style_object_recording_order(
             &[property_cloned],
             key_path,
             state,
             traversal_state,
             fns,
+            first_order.as_deref_mut(),
           );
 
           flattened.extend(inner_flattened);
@@ -372,7 +411,10 @@ pub(crate) fn flatten_raw_style_object_logic(
         // for not being a style value, which is the sentence the reference
         // implementation gives it -- where saying nothing is static reads as a
         // report about resolution, and names neither the value nor the input.
-        _ if is_js_undefined(ident) => stylex_panic!("{}", ILLEGAL_PROP_VALUE),
+        _ if is_js_undefined(ident) => {
+          stylex_macros::stylex_error::mark_panic_plain();
+          stylex_panic!("{}", ILLEGAL_PROP_VALUE)
+        },
         _ => {
           stylex_panic!("{}", non_static_value("stylex"));
         },
@@ -383,8 +425,14 @@ pub(crate) fn flatten_raw_style_object_logic(
         let mut property_cloned = property.clone();
         property_cloned.value = Box::new(create_number_expr(result));
 
-        let inner_flattened =
-          flatten_raw_style_object_logic(&[property_cloned], key_path, state, traversal_state, fns);
+        let inner_flattened = flatten_raw_style_object_recording_order(
+          &[property_cloned],
+          key_path,
+          state,
+          traversal_state,
+          fns,
+          first_order.as_deref_mut(),
+        );
 
         flattened.extend(inner_flattened)
       },
@@ -417,15 +465,23 @@ pub(crate) fn flatten_raw_style_object_logic(
                   vec![css_property_key.to_string(), condition.clone()]
                 };
 
-                let pairs = flatten_raw_style_object_logic(
+                let mut first_properties = IndexSet::new();
+                let mut pairs = flatten_raw_style_object_recording_order(
                   std::slice::from_ref(inner_key_value),
                   &mut key_path,
                   state,
                   traversal_state,
                   fns,
+                  Some(&mut first_properties),
                 );
 
-                for (property, pre_rule) in pairs {
+                // Aggregate conditions by the property's first appearance in
+                // Babel's inner appended list, not its deduplicated last slot.
+                // The final rule for each property is unchanged.
+                for property in first_properties {
+                  let pre_rule = pairs
+                    .swap_remove(&property)
+                    .expect("recorded flattened property has its final rule");
                   // One look-up rather than a look-up, an insert and a second
                   // look-up. The entry is the map either way, so the refusal
                   // that stood here answered for nothing.
@@ -450,7 +506,16 @@ pub(crate) fn flatten_raw_style_object_logic(
               .map(|condition| obj[*condition].clone())
               .collect();
 
-            flattened.insert(property.clone(), PreRuleSet::create(rules));
+            // Babel appends this pair, then removes earlier duplicates while
+            // retaining the last slot (2d42d72 flatten-raw-style-obj.js:158-166;
+            // stylex-create.js:59-74). Conditional overrides follow the same
+            // order as literal/array shorthand overrides.
+            insert_or_update_rule_with_shifting_index(
+              &mut flattened,
+              &mut first_order,
+              property,
+              PreRuleSet::create(rules),
+            );
           }
         } else {
           let inner_key_value = get_key_values_from_object(obj);
@@ -458,20 +523,26 @@ pub(crate) fn flatten_raw_style_object_logic(
           let mut key_path = key_path.clone();
           key_path.push(key.clone());
 
-          let pairs = flatten_raw_style_object_logic(
+          let mut first_properties = IndexSet::new();
+          let mut pairs = flatten_raw_style_object_recording_order(
             &inner_key_value.into_iter().collect::<Vec<KeyValueProp>>(),
             &mut key_path,
             state,
             traversal_state,
             fns,
+            first_order.as_ref().map(|_| &mut first_properties),
           );
 
-          for (property, pre_rule) in pairs {
-            insert_or_update_rule_with_shifting_index(
-              &mut flattened,
-              format!("{}_{}", css_property_key, property).as_str(),
-              pre_rule,
-            );
+          if first_order.is_some() {
+            let pairs = first_properties.into_iter().map(|property| {
+              let rule = pairs
+                .swap_remove(&property)
+                .expect("recorded prefixed property has its final rule");
+              (property, rule)
+            });
+            insert_prefixed_rules(&mut flattened, &mut first_order, &css_property_key, pairs);
+          } else {
+            insert_prefixed_rules(&mut flattened, &mut first_order, &css_property_key, pairs);
           }
         }
       },
@@ -484,11 +555,31 @@ pub(crate) fn flatten_raw_style_object_logic(
   flattened
 }
 
+fn insert_prefixed_rules(
+  flattened: &mut IndexMap<String, PreRules>,
+  first_order: &mut Option<&mut IndexSet<String>>,
+  prefix: &str,
+  pairs: impl IntoIterator<Item = (String, PreRules)>,
+) {
+  for (property, rule) in pairs {
+    insert_or_update_rule_with_shifting_index(
+      flattened,
+      first_order,
+      &format!("{prefix}_{property}"),
+      rule,
+    );
+  }
+}
+
 fn insert_or_update_rule_with_shifting_index(
   flattened: &mut IndexMap<String, PreRules>,
+  first_order: &mut Option<&mut IndexSet<String>>,
   property: &str,
   pre_rule: PreRules,
 ) {
+  if let Some(order) = first_order {
+    order.insert(property.to_owned());
+  }
   if flattened.get(property).is_some() {
     flattened.shift_remove_entry(property);
   };

@@ -55,7 +55,37 @@ pub(in super::super) fn evaluate(
   let left = evaluate_operand(&bin.left, state, traversal_state, fns);
 
   let decision = match left.confident {
-    true => decide(op, left.value.as_ref()),
+    true => {
+      if let Some(value @ EvaluateResultValue::Host(_)) = left.value.as_ref() {
+        if matches!(op, LogicalOp::Nullish) {
+          Decision::Left
+        } else {
+          let truthy = match super::super::truthiness::truthy(value, traversal_state) {
+            Ok(value) => value,
+            Err(error) => return deopt(&bin.left, state, &error.message),
+          };
+          match op {
+            LogicalOp::And => {
+              if truthy {
+                Decision::Right
+              } else {
+                Decision::Left
+              }
+            },
+            LogicalOp::Or => {
+              if truthy {
+                Decision::Left
+              } else {
+                Decision::Right
+              }
+            },
+            LogicalOp::Nullish => Decision::Left,
+          }
+        }
+      } else {
+        decide(op, left.value.as_ref())
+      }
+    },
     // The right side is still evaluated below, because which path the deopt
     // names depends on it: an unconfident right side is the one reported, and
     // only a confident one lets the left side's own reason through.
@@ -126,20 +156,6 @@ fn evaluate_operand(
     confident: own_state.confident,
     reason: own_state.deopt_reason,
   }
-}
-
-/// Whether `op` evaluates its right operand at all, given the value its left
-/// operand holds.
-///
-/// The short circuit is a fact about the operator rather than about who is
-/// asking, so the guard in front of the engine reads it from here rather than
-/// keeping a table of its own that could come to disagree with [`decide`] about
-/// which operand a build reaches.
-pub(in super::super) fn evaluates_its_right_operand(
-  op: LogicalOp,
-  left: &EvaluateResultValue,
-) -> bool {
-  !matches!(decide(op, Some(left)), Decision::Left)
 }
 
 /// What the left side alone settles.
@@ -230,3 +246,11 @@ mod tests;
 #[cfg(test)]
 #[path = "tests/unfoldable_operand_tests.rs"]
 mod unfoldable_operand_tests;
+
+#[cfg(test)]
+pub(in super::super) fn evaluates_its_right_operand(
+  op: LogicalOp,
+  left: &EvaluateResultValue,
+) -> bool {
+  !matches!(decide(op, Some(left)), Decision::Left)
+}

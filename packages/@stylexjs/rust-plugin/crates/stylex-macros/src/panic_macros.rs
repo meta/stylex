@@ -91,6 +91,7 @@ pub fn __stylex_panic(mut err: StyleXError) -> ! {
   if err.source_location.is_none() {
     err.source_location = Some(format_source_location(caller));
   }
+  crate::stylex_error::record_panic_message(err.message.as_ref());
 
   panic!("{}", err)
 }

@@ -172,7 +172,10 @@ impl Conversion {
         Some(argument) => match evaluate_result_to_js_number(&argument, traversal_state) {
           // `NaN` is not a refusal: it flows into the declaration exactly as it
           // does upstream, where `Number('10px')` writes `NaN` into the rule.
-          Ok(number) => Some(EvaluateResultValue::Expr(create_number_expr(number))),
+          // Spelled where no literal writes it (`NaN`, the infinities).
+          Ok(number) => Some(EvaluateResultValue::Expr(
+            stylex_js::coercions::js_number_expr(number),
+          )),
           Err(NumberRefusal::NoNumberForm) => deopt(path, state, &uncoercible_value(self.name())),
           Err(NumberRefusal::TooLarge) => deopt(
             path,

@@ -1,4 +1,5 @@
 mod helpers;
+mod typed;
 
 use std::rc::Rc;
 
@@ -8,7 +9,7 @@ use stylex_macros::stylex_panic;
 use stylex_utils::identifier::gen_file_based_identifier;
 use swc_core::{
   common::comments::Comments,
-  ecma::ast::{CallExpr, Expr},
+  ecma::ast::{CallExpr, Expr, Pat},
 };
 
 use crate::{
@@ -19,7 +20,7 @@ use crate::{
       core::js_to_ast::convert_values_to_ast,
       validators::{
         argument_at, find_and_validate_stylex_define_vars, folded_style_object_lit,
-        is_define_vars_call,
+        is_define_vars_call, reported_at,
       },
     },
   },
@@ -48,14 +49,23 @@ where
       let export_name = find_and_validate_stylex_define_vars(call, &mut self.state);
 
       let first_arg = argument_at(call, 0, STYLEX_DEFINE_VARS);
+      // Read off the declarator in place: only the binding is wanted, and a
+      // copy of the declarator is a copy of the whole group.
+      let self_binding = self
+        .state
+        .find_call_declaration(call)
+        .and_then(|declaration| match &declaration.name {
+          Pat::Ident(binding) => Some(binding.id.to_id()),
+          _ => None,
+        })
+        .unwrap_or_else(|| stylex_panic!("A validated defineVars group has no source binding."));
 
       // The same registrations `createThemeNested` and `defineVarsNested` fold
       // their argument with, and this call adds the theme reference below.
-      let mut function_map = build_eval_config(&mut self.state);
+      let function_map = build_eval_config(&mut self.state);
 
-      // Compute file_name, export_name, and export_id BEFORE evaluation so the
-      // ThemeRefMapper factory can be built and injected into identifiers, allowing
-      // arrow function bodies to resolve `exportName.property` to `var(--hash)`.
+      // Canonical identity is computed before evaluation; the self proxy is
+      // installed only during normalization, after the first argument folds.
       let file_name = match self
         .state
         .get_filename_for_hashing(&mut FxHashMap::default())
@@ -66,19 +76,32 @@ where
 
       self.state.export_id = Some(gen_file_based_identifier(&file_name, &export_name, None));
 
-      // Inject a ThemeRef factory under the export variable name so that arrow
-      // function bodies can resolve `exportName.property` to `var(--hash)` during
-      // normal evaluation. The factory clones a single `ThemeRef` whose internal
-      // hash-map is shared via `Rc<RefCell<…>>`, so repeated `colors.x` accesses
-      // across the same `defineVars` call hit the cache.
+      let mut function_map: Box<FunctionMap> = Box::new(function_map);
+
+      let evaluated_arg = evaluate(first_arg, &mut self.state, &function_map);
+
+      // The self proxy is for function-value normalization, not evaluation of
+      // the first argument. An ordinary self read must still fail its TDZ guard.
       let shared_theme_ref = ThemeRef::new(
         file_name.as_str(),
         export_name.as_str(),
-        self.state.options.class_name_prefix.to_string(),
+        self.state.options.class_name_prefix.clone(),
       );
+      let normalized_typed = evaluated_arg
+        .value
+        .as_ref()
+        .filter(|_| evaluated_arg.confident)
+        .and_then(|value| {
+          typed::normalize_typed_define_vars(
+            value,
+            &self_binding,
+            shared_theme_ref.clone(),
+            call,
+            &mut self.state,
+          )
+        });
       let theme_ref_factory: Rc<dyn Fn() -> ThemeRef + 'static> =
         Rc::new(move || shared_theme_ref.clone());
-
       function_map.identifiers.insert(
         export_name.clone(),
         Box::new(FunctionConfigType::Regular(FunctionConfig {
@@ -87,36 +110,30 @@ where
         })),
       );
 
-      let function_map: Box<FunctionMap> = Box::new(function_map);
-
-      let evaluated_arg = evaluate(first_arg, &mut self.state, &function_map);
-
-      let folded = folded_style_object_lit(
-        evaluated_arg,
-        call,
-        first_arg,
-        STYLEX_DEFINE_VARS,
-        &mut self.state,
-      );
-
-      // The variables are read out of the *evaluated* object, so every
-      // statically resolvable form — an inline object literal, an
-      // identifier-bound constant (`defineVars(tokens)`), an object spread, a
-      // computed key — reaches the checks below in the same shape.
-      let group = VariableGroup::read(&folded);
-
-      // Cycles and references to a name the group does not declare are caught
-      // before any function value is folded.
-      assert_no_define_vars_cycles(&collect_dependencies(&group, &export_name));
-
-      // Zero-argument function values are replaced by what their bodies fold
-      // to. A group that holds none is passed on as it was read.
-      let normalized =
-        normalize_define_vars_functions(&group, &mut self.state, &function_map, call, first_arg);
-
-      let value = match normalized {
-        Some(value) => value,
-        None => EvaluateResultValue::Expr(Expr::Object(folded)),
+      let value = if let Some(value) = normalized_typed {
+        value
+      } else {
+        let folded = reported_at(call.span, || {
+          folded_style_object_lit(
+            evaluated_arg,
+            call,
+            first_arg,
+            STYLEX_DEFINE_VARS,
+            &mut self.state,
+          )
+        });
+        let group = VariableGroup::read(&folded);
+        assert_no_define_vars_cycles(&collect_dependencies(&group, &export_name));
+        match normalize_define_vars_functions(
+          &group,
+          &mut self.state,
+          &function_map,
+          call,
+          first_arg,
+        ) {
+          Some(value) => value,
+          None => EvaluateResultValue::Expr(Expr::Object(folded)),
+        }
       };
 
       let (variables_obj, injected_styles_sans_keyframes) =

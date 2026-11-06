@@ -11,10 +11,13 @@ use stylex_enums::{
   sx_prop_name_param::SxPropNameParam,
 };
 
+use std::rc::Rc;
+
 use crate::{
   core_stylex_options::CoreStyleXOptions,
+  import_resolver::{DebugFileNamer, ImportResolver},
   named_import_source::{ImportSources, RuntimeInjection},
-  stylex_env::{EnvEntry, JSFunction},
+  stylex_env::{EnvEntry, HostEnvironment, JSFunction},
 };
 
 #[derive(Deserialize, Clone, Debug)]
@@ -62,6 +65,16 @@ pub struct StyleXOptionsParams {
   pub env: Option<IndexMap<String, EnvEntry>>,
   #[serde(skip)]
   pub debug_file_path: Option<JSFunction>,
+  /// The embedding host (the Node addon's JavaScript bridge), through which
+  /// `env` values that are live JavaScript values are read and called.
+  #[serde(skip)]
+  pub host_environment: Option<HostEnvironment>,
+  /// Resolves theme imports through the host (see `ImportResolver`).
+  #[serde(skip)]
+  pub import_resolver: Option<Rc<dyn ImportResolver>>,
+  /// Names files in debug labels through the host's `debugFilePath`.
+  #[serde(skip)]
+  pub debug_file_namer: Option<Rc<dyn DebugFileNamer>>,
 }
 
 impl Default for StyleXOptionsParams {
@@ -97,6 +110,9 @@ impl Default for StyleXOptionsParams {
       max_folded_entries: None,
       env: None,
       debug_file_path: None,
+      host_environment: None,
+      import_resolver: None,
+      debug_file_namer: None,
     }
   }
 }
@@ -108,6 +124,11 @@ pub enum ModuleResolutionKind {
   #[serde(rename = "commonjs", alias = "commonJS")]
   CommonJs,
   CrossFileParsing,
+  /// `custom`: the host's `filePathResolver`/`getCanonicalFilePath` resolve.
+  Custom,
+  /// No `unstable_moduleResolution` option: theme imports are not resolved,
+  /// as in the Babel plugin.
+  Unconfigured,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -159,6 +180,10 @@ pub enum CheckModuleResolution {
     root_dir: Option<String>,
     theme_file_extension: Option<String>,
   },
+  Custom {
+    theme_file_extension: Option<String>,
+  },
+  Unconfigured,
 }
 
 impl CheckModuleResolution {
@@ -167,6 +192,7 @@ impl CheckModuleResolution {
       CheckModuleResolution::CommonJs { root_dir, .. }
       | CheckModuleResolution::Haste { root_dir, .. }
       | CheckModuleResolution::CrossFileParsing { root_dir, .. } => root_dir.as_deref(),
+      CheckModuleResolution::Custom { .. } | CheckModuleResolution::Unconfigured => None,
     }
   }
 
@@ -183,7 +209,11 @@ impl CheckModuleResolution {
       | CheckModuleResolution::CrossFileParsing {
         theme_file_extension,
         ..
+      }
+      | CheckModuleResolution::Custom {
+        theme_file_extension,
       } => theme_file_extension.as_deref(),
+      CheckModuleResolution::Unconfigured => None,
     }
   }
 }
@@ -209,6 +239,10 @@ impl From<ModuleResolution> for CheckModuleResolution {
         root_dir,
         theme_file_extension,
       },
+      ModuleResolutionKind::Custom => CheckModuleResolution::Custom {
+        theme_file_extension,
+      },
+      ModuleResolutionKind::Unconfigured => CheckModuleResolution::Unconfigured,
     }
   }
 }
@@ -353,6 +387,9 @@ impl From<StyleXOptionsParams> for StyleXOptions {
       })
       .with_env(options.env.unwrap_or_default())
       .with_debug_file_path(options.debug_file_path)
+      .with_host_environment(options.host_environment)
+      .with_import_resolver(options.import_resolver)
+      .with_debug_file_namer(options.debug_file_namer)
       .maybe_style_resolution(options.style_resolution)
       .maybe_property_validation_mode(options.property_validation_mode)
       .maybe_enable_font_size_px_to_rem(options.enable_font_size_px_to_rem)

@@ -22,12 +22,12 @@ where
         if let Pat::Ident(bind_ident) = &decl.name {
           let decl_id = bind_ident.id.to_id();
 
-          // Drop only declarators that the graph captured (`decl_uses`
-          // is the observable-set) but whose `Id` is not live. Anything
-          // outside the graph — non `Pat::Ident` patterns, helpers
-          // introduced after graph capture, etc. — falls through to the
-          // "keep by default" fallback.
-          if self.state.decl_uses.contains_key(&decl_id) {
+          // Babel only deletes remembered StyleX namespace bindings. An
+          // unrelated binding stays even when its value was folded or nothing
+          // references it; matching uses its full resolved Id, not spelling.
+          if self.state.is_style_var_ident(&bind_ident.id)
+            && self.state.decl_uses.contains_key(&decl_id)
+          {
             return self.state.live_set.contains(&decl_id);
           }
         }
@@ -39,3 +39,7 @@ where
     var_declarators.visit_mut_children_with(self);
   }
 }
+
+#[cfg(test)]
+#[path = "tests/current_babel_cleanup.rs"]
+mod current_babel_cleanup;

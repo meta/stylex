@@ -14,7 +14,7 @@ use crate::{
   shared::{
     transformers::stylex_keyframes::stylex_keyframes,
     utils::validators::{
-      argument_at, assert_valid_keyframes, folded_style_object, is_keyframes_call,
+      argument_at, assert_valid_keyframes, folded_style_object, is_keyframes_call, reported_at,
       validate_stylex_keyframes_indent,
     },
   },
@@ -49,15 +49,21 @@ where
 
       let evaluated_arg = evaluate_with_functions(first_arg, &mut self.state, function_map);
 
-      let value = folded_style_object(
-        evaluated_arg,
-        call,
-        first_arg,
-        STYLEX_KEYFRAMES,
-        &mut self.state,
-      );
+      // The original plugin refuses a keyframes() argument it cannot read, and
+      // a frame that is not an object, at the declarator.
+      let value = reported_at(var_decl.span, || {
+        folded_style_object(
+          evaluated_arg,
+          call,
+          first_arg,
+          STYLEX_KEYFRAMES,
+          &mut self.state,
+        )
+      });
 
-      assert_valid_keyframes(&value, &mut self.state);
+      reported_at(var_decl.span, || {
+        assert_valid_keyframes(&value, &mut self.state)
+      });
 
       let (animation_name, injectable_style) = stylex_keyframes(&value, &mut self.state);
 

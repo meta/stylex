@@ -13,6 +13,7 @@ crate-type = ["rlib"]
 doctest = false
 
 [dependencies]
+path-clean.workspace = true
 anyhow.workspace = true
 indexmap.workspace = true
 log.workspace = true

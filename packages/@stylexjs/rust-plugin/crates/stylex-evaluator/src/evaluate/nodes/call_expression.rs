@@ -11,6 +11,32 @@ pub(in super::super) fn evaluate(
   traversal_state: &mut StateManager,
   fns: &FunctionMap,
 ) -> Option<EvaluateResultValue> {
+  stylex_js::native::with_callsite(call.span.lo.0, || {
+    evaluate_inner(call, state, traversal_state, fns)
+  })
+}
+fn evaluate_inner(
+  call: &CallExpr,
+  state: &mut EvaluationState,
+  traversal_state: &mut StateManager,
+  fns: &FunctionMap,
+) -> Option<EvaluateResultValue> {
+  // JSON is not in Babel's static-callee inventory. An unbound global JSON
+  // member call therefore reaches its CallExpression refusal, not evaluation
+  // of an invented JSON binding (evaluate-path.js:51-52,1201). Real bindings
+  // and registered overlays still take the ordinary receiver/argument path.
+  if let Callee::Expr(callee) = &call.callee
+    && let Expr::Member(member) = normalize_expr(callee)
+    && let Expr::Ident(object) = normalize_expr(&member.obj)
+    && object.sym == "JSON"
+    && !traversal_state.declares_binding(object)
+    && !fns.bindings.contains_key(&object.to_id())
+    && !fns.identifiers.contains_key(&object.sym)
+    && !fns.member_expressions.contains_key(&ImportSources::Regular(object.sym.to_string()))
+  {
+    return deopt(&Expr::Call(call.clone()), state, &unsupported_expression("CallExpression"));
+  }
+
   // A method call whose every leaf resolves to a value the bridge can carry is
   // evaluated rather than matched against the names below, so the whole
   // prototype surface folds, a chain folds at every link, and naming a value
@@ -25,9 +51,12 @@ pub(in super::super) fn evaluate(
   match super::super::engine_fold::try_fold(call, state, traversal_state, fns) {
     Some(Ok(value)) => return Some(value),
     Some(Err(reason)) => return deopt(&Expr::Call(call.clone()), state, &reason),
-    None => {},
+    None => {}
   }
 
+  if !state.confident {
+    return None;
+  }
   let path = Expr::Call(call.clone());
   let path = &path;
 
@@ -40,6 +69,39 @@ pub(in super::super) fn evaluate(
     return conversion.evaluate(call, path, state, traversal_state, fns);
   }
 
+  if let Callee::Expr(callee) = &call.callee {
+    let callee = normalize_expr(callee);
+    // Function/class expressions are callable in JavaScript but their invocation
+    // is unsupported by this model; label the call, without inventing semantics.
+    if matches!(callee, Expr::Fn(_) | Expr::Class(_)) {
+      return deopt(path, state, &unsupported_expression("CallExpression"));
+    }
+    if !matches!(callee, Expr::Ident(_) | Expr::Member(_)) {
+      let value = evaluate_cached(callee, state, traversal_state, fns)?;
+      let args = evaluate_func_call_args(call, state, traversal_state, fns)?;
+      return match value {
+        EvaluateResultValue::Callback(function) => {
+          match super::super::function_scope::evaluate_function_in_scope(
+            &function,
+            args,
+            traversal_state,
+            call.span,
+            &rustc_hash::FxHashMap::default(),
+          ) {
+            Ok(value) => Some(value),
+            Err(error) => super::super::callback_failure::invocation_failure(error, state),
+          }
+        }
+        EvaluateResultValue::Host(function) => {
+          match super::super::host_dispatch::call(&function, &args, traversal_state) {
+            Ok(value) => Some(value),
+            Err(error) => deopt(path, state, &error.message),
+          }
+        }
+        _ => deopt(path, state, &unsupported_expression("CallExpression")),
+      };
+    }
+  }
   let mut func: Option<Box<FunctionConfig>> = None;
 
   if let Callee::Expr(callee_expr) = &call.callee {
@@ -55,8 +117,9 @@ pub(in super::super) fn evaluate(
     if let Expr::Ident(ident) = callee_expr {
       let entry = state
         .functions
-        .identifiers
-        .get(&ident.to_id().0)
+        .bindings
+        .get(&ident.to_id())
+        .or_else(|| state.functions.identifiers.get(&ident.to_id().0))
         .map(|entry| applied_entry(entry.as_ref()));
 
       if let Some(entry) = entry {
@@ -69,6 +132,16 @@ pub(in super::super) fn evaluate(
 
         if state.confident {
           match named {
+            Some(EvaluateResultValue::Host(value)) => {
+              let args = evaluate_func_call_args(call, state, traversal_state, fns)?;
+              return match super::super::host_dispatch::call(&value, &args, traversal_state) {
+                Ok(value) => Some(value),
+                Err(error) => {
+                  deopt(path, state, &error.message);
+                  None
+                }
+              };
+            }
             Some(EvaluateResultValue::FunctionConfig(fc)) => func = Some(Box::new(fc)),
             // The name resolved to one of the author's own arrows, so the call
             // on it is *applied* here rather than handed back as the function
@@ -81,10 +154,10 @@ pub(in super::super) fn evaluate(
             // one rule answers every position.
             Some(EvaluateResultValue::Callback(cb)) => {
               return apply_own_arrow(&cb, call, path, state, traversal_state, fns);
-            },
+            }
             _ => {
               return deopt(path, state, NON_CONSTANT);
-            },
+            }
           }
         } else {
           return deopt(path, state, NON_CONSTANT);
@@ -96,7 +169,7 @@ pub(in super::super) fn evaluate(
       match member_callee(member, call, path, state, traversal_state, fns)? {
         MemberCallee::Function(config) => func = Some(config),
         MemberCallee::Value(value) => return Some(value),
-        MemberCallee::Unnamed => {},
+        MemberCallee::Unnamed => {}
       }
     }
   }
@@ -113,7 +186,7 @@ pub(in super::super) fn evaluate(
             fns,
           );
           return Some(EvaluateResultValue::Expr(func_result));
-        },
+        }
         FunctionType::StylexExprFn(func) => {
           let Some(first_arg) = args.first() else {
             deopt_unsupported!(
@@ -127,7 +200,7 @@ pub(in super::super) fn evaluate(
           let func_result = (func)((**first_arg).clone(), traversal_state);
 
           return Some(EvaluateResultValue::Expr(func_result));
-        },
+        }
         // Every remaining function kind takes evaluated arguments rather
         // than raw paths, so reaching one here means the call cannot be
         // folded in this position rather than that the evaluator broke.
@@ -135,6 +208,7 @@ pub(in super::super) fn evaluate(
         | FunctionType::StylexTypeFn(_)
         | FunctionType::StylexFnsFactory(_)
         | FunctionType::Callback(_)
+        | FunctionType::ValueMapper(_)
         | FunctionType::Mapper(_)
         | FunctionType::ThemeRefMapper(_)
         | FunctionType::DefaultMarker(_)
@@ -159,7 +233,7 @@ pub(in super::super) fn evaluate(
           let func_result = (func)(fn_args, traversal_state, fns);
 
           return Some(EvaluateResultValue::Expr(func_result));
-        },
+        }
         FunctionType::StylexExprFn(func) => {
           let args = evaluate_func_call_args(call, state, traversal_state, fns)?;
           let Some(first_arg) = args.first().and_then(|arg| arg.as_expr().cloned()) else {
@@ -174,7 +248,7 @@ pub(in super::super) fn evaluate(
           let func_result = (func)(first_arg, traversal_state);
 
           return Some(EvaluateResultValue::Expr(func_result));
-        },
+        }
         FunctionType::StylexWhenFn(func) => {
           let mut args = evaluate_func_call_args(call, state, traversal_state, fns)?.into_iter();
           let Some(pseudo) = args.next() else {
@@ -187,7 +261,7 @@ pub(in super::super) fn evaluate(
           };
           let func_result = (func)(pseudo, args.next(), traversal_state);
           return Some(EvaluateResultValue::Expr(func_result));
-        },
+        }
         FunctionType::StylexTypeFn(func) => {
           let args = evaluate_func_call_args(call, state, traversal_state, fns)?;
           let mut fn_args = IndexMap::default();
@@ -206,24 +280,41 @@ pub(in super::super) fn evaluate(
                   deopt_unsupported!(deopt, path, state, VALUE_MUST_BE_LITERAL);
                 };
 
-                fn_args.insert(
-                  key,
-                  ValueWithDefault::String(convert_lit_to_string(value).unwrap_or_default()),
-                );
+                let Some(text) = super::super::text_boundary::literal_text(value) else {
+                  return deopt(path, state, EXPRESSION_IS_NOT_A_STRING);
+                };
+                fn_args.insert(key, ValueWithDefault::String(text));
               }
-            },
+            }
             Expr::Lit(lit) => {
-              fn_args.insert(
-                "default".to_string(),
-                ValueWithDefault::String(convert_lit_to_string(lit).unwrap_or_default()),
-              );
-            },
-            _ => {},
+              let Some(text) = super::super::text_boundary::literal_text(lit) else {
+                return deopt(path, state, EXPRESSION_IS_NOT_A_STRING);
+              };
+              fn_args.insert("default".to_string(), ValueWithDefault::String(text));
+            }
+            _ => {}
           }
 
           let func_result = (func)(ValueWithDefault::Map(fn_args));
           return Some(EvaluateResultValue::Expr(func_result));
-        },
+        }
+        FunctionType::ValueMapper(mapper) => {
+          let value = mapper();
+          let args = evaluate_func_call_args(call, state, traversal_state, fns)?;
+          return match value {
+            EvaluateResultValue::Callback(function) => match function(args, traversal_state) {
+              Ok(value) => Some(value),
+              Err(error) => super::super::callback_failure::invocation_failure(error, state),
+            },
+            EvaluateResultValue::Host(function) => {
+              match super::super::host_dispatch::call(&function, &args, traversal_state) {
+                Ok(value) => Some(value),
+                Err(error) => deopt(path, state, &error.message),
+              }
+            }
+            _ => deopt(path, state, NON_CONSTANT),
+          };
+        }
         FunctionType::Callback(arrow_fn) => {
           let evaluation_result = evaluate_cached(&arrow_fn, state, traversal_state, fns);
 
@@ -232,13 +323,13 @@ pub(in super::super) fn evaluate(
           };
 
           return apply_own_arrow(&cb, call, path, state, traversal_state, fns);
-        },
+        }
         FunctionType::DefaultMarker(default_marker) => {
           return Some(EvaluateResultValue::FunctionConfig(FunctionConfig {
             fn_ptr: FunctionType::DefaultMarker(Arc::clone(&default_marker)),
             takes_path: false,
           }));
-        },
+        }
         FunctionType::EnvFunction(env_fn) => {
           let args = evaluate_func_call_args(call, state, traversal_state, fns)?;
           let mut env_args = Vec::with_capacity(args.len());
@@ -251,7 +342,7 @@ pub(in super::super) fn evaluate(
           }
           let result = env_fn.call(env_args);
           return Some(EvaluateResultValue::Expr(result));
-        },
+        }
         _ => deopt_unsupported!(deopt, path, state, NON_CONSTANT),
       }
     }
@@ -293,20 +384,15 @@ pub(in super::super) fn evaluate(
 fn apply_own_arrow(
   cb: &EvaluationCallback,
   call: &CallExpr,
-  path: &Expr,
+  _path: &Expr,
   state: &mut EvaluationState,
   traversal_state: &mut StateManager,
   fns: &FunctionMap,
 ) -> Option<EvaluateResultValue> {
   let args = evaluate_func_call_args(call, state, traversal_state, fns)?;
-  let every_argument_bound = args.iter().all(binds_a_parameter);
-
   match cb(args, traversal_state) {
-    Some(expr) => Some(EvaluateResultValue::Expr(expr)),
-    None => match every_argument_bound {
-      true => deopt(path, state, FUNCTION_BODY_WITHOUT_VALUE),
-      false => deopt(path, state, ARGUMENT_NOT_EXPRESSION),
-    },
+    Ok(value) => Some(value),
+    Err(error) => super::super::callback_failure::invocation_failure(error, state),
   }
 }
 
@@ -341,6 +427,9 @@ fn member_callee(
   traversal_state: &mut StateManager,
   fns: &FunctionMap,
 ) -> Option<MemberCallee> {
+  if !state.confident {
+    return None;
+  }
   let object = &member.obj;
   // The receiver's *name* is read through its parentheses -- `(stylex).types`
   // names what `stylex.types` names. Only the name: the evaluation below is
@@ -524,7 +613,7 @@ fn member_callee(
             fn_ptr: FunctionType::Callback(key_value.value.clone()),
             takes_path: false,
           })))
-        },
+        }
         // A method call on a receiver whose kind carries no methods this
         // evaluator folds — a `null`, an `undefined`, a name that resolved to
         // something with no prototype here. The primitives whose prototypes do
@@ -545,7 +634,7 @@ fn member_callee(
             fn_ptr: FunctionType::StylexTypeFn(sxfns(prop_name)),
             takes_path: false,
           })))
-        },
+        }
         FunctionType::DefaultMarker(default_marker) => match default_marker.get(&prop_name) {
           Some(expr_fn) => Some(MemberCallee::Function(Box::new(FunctionConfig {
             fn_ptr: FunctionType::StylexWhenFn(*expr_fn),
@@ -557,6 +646,27 @@ fn member_callee(
       },
       // An `env` entry, which is a function or a value depending on how the
       // option was configured.
+      EvaluateResultValue::Host(value) => {
+        let function = match super::super::host_dispatch::get(&value, &prop_name, traversal_state) {
+          Ok(value) => value,
+          Err(error) => {
+            deopt(path, state, &error.message);
+            return None;
+          }
+        };
+        let EvaluateResultValue::Host(function) = function else {
+          deopt(path, state, NON_CONSTANT);
+          return None;
+        };
+        let args = evaluate_func_call_args(call, state, traversal_state, fns)?;
+        match super::super::host_dispatch::call(&function, &args, traversal_state) {
+          Ok(value) => Some(MemberCallee::Value(value)),
+          Err(error) => {
+            deopt(path, state, &error.message);
+            None
+          }
+        }
+      }
       EvaluateResultValue::EnvObject(env_map) => {
         let Some(env_val) = env_map.get(&prop_name) else {
           deopt_unsupported!(
@@ -571,6 +681,24 @@ fn member_callee(
           );
         };
 
+        if let Some(value) = env_val.as_host() {
+          let receiver = traversal_state
+            .host_environment()
+            .and_then(|e| e.env.as_ref())
+            .map(|r| stylex_structures::stylex_env::HostValue::Ref(r.clone()));
+          let value = super::super::host_dispatch::host_result(value.clone(), receiver);
+          let EvaluateResultValue::Host(function) = value else {
+            return Some(MemberCallee::Value(value));
+          };
+          let args = evaluate_func_call_args(call, state, traversal_state, fns)?;
+          return match super::super::host_dispatch::call(&function, &args, traversal_state) {
+            Ok(value) => Some(MemberCallee::Value(value)),
+            Err(error) => {
+              deopt(path, state, &error.message);
+              None
+            }
+          };
+        }
         match env_val.as_function() {
           Some(env_fn) => Some(MemberCallee::Function(Box::new(FunctionConfig {
             fn_ptr: FunctionType::EnvFunction(env_fn.clone()),
@@ -580,7 +708,7 @@ fn member_callee(
             env_val, &env_map,
           ))),
         }
-      },
+      }
       // A receiver the evaluator carries in a representation with no methods of
       // its own — an entries map, a callback, a theme ref.
       _ => deopt_unsupported!(deopt, path, state, UNEXPECTED_MEMBER_LOOKUP),

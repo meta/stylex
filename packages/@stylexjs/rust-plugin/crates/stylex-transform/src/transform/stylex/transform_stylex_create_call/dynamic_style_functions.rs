@@ -3,10 +3,9 @@ use crate::shared::utils::core::js_to_ast::{
   CompiledNamespaces, CompiledValues, NamedProp, named_props_to_object, namespaces_to_object,
 };
 use std::borrow::Cow;
-use stylex_ast::ast::factories::create_arrow_expression_with_params;
 use stylex_css::utils::pseudo::is_pseudo_selector;
 use stylex_state::types::{ClassPathsInNamespace, ClassPathsMap, DynamicFns, TInlineStyles};
-use swc_core::ecma::ast::BindingIdent;
+use swc_core::ecma::ast::{ArrowExpr, ArrowFunctionBody};
 
 /// The class-name expression one compiled property contributes, and whether it
 /// stayed static.
@@ -17,6 +16,9 @@ struct PropClassNames {
   /// decides whether the property is emitted on the static object or the
   /// conditional one.
   is_static: bool,
+  /// The last unsafe value in the list; a single-class property is guarded
+  /// against undefined separately from its null-to-empty-string class branch.
+  controlling_expr: Option<Expr>,
 }
 
 /// Assemble one compiled property's class names into the expression it emits.
@@ -35,6 +37,7 @@ fn class_names_for_prop(
   injected_styles: &InjectableStylesMap,
 ) -> PropClassNames {
   let mut is_static = true;
+  let mut controlling_expr = None;
   let mut expr_list = Vec::with_capacity(class_list.len());
 
   for (index, cls) in class_list.iter().enumerate() {
@@ -67,10 +70,11 @@ fn class_names_for_prop(
 
     if let Some(expr) = expr.filter(|e| !is_safe_to_skip_null_check(e)) {
       is_static = false;
+      controlling_expr = Some(expr.clone());
       expr_list.push(create_cond_expr(
-        create_bin_expr(BinaryOp::NotEq, expr.clone(), create_null_expr()),
+        create_bin_expr(BinaryOp::NotEq, expr, create_null_expr()),
         create_string_expr(&cls_with_space),
-        expr,
+        create_string_expr(""),
       ));
     } else {
       expr_list.push(create_string_expr(&cls_with_space));
@@ -85,7 +89,11 @@ fn class_names_for_prop(
     .reduce(|acc, curr| create_bin_expr(BinaryOp::Add, acc, curr))
     .unwrap_or_else(|| create_string_expr(""));
 
-  PropClassNames { joined, is_static }
+  PropClassNames {
+    joined,
+    is_static,
+    controlling_expr,
+  }
 }
 
 /// The dynamic styles one namespace declares, keyed by the path each claims.
@@ -166,7 +174,7 @@ fn joined_class_paths(namespace: Option<&Rc<ClassPathsInNamespace>>) -> IndexMap
 /// because they are the same for every call.
 fn dynamic_namespace_fn(
   state: &mut StateManager,
-  params: &[BindingIdent],
+  original: &ArrowExpr,
   inline_styles: &TInlineStyles,
   values: CompiledValues<'_>,
   orig_class_paths: &IndexMap<&str, String>,
@@ -192,6 +200,7 @@ fn dynamic_namespace_fn(
 
   let mut static_props = Vec::with_capacity(values.len());
   let mut conditional_props = Vec::with_capacity(values.len());
+  let mut guarded_props = Vec::new();
 
   for NamedProp { key, value } in values {
     if key == COMPILED_KEY {
@@ -215,7 +224,11 @@ fn dynamic_namespace_fn(
     // declaration of the same property when two styles merge -- still owns its
     // key, and the `joined` fallback spells it `""`. Skipping the property
     // instead dropped the key, and a key that is not there unsets nothing.
-    let PropClassNames { joined, is_static } = class_names_for_prop(
+    let PropClassNames {
+      joined,
+      is_static,
+      controlling_expr,
+    } = class_names_for_prop(
       &class_list,
       &dynamic_styles,
       orig_class_paths,
@@ -227,6 +240,11 @@ fn dynamic_namespace_fn(
 
     if is_static {
       static_props.push(prop);
+    } else if class_list.len() == 1 {
+      guarded_props.push((
+        prop,
+        controlling_expr.expect("an unsafe class owns its controlling expression"),
+      ));
     } else {
       conditional_props.push(prop);
     }
@@ -246,7 +264,10 @@ fn dynamic_namespace_fn(
   let mut array_elements = Vec::new();
 
   if !static_props.is_empty() {
-    static_props.push(create_key_value_prop(COMPILED_KEY, css_tag_value.clone()));
+    static_props.push(stylex_ast::ast::factories::create_str_key_value_prop(
+      COMPILED_KEY,
+      css_tag_value.clone(),
+    ));
 
     let hoisted = hoist_expression(create_object_expression(static_props), state);
 
@@ -256,6 +277,23 @@ fn dynamic_namespace_fn(
     ));
 
     array_elements.push(Some(create_expr_or_spread(Expr::Ident(hoisted))));
+  }
+
+  for (prop, expression) in guarded_props {
+    let object = create_object_expression(vec![
+      prop,
+      create_key_value_prop(COMPILED_KEY, css_tag_value.clone()),
+    ]);
+    let guard = create_bin_expr(
+      BinaryOp::LogicalAnd,
+      create_bin_expr(
+        BinaryOp::NotEqEq,
+        expression,
+        stylex_ast::ast::convertors::create_ident_expr("undefined"),
+      ),
+      object,
+    );
+    array_elements.push(Some(create_expr_or_spread(guard)));
   }
 
   if !conditional_props.is_empty() {
@@ -272,10 +310,9 @@ fn dynamic_namespace_fn(
     fn_value = create_array_expression(array_elements);
   }
 
-  create_arrow_expression_with_params(
-    params.iter().map(|arg| Pat::Ident(arg.clone())).collect(),
-    fn_value,
-  )
+  let mut function = original.clone();
+  function.body = Box::new(ArrowFunctionBody::Expr(Box::new(fn_value)));
+  Expr::Arrow(function)
 }
 
 /// The compiled style object, with every namespace a dynamic entry declared
@@ -299,7 +336,7 @@ pub(super) fn apply_dynamic_style_functions(
   let props: Vec<PropOrSpread> = namespaces
     .into_iter()
     .map(|NamedProp { key, value }| {
-      let Some((params, inline_styles)) = fns.get(key) else {
+      let Some(function) = fns.get(key) else {
         return create_key_value_prop(key, named_props_to_object(value));
       };
 
@@ -307,8 +344,8 @@ pub(super) fn apply_dynamic_style_functions(
 
       let function = dynamic_namespace_fn(
         state,
-        params,
-        inline_styles,
+        &function.original,
+        &function.inline_styles,
         value,
         &orig_class_paths,
         injected_styles,

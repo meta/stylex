@@ -119,7 +119,7 @@ pub(crate) fn collect_vars_by_at_rules(
       collection
         .entry(key)
         .or_default()
-        .push(format!("--{}:{};", hash_name, val));
+        .push(["--", hash_name.as_str(), ":", val.as_ref(), ";"].concat());
     },
     Expr::Object(obj) => {
       if object_needs_a_default(obj) {

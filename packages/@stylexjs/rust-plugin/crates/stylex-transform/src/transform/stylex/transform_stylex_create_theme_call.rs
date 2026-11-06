@@ -18,7 +18,7 @@ use crate::{
         js_to_ast::convert_values_to_ast,
       },
       validators::{
-        argument_at, is_create_theme_call, validate_stylex_create_theme_indent,
+        argument_at, is_create_theme_call, reported_at, validate_stylex_create_theme_indent,
         validate_theme_variables,
       },
     },
@@ -33,7 +33,7 @@ use stylex_constants::constants::{
   messages::{non_static_value, non_style_object},
 };
 use stylex_diagnostics::code_frame::build_code_frame_error;
-use stylex_evaluator::{evaluate::evaluate, evaluate_result::refusal_site};
+use stylex_evaluator::evaluate::evaluate;
 use stylex_state::{
   functions::{FunctionConfigType, FunctionMap},
   state_manager::ImportKind,
@@ -113,7 +113,7 @@ where
           "{}",
           build_code_frame_error(
             &Expr::Call(call.clone()),
-            &refusal_site(evaluated_arg1.deopt.as_ref(), first_arg),
+            &Expr::Call(call.clone()),
             &non_static_value(STYLEX_CREATE_THEME),
             &mut self.state,
           )
@@ -127,48 +127,58 @@ where
         "{}",
         build_code_frame_error(
           &Expr::Call(call.clone()),
-          &refusal_site(evaluated_arg2.deopt.as_ref(), second_arg),
+          &Expr::Call(call.clone()),
           &non_static_value(STYLEX_CREATE_THEME),
           &mut self.state,
         )
       );
 
-      // Asked here so that a first argument that is no variable group is
-      // refused with this sentence, before the producer runs and reports the
-      // same input in its own words. Both arguments are already read at this
-      // point, so this does not change which one is read first.
-      //
-      // The answer is carried on rather than thrown away. Reading it again in
-      // the producer copies every property of the group a second time.
-      let theme_group = validate_theme_variables(&variables);
-
       let overrides = match evaluated_arg2.value {
         Some(value) => {
-          assert!(
-            value
-              .as_expr()
-              .map(|expr| expr.is_object())
-              .unwrap_or(false),
-            "{}",
-            build_code_frame_error(
-              &Expr::Call(call.clone()),
-              &refusal_site(evaluated_arg2.deopt.as_ref(), second_arg),
-              &non_style_object(STYLEX_CREATE_THEME),
-              &mut self.state,
-            )
-          );
-          value
+          let expression = match stylex_evaluator::evaluate::materialize_result(&value, &self.state)
+          {
+            Ok(Some(expression)) => expression,
+            Ok(None) => stylex_panic!(
+              "{}",
+              build_code_frame_error(
+                &Expr::Call(call.clone()),
+                &Expr::Call(call.clone()),
+                &non_style_object(STYLEX_CREATE_THEME),
+                &mut self.state,
+              )
+            ),
+            Err(error) => stylex_panic!("{}", error),
+          };
+          if !expression.is_object() {
+            stylex_panic!(
+              "{}",
+              build_code_frame_error(
+                &Expr::Call(call.clone()),
+                &Expr::Call(call.clone()),
+                &non_style_object(STYLEX_CREATE_THEME),
+                &mut self.state,
+              )
+            );
+          }
+          stylex_state::evaluate_result_value::EvaluateResultValue::Expr(expression)
         },
         None => stylex_panic!(
           "{}",
           build_code_frame_error(
             &Expr::Call(call.clone()),
-            &refusal_site(evaluated_arg2.deopt.as_ref(), second_arg),
+            &Expr::Call(call.clone()),
             &non_style_object(STYLEX_CREATE_THEME),
             &mut self.state,
           )
         ),
       };
+
+      // Babel checks the evaluated override shape before the theme group.
+      // Retain that diagnostic precedence and frame invalid groups at the call.
+      // Carry the group forward so the producer need not read it a second time.
+      let theme_group = reported_at(call.span, || {
+        validate_theme_variables(&variables, &self.state)
+      });
 
       let (mut overrides_obj, inject_styles) = stylex_create_theme_from_group(
         theme_group,
@@ -177,7 +187,7 @@ where
         &mut IndexMap::default(),
       );
 
-      let (var_name, _) = self.get_call_var_name(call);
+      let var_name = self.call_var_name(call);
 
       if self.state.is_test() {
         overrides_obj =

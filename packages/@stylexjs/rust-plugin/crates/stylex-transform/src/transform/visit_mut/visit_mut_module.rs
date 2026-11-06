@@ -5,10 +5,11 @@ use swc_core::{
   ecma::{
     ast::{
       ArrayPat, ArrowExpr, AssignExpr, AssignTarget, AssignTargetPat, BindingIdent, BlockStmt,
-      CallExpr, Callee, CatchClause, ClassDecl, ClassExpr, Expr, ExprOrSpread, FnDecl, FnExpr,
-      ForHead, ForInStmt, ForOfStmt, Function, Id, Ident, ImportDecl, Lit, MemberExpr, MemberProp,
-      Module, ModuleItem, ObjectPat, ObjectPatProp, OptChainBase, OptChainExpr, Pat, Program,
-      Script, SimpleAssignTarget, UnaryExpr, UnaryOp, UpdateExpr, VarDecl, VarDeclKind,
+      CallExpr, Callee, CatchClause, ClassDecl, ClassExpr, Decl, DefaultDecl, Expr, ExprOrSpread,
+      FnDecl, FnExpr, ForHead, ForInStmt, ForOfStmt, Function, Id, Ident, ImportDecl, Lit,
+      MemberExpr, MemberProp, Module, ModuleDecl, ModuleItem, ObjectPat, ObjectPatProp,
+      OptChainBase, OptChainExpr, Pat, Program, Script, SimpleAssignTarget, TsModuleName,
+      UnaryExpr, UnaryOp, UpdateExpr, VarDecl, VarDeclKind,
     },
     visit::{Visit, VisitMutWith, VisitWith},
   },
@@ -26,7 +27,9 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use stylex_ast::ast::imports::local_binding_of;
 use stylex_constants::constants::common::{MUTATING_ARRAY_METHODS, MUTATING_OBJECT_METHODS};
 use stylex_enums::core::TransformationCycle;
-use stylex_state::state_manager::{BindingWrites, flush_pending_insertions};
+use stylex_state::state_manager::{
+  BindingWrites, OpaqueDeclarationFault, OpaqueDeclarationKind, flush_pending_insertions,
+};
 
 /// Span covering the whole source, used for the module-level scope frame so
 /// top-level bindings enclose every `sx` site. The scope stack is seeded with
@@ -105,6 +108,19 @@ struct ScopeFrame {
 /// mutations of their referenced values for static evaluation. SWC visitors
 /// have no parent pointers or scope chain, so this pre-scan supplies the
 /// binding information used by both runtime-binding resolution and evaluation.
+/// Only call sites whose callable/array receiver is known from this input
+/// contribute argument-to-parameter write edges. Unknown calls are not escapes.
+#[derive(Clone)]
+enum KnownCallee {
+  Binding(Id),
+  Parameters(Vec<Option<Id>>),
+}
+struct KnownCall {
+  callee: KnownCallee,
+  arguments: Vec<Option<Id>>,
+  array_receiver: Option<Id>,
+}
+
 struct ModuleBindingsCollector {
   collect_sx_bindings: bool,
   import_sources: Vec<String>,
@@ -114,6 +130,8 @@ struct ModuleBindingsCollector {
   /// [`Self::bound_names`], because the evaluator consumes it whether or not
   /// the `sx` prop is enabled.
   declared_bindings: FxHashSet<Id>,
+  /// Source faults for bindings whose declaration is not value-folded.
+  opaque_declaration_faults: FxHashMap<Id, OpaqueDeclarationFault>,
   /// For each name bound by a non-import declaration, the spans of the scopes
   /// in which it is bound. A name shadows an `sx` site iff one of its scope
   /// spans encloses that site (see [`StateManager::is_locally_rebound_at`]).
@@ -128,6 +146,12 @@ struct ModuleBindingsCollector {
   /// than the reference implementation looks. See
   /// [`StateManager::binding_deep_mutations`].
   binding_deep_mutations: FxHashSet<Id>,
+  binding_aliases: FxHashMap<Id, FxHashSet<Id>>,
+  array_aliases: FxHashMap<Id, FxHashSet<Id>>,
+  array_bindings: FxHashSet<Id>,
+  functions: FxHashMap<Id, Vec<Option<Id>>>,
+  known_calls: Vec<KnownCall>,
+  iterations: Vec<(Vec<Id>, Id)>,
   /// Stack of enclosing lexical scopes, outermost (module) first.
   scope_stack: Vec<ScopeFrame>,
   /// `VarDeclKind` of the `VarDecl` currently being visited, if any — needed
@@ -137,12 +161,115 @@ struct ModuleBindingsCollector {
 }
 
 impl ModuleBindingsCollector {
+  /// Pattern bindings only: initializer/default expressions still take the
+  /// ordinary discovery path and are not names declared by this pattern.
+  fn record_opaque_pattern(&mut self, pattern: &Pat, fault: OpaqueDeclarationFault) {
+    struct PatternFaults<'a> {
+      faults: &'a mut FxHashMap<Id, OpaqueDeclarationFault>,
+      fault: OpaqueDeclarationFault,
+    }
+    impl Visit for PatternFaults<'_> {
+      fn visit_binding_ident(&mut self, binding: &BindingIdent) {
+        self.faults.entry(binding.id.to_id()).or_insert(self.fault);
+      }
+      fn visit_expr(&mut self, _: &Expr) {}
+      fn visit_ts_type(&mut self, _: &swc_core::ecma::ast::TsType) {}
+    }
+    pattern.visit_with(&mut PatternFaults {
+      faults: &mut self.opaque_declaration_faults,
+      fault,
+    });
+  }
+
+  fn record_parameter_fault(&mut self, pattern: &Pat) {
+    if let Pat::Ident(binding) = pattern {
+      self.opaque_declaration_faults.entry(binding.id.to_id()).or_insert(
+        OpaqueDeclarationFault {
+          kind: OpaqueDeclarationKind::Identifier,
+          span: binding.id.span,
+        },
+      );
+    }
+  }
+
   /// The binding sets, moved out together.
   ///
   /// The one place the collector's four fields are matched to the state's four,
   /// so a transposition is a single visible mistake here rather than one
   /// repeated at every call site.
   fn take_binding_writes(&mut self) -> BindingWrites {
+    fn propagate(writes: &mut FxHashSet<Id>, aliases: &FxHashMap<Id, FxHashSet<Id>>) {
+      let mut work = writes.iter().cloned().collect::<Vec<_>>();
+      while let Some(id) = work.pop() {
+        if let Some(links) = aliases.get(&id) {
+          for link in links {
+            if writes.insert(link.clone()) {
+              work.push(link.clone());
+            }
+          }
+        }
+      }
+    }
+    // Resolve forward named callees after the one discovery walk. Edges only
+    // carry actual object writes from parameters to concrete source arguments;
+    // rebinding a parameter never mutates the caller's object.
+    propagate(&mut self.array_bindings, &self.array_aliases);
+    for (parameters, receiver) in &self.iterations {
+      if self.array_bindings.contains(receiver) {
+        for parameter in parameters {
+          self
+            .binding_aliases
+            .entry(parameter.clone())
+            .or_default()
+            .insert(receiver.clone());
+        }
+      }
+    }
+    for call in &self.known_calls {
+      if call
+        .array_receiver
+        .as_ref()
+        .is_some_and(|receiver| !self.array_bindings.contains(receiver))
+      {
+        continue;
+      }
+      let parameters = match &call.callee {
+        KnownCallee::Parameters(parameters) => Some(parameters),
+        KnownCallee::Binding(id) => {
+          let mut visited = FxHashSet::default();
+          let mut work = vec![id.clone()];
+          let mut found = None;
+          while let Some(id) = work.pop() {
+            if !visited.insert(id.clone()) {
+              continue;
+            }
+            if let Some(parameters) = self.functions.get(&id) {
+              found = Some(parameters);
+              break;
+            }
+            if let Some(aliases) = self.array_aliases.get(&id) {
+              work.extend(aliases.iter().cloned());
+            }
+          }
+          found
+        }
+      };
+      if let Some(parameters) = parameters {
+        for (parameter, argument) in parameters.iter().zip(&call.arguments) {
+          if let (Some(parameter), Some(argument)) = (parameter, argument) {
+            self
+              .binding_aliases
+              .entry(parameter.clone())
+              .or_default()
+              .insert(argument.clone());
+          }
+        }
+      }
+    }
+    // Object writes affect every binding of that same object, in both
+    // directions. Reassigning an alias alone never changes the other object.
+    propagate(&mut self.binding_mutations, &self.binding_aliases);
+    propagate(&mut self.binding_deep_mutations, &self.binding_aliases);
     BindingWrites {
       reassignments: std::mem::take(&mut self.binding_reassignments),
       mutations: std::mem::take(&mut self.binding_mutations),
@@ -172,10 +299,17 @@ impl ModuleBindingsCollector {
       import_sources: Vec::new(),
       bound_names: FxHashSet::default(),
       declared_bindings: FxHashSet::default(),
+      opaque_declaration_faults: FxHashMap::default(),
       local_rebinding_scopes: FxHashMap::default(),
       binding_reassignments: FxHashSet::default(),
       binding_mutations: FxHashSet::default(),
       binding_deep_mutations: FxHashSet::default(),
+      binding_aliases: FxHashMap::default(),
+      array_aliases: FxHashMap::default(),
+      array_bindings: FxHashSet::default(),
+      functions: FxHashMap::default(),
+      known_calls: Vec::new(),
+      iterations: Vec::new(),
       // Seed a module-level function scope spanning the whole source so
       // top-level bindings enclose every `sx` site.
       scope_stack: vec![ScopeFrame {
@@ -218,6 +352,7 @@ impl ModuleBindingsCollector {
   /// `Id`-keyed set serves the evaluator, which runs either way.
   fn add_local_binding(&mut self, ident: &Ident, hoisted: bool) {
     self.declared_bindings.insert(ident.to_id());
+    self.bound_names.insert(ident.sym.to_string());
 
     if !self.collect_sx_bindings {
       return;
@@ -289,17 +424,17 @@ impl ModuleBindingsCollector {
         Expr::Ident(ident) => {
           self.add_binding_write(ident, kind);
           return;
-        },
+        }
         Expr::Member(inner) => {
           kind = crossed_a_member_hop(kind);
           current = inner.obj.as_ref();
-        },
+        }
         Expr::Paren(paren) => current = paren.expr.as_ref(),
         Expr::OptChain(opt_chain) => match opt_chain.base.as_ref() {
           OptChainBase::Member(inner) => {
             kind = crossed_a_member_hop(kind);
             current = inner.obj.as_ref();
-          },
+          }
           // `f()?.x = 1` writes into a call result, which owns no binding.
           OptChainBase::Call(_) => return,
         },
@@ -328,7 +463,7 @@ impl ModuleBindingsCollector {
     match pattern {
       Pat::Ident(binding_ident) => {
         self.add_binding_write(&binding_ident.id, WriteKind::Reassignment)
-      },
+      }
       Pat::Array(array_pattern) => self.add_array_pattern_writes(array_pattern),
       Pat::Object(object_pattern) => self.add_object_pattern_writes(object_pattern),
       Pat::Rest(rest_pattern) => self.add_pattern_writes(&rest_pattern.arg),
@@ -340,8 +475,8 @@ impl ModuleBindingsCollector {
         if let Some(member_expression) = member_target(expression) {
           self.add_member_root_write(member_expression);
         }
-      },
-      Pat::Invalid(_) => {},
+      }
+      Pat::Invalid(_) => {}
     }
   }
 
@@ -360,7 +495,7 @@ impl ModuleBindingsCollector {
         ObjectPatProp::KeyValue(key_value) => self.add_pattern_writes(&key_value.value),
         ObjectPatProp::Assign(assign) => {
           self.add_binding_write(&assign.key.id, WriteKind::Reassignment)
-        },
+        }
         ObjectPatProp::Rest(rest) => self.add_pattern_writes(&rest.arg),
       }
     }
@@ -374,35 +509,102 @@ impl ModuleBindingsCollector {
     match target {
       SimpleAssignTarget::Ident(ident) => {
         self.add_binding_write(&ident.id, WriteKind::Reassignment)
-      },
+      }
       SimpleAssignTarget::Member(member_expression) => {
         self.add_member_root_write(member_expression)
-      },
+      }
       SimpleAssignTarget::Paren(paren) => {
         self.add_target_root_write(&paren.expr, WriteKind::Reassignment)
-      },
+      }
       SimpleAssignTarget::OptChain(opt_chain) => {
         if let OptChainBase::Member(member_expression) = opt_chain.base.as_ref() {
           self.add_member_root_write(member_expression);
         }
-      },
+      }
       SimpleAssignTarget::TsAs(ts_as) => {
         self.add_target_root_write(&ts_as.expr, WriteKind::Reassignment)
-      },
+      }
       SimpleAssignTarget::TsSatisfies(satisfies) => {
         self.add_target_root_write(&satisfies.expr, WriteKind::Reassignment)
-      },
+      }
       SimpleAssignTarget::TsNonNull(non_null) => {
         self.add_target_root_write(&non_null.expr, WriteKind::Reassignment)
-      },
+      }
       SimpleAssignTarget::TsTypeAssertion(assertion) => {
         self.add_target_root_write(&assertion.expr, WriteKind::Reassignment)
-      },
+      }
       SimpleAssignTarget::TsInstantiation(instantiation) => {
         self.add_target_root_write(&instantiation.expr, WriteKind::Reassignment)
-      },
+      }
       // `super.x = 1` and invalid targets bind no module-level name.
-      SimpleAssignTarget::SuperProp(_) | SimpleAssignTarget::Invalid(_) => {},
+      SimpleAssignTarget::SuperProp(_) | SimpleAssignTarget::Invalid(_) => {}
+    }
+  }
+
+  fn record_known_call(&mut self, callee: &Expr, arguments: &[ExprOrSpread]) {
+    let callee = stylex_ast::ast::convertors::normalize_expr(callee);
+    if let Some(known) = known_callee(callee) {
+      self.known_calls.push(KnownCall {
+        callee: known,
+        arguments: arguments
+          .iter()
+          .map(|arg| {
+            if arg.spread.is_none() {
+              expression_root_id(&arg.expr)
+            } else {
+              None
+            }
+          })
+          .collect(),
+        array_receiver: None,
+      });
+      return;
+    }
+    let Some(member) = member_target(callee) else {
+      return;
+    };
+    let Some(method) = member_property_name(&member.prop) else {
+      return;
+    };
+    let callback = if matches!(
+      method,
+      "map"
+        | "forEach"
+        | "filter"
+        | "some"
+        | "every"
+        | "find"
+        | "findIndex"
+        | "flatMap"
+        | "reduce"
+        | "reduceRight"
+    ) {
+      arguments
+        .first()
+        .filter(|arg| arg.spread.is_none())
+        .and_then(|arg| known_callee(&arg.expr))
+    } else {
+      None
+    };
+    if let (Some(callback), Some(receiver)) = (callback, expression_root_id(&member.obj)) {
+      let mapped = if matches!(method, "reduce" | "reduceRight") {
+        vec![
+          arguments
+            .get(1)
+            .filter(|arg| arg.spread.is_none())
+            .and_then(|arg| expression_root_id(&arg.expr)),
+          Some(receiver.clone()),
+          None,
+          Some(receiver.clone()),
+        ]
+      } else {
+        vec![Some(receiver.clone()), None, Some(receiver.clone())]
+      };
+      self.known_calls.push(KnownCall {
+        callee: callback,
+        arguments: mapped,
+        array_receiver: Some(receiver),
+      });
     }
   }
 
@@ -440,6 +642,45 @@ impl ModuleBindingsCollector {
     {
       self.add_target_root_write(first_argument.expr.as_ref(), WriteKind::Mutation);
     }
+  }
+}
+
+fn expression_root_id(expression: &Expr) -> Option<Id> {
+  let expression = stylex_ast::ast::convertors::normalize_expr(expression);
+  if let Expr::Ident(ident) = expression {
+    return Some(ident.to_id());
+  }
+  if let Some(member) = member_target(expression) {
+    return expression_root_id(&member.obj);
+  }
+  match expression {
+    Expr::TsNonNull(value) => expression_root_id(&value.expr),
+    Expr::TsInstantiation(value) => expression_root_id(&value.expr),
+    _ => None,
+  }
+}
+fn parameter_id(parameter: &Pat) -> Option<Id> {
+  match parameter {
+    Pat::Ident(binding) => Some(binding.id.to_id()),
+    Pat::Assign(assign) => parameter_id(&assign.left),
+    _ => None,
+  }
+}
+fn known_callee(expression: &Expr) -> Option<KnownCallee> {
+  match stylex_ast::ast::convertors::normalize_expr(expression) {
+    Expr::Ident(ident) => Some(KnownCallee::Binding(ident.to_id())),
+    Expr::Arrow(arrow) => Some(KnownCallee::Parameters(
+      arrow.params.iter().map(parameter_id).collect(),
+    )),
+    Expr::Fn(function) => Some(KnownCallee::Parameters(
+      function
+        .function
+        .params
+        .iter()
+        .map(|param| parameter_id(&param.pat))
+        .collect(),
+    )),
+    _ => None,
   }
 }
 
@@ -482,6 +723,84 @@ fn member_property_name(property: &MemberProp) -> Option<&str> {
 }
 
 impl Visit for ModuleBindingsCollector {
+  fn visit_labeled_stmt(&mut self, node: &swc_core::ecma::ast::LabeledStmt) {
+    // Function-local labels do not belong to the program's UID namespace.
+    if self.nearest_function_scope() == MODULE_SCOPE_SPAN {
+      self.bound_names.insert(node.label.sym.to_string());
+    }
+    node.body.visit_with(self);
+  }
+  fn visit_break_stmt(&mut self, _: &swc_core::ecma::ast::BreakStmt) {}
+  fn visit_continue_stmt(&mut self, _: &swc_core::ecma::ast::ContinueStmt) {}
+
+  fn visit_var_declarator(&mut self, decl: &swc_core::ecma::ast::VarDeclarator) {
+    if !matches!(&decl.name, Pat::Ident(_)) {
+      self.record_opaque_pattern(&decl.name, OpaqueDeclarationFault {
+        kind: OpaqueDeclarationKind::VariableDeclarator,
+        span: decl.span,
+      });
+    }
+    if let Pat::Ident(binding) = &decl.name
+      && let Some(initializer) = decl
+        .init
+        .as_deref()
+        .map(stylex_ast::ast::convertors::normalize_expr)
+    {
+      let id = binding.id.to_id();
+      if let Some(source) = expression_root_id(initializer) {
+        self
+          .binding_aliases
+          .entry(id.clone())
+          .or_default()
+          .insert(source.clone());
+        self
+          .binding_aliases
+          .entry(source.clone())
+          .or_default()
+          .insert(id.clone());
+        if initializer.is_ident() {
+          self
+            .array_aliases
+            .entry(id.clone())
+            .or_default()
+            .insert(source.clone());
+          self
+            .array_aliases
+            .entry(source)
+            .or_default()
+            .insert(id.clone());
+        }
+      }
+      match initializer {
+        Expr::Array(_) => {
+          self.array_bindings.insert(id);
+        }
+        Expr::Arrow(arrow) => {
+          self
+            .functions
+            .insert(id, arrow.params.iter().map(parameter_id).collect());
+        }
+        Expr::Fn(function) => {
+          self.functions.insert(
+            id,
+            function
+              .function
+              .params
+              .iter()
+              .map(|param| parameter_id(&param.pat))
+              .collect(),
+          );
+        }
+        _ => {}
+      }
+    }
+    decl.visit_children_with(self);
+  }
+
+  fn visit_ident(&mut self, ident: &Ident) {
+    self.bound_names.insert(ident.sym.to_string());
+  }
+
   fn visit_import_decl(&mut self, import_decl: &ImportDecl) {
     // An import local is a binding like any other, and the evaluator asks about
     // it in every mode -- so `bindings` is filled before the mode gate. An
@@ -491,6 +810,7 @@ impl Visit for ModuleBindingsCollector {
       let local = local_binding_of(specifier);
 
       self.declared_bindings.insert(local.to_id());
+      self.bound_names.insert(local.sym.to_string());
 
       if self.collect_sx_bindings {
         // Import locals are bindings, but never count as a re-binding that
@@ -509,6 +829,9 @@ impl Visit for ModuleBindingsCollector {
   }
 
   fn visit_function(&mut self, function: &Function) {
+    for parameter in &function.params {
+      self.record_parameter_fault(&parameter.pat);
+    }
     self.scope_stack.push(ScopeFrame {
       span: function.span,
       kind: ScopeKind::Function,
@@ -518,6 +841,9 @@ impl Visit for ModuleBindingsCollector {
   }
 
   fn visit_arrow_expr(&mut self, arrow_expr: &ArrowExpr) {
+    for parameter in &arrow_expr.params {
+      self.record_parameter_fault(parameter);
+    }
     self.scope_stack.push(ScopeFrame {
       span: arrow_expr.span,
       kind: ScopeKind::Function,
@@ -527,6 +853,9 @@ impl Visit for ModuleBindingsCollector {
   }
 
   fn visit_fn_expr(&mut self, fn_expr: &FnExpr) {
+    for parameter in &fn_expr.function.params {
+      self.record_parameter_fault(&parameter.pat);
+    }
     self.scope_stack.push(ScopeFrame {
       span: fn_expr.function.span,
       kind: ScopeKind::Function,
@@ -588,6 +917,15 @@ impl Visit for ModuleBindingsCollector {
   }
 
   fn visit_fn_decl(&mut self, fn_decl: &FnDecl) {
+    self.functions.insert(
+      fn_decl.ident.to_id(),
+      fn_decl
+        .function
+        .params
+        .iter()
+        .map(|param| parameter_id(&param.pat))
+        .collect(),
+    );
     // Function declarations in modules are block-scoped; top-level ones still
     // land in the module scope because it is the innermost frame there.
     self.add_local_binding(&fn_decl.ident, false);
@@ -606,7 +944,7 @@ impl Visit for ModuleBindingsCollector {
       AssignTarget::Pat(pattern) => match pattern {
         AssignTargetPat::Array(array_pattern) => self.add_array_pattern_writes(array_pattern),
         AssignTargetPat::Object(object_pattern) => self.add_object_pattern_writes(object_pattern),
-        AssignTargetPat::Invalid(_) => {},
+        AssignTargetPat::Invalid(_) => {}
       },
     }
 
@@ -633,6 +971,7 @@ impl Visit for ModuleBindingsCollector {
 
   fn visit_call_expr(&mut self, call_expression: &CallExpr) {
     if let Callee::Expr(callee) = &call_expression.callee {
+      self.record_known_call(callee.as_ref(), &call_expression.args);
       self.add_call_mutation_writes(callee.as_ref(), &call_expression.args);
     }
 
@@ -644,6 +983,7 @@ impl Visit for ModuleBindingsCollector {
     // needs its own hook — it mutates the receiver exactly as `arr.push(1)`
     // does whenever the receiver is non-nullish.
     if let OptChainBase::Call(call) = opt_chain.base.as_ref() {
+      self.record_known_call(call.callee.as_ref(), &call.args);
       self.add_call_mutation_writes(call.callee.as_ref(), &call.args);
     }
 
@@ -659,12 +999,111 @@ impl Visit for ModuleBindingsCollector {
   }
 
   fn visit_for_of_stmt(&mut self, for_of_statement: &ForOfStmt) {
+    if let Some(receiver) = expression_root_id(&for_of_statement.right) {
+      let ids = match &for_of_statement.left {
+        ForHead::VarDecl(vars) => vars
+          .decls
+          .iter()
+          .filter_map(|decl| parameter_id(&decl.name))
+          .collect(),
+        ForHead::Pat(pat) => parameter_id(pat).into_iter().collect(),
+        ForHead::UsingDecl(using) => using
+          .decls
+          .iter()
+          .filter_map(|decl| parameter_id(&decl.name))
+          .collect(),
+      };
+      self.iterations.push((ids, receiver));
+    }
     if let ForHead::Pat(pattern) = &for_of_statement.left {
       self.add_pattern_writes(pattern);
     }
 
     for_of_statement.visit_children_with(self);
   }
+}
+
+fn module_root_bindings(module: &Module) -> FxHashSet<Id> {
+  #[derive(Default)]
+  struct PatternBindings(FxHashSet<Id>);
+  impl Visit for PatternBindings {
+    fn visit_binding_ident(&mut self, binding: &BindingIdent) {
+      self.0.insert(binding.id.to_id());
+    }
+    fn visit_expr(&mut self, _: &Expr) {}
+    fn visit_function(&mut self, _: &Function) {}
+    fn visit_ts_type(&mut self, _: &swc_core::ecma::ast::TsType) {}
+  }
+  fn declaration(decl: &Decl, ids: &mut FxHashSet<Id>) {
+    match decl {
+      Decl::Var(vars) => {
+        for variable in &vars.decls {
+          let mut pattern = PatternBindings::default();
+          variable.name.visit_with(&mut pattern);
+          ids.extend(pattern.0);
+        }
+      }
+      Decl::Fn(function) => {
+        ids.insert(function.ident.to_id());
+      }
+      Decl::Class(class) => {
+        ids.insert(class.ident.to_id());
+      }
+      Decl::TsTypeAlias(alias) => {
+        ids.insert(alias.id.to_id());
+      }
+      Decl::TsInterface(interface) => {
+        ids.insert(interface.id.to_id());
+      }
+      Decl::TsEnum(enumeration) => {
+        ids.insert(enumeration.id.to_id());
+      }
+      Decl::TsModule(namespace) => {
+        if let TsModuleName::Ident(ident) = &namespace.id {
+          ids.insert(ident.to_id());
+        }
+      }
+      Decl::Using(using) => {
+        for variable in &using.decls {
+          let mut pattern = PatternBindings::default();
+          variable.name.visit_with(&mut pattern);
+          ids.extend(pattern.0);
+        }
+      }
+    }
+  }
+  let mut ids = FxHashSet::default();
+  for item in &module.body {
+    match item {
+      ModuleItem::Stmt(swc_core::ecma::ast::Stmt::Decl(decl)) => declaration(decl, &mut ids),
+      ModuleItem::ModuleDecl(ModuleDecl::ExportDecl(export)) => declaration(&export.decl, &mut ids),
+      ModuleItem::ModuleDecl(ModuleDecl::Import(import)) => {
+        for specifier in &import.specifiers {
+          ids.insert(local_binding_of(specifier).to_id());
+        }
+      }
+      ModuleItem::ModuleDecl(ModuleDecl::TsImportEquals(import)) => {
+        ids.insert(import.id.to_id());
+      }
+      ModuleItem::ModuleDecl(ModuleDecl::ExportDefaultDecl(export)) => match &export.decl {
+        DefaultDecl::Class(class) => {
+          if let Some(ident) = &class.ident {
+            ids.insert(ident.to_id());
+          }
+        }
+        DefaultDecl::Fn(function) => {
+          if let Some(ident) = &function.ident {
+            ids.insert(ident.to_id());
+          }
+        }
+        DefaultDecl::TsInterfaceDecl(interface) => {
+          ids.insert(interface.id.to_id());
+        }
+      },
+      _ => {}
+    }
+  }
+  ids
 }
 
 impl<C> StyleXTransform<C>
@@ -711,11 +1150,14 @@ where
               .collect(),
           };
         }
-      },
+      }
     }
   }
 
   pub(crate) fn visit_mut_module_impl(&mut self, module: &mut Module) {
+    self
+      .state
+      .adopt_module_root_bindings(module_root_bindings(module));
     // Recorded unconditionally, unlike the memo below it. A key-span lookup
     // compares this module's positions against candidates indexed from a
     // re-parse into the code frame's own source map, and only offsets into the
@@ -739,11 +1181,8 @@ where
       return;
     }
 
-    // Binding writes are only read by the evaluator, which runs from here on,
-    // so modules that never reach this point pay no pre-scan. When the `sx`
-    // feature is on, `discover_module` already scanned (its output is needed
-    // mid-walk) and this is a no-op.
-    self.collect_binding_writes(module);
+    // Discovery has already collected lexical binding writes and names before
+    // any CommonJS loader or generated sx binding is classified.
 
     self.transform_producers(module);
     self.transform_atoms(module);
@@ -762,20 +1201,23 @@ where
   pub(crate) fn discover_module(&mut self, module: &mut Module) {
     self.state.cycle = TransformationCycle::Discover;
 
-    // The `sx` runtime-binding injection runs mid-walk in this same cycle and
-    // consults the pre-scan, so with `sx` enabled the scan has to happen up
-    // front. It collects binding writes in the same pass; without `sx` the
-    // scan is deferred to `collect_binding_writes`, which only runs for
-    // modules that actually reach evaluation.
+    // Require-loader identity is read during discovery too, including when sx
+    // is disabled. Collect it once before that walk, not afterwards.
+    let mut collector = if self.state.options.sx_prop_name.is_some() {
+      ModuleBindingsCollector::for_sx()
+    } else {
+      ModuleBindingsCollector::writes_only()
+    };
+    module.visit_with(&mut collector);
+    self.state.adopt_opaque_declaration_faults(std::mem::take(
+      &mut collector.opaque_declaration_faults,
+    ));
+    self
+      .state
+      .adopt_binding_writes(collector.take_binding_writes());
+    self.state.bound_names = collector.bound_names;
     if self.state.options.sx_prop_name.is_some() {
-      let mut collector = ModuleBindingsCollector::for_sx();
-      module.visit_with(&mut collector);
-
-      self
-        .state
-        .adopt_binding_writes(collector.take_binding_writes());
       self.state.existing_import_sources = collector.import_sources;
-      self.state.bound_names = collector.bound_names;
       self.state.local_rebinding_scopes = collector.local_rebinding_scopes;
     }
 
@@ -785,23 +1227,6 @@ where
       fill_top_level_expressions(module, &mut self.state);
       fill_call_positions(module, &mut self.state);
     }
-  }
-
-  /// Record every binding the module declares, and every one it rebinds or
-  /// mutates, so the evaluator can ask which binding a reference names and
-  /// never inlines a declaration initializer that no longer holds at the use
-  /// site. No-op when `discover_module` already collected them for `sx`.
-  pub(crate) fn collect_binding_writes(&mut self, module: &Module) {
-    if self.state.options.sx_prop_name.is_some() {
-      return;
-    }
-
-    let mut collector = ModuleBindingsCollector::writes_only();
-    module.visit_with(&mut collector);
-
-    self
-      .state
-      .adopt_binding_writes(collector.take_binding_writes());
   }
 
   /// Run the producer transformation pass.
@@ -867,6 +1292,10 @@ where
     module.visit_mut_children_with(self);
   }
 }
+
+#[cfg(test)]
+#[path = "tests/known_writes.rs"]
+mod known_writes;
 
 #[cfg(test)]
 #[path = "tests/module_bindings_collector_tests.rs"]

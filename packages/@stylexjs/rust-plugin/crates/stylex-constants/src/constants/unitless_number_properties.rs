@@ -24,6 +24,7 @@ pub static UNITLESS_NUMBER_PROPERTIES: phf::Set<&'static str> = phf_set! {
   "gridColumnStart",
   "gridColumnEnd",
   "gridArea",
+  "fontSizeAdjust",
   "fontWeight",
   "hyphenateLimitChars",
   "lineClamp",

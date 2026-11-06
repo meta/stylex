@@ -15,7 +15,7 @@ use crate::{
   shared::{
     transformers::stylex_create::stylex_create_set,
     utils::core::{
-      dev_class_name::inject_sx_dev_class_name,
+      dev_class_name::inject_dev_class_names,
       evaluate_stylex_create_arg::evaluate_stylex_create_arg, js_to_ast::convert_values_to_ast,
     },
   },
@@ -78,8 +78,14 @@ where
       return;
     }
 
-    let mut visitor = create_utility_styles_visitor(self);
-    module.visit_mut_with(&mut visitor);
+    for item in &mut module.body {
+      let anchor = self
+        .state
+        .replace_statement_anchor(Some(swc_core::common::Spanned::span(item)));
+      let mut visitor = create_utility_styles_visitor(self);
+      item.visit_mut_with(&mut visitor);
+      self.state.replace_statement_anchor(anchor);
+    }
   }
 }
 
@@ -128,7 +134,7 @@ where
     );
 
     if self.state.is_dev() && self.state.options.enable_dev_class_names {
-      compiled = inject_sx_dev_class_name(compiled, &self.state);
+      compiled = inject_dev_class_names(compiled, &None, &self.state);
     }
     self.state.in_stylex_create = prev_in_stylex_create;
 
@@ -181,7 +187,7 @@ where
       let kind = match &style.rtl {
         Some(rtl) => {
           InjectableStyle::with_rtl(style.ltr.clone(), rtl.clone(), Some(style.priority))
-        },
+        }
         None => InjectableStyle::regular(style.ltr.clone(), Some(style.priority)),
       };
 

@@ -20,7 +20,7 @@ where
     let is_attrs_call = is_attrs_call(call, &self.state);
 
     if is_attrs_call {
-      return stylex_merge(call, attrs, hoist_expression, &mut self.state);
+      return stylex_merge(call, attrs, hoist_expression, true, &mut self.state);
     }
 
     None

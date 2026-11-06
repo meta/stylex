@@ -12,7 +12,7 @@
 //! account of the aid that explains why it stopped.
 
 pub mod code_frame;
-pub(crate) mod declaration_span;
+pub mod declaration_span;
 pub mod memo;
 pub mod state;
 

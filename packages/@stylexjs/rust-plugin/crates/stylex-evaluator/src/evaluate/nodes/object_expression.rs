@@ -1,8 +1,7 @@
 use super::super::*;
-use stylex_ast::ast::convertors::normalize_expr;
 use stylex_macros::deopt_unsupported;
 use stylex_utils::number::to_js_string;
-use swc_core::ecma::ast::ObjectLit;
+use swc_core::{common::Spanned, ecma::ast::{Invalid, ObjectLit}};
 
 /// The own enumerable properties a spread operand contributes, mirroring
 /// `Object.assign({}, value)` — which is literally what the reference
@@ -60,16 +59,11 @@ pub fn spread_own_properties(value: EvaluateResultValue) -> Option<Vec<PropOrSpr
     // the same rule `char_code_at` and `json_stringify` already leave
     // unreachable for the same reason.
     EvaluateResultValue::Expr(Expr::Lit(Lit::Str(strng))) => {
-      let value = strng.value.as_str()?;
-      let characters = value.chars().collect::<Vec<_>>();
-
+      let units = stylex_js::native::wtf_units(strng.value.code_points().map(|p| p.to_u32()));
       indexed_props(
-        characters
+        units
           .iter()
-          .map(|character| match character.len_utf16() {
-            1 => Some(create_string_expr(&character.to_string())),
-            _ => None,
-          }),
+          .map(|unit| Some(super::super::host_values::utf16_expr(&[*unit]))),
       )
     },
 
@@ -143,6 +137,10 @@ pub(in super::super) fn evaluate(
   // report a fault.
   let refusal_path = || Expr::Object(obj_path.clone());
   let mut props = Vec::with_capacity(obj_path.props.len());
+  let mut typed_entries = IndexMap::new();
+  let mut typed = false;
+  let mut null_prototype = false;
+  let mut custom_prototype = false;
 
   for prop in &obj_path.props {
     match prop {
@@ -165,6 +163,35 @@ pub(in super::super) fn evaluate(
           return deopt(&refusal_path(), state, &reason);
         }
 
+        if let Some(value) = spread_expression.as_ref() {
+          let entries =
+            match super::super::enumerable_values::enumerable_values(value, traversal_state) {
+              Ok(entries) => entries,
+              Err(error) => return deopt(&prop.expr, state, &error.message),
+            };
+          if let Some(entries) = entries {
+            // A list carrying a value with no literal form -- a callback nested
+            // one array down -- is refused here as the value arm refuses it
+            // (`ILLEGAL_PROP_ARRAY_VALUE` for `{ a: [[() => 1]] }`): a spread
+            // copies the entry into the same style-object position, and a
+            // function inside a list is no style value. A callback that *is*
+            // the entry stays a typed callback, as it does in the value arm.
+            if entries.values().any(|value| {
+              matches!(value, EvaluateResultValue::Vec(items)
+                if evaluate_result_vec_to_array_expr(items).is_none())
+            }) {
+              deopt_unsupported!(deopt, &refusal_path(), state, SPREAD_PROPERTIES_UNREADABLE);
+            }
+            let mut added = Vec::with_capacity(entries.len());
+            for (key, value) in entries {
+              typed_entries.insert(key.clone(), value);
+              added.push(create_ident_key_value_prop(&key, undefined_expr()));
+            }
+            props = assign_props(props, added);
+            typed = true;
+            continue;
+          }
+        }
         let Some(new_props) = spread_expression.and_then(spread_own_properties) else {
           deopt_unsupported!(deopt, &refusal_path(), state, SPREAD_PROPERTIES_UNREADABLE);
         };
@@ -177,20 +204,26 @@ pub(in super::super) fn evaluate(
       },
       PropOrSpread::Prop(prop) => {
         if prop.is_method() {
-          // `OBJECT_METHOD`, which is what the reference compiler reports here
-          // (`utils/evaluate-path.js:757`, 0.19.0). This arm and the spread
-          // arm above held each other's reason, and `deopt` only writes while
-          // `confident` is still true -- so the reason read from the state
-          // arrived here as `None` every time and the author was handed the bare
-          // `unknown error`, while the constant that belonged here sat in the
-          // spread arm where it could never be applied at all.
-          return deopt(&refusal_path(), state, OBJECT_METHOD);
+          // Babel rejects the ObjectMethod itself, not its containing object
+          // (evaluate-path.js:879-886). Carry that actual property span.
+          let fault = Expr::Invalid(Invalid { span: prop.span() });
+          return deopt(&fault, state, OBJECT_METHOD);
         }
 
         // Read where it lies. Nothing below writes to the property, and this
         // runs for every property of every object the evaluator folds, so the
         // copy it used to make was the whole value subtree of each one.
-        let prop = expanded_shorthand_prop(prop);
+        let shorthand = matches!(&**prop, Prop::Shorthand(_));
+        let prop = match &**prop {
+          Prop::Shorthand(id) => std::borrow::Cow::Owned(Prop::KeyValue(KeyValueProp {
+            key: PropName::Ident(swc_core::ecma::ast::IdentName {
+              sym: id.sym.clone(),
+              span: id.span,
+            }),
+            value: Box::new(Expr::Ident(id.clone())),
+          })),
+          prop => std::borrow::Cow::Borrowed(prop),
+        };
 
         match prop.as_ref() {
           Prop::KeyValue(path_key_value) => {
@@ -298,7 +331,7 @@ pub(in super::super) fn evaluate(
               // `guidelines/stack/RUST.md` names for it.
               let deopt_path = eval_value.deopt.unwrap_or_else(refusal_path);
 
-              return deopt(&deopt_path, state, &format!("{} > {}", key, base_reason));
+              return deopt(&deopt_path, state, &base_reason);
             }
 
             // A value that answered nothing while the walk stayed confident,
@@ -327,27 +360,55 @@ pub(in super::super) fn evaluate(
             // read without a member access used to do, silently, where upstream
             // refuses it. A value this evaluator cannot write down is a refusal,
             // never an omission.
+            if key == "__proto__"
+              && !matches!(path_key_value.key, PropName::Computed(_))
+              && !shorthand
+            {
+              null_prototype = evaluate_result_is_nullish(&value);
+              custom_prototype = !null_prototype
+                && matches!(
+                  value,
+                  EvaluateResultValue::Object(_) | EvaluateResultValue::Expr(Expr::Object(_))
+                );
+              typed = true;
+              continue;
+            }
+            typed_entries.insert(key.clone(), value.clone());
+            if matches!(
+              value,
+              EvaluateResultValue::Callback(_)
+                | EvaluateResultValue::Host(_)
+                | EvaluateResultValue::Object(_)
+            ) {
+              typed = true;
+              props.push(create_ident_key_value_prop(&key, undefined_expr()));
+              continue;
+            }
             let value = match value {
+              EvaluateResultValue::NativeArray(values) => {
+                match super::super::native_call::native_array_expr(&values) {
+                  Some(expr) => expr,
+                  None => {
+                    typed = true;
+                    props.push(create_ident_key_value_prop(&key, undefined_expr()));
+                    continue;
+                  },
+                }
+              },
+              EvaluateResultValue::SharedArray(values) => {
+                match evaluate_result_vec_to_array_expr(&values) {
+                  Some(expr) => expr,
+                  None => {
+                    typed = true;
+                    props.push(create_ident_key_value_prop(&key, undefined_expr()));
+                    continue;
+                  },
+                }
+              },
               EvaluateResultValue::Expr(expr) => expr,
               EvaluateResultValue::Vec(items) => match evaluate_result_vec_to_array_expr(&items) {
                 Some(expr) => expr,
                 None => deopt_unsupported!(deopt, &refusal_path(), state, ILLEGAL_PROP_ARRAY_VALUE),
-              },
-              // A callback reaches a value position as the arrow it was written
-              // as -- a dynamic style's function, which is kept for the runtime
-              // to call. A *call* on one no longer arrives here: applying it
-              // used to be this arm's second job, and doing it beside the
-              // dispatch is what made the same call fold in a style value and
-              // refuse one argument deeper.
-              //
-              // Read through the parentheses an author may have written around
-              // the arrow. They are a node in this tree and none in the
-              // reference implementation's, so matching the bare node refused
-              // `{ transform: (() => '') }` where `{ transform: () => '' }`
-              // folded -- the same function, written two ways.
-              EvaluateResultValue::Callback(_) => match normalize_expr(&path_key_value.value) {
-                Expr::Arrow(arrow_func_expr) => Expr::Arrow(arrow_func_expr.clone()),
-                _ => deopt_unsupported!(deopt, &refusal_path(), state, ILLEGAL_PROP_VALUE),
               },
               // A folded function map or function config, materialized as the
               // object it stands for so it reaches whatever validates this
@@ -364,7 +425,10 @@ pub(in super::super) fn evaluate(
           },
           // A getter, a setter or an assignment pattern: object properties
           // with no compile-time value of their own.
-          _ => deopt_unsupported!(deopt, &refusal_path(), state, OBJECT_METHOD),
+          _ => {
+            let fault = Expr::Invalid(Invalid { span: prop.span() });
+            return deopt(&fault, state, OBJECT_METHOD);
+          },
         }
       },
     }
@@ -374,8 +438,32 @@ pub(in super::super) fn evaluate(
   // array-index key can arrive from a literal, from a spread, or from a
   // computed key, and the language's answer depends only on the set that ends
   // up here.
+  let props = order_own_keys(remove_duplicates(props));
+  if typed {
+    let mut entries = IndexMap::new();
+    for prop in &props {
+      if let PropOrSpread::Prop(prop) = prop
+        && let Prop::KeyValue(kv) = &**prop
+      {
+        let key = key_value_name(kv).into_owned();
+        entries.insert(
+          key.clone(),
+          typed_entries
+            .shift_remove(&key)
+            .unwrap_or_else(|| EvaluateResultValue::Expr(*kv.value.clone())),
+        );
+      }
+    }
+    return Some(EvaluateResultValue::Object(Rc::new(
+      stylex_state::evaluate_result_value::EvaluatedObject {
+        entries,
+        null_prototype,
+        custom_prototype,
+      },
+    )));
+  }
   Some(EvaluateResultValue::Expr(Expr::Object(create_object_lit(
-    order_own_keys(remove_duplicates(props)),
+    props,
   ))))
 }
 

@@ -8,7 +8,7 @@ use stylex_utils::collections::FxIndexMap;
 use swc_core::{
   atoms::Atom,
   common::SourceFile,
-  ecma::ast::{BindingIdent, Expr, Ident, Module},
+  ecma::ast::{Ident, Module},
 };
 
 use crate::{
@@ -22,15 +22,51 @@ use stylex_state_index::key_span_index::KeySpanIndex;
 use stylex_structures::{inline_style::InlineStyle, named_import_source::ImportSources};
 
 pub type FlatCompiledStyles = IndexMap<String, Rc<FlatCompiledStylesValue>>;
-pub type DynamicFns = IndexMap<String, (Vec<BindingIdent>, TInlineStyles)>;
+/// A dynamic style retains the complete authored arrow (including TS/Flow
+/// annotations), with only its returned body rewritten by creation.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DynamicFunction {
+  pub original: swc_core::ecma::ast::ArrowExpr,
+  pub inline_styles: TInlineStyles,
+}
+pub type DynamicFns = IndexMap<String, DynamicFunction>;
 
 /// An author's own arrow, ready to be applied to evaluated arguments.
 ///
 /// `None` is the answer for a body that did not fold. The callback has no deopt
 /// to record -- it answers a value, not a result -- so this is how it declines,
 /// and the caller is what names the call in a sentence.
-pub type EvaluationCallback =
-  Rc<dyn Fn(Vec<EvaluateResultValue>, &mut StateManager) -> Option<Expr> + 'static>;
+#[derive(Clone, Debug, PartialEq)]
+pub struct EvaluationFailure {
+  pub message: String,
+  pub span: swc_core::common::Span,
+  pub plain: bool,
+}
+pub type CallbackOperation = dyn Fn(
+  Vec<EvaluateResultValue>,
+  &mut StateManager,
+) -> Result<EvaluateResultValue, EvaluationFailure>;
+pub type OverlayOperation = dyn Fn(
+  Vec<EvaluateResultValue>,
+  &mut StateManager,
+  &rustc_hash::FxHashMap<swc_core::ecma::ast::Id, EvaluateResultValue>,
+) -> Result<EvaluateResultValue, EvaluationFailure>;
+pub struct EvaluatedFunction {
+  pub original: Rc<swc_core::ecma::ast::ArrowExpr>,
+  pub invoke: Rc<CallbackOperation>,
+  pub invoke_with_overlays: Rc<OverlayOperation>,
+  pub budget: Option<stylex_js::native::BudgetLease>,
+}
+impl std::ops::Deref for EvaluatedFunction {
+  type Target = dyn Fn(
+    Vec<EvaluateResultValue>,
+    &mut StateManager,
+  ) -> Result<EvaluateResultValue, EvaluationFailure>;
+  fn deref(&self) -> &Self::Target {
+    self.invoke.as_ref()
+  }
+}
+pub type EvaluationCallback = Rc<EvaluatedFunction>;
 pub type FunctionMapMemberExpression =
   FxHashMap<ImportSources, Box<FxHashMap<Atom, Box<FunctionConfigType>>>>;
 pub type FunctionMapIdentifiers = FxHashMap<Atom, Box<FunctionConfigType>>;

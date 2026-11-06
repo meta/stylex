@@ -112,18 +112,26 @@ pub fn is_panic_stderr_suppressed() -> bool {
 ///
 /// Create one immediately before `catch_unwind`; the hook will stay silent
 /// until the guard is dropped (on exit from scope, including on panic).
+/// Guards nest: dropping one restores the state it found, so a transform run
+/// from a host callback of another leaves the outer one silent.
 ///
 /// ```rust,ignore
 /// let _guard = SuppressPanicStderr::new();
 /// let result = std::panic::catch_unwind(|| { /* ... */ });
 /// // guard dropped here -> suppression lifted
 /// ```
-pub struct SuppressPanicStderr;
+pub struct SuppressPanicStderr {
+  /// The suppression in force before this guard, restored when it drops, so a
+  /// nested guard (a transform started from inside another) leaves the outer
+  /// one in force.
+  previous: bool,
+}
 
 impl SuppressPanicStderr {
   pub fn new() -> Self {
-    SUPPRESS_PANIC_STDERR.with(|f| f.set(true));
-    Self
+    Self {
+      previous: SUPPRESS_PANIC_STDERR.with(|f| f.replace(true)),
+    }
   }
 }
 
@@ -135,7 +143,7 @@ impl Default for SuppressPanicStderr {
 
 impl Drop for SuppressPanicStderr {
   fn drop(&mut self) {
-    SUPPRESS_PANIC_STDERR.with(|f| f.set(false));
+    SUPPRESS_PANIC_STDERR.with(|f| f.set(self.previous));
   }
 }
 
@@ -164,6 +172,96 @@ fn strip_ansi(s: &str) -> Cow<'_, str> {
     }
   }
   Cow::Owned(result)
+}
+
+thread_local! {
+  /// Byte span (`lo`, `hi`) of the node the last StyleX error on this thread
+  /// was reported at, for hosts that render their own code frames.
+  static PANIC_SPAN: std::cell::Cell<Option<(u32, u32)>> = const { std::cell::Cell::new(None) };
+  /// Whether the last StyleX error on this thread is a plain `Error` in the
+  /// Babel plugin (a `throw new Error(…)`) rather than a code-frame
+  /// `SyntaxError`.
+  static PANIC_PLAIN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+  /// The message of the last StyleX error on this thread exactly as reported,
+  /// without the key path or location the panic text adds.
+  static PANIC_MESSAGE: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+  /// The binding whose declaration the last StyleX error on this thread is
+  /// about (the Babel plugin frames `binding.path`), when it named one.
+  static PANIC_DECLARATION: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Reports the error being raised at the node spanning `lo..hi`, which the
+/// raiser names explicitly: it outranks both the fault's own span and any
+/// binding declaration the refusal framed.
+pub fn report_panic_at(lo: u32, hi: u32) {
+  PANIC_DECLARATION.with(|slot| slot.borrow_mut().take());
+  record_panic_span(lo, hi);
+}
+
+/// Records that the StyleX error about to be raised is about the declaration
+/// of `name`.
+pub fn record_panic_declaration(name: &str) {
+  PANIC_DECLARATION.with(|slot| *slot.borrow_mut() = Some(name.to_owned()));
+}
+
+/// The declaration recorded for the last StyleX error on this thread, cleared.
+pub fn take_panic_declaration() -> Option<String> {
+  PANIC_DECLARATION.with(|slot| slot.borrow_mut().take())
+}
+
+/// Records the message of the StyleX error about to be raised.
+pub fn record_panic_message(message: &str) {
+  PANIC_MESSAGE.with(|slot| *slot.borrow_mut() = Some(message.to_owned()));
+}
+
+/// The message recorded for the last StyleX error on this thread, cleared.
+pub fn take_panic_message() -> Option<String> {
+  PANIC_MESSAGE.with(|slot| slot.borrow_mut().take())
+}
+
+/// Marks the StyleX error about to be reported as one the Babel plugin throws
+/// as a plain `Error`, with no code frame. The error's catcher reads it with
+/// [`take_panic_plain`].
+pub fn mark_panic_plain() {
+  PANIC_PLAIN.with(|plain| plain.set(true));
+}
+
+/// Whether the last StyleX error on this thread was marked plain, cleared.
+pub fn take_panic_plain() -> bool {
+  PANIC_PLAIN.with(|plain| plain.replace(false))
+}
+
+/// Records the source span of the node a StyleX error is about to be reported
+/// at. The error's catcher reads it with [`take_panic_span`].
+pub fn record_panic_span(lo: u32, hi: u32) {
+  PANIC_SPAN.with(|span| span.set(Some((lo, hi))));
+}
+
+/// The span recorded for the last StyleX error on this thread, cleared.
+pub fn take_panic_span() -> Option<(u32, u32)> {
+  PANIC_SPAN.with(|span| span.take())
+}
+
+/// Runs `work` with this thread's error-reporting state of its own, restoring
+/// the caller's afterwards: a transform started from inside another (a host
+/// callback) neither sees nor clobbers the outer transform's state.
+pub fn with_isolated_error_state<R>(work: impl FnOnce() -> R) -> R {
+  struct Restore(Option<(u32, u32)>, bool, Option<String>, Option<String>);
+  impl Drop for Restore {
+    fn drop(&mut self) {
+      PANIC_DECLARATION.with(|slot| *slot.borrow_mut() = self.3.take());
+      PANIC_SPAN.with(|span| span.set(self.0));
+      PANIC_PLAIN.with(|plain| plain.set(self.1));
+      PANIC_MESSAGE.with(|slot| *slot.borrow_mut() = self.2.take());
+    }
+  }
+  let _restore = Restore(
+    PANIC_SPAN.with(|span| span.take()),
+    PANIC_PLAIN.with(|plain| plain.replace(false)),
+    PANIC_MESSAGE.with(|slot| slot.borrow_mut().take()),
+    PANIC_DECLARATION.with(|slot| slot.borrow_mut().take()),
+  );
+  work()
 }
 
 /// Extract a plain-text error message from a caught panic payload.

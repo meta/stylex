@@ -44,7 +44,43 @@ pub(in super::super) fn evaluate(
   //
   // `typeof someObject.method` is ordinary JavaScript, and what it reads is the
   // member's own refusal rather than one this node invents.
-  let arg = evaluate_cached(argument, state, traversal_state, fns)?;
+  let mut arg = evaluate_cached(argument, state, traversal_state, fns)?;
+  if matches!(unary.op, UnaryOp::Plus | UnaryOp::Minus | UnaryOp::Tilde)
+    && matches!(
+      arg,
+      EvaluateResultValue::Object(_)
+        | EvaluateResultValue::SharedArray(_)
+        | EvaluateResultValue::NativeArray(_)
+        | EvaluateResultValue::Vec(_)
+        | EvaluateResultValue::ThemeRef(_)
+        | EvaluateResultValue::Expr(Expr::Object(_) | Expr::Array(_))
+    )
+  {
+    arg = match super::super::primitive::primitive(
+      &arg,
+      stylex_structures::stylex_env::PrimitiveHint::Number,
+      traversal_state,
+      unary.span,
+    ) {
+      Ok(value) => value,
+      Err(error) => {
+        if let Some(refusal) = stylex_js::native::quota_refusal() {
+          return deopt(
+            &create_unary_expr(unary),
+            state,
+            &quota_reason(refusal, QuotaBoundary::Growth(NUMERIC_CONVERSION)),
+          );
+        }
+        return super::super::callback_failure::invocation_failure(error, state);
+      }
+    };
+  }
+  if matches!(arg, EvaluateResultValue::Host(_)) {
+    return match super::super::host_operators::unary_value(unary.op, &arg, traversal_state) {
+      Ok(value) => Some(value),
+      Err(error) => deopt(&create_unary_expr(unary), state, &error.message),
+    };
+  }
 
   // `!` is answered off the evaluated value rather than off an expression form
   // of it, and through the one `ToBoolean` bridge the logical operators read.

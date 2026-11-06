@@ -98,16 +98,16 @@ pub(super) fn is_safe_to_skip_null_check(expr: &Expr) -> bool {
       | BinaryOp::Exp => true,
       BinaryOp::NullishCoalescing | BinaryOp::LogicalOr => {
         is_safe_to_skip_null_check(&bin_expr.left) || is_safe_to_skip_null_check(&bin_expr.right)
-      },
+      }
       BinaryOp::LogicalAnd => {
         is_safe_to_skip_null_check(&bin_expr.left) && is_safe_to_skip_null_check(&bin_expr.right)
-      },
+      }
       _ => false,
     },
     Expr::Unary(unary_expr) => matches!(unary_expr.op, UnaryOp::Minus | UnaryOp::Plus),
     Expr::Cond(cond_expr) => {
       is_safe_to_skip_null_check(&cond_expr.cons) && is_safe_to_skip_null_check(&cond_expr.alt)
-    },
+    }
     _ => false,
   }
 }
@@ -120,11 +120,11 @@ pub(super) fn has_explicit_nullish_fallback(expr: &Expr) -> bool {
     Expr::Unary(unary) if matches!(unary.op, UnaryOp::Void) => true,
     Expr::Cond(cond) => {
       has_explicit_nullish_fallback(&cond.cons) || has_explicit_nullish_fallback(&cond.alt)
-    },
+    }
     Expr::Bin(bin) => match bin.op {
       BinaryOp::LogicalOr | BinaryOp::NullishCoalescing | BinaryOp::LogicalAnd => {
         has_explicit_nullish_fallback(&bin.left) || has_explicit_nullish_fallback(&bin.right)
-      },
+      }
       _ => false,
     },
     _ => false,
@@ -149,9 +149,9 @@ pub(super) fn extract_expr_from_rule(
 
 /// Hoist an expression to the module level as a `const` declaration.
 ///
-/// The declaration is queued after the imports and the returned identifier
-/// stands for the expression at the call site. `stem` is what the generated
-/// name is built on.
+/// The declaration is queued before the current original program statement;
+/// the returned identifier stands for the expression at the call site.
+/// `stem` is what the generated name is built on.
 ///
 /// The name is answered as the identifier it is, not as an expression holding
 /// one. A caller that needs the name -- the dynamic-style rewrite declares it
@@ -173,10 +173,7 @@ fn hoist_to_module_level(
   };
 
   let module_item = ModuleItem::Stmt(Stmt::Decl(Decl::Var(Box::new(var_decl))));
-  state.queue_insertion(
-    stylex_state::state_manager::InsertionSlot::AfterImports,
-    module_item,
-  );
+  state.queue_at_current_statement(module_item);
 
   hoisted_ident
 }

@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 use stylex_ast::ast::convertors::create_string_expr;
 use stylex_macros::stylex_panic;
 use swc_core::{
-  common::comments::Comments,
+  common::{Spanned, comments::Comments},
   ecma::ast::{Expr, VarDeclarator},
 };
 
@@ -14,8 +14,8 @@ use crate::{
   shared::{
     transformers::stylex_position_try::stylex_position_try,
     utils::validators::{
-      argument_at, assert_valid_position_try, assert_valid_properties, folded_style_object,
-      is_position_try_call, validate_stylex_position_try_indent,
+      argument_at, assert_valid_position_try, assert_valid_properties, folded_producer_object,
+      is_position_try_call, reported_at, validate_stylex_position_try_indent,
     },
   },
   transform::stylex::visitor_utils::rule_call_eval_config,
@@ -52,7 +52,7 @@ where
 
       let evaluated_arg = evaluate_with_functions(first_arg, &mut self.state, function_map);
 
-      let plain_object = folded_style_object(
+      let plain_object = folded_producer_object(
         evaluated_arg,
         call,
         first_arg,
@@ -60,13 +60,19 @@ where
         &mut self.state,
       );
 
-      assert_valid_position_try(&plain_object, &mut self.state);
-      assert_valid_properties(
-        &plain_object,
-        &*VALID_POSITION_TRY_PROPERTIES,
-        POSITION_TRY_INVALID_PROPERTY,
-        &mut self.state,
-      );
+      // The original plugin refuses the folded value at the argument.
+      let argument = first_arg.span();
+      reported_at(argument, || {
+        assert_valid_position_try(&plain_object, &mut self.state)
+      });
+      reported_at(argument, || {
+        assert_valid_properties(
+          &plain_object,
+          &*VALID_POSITION_TRY_PROPERTIES,
+          POSITION_TRY_INVALID_PROPERTY,
+          &mut self.state,
+        )
+      });
 
       let (position_try_name, injectable_style) =
         stylex_position_try(&plain_object, &mut self.state);

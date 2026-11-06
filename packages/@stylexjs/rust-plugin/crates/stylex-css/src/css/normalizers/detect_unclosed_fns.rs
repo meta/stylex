@@ -5,23 +5,16 @@
 use postcss_value_parser::{NodeKind, ValueParser};
 use stylex_constants::constants::messages::LINT_UNCLOSED_FUNCTION;
 
-use super::reject_value;
+use stylex_macros::stylex_panic;
 
 /// Rejects a value carrying a function that was never closed.
 ///
 /// Runs first so that no later normalizer gets to rewrite tokens the author
 /// never finished writing.
 ///
-/// The reference implementation raises a bare message here; the rule text is
-/// appended so the report names the declaration it came from, which is what
-/// this compiler's message has always carried.
-///
-/// That text is read back off the token list rather than kept from the input,
-/// which nothing has yet rewritten — this runs first. The one value that comes
-/// back spelled differently is the scanner's documented `/*/`, so a rejected
-/// value containing that quotes itself slightly repaired. It is a message, and
-/// only a message: no value that reaches a stylesheet passes through here.
-pub fn detect_unclosed_fns(ast: &mut ValueParser, key: &str) {
+/// The compatibility diagnostic is Babel's bare message; source/code-frame
+/// context is added by the owning host layer, not by reserializing a CSS rule.
+pub fn detect_unclosed_fns(ast: &mut ValueParser, _key: &str) {
   let mut unclosed = false;
 
   ast.walk(
@@ -36,6 +29,6 @@ pub fn detect_unclosed_fns(ast: &mut ValueParser, key: &str) {
   );
 
   if unclosed {
-    reject_value(ast, key, LINT_UNCLOSED_FUNCTION);
+    stylex_panic!("{}", LINT_UNCLOSED_FUNCTION);
   }
 }

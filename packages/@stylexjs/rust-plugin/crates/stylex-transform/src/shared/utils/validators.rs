@@ -2,6 +2,7 @@ use rustc_hash::FxHashSet;
 use stylex_macros::{stylex_panic, stylex_unimplemented};
 use swc_core::{
   atoms::Atom,
+  common::{Span, Spanned},
   ecma::ast::{
     ArrayLit, ArrowExpr, CallExpr, Expr, ExprOrSpread, KeyValueProp, Lit, ObjectLit, Pat,
     PropOrSpread, VarDeclarator,
@@ -25,17 +26,32 @@ use stylex_constants::constants::{
   messages::{
     DUPLICATE_CONDITIONAL, EXPECTED_CSS_VAR, ILLEGAL_PROP_ARRAY_VALUE, ILLEGAL_PROP_VALUE,
     INVALID_PSEUDO_OR_AT_RULE, NO_OBJECT_SPREADS, NON_OBJECT_KEYFRAME,
-    NON_STATIC_SECOND_ARG_CREATE_THEME_VALUE, ONLY_NAMED_PARAMETERS_IN_DYNAMIC_STYLE_FUNCTIONS,
-    ONLY_OVERRIDE_DEFINE_VARS, SPREAD_NOT_SUPPORTED, illegal_argument_length,
-    non_export_named_declaration, non_static_value, non_style_object, type_asserted_call_value,
-    unbound_call_value,
+    ONLY_NAMED_PARAMETERS_IN_DYNAMIC_STYLE_FUNCTIONS, ONLY_OVERRIDE_DEFINE_VARS,
+    SPREAD_NOT_SUPPORTED, illegal_argument_length, non_export_named_declaration, non_static_value,
+    non_style_object, type_asserted_call_value, unbound_call_value,
   },
 };
 use stylex_css::utils::condition::is_conditional_key;
 use stylex_diagnostics::code_frame::{
   build_code_frame_error, build_code_frame_error_and_panic, build_code_frame_error_and_panic_at,
+  build_code_frame_error_and_panic_reported_at,
 };
+use stylex_evaluator::evaluate::materialize_result;
 use stylex_evaluator::evaluate_result::{EvaluateResult, refusal_site};
+
+/// Convert a final evaluated data value through the evaluator's single owned
+/// boundary. A host failure is terminal; values such as callbacks remain typed
+/// and are not recreated from source text.
+fn materialized_data(value: &EvaluateResultValue, state: &StateManager) -> Option<Expr> {
+  match materialize_result(value, state) {
+    Ok(value) => value,
+    Err(error) => stylex_panic!("{}", error),
+  }
+}
+
+#[cfg(test)]
+#[path = "tests/validator_carriers.rs"]
+mod validator_carriers;
 use stylex_state::{
   evaluate_result_value::EvaluateResultValue,
   state_manager::{ImportKind, StateManager},
@@ -49,8 +65,12 @@ fn validate_arg_count_for_expr(
   state: &mut StateManager,
 ) {
   if call.args.len() != expected {
-    build_code_frame_error_and_panic_at(
+    build_code_frame_error_and_panic_reported_at(
       wrapped_expr,
+      state
+        .find_call_declaration_by_span(call)
+        .map(|decl| decl.span)
+        .unwrap_or(call.span),
       &illegal_argument_length(fn_name, expected),
       state,
     );
@@ -148,7 +168,7 @@ pub(crate) fn folded_style_object_lit(
     )
   };
 
-  let EvaluateResultValue::Expr(Expr::Object(object)) = value else {
+  let Some(Expr::Object(object)) = materialized_data(&value, state) else {
     stylex_panic!(
       "{}",
       build_code_frame_error(
@@ -179,6 +199,23 @@ pub(crate) fn folded_style_object(
   EvaluateResultValue::Expr(Expr::Object(folded_style_object_lit(
     evaluated, call, argument, fn_name, state,
   )))
+}
+
+/// [`folded_style_object`] for a positionTry or viewTransitionClass argument,
+/// refused where the original plugin frames it: an argument it cannot read at
+/// the call, one that folds to no object at the argument.
+pub(crate) fn folded_producer_object(
+  evaluated: Box<EvaluateResult>,
+  call: &CallExpr,
+  argument: &Expr,
+  fn_name: &str,
+  state: &mut StateManager,
+) -> EvaluateResultValue {
+  let readable = evaluated.confident && evaluated.value.is_some();
+  let reported = if readable { argument.span() } else { call.span };
+  reported_at(reported, || {
+    folded_style_object(evaluated, call, argument, fn_name, state)
+  })
 }
 
 /// `read`, or the refusal an argument list too short is reported with.
@@ -239,7 +276,7 @@ fn or_refuse_initializer<'a>(
     None => match init_expr {
       Some(init_expr) => {
         build_code_frame_error_and_panic_at(init_expr, &non_static_value(fn_name), state)
-      },
+      }
       None => stylex_panic!("{}", non_static_value(fn_name)),
     },
   }
@@ -263,6 +300,23 @@ fn init_call_of<'a>(
   or_refuse_initializer(read, init_expr, fn_name, state)
 }
 
+/// Runs `check`, and reports a refusal it raises at `reported` instead of the
+/// node it named: the original plugin throws some producer errors from the
+/// variable declarator (`const k = stylex.keyframes()` frames from `k`), the
+/// call or the argument. The message and everything else about the refusal
+/// stay as `check` made them.
+pub(crate) fn reported_at<T>(reported: Span, check: impl FnOnce() -> T) -> T {
+  match std::panic::catch_unwind(std::panic::AssertUnwindSafe(check)) {
+    Ok(value) => value,
+    Err(payload) => {
+      if !reported.is_dummy() {
+        stylex_macros::stylex_error::report_panic_at(reported.lo.0, reported.hi.0);
+      }
+      std::panic::resume_unwind(payload)
+    }
+  }
+}
+
 fn validate_single_object_arg_indent(
   var_decl: &VarDeclarator,
   fn_name: &str,
@@ -274,8 +328,19 @@ fn validate_single_object_arg_indent(
     build_code_frame_error_and_panic_at(init_expr, &unbound_call_value(fn_name), state);
   }
 
-  validate_arg_count_for_expr(init_expr, call, 1, fn_name, state);
-  assert_first_arg_is_object(init_expr, call, fn_name, state);
+  // The original keyframes, positionTry and viewTransitionClass visitors check
+  // the argument count on the declarator; only keyframes also refuses a
+  // non-object argument there (the other two report it at the argument).
+  reported_at(var_decl.span, || {
+    validate_arg_count_for_expr(init_expr, call, 1, fn_name, state)
+  });
+  if fn_name == STYLEX_KEYFRAMES {
+    reported_at(var_decl.span, || {
+      assert_first_arg_is_object(init_expr, call, fn_name, state)
+    });
+  } else {
+    assert_first_arg_is_object(init_expr, call, fn_name, state);
+  }
 }
 
 fn is_var_decl_target_call(
@@ -346,10 +411,11 @@ pub(crate) fn validate_stylex_create(call: &CallExpr, state: &mut StateManager) 
   // A parenthesis is not a different argument, here or at the reader that
   // evaluates it. Read bare, `create(({…}))` stopped the build on an object the
   // same author could have written without the brackets.
+  // The original plugin frames both refusals at the call, as it does the ones
+  // above.
   let Expr::Object(obj) = normalize_expr(&first_arg.expr) else {
-    build_code_frame_error_and_panic(
+    build_code_frame_error_and_panic_at(
       &Expr::Call(call.clone()),
-      &first_arg.expr,
       &non_style_object(STYLEX_CREATE),
       state,
     );
@@ -360,12 +426,7 @@ pub(crate) fn validate_stylex_create(call: &CallExpr, state: &mut StateManager) 
     .iter()
     .any(|prop| matches!(prop, PropOrSpread::Spread(_)))
   {
-    build_code_frame_error_and_panic(
-      &Expr::Call(call.clone()),
-      &first_arg.expr,
-      NO_OBJECT_SPREADS,
-      state,
-    );
+    build_code_frame_error_and_panic_at(&Expr::Call(call.clone()), NO_OBJECT_SPREADS, state);
   }
 }
 
@@ -395,7 +456,7 @@ pub(crate) fn validate_stylex_default_marker_indent(call: &CallExpr, state: &mut
   if !call.args.is_empty() {
     build_code_frame_error_and_panic_at(
       &Expr::from(call.clone()),
-      &illegal_argument_length(STYLEX_DEFAULT_MARKER, 1),
+      &illegal_argument_length(STYLEX_DEFAULT_MARKER, 0),
       state,
     );
   }
@@ -426,7 +487,7 @@ pub(crate) fn validate_stylex_create_theme_indent(
   let (init_expr, init) = theme_init_call_of(var_decl, call, state);
 
   match state.find_top_level_expr(call) {
-    Some(_) => {},
+    Some(_) => {}
     None => build_code_frame_error_and_panic(
       init_expr,
       &call_expr(),
@@ -439,29 +500,14 @@ pub(crate) fn validate_stylex_create_theme_indent(
     build_code_frame_error_and_panic(
       init_expr,
       &call_expr(),
-      &illegal_argument_length(STYLEX_CREATE_THEME, 1),
+      &illegal_argument_length(STYLEX_CREATE_THEME, 2),
       state,
     );
   }
 
-  let second_arg = &init.args[1];
-
-  // A parenthesis is not a different argument, so the theme object is read
-  // through it. Read bare, `createTheme(vars, ({…}))` stopped the build.
-  let is_valid_second_arg = match normalize_expr(&second_arg.expr) {
-    Expr::Ident(ident) => state.import_binding(ident).is_none(),
-    Expr::Object(_) => true,
-    _ => false,
-  };
-
-  if !is_valid_second_arg {
-    build_code_frame_error_and_panic(
-      init_expr,
-      &call_expr(),
-      NON_STATIC_SECOND_ARG_CREATE_THEME_VALUE,
-      state,
-    );
-  }
+  // The second argument is validated after evaluation in the createTheme
+  // visitor. Its authored syntax does not determine whether it yields an
+  // object, and an unresolvable call must retain the non-static diagnostic.
 }
 
 /// Refuses a `stylex.defineVars` call the compiler cannot read, and answers the
@@ -567,7 +613,7 @@ pub(crate) fn find_and_validate_stylex_define_marker(
       };
 
       build_code_frame_error_and_panic_at(&fault_expr(), &error_message, state)
-    },
+    }
   };
 
   // Read out before the refusal below, which needs the state mutably.
@@ -671,7 +717,7 @@ stylex_call_predicate!(
 );
 
 pub(crate) fn is_target_call(
-  (call_name, imports_map): (&str, Option<&FxHashSet<Atom>>),
+  (call_name, _imports_map): (&str, Option<&FxHashSet<Atom>>),
   call: &CallExpr,
   state: &StateManager,
 ) -> bool {
@@ -682,7 +728,9 @@ pub(crate) fn is_target_call(
 
   let is_create_ident = callee
     .and_then(|callee| callee.as_ident())
-    .is_some_and(|ident| imports_map.is_some_and(|set| set.contains(&ident.sym)));
+    .is_some_and(|ident| {
+      ImportKind::from_import_name(call_name).is_some_and(|kind| state.matches_method(ident, kind))
+    });
 
   // The receiver is asked for its name once. Asking whether it has one and then
   // reading it left a second answer for a receiver that has none, which the
@@ -693,9 +741,10 @@ pub(crate) fn is_target_call(
       normalize_expr(&member.obj)
         .as_ident()
         .is_some_and(|receiver| {
-          member.prop.as_ident().is_some_and(|ident| {
-            ident.sym == call_name && state.is_stylex_namespace_import(receiver.sym.as_ref())
-          })
+          member
+            .prop
+            .as_ident()
+            .is_some_and(|ident| ident.sym == call_name && state.matches_namespace(receiver))
         })
     });
 
@@ -874,7 +923,7 @@ pub(crate) fn validate_namespace(
       Expr::Lit(lit) => reject_unless_style_value_literal(lit, state),
       Expr::Array(array) => {
         reject_unless_style_value_array(array, ILLEGAL_PROP_ARRAY_VALUE, state);
-      },
+      }
       Expr::Object(object) => {
         let key = convert_key_value_to_str(namespace);
 
@@ -897,8 +946,8 @@ pub(crate) fn validate_namespace(
             validate_conditional_styles(conditional_style, &[], state);
           }
         }
-      },
-      _ => {},
+      }
+      _ => {}
     }
   }
 }
@@ -952,7 +1001,7 @@ pub(crate) fn validate_conditional_styles(
     Expr::Lit(lit) => reject_unless_style_value_literal(lit, state),
     Expr::Array(array) => {
       reject_unless_style_value_array(array, ILLEGAL_PROP_VALUE, state);
-    },
+    }
     Expr::Object(object) => {
       let nested_key_values = get_key_values_from_object(object);
 
@@ -962,30 +1011,30 @@ pub(crate) fn validate_conditional_styles(
       for nested_key_value in nested_key_values.iter() {
         validate_conditional_styles(nested_key_value, &extended_conditions, state);
       }
-    },
-    Expr::Ident(_) => {},
+    }
+    Expr::Ident(_) => {}
     _ => build_code_frame_error_and_panic_at(&inner_value, ILLEGAL_PROP_VALUE, state),
   }
 }
 
 pub(crate) fn assert_valid_keyframes(obj: &EvaluateResultValue, state: &mut StateManager) {
-  match obj {
-    EvaluateResultValue::Expr(expr) => match expr {
+  match materialized_data(obj, state) {
+    Some(expr) => match &expr {
       Expr::Object(object) => {
         let key_values = get_key_values_from_object(object);
 
         for key_value in key_values.iter() {
           match key_value.value.as_ref() {
-            Expr::Object(_) => {},
+            Expr::Object(_) => {}
             _ => {
-              build_code_frame_error_and_panic_at(expr, NON_OBJECT_KEYFRAME, state);
-            },
+              build_code_frame_error_and_panic_at(&expr, NON_OBJECT_KEYFRAME, state);
+            }
           }
         }
-      },
+      }
       _ => {
-        build_code_frame_error_and_panic_at(expr, &non_style_object(STYLEX_KEYFRAMES), state);
-      },
+        build_code_frame_error_and_panic_at(&expr, &non_style_object(STYLEX_KEYFRAMES), state);
+      }
     },
     _ => stylex_panic!("{}", non_static_value(STYLEX_KEYFRAMES)),
   }
@@ -997,24 +1046,24 @@ pub(crate) fn assert_valid_properties(
   error_message: &str,
   state: &mut StateManager,
 ) {
-  if let EvaluateResultValue::Expr(expr) = obj
-    && let Expr::Object(object) = expr
+  if let Some(expr) = materialized_data(obj, state)
+    && let Expr::Object(object) = &expr
   {
     let key_values = get_key_values_from_object(object);
 
     for key_value in key_values.iter() {
       let key = key_value_name(key_value);
       if !valid_keys.contains(&key.as_ref()) {
-        build_code_frame_error_and_panic_at(expr, error_message, state);
+        build_code_frame_error_and_panic_at(&expr, error_message, state);
       }
     }
   }
 }
 
 fn assert_stylex_arg(value: &EvaluateResultValue, state: &mut StateManager, fn_name: &str) {
-  if let EvaluateResultValue::Expr(expr) = value {
+  if let Some(expr) = materialized_data(value, state) {
     if !expr.is_object() {
-      build_code_frame_error_and_panic_at(expr, &non_style_object(fn_name), state);
+      build_code_frame_error_and_panic_at(&expr, &non_style_object(fn_name), state);
     }
   } else {
     {
@@ -1041,7 +1090,10 @@ pub(crate) fn assert_valid_view_transition_class(
 /// object carries it under `__varGroupHash__`. A value that is neither, or an
 /// object that names no group, is refused here, so what is answered has only
 /// the two states [`ThemeVars`] holds.
-pub(crate) fn validate_theme_variables(variables: &EvaluateResultValue) -> (String, ThemeVars) {
+pub(crate) fn validate_theme_variables(
+  variables: &EvaluateResultValue,
+  state: &StateManager,
+) -> (String, ThemeVars) {
   if let Some(theme_ref) = variables.as_theme_ref() {
     let mut theme_ref = theme_ref.clone();
 
@@ -1051,11 +1103,11 @@ pub(crate) fn validate_theme_variables(variables: &EvaluateResultValue) -> (Stri
     return (group_name, ThemeVars::Group(theme_ref));
   }
 
-  let Some(object) = variables.as_expr().and_then(|expr| expr.as_object()) else {
+  let Some(Expr::Object(object)) = materialized_data(variables, state) else {
     stylex_panic!("{}", ONLY_OVERRIDE_DEFINE_VARS)
   };
 
-  let key_values = get_key_values_from_object(object);
+  let key_values = get_key_values_from_object(&object);
 
   let group_name = key_values
     .iter()

@@ -67,6 +67,25 @@ pub(crate) fn obj_map_keys_and_transform_values(
     .collect()
 }
 
+/// Keyframes and view-transition classes normalize against the original,
+/// expanded property name before dashifying it. The camelCase name selects
+/// the numeric suffix and property-specific value conversions in Babel.
+pub(crate) fn obj_transform_values_then_map_keys(
+  entries: &IndexMap<String, TRawValue>,
+  state: &mut StateManager,
+  mapper: impl Fn(&str) -> String,
+) -> Vec<Pair> {
+  let mut map: IndexMap<String, String> = IndexMap::with_capacity(entries.len());
+  for (key, value) in entries {
+    let transformed = transform_value_cached(key, value, state);
+    map.insert(mapper(key), transformed);
+  }
+  map
+    .into_iter()
+    .map(|(key, value)| Pair { key, value })
+    .collect()
+}
+
 pub(crate) fn preprocess_object_properties(
   style: &Expr,
   state: &mut StateManager,

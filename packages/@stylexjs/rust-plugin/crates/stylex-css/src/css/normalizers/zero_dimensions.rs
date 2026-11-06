@@ -14,12 +14,9 @@ const PERCENTAGE: &str = "%";
 /// entirely — but only outside a function, where dropping the unit would change
 /// what the function computes.
 ///
-/// Whether a token is inside a function is decided by comparing source offsets
-/// against the end of the first function seen, not by tracking where the walk
-/// currently is. The two answer differently, and the offsets are what the
-/// reference implementation asks: the window closes at the *first* function's
-/// end, so a second function later in the value is not covered by it, and a
-/// zero inside that one does lose its unit.
+/// The source-offset window is extended at every function (#1750), preserving
+/// units inside later functions as well as the first. URL bodies are skipped
+/// by the numeric rewrite (#1983).
 ///
 /// A custom property is exempt outright. Its value has no grammar the compiler
 /// can reason about, so `0px` there may well be read back as text by something
@@ -33,12 +30,15 @@ pub fn normalize_zero_dimensions(ast: &mut ValueParser, key: &str) {
 
   ast.walk(
     |node, _| {
-      if node.kind == NodeKind::Function && end_function == 0 {
-        end_function = node.source_end_index;
+      if node.kind == NodeKind::Function {
+        end_function = end_function.max(node.source_end_index);
       }
 
       if end_function > 0 && node.source_index > end_function {
         end_function = 0;
+      }
+      if node.kind == NodeKind::Function && node.value.eq_ignore_ascii_case("url") {
+        return false;
       }
 
       if node.kind != NodeKind::Word {

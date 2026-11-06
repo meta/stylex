@@ -49,8 +49,8 @@ pub static LONG_HAND_PHYSICAL: phf::Set<&'static str> = phf_set! {
   "padding-left",
   "padding-right",
 
-  "line-clamp",
-  "max-lines",
+  // Current Babel's priority table leaves line-clamp/max-lines unclassified
+  // (commented entries), so they take the normal 3000 fallback.
 
   "overflow-y",
   "overflow-x",

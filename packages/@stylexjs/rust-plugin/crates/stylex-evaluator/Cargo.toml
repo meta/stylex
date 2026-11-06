@@ -12,9 +12,12 @@ version.workspace = true
 crate-type = ["rlib"]
 doctest = false
 
+[features]
+default = []
+
 [dependencies]
 anyhow.workspace = true
-boa_engine.workspace = true
+hstr = "4.0.0"
 indexmap.workspace = true
 log.workspace = true
 rustc-hash.workspace = true

@@ -3,8 +3,14 @@ use swc_core::{
   ecma::ast::{CallExpr, Expr},
 };
 
+use std::cell::OnceCell;
+
 use crate::StyleXTransform;
+use crate::shared::utils::validators::{
+  is_keyframes_call, is_position_try_call, is_view_transition_class_call,
+};
 use stylex_enums::core::TransformationCycle;
+use stylex_utils::hash::stable_hash_unspanned_call;
 
 impl<C> StyleXTransform<C>
 where
@@ -12,9 +18,25 @@ where
 {
   pub(crate) fn transform_stylex_fns(&mut self, call_expr: &mut CallExpr) -> Option<Expr> {
     if self.state.cycle == TransformationCycle::TransformProducers {
-      let (_, parent_var_decl) = &self.get_call_var_name(call_expr);
+      // Every producer below reads the call without changing it, so its key is
+      // computed at most once and shared with the `create` transform.
+      let call: &CallExpr = call_expr;
+      let key = OnceCell::new();
+      let call_key = || *key.get_or_init(|| stable_hash_unspanned_call(call));
 
-      if let Some(parent_var_decl) = parent_var_decl {
+      // Only these three producers read the declarator, so it is copied for
+      // them alone rather than with every style object it initialises.
+      let parent_var_decl = self
+        .state
+        .find_call_declaration_keyed(call, call_key)
+        .filter(|decl| {
+          is_keyframes_call(decl, &self.state)
+            || is_view_transition_class_call(decl, &self.state)
+            || is_position_try_call(decl, &self.state)
+        })
+        .cloned();
+
+      if let Some(parent_var_decl) = &parent_var_decl {
         if let Some(value) = self.transform_stylex_keyframes_call(parent_var_decl) {
           return Some(value);
         }
@@ -28,39 +50,39 @@ where
         }
       }
 
-      if let Some(value) = self.transform_default_marker_call(call_expr) {
+      if let Some(value) = self.transform_default_marker_call(call) {
         return Some(value);
       }
 
-      if let Some(value) = self.transform_define_marker_call(call_expr) {
+      if let Some(value) = self.transform_define_marker_call(call) {
         return Some(value);
       }
 
-      if let Some(value) = self.transform_stylex_define_vars(call_expr) {
+      if let Some(value) = self.transform_stylex_define_vars(call) {
         return Some(value);
       }
 
-      if let Some(value) = self.transform_stylex_define_vars_nested(call_expr) {
+      if let Some(value) = self.transform_stylex_define_vars_nested(call) {
         return Some(value);
       }
 
-      if let Some(value) = self.transform_stylex_define_consts(call_expr) {
+      if let Some(value) = self.transform_stylex_define_consts(call) {
         return Some(value);
       }
 
-      if let Some(value) = self.transform_stylex_define_consts_nested(call_expr) {
+      if let Some(value) = self.transform_stylex_define_consts_nested(call) {
         return Some(value);
       }
 
-      if let Some(value) = self.transform_stylex_create_theme_call(call_expr) {
+      if let Some(value) = self.transform_stylex_create_theme_call(call) {
         return Some(value);
       }
 
-      if let Some(value) = self.transform_stylex_create_theme_nested_call(call_expr) {
+      if let Some(value) = self.transform_stylex_create_theme_nested_call(call) {
         return Some(value);
       }
 
-      if let Some(value) = self.transform_stylex_create(call_expr) {
+      if let Some(value) = self.transform_stylex_create(call, call_key) {
         return Some(value);
       }
     }

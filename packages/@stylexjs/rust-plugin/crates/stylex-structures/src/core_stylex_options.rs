@@ -11,8 +11,9 @@ use stylex_enums::{
 use crate::{
   evaluation_depth::MAX_EVALUATION_DEPTH,
   fold_ceilings::{MAX_FOLDED_CHARACTERS, MAX_FOLDED_ENTRIES},
+  import_resolver::{DebugFileNamer, ImportResolver},
   named_import_source::ImportSources,
-  stylex_env::{EnvEntry, JSFunction},
+  stylex_env::{EnvEntry, HostEnvironment, JSFunction},
   stylex_options::CheckModuleResolution,
 };
 
@@ -85,6 +86,15 @@ pub struct CoreStyleXOptions {
   pub env: Rc<IndexMap<String, EnvEntry>>,
   #[serde(skip)]
   pub debug_file_path: Option<JSFunction>,
+  /// See `StyleXOptionsParams::host_environment`.
+  #[serde(skip)]
+  pub host_environment: Option<HostEnvironment>,
+  /// See `StyleXOptionsParams::import_resolver`.
+  #[serde(skip)]
+  pub import_resolver: Option<Rc<dyn ImportResolver>>,
+  /// Names files in debug labels through the host's `debugFilePath`.
+  #[serde(skip)]
+  pub debug_file_namer: Option<Rc<dyn DebugFileNamer>>,
 }
 
 impl Default for CoreStyleXOptions {
@@ -117,6 +127,9 @@ impl Default for CoreStyleXOptions {
       max_folded_entries: MAX_FOLDED_ENTRIES.resolve(None),
       env: Rc::new(IndexMap::new()),
       debug_file_path: None,
+      host_environment: None,
+      import_resolver: None,
+      debug_file_namer: None,
     }
   }
 }
@@ -264,6 +277,21 @@ impl CoreStyleXOptions {
 
   pub fn with_debug_file_path(mut self, path: Option<JSFunction>) -> Self {
     self.debug_file_path = path;
+    self
+  }
+
+  pub fn with_host_environment(mut self, host: Option<HostEnvironment>) -> Self {
+    self.host_environment = host;
+    self
+  }
+
+  pub fn with_import_resolver(mut self, resolver: Option<Rc<dyn ImportResolver>>) -> Self {
+    self.import_resolver = resolver;
+    self
+  }
+
+  pub fn with_debug_file_namer(mut self, namer: Option<Rc<dyn DebugFileNamer>>) -> Self {
+    self.debug_file_namer = namer;
     self
   }
 

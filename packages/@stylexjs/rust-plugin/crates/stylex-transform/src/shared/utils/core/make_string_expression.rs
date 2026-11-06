@@ -1,9 +1,8 @@
 use stylex_ast::ast::convertors::create_number_expr;
 use swc_core::{
   common::DUMMY_SP,
-  ecma::{
-    ast::{BinaryOp, Expr, KeyValueProp, Prop, PropName, PropOrSpread, UnaryExpr, UnaryOp},
-    utils::quote_ident,
+  ecma::ast::{
+    BinaryOp, Expr, KeyValueProp, Number, Prop, PropName, PropOrSpread, UnaryExpr, UnaryOp,
   },
 };
 
@@ -63,7 +62,7 @@ pub(crate) fn make_string_expression(
             result
               .as_ref()
               .map(|result| ResolvedArg::StyleObject(result.clone()))
-          },
+          }
         })
         .collect::<Vec<ResolvedArg>>();
 
@@ -72,7 +71,11 @@ pub(crate) fn make_string_expression(
         .fold(0, |so_far, &b| (so_far << 1) | if b { 1 } else { 0 });
 
       PropOrSpread::Prop(Box::new(Prop::from(KeyValueProp {
-        key: PropName::Ident(quote_ident!(key.to_string())),
+        key: PropName::Num(Number {
+          span: DUMMY_SP,
+          value: key as f64,
+          raw: None,
+        }),
         value: Box::new(fn_result_to_expression(props_like_fn(&args))),
       })))
     })

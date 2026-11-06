@@ -6,6 +6,11 @@
 //! state itself -- [`StateManager::declaration_of`] and
 //! [`StateManager::import_binding`].
 
+#[cfg(test)]
+#[path = "initializer_snapshot_tests.rs"]
+mod initializer_snapshot_tests;
+
+use std::rc::Rc;
 use stylex_ast::ast::factories::create_var_declarator;
 use stylex_macros::{stylex_panic, stylex_unimplemented};
 use swc_core::{
@@ -20,11 +25,9 @@ use crate::{
 
 /// The two parts of a declarator the reference chain actually reads.
 ///
-/// Step 5 asks only for the span, which is `Copy`, and step 8 for the
-/// initializer. Answering either by cloning the whole declarator also copies its
-/// name pattern and type annotation, and does so on the path a real module takes
-/// -- the state hit -- where a borrow is available and only the initializer has
-/// to be owned.
+/// The indexed initializer is retained as immutable shared AST data: copying
+/// these parts copies only a span and an Rc, not the initializer subtree.
+/// Rewrites invalidate its snapshot while keeping the declaration span for TDZ.
 ///
 /// Falls through to [`get_var_decl_by_ident`] for the synthesized declarators
 /// the function map builds, rather than repeating its arms: that path has to
@@ -33,13 +36,13 @@ pub fn get_var_decl_parts_by_ident(
   ident: &Ident,
   traversal_state: &mut StateManager,
   functions: &FunctionMap,
-) -> Option<(Span, Option<Box<Expr>>)> {
-  if let Some(declarator) = traversal_state.declaration_of(ident) {
-    return Some((declarator.span, declarator.init.clone()));
+) -> Option<(Span, Option<Rc<Expr>>)> {
+  if let Some(parts) = traversal_state.declaration_parts(ident) {
+    return Some(parts);
   }
 
   get_var_decl_by_ident(ident, traversal_state, functions)
-    .map(|declarator| (declarator.span, declarator.init))
+    .map(|declarator| (declarator.span, declarator.init.map(|init| Rc::new(*init))))
 }
 
 /// Finds the declarator that an identifier names, or builds one from the

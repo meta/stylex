@@ -1,4 +1,6 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
+use std::sync::LazyLock;
 
 use crate::css::{
   generate_ltr::generate_ltr, generate_rtl::generate_rtl, normalize_value::normalize_value_guarded,
@@ -213,7 +215,7 @@ pub fn generate_css_rule(
 }
 
 /// Calculates priority for compound pseudo selectors (e.g. `:hover::after`).
-fn get_compound_pseudo_priority(key: &str) -> Option<f64> {
+pub(crate) fn get_compound_pseudo_priority(key: &str) -> Option<f64> {
   // Both alternations in `PSEUDO_PART_REGEX` open with a colon, so a key
   // without one cannot hold a pseudo part and the scan below can only come
   // back empty. Asked first because the overwhelming majority of keys reaching
@@ -221,6 +223,21 @@ fn get_compound_pseudo_priority(key: &str) -> Option<f64> {
   // backtracking regex over each of them to learn nothing made this the
   // single hottest leaf in a sampled profile of a large module.
   if !key.contains(':') {
+    return None;
+  }
+
+  // Every part the pattern matches starts in a run of colons of its own: a
+  // part ends in a letter or a parenthesis, so it cannot end inside a run for
+  // another to start there. A key with a single run of colons -- `:hover`,
+  // `::before` -- therefore holds at most one part, which the check below
+  // declines anyway.
+  let colon_runs = key
+    .as_bytes()
+    .windows(2)
+    .filter(|pair| pair[1] == b':' && pair[0] != b':')
+    .count()
+    + usize::from(key.starts_with(':'));
+  if colon_runs <= 1 {
     return None;
   }
 
@@ -281,39 +298,43 @@ fn get_pseudo_element_priority(key: &str) -> Option<f64> {
 fn get_pseudo_class_priority(key: &str) -> Option<f64> {
   let pseudo_base = |p: &str| -> f64 { **PSEUDO_CLASS_PRIORITIES.get(p).unwrap_or(&&40.0) / 100.0 };
 
-  // Check ancestor selector
-  if let Ok(Some(captures)) = ANCESTOR_SELECTOR.captures(key)
-    && let Some(pseudo) = captures.get(1)
-  {
-    return Some(10.0 + pseudo_base(pseudo.as_str()));
-  }
+  // Every relational selector pattern is anchored at `^:where\(`, so a key
+  // that does not open that way -- every plain property -- skips all five.
+  if key.starts_with(":where(") {
+    // Check ancestor selector
+    if let Ok(Some(captures)) = ANCESTOR_SELECTOR.captures(key)
+      && let Some(pseudo) = captures.get(1)
+    {
+      return Some(10.0 + pseudo_base(pseudo.as_str()));
+    }
 
-  // Check descendant selector
-  if let Ok(Some(captures)) = DESCENDANT_SELECTOR.captures(key)
-    && let Some(pseudo) = captures.get(1)
-  {
-    return Some(15.0 + pseudo_base(pseudo.as_str()));
-  }
+    // Check descendant selector
+    if let Ok(Some(captures)) = DESCENDANT_SELECTOR.captures(key)
+      && let Some(pseudo) = captures.get(1)
+    {
+      return Some(15.0 + pseudo_base(pseudo.as_str()));
+    }
 
-  // Check any sibling selector (must come before individual sibling selectors)
-  if let Ok(Some(captures)) = ANY_SIBLING_SELECTOR.captures(key)
-    && let (Some(pseudo1), Some(pseudo2)) = (captures.get(1), captures.get(2))
-  {
-    return Some(20.0 + pseudo_base(pseudo1.as_str()).max(pseudo_base(pseudo2.as_str())));
-  }
+    // Check any sibling selector (must come before individual sibling selectors)
+    if let Ok(Some(captures)) = ANY_SIBLING_SELECTOR.captures(key)
+      && let (Some(pseudo1), Some(pseudo2)) = (captures.get(1), captures.get(2))
+    {
+      return Some(20.0 + pseudo_base(pseudo1.as_str()).max(pseudo_base(pseudo2.as_str())));
+    }
 
-  // Check sibling before selector
-  if let Ok(Some(captures)) = SIBLING_BEFORE_SELECTOR.captures(key)
-    && let Some(pseudo) = captures.get(1)
-  {
-    return Some(30.0 + pseudo_base(pseudo.as_str()));
-  }
+    // Check sibling before selector
+    if let Ok(Some(captures)) = SIBLING_BEFORE_SELECTOR.captures(key)
+      && let Some(pseudo) = captures.get(1)
+    {
+      return Some(30.0 + pseudo_base(pseudo.as_str()));
+    }
 
-  // Check sibling after selector
-  if let Ok(Some(captures)) = SIBLING_AFTER_SELECTOR.captures(key)
-    && let Some(pseudo) = captures.get(1)
-  {
-    return Some(40.0 + pseudo_base(pseudo.as_str()));
+    // Check sibling after selector
+    if let Ok(Some(captures)) = SIBLING_AFTER_SELECTOR.captures(key)
+      && let Some(pseudo) = captures.get(1)
+    {
+      return Some(40.0 + pseudo_base(pseudo.as_str()));
+    }
   }
 
   // This function prices pseudo classes only; pseudo elements are priced by
@@ -331,23 +352,25 @@ fn get_pseudo_class_priority(key: &str) -> Option<f64> {
 }
 
 fn get_default_priority(key: &str) -> Option<f64> {
-  if SHORTHANDS_OF_SHORTHANDS.contains(key) {
-    return Some(1000.0);
-  }
+  // The four sets folded into one map, each key answering the priority of the
+  // first set that holds it -- the order the four probes ran in -- so a key is
+  // hashed once rather than once per set.
+  static DEFAULT_PRIORITIES: LazyLock<HashMap<&'static str, f64>> = LazyLock::new(|| {
+    let mut priorities = HashMap::new();
+    for (set, priority) in [
+      (&SHORTHANDS_OF_SHORTHANDS, 1000.0),
+      (&SHORTHANDS_OF_LONGHANDS, 2000.0),
+      (&LONG_HAND_LOGICAL, 3000.0),
+      (&LONG_HAND_PHYSICAL, 4000.0),
+    ] {
+      for key in set.iter() {
+        priorities.entry(*key).or_insert(priority);
+      }
+    }
+    priorities
+  });
 
-  if SHORTHANDS_OF_LONGHANDS.contains(key) {
-    return Some(2000.0);
-  }
-
-  if LONG_HAND_LOGICAL.contains(key) {
-    return Some(3000.0);
-  }
-
-  if LONG_HAND_PHYSICAL.contains(key) {
-    return Some(4000.0);
-  }
-
-  None
+  DEFAULT_PRIORITIES.get(key).copied()
 }
 
 /// Returns the CSS priority for a given key (property name, at-rule, or
@@ -711,6 +734,16 @@ pub fn normalize_css_property_value(
   css_property_value: &str,
   options: &StyleXStateOptions,
 ) -> String {
+  // A lowercase ASCII keyword -- `purple`, `solid`, `border-box` -- parses to
+  // one word node that no check or pass touches: it holds no space, divider,
+  // function, string, comment, number, dimension, `!important`, rule-breaking
+  // token or custom property, and is already in the case
+  // `convert_camel_cased_values` writes. Printing it back gives the text it was
+  // parsed from, so the text is answered without the round trip.
+  if is_plain_keyword(css_property_value) {
+    return css_property_value.to_owned();
+  }
+
   let structure = scan_value_structure(css_property_value);
 
   // The one guard that cannot wait for a pass. Parsing and normalizing each
@@ -761,6 +794,15 @@ pub fn normalize_css_property_value(
     options,
     deferred_refusal.as_deref(),
   )
+}
+
+/// A non-empty run of lowercase ASCII letters and hyphens that opens with a
+/// letter. See [`normalize_css_property_value`].
+pub(crate) fn is_plain_keyword(value: &str) -> bool {
+  value.as_bytes().first().is_some_and(u8::is_ascii_lowercase)
+    && value
+      .bytes()
+      .all(|byte| byte.is_ascii_lowercase() || byte == b'-')
 }
 
 /// Returns the numeric suffix for a CSS property (`"px"`, `"ms"`, `""`, etc.).

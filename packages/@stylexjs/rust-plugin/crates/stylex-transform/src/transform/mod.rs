@@ -368,24 +368,18 @@ where
       // through it: `(stylex.create)({…})` and `(stylex).create({…})` name the
       // same function the bare spelling names.
       match normalize_expr(callee) {
-        Expr::Ident(ident)
-          if self
-            .state
-            .is_stylex_import_for_current_cycle(ident.sym.as_ref()) =>
-        {
+        Expr::Ident(ident) if self.state.is_stylex_binding_for_current_cycle(ident) => {
           return Some((ident.to_id(), ident.sym.to_string()));
-        },
+        }
         Expr::Member(member) => {
           if let (Expr::Ident(obj_ident), MemberProp::Ident(prop_ident)) =
             (normalize_expr(&member.obj), &member.prop)
-            && self
-              .state
-              .is_stylex_import_for_current_cycle(obj_ident.sym.as_ref())
+            && self.state.is_stylex_binding_for_current_cycle(obj_ident)
           {
             return Some((obj_ident.to_id(), prop_ident.sym.to_string()));
           }
-        },
-        _ => {},
+        }
+        _ => {}
       }
     }
 
@@ -408,17 +402,55 @@ where
     &mut self,
     call: &CallExpr,
   ) -> (Option<String>, Option<VarDeclarator>) {
-    let mut var_name: Option<String> = None;
-
     let parent_var_decl = self.state.find_call_declaration(call).cloned();
-
-    if let Some(ref parent_var_decl) = parent_var_decl
-      && let Some(ident) = parent_var_decl.name.as_ident()
-    {
-      var_name = Some(ident.sym.to_string());
-    }
+    let var_name = parent_var_decl
+      .as_ref()
+      .and_then(|declarator| declarator.name.as_ident())
+      .map(|ident| ident.sym.to_string());
 
     (var_name, parent_var_decl)
+  }
+
+  /// [`Self::get_call_var_name`] for the `create` transform, with the call's key
+  /// supplied by the caller that already asked about the same call.
+  ///
+  /// `with_init` false answers the declarator without its initializer, for a
+  /// caller that records it with what the call compiled to: copying the call it
+  /// holds would copy the whole style object for nothing.
+  pub(crate) fn create_call_var_name_keyed(
+    &mut self,
+    call: &CallExpr,
+    call_key: impl FnOnce() -> u128,
+    with_init: bool,
+  ) -> (Option<String>, Option<VarDeclarator>) {
+    let parent_var_decl = self
+      .state
+      .find_call_declaration_keyed(call, call_key)
+      .map(|declarator| match with_init {
+        true => declarator.clone(),
+        false => VarDeclarator {
+          span: declarator.span,
+          name: declarator.name.clone(),
+          init: None,
+          definite: declarator.definite,
+        },
+      });
+    let var_name = parent_var_decl
+      .as_ref()
+      .and_then(|declarator| declarator.name.as_ident())
+      .map(|ident| ident.sym.to_string());
+
+    (var_name, parent_var_decl)
+  }
+
+  /// The name of the variable the declarator `call` initialises binds, without
+  /// copying the declarator.
+  pub(crate) fn call_var_name(&self, call: &CallExpr) -> Option<String> {
+    self
+      .state
+      .find_call_declaration(call)
+      .and_then(|declarator| declarator.name.as_ident())
+      .map(|ident| ident.sym.to_string())
   }
 }
 
