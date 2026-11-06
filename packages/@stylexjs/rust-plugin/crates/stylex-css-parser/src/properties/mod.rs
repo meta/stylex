@@ -1,8 +1,5 @@
 /*!
-CSS property parsers.
-
-This module contains parsers for specific CSS properties that require complex parsing logic.
-Each property has its own module with specialized parsing for that property's syntax.
+Parsers for CSS properties with complex syntax.
 */
 
 pub mod border_radius;

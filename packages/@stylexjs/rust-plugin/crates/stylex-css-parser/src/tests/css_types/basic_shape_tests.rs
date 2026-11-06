@@ -1,6 +1,3 @@
-// Tests extracted for css_types/basic_shape.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/css_types/basic_shape.rs
-
 use super::*;
 
 #[test]

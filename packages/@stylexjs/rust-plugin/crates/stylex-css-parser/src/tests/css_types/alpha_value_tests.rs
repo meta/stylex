@@ -1,6 +1,3 @@
-// Tests extracted for css_types/alpha_value.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/css_types/alpha_value.rs
-
 use super::*;
 
 #[test]
@@ -22,7 +19,6 @@ fn test_alpha_display() {
 
 #[test]
 fn test_parser_creation() {
-  // Test that the parser can be created
   let _parser = AlphaValue::parser();
   let _alpha_as_num = alpha_as_number();
 }

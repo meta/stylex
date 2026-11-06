@@ -1,6 +1,3 @@
-// Tests extracted for at_queries/messages.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/at_queries/messages.rs
-
 use super::*;
 
 #[test]

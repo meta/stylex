@@ -9,19 +9,17 @@ fn token_list(tokens: Vec<SimpleToken>) -> TokenList {
   }
 }
 
-// ── VerticalKeyword::as_str center arm ─────────────────────────
+// ── VerticalKeyword::as_str center arm ──
 
 #[test]
 fn vertical_keyword_as_str_center() {
-  // "center" arm of VerticalKeyword::as_str was not covered by existing tests.
   assert_eq!(VerticalKeyword::Center.as_str(), "center");
 }
 
-// ── Position::is_horizontal_ident — non-Ident branch ──────────
+// ── Position::is_horizontal_ident — non-Ident branch ──
 
 #[test]
 fn is_horizontal_ident_returns_false_for_non_ident() {
-  // Exercises the `else { false }` branch with a non-Ident token.
   let result = Position::is_horizontal_ident(&SimpleToken::Whitespace);
   assert!(!result);
 }
@@ -46,7 +44,7 @@ fn is_horizontal_ident_returns_false_for_unknown_ident() {
   )));
 }
 
-// ── Position::token_to_horizontal_keyword — unreachable arms ─────────────
+// ── Position::token_to_horizontal_keyword — unreachable arms ──
 
 #[test]
 fn token_to_horizontal_keyword_happy_path() {
@@ -78,7 +76,7 @@ fn token_to_horizontal_keyword_non_ident_panics() {
   Position::token_to_horizontal_keyword(SimpleToken::Whitespace);
 }
 
-// ── Position::is_vertical_ident — non-Ident branch ───────────
+// ── Position::is_vertical_ident — non-Ident branch ──
 
 #[test]
 fn is_vertical_ident_returns_false_for_non_ident() {
@@ -106,7 +104,7 @@ fn is_vertical_ident_returns_false_for_unknown_ident() {
   )));
 }
 
-// ── Position::token_to_vertical_keyword — unreachable arms ───────────────
+// ── Position::token_to_vertical_keyword — unreachable arms ──
 
 #[test]
 fn token_to_vertical_keyword_happy_path() {
@@ -138,11 +136,10 @@ fn token_to_vertical_keyword_non_ident_panics() {
   Position::token_to_vertical_keyword(SimpleToken::Whitespace);
 }
 
-// ── Vertical-then-horizontal parser ──────────────────────
+// ── Vertical-then-horizontal parser ──
 
 #[test]
 fn parses_top_left_vertical_then_horizontal() {
-  // "top left" exercises the vertical_horizontal_keywords branch.
   let result = Position::parser().parse_to_end("top left").unwrap();
   assert!(matches!(
     result.horizontal,
@@ -203,11 +200,10 @@ fn numbers_only_rewinds_trailing_whitespace_without_second_length() {
   assert_eq!(tokens.current_index, 1);
 }
 
-// ── position_parser convenience fn ───────────────────────
+// ── position_parser convenience fn ──
 
 #[test]
 fn position_parser_fn_works() {
-  // Exercises the `position_parser()` free function.
   let result = position_parser().parse_to_end("left").unwrap();
   assert!(matches!(
     result.horizontal,

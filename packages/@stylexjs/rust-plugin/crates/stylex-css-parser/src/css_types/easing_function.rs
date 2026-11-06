@@ -90,7 +90,6 @@ impl LinearEasingFunction {
   pub(crate) fn parse_tokens(
     tokens: &mut TokenList,
   ) -> Result<LinearEasingFunction, CssParseError> {
-    // Parse 'linear(' function start
     match tokens.consume_next_token_infallible() {
       Some(SimpleToken::Function(fn_name)) if fn_name == "linear" => {},
       Some(token) => {
@@ -105,17 +104,13 @@ impl LinearEasingFunction {
       },
     }
 
-    // Skip optional whitespace
     while matches!(tokens.peek(), Ok(Some(SimpleToken::Whitespace))) {
       let _ = tokens.consume_next_token();
     }
 
-    // Parse one or more numbers separated by commas
     let mut points = Vec::new();
 
-    // Check for empty linear() — at least one point is required.
-    // Peek ahead: if the next token is already a closing paren, no numbers were
-    // provided and points would remain empty after the loop.
+    // `linear()` needs at least one point.
     if matches!(tokens.peek(), Ok(Some(SimpleToken::RightParen))) {
       return Err(CssParseError::ParseError {
         message: "Linear function must have at least one point".to_string(),
@@ -123,7 +118,6 @@ impl LinearEasingFunction {
     }
 
     loop {
-      // Parse number
       let number = match tokens.consume_next_token_infallible() {
         Some(SimpleToken::Number(value)) => value,
         Some(token) => {
@@ -140,7 +134,6 @@ impl LinearEasingFunction {
 
       points.push(number);
 
-      // Skip optional whitespace
       while matches!(tokens.peek(), Ok(Some(SimpleToken::Whitespace))) {
         let _ = tokens.consume_next_token();
       }
@@ -148,7 +141,6 @@ impl LinearEasingFunction {
       // Consume comma (more numbers) or closing paren (end)
       match tokens.consume_next_token_infallible() {
         Some(SimpleToken::Comma) => {
-          // Skip optional whitespace after comma
           while matches!(tokens.peek(), Ok(Some(SimpleToken::Whitespace))) {
             let _ = tokens.consume_next_token();
           }
@@ -189,7 +181,6 @@ impl CubicBezierEasingFunction {
   pub(crate) fn parse_tokens(
     tokens: &mut TokenList,
   ) -> Result<CubicBezierEasingFunction, CssParseError> {
-    // Parse 'cubic-bezier(' function start
     match tokens.consume_next_token_infallible() {
       Some(SimpleToken::Function(fn_name)) if fn_name == "cubic-bezier" => {},
       Some(token) => {
@@ -204,7 +195,6 @@ impl CubicBezierEasingFunction {
       },
     }
 
-    // Skip optional whitespace
     while matches!(tokens.peek(), Ok(Some(SimpleToken::Whitespace))) {
       let _ = tokens.consume_next_token();
     }
@@ -214,12 +204,10 @@ impl CubicBezierEasingFunction {
 
     for i in 0..4 {
       if i > 0 {
-        // Skip optional whitespace before comma
         while matches!(tokens.peek(), Ok(Some(SimpleToken::Whitespace))) {
           let _ = tokens.consume_next_token();
         }
 
-        // Expect comma
         match tokens.consume_next_token_infallible() {
           Some(SimpleToken::Comma) => {},
           Some(token) => {
@@ -234,13 +222,11 @@ impl CubicBezierEasingFunction {
           },
         }
 
-        // Skip optional whitespace after comma
         while matches!(tokens.peek(), Ok(Some(SimpleToken::Whitespace))) {
           let _ = tokens.consume_next_token();
         }
       }
 
-      // Parse number
       let number = match tokens.consume_next_token_infallible() {
         Some(SimpleToken::Number(value)) => value,
         Some(token) => {
@@ -258,12 +244,10 @@ impl CubicBezierEasingFunction {
       numbers.push(number);
     }
 
-    // Skip optional whitespace
     while matches!(tokens.peek(), Ok(Some(SimpleToken::Whitespace))) {
       let _ = tokens.consume_next_token();
     }
 
-    // Parse closing paren
     match tokens.consume_next_token_infallible() {
       Some(SimpleToken::RightParen) => {},
       Some(token) => {
@@ -348,7 +332,6 @@ impl StepsEasingFunction {
   }
 
   pub(crate) fn parse_tokens(tokens: &mut TokenList) -> Result<StepsEasingFunction, CssParseError> {
-    // Parse 'steps(' function start
     match tokens.consume_next_token_infallible() {
       Some(SimpleToken::Function(fn_name)) if fn_name == "steps" => {},
       Some(token) => {
@@ -363,7 +346,6 @@ impl StepsEasingFunction {
       },
     }
 
-    // Skip optional whitespace
     while matches!(tokens.peek(), Ok(Some(SimpleToken::Whitespace))) {
       let _ = tokens.consume_next_token();
     }
@@ -392,12 +374,10 @@ impl StepsEasingFunction {
       },
     };
 
-    // Skip optional whitespace
     while matches!(tokens.peek(), Ok(Some(SimpleToken::Whitespace))) {
       let _ = tokens.consume_next_token();
     }
 
-    // Expect comma
     match tokens.consume_next_token_infallible() {
       Some(SimpleToken::Comma) => {},
       Some(token) => {
@@ -412,7 +392,6 @@ impl StepsEasingFunction {
       },
     }
 
-    // Skip optional whitespace after comma
     while matches!(tokens.peek(), Ok(Some(SimpleToken::Whitespace))) {
       let _ = tokens.consume_next_token();
     }
@@ -446,12 +425,10 @@ impl StepsEasingFunction {
       },
     };
 
-    // Skip optional whitespace
     while matches!(tokens.peek(), Ok(Some(SimpleToken::Whitespace))) {
       let _ = tokens.consume_next_token();
     }
 
-    // Parse closing paren
     match tokens.consume_next_token_infallible() {
       Some(SimpleToken::RightParen) => {},
       Some(token) => {

@@ -1,7 +1,5 @@
 /*!
-CSS Resolution type parsing.
-
-Handles resolution values with 'dpi' (dots per inch), 'dpcm' (dots per cm), and 'dppx' (dots per px) units.
+CSS `<resolution>`: `dpi`, `dpcm` and `dppx` units.
 */
 
 use stylex_macros::stylex_unreachable;
@@ -39,11 +37,7 @@ impl Resolution {
     RESOLUTION_UNITS.contains(&unit)
   }
 
-  /// Return `true` when `token` is a `Dimension` with a valid resolution unit.
-  ///
-  /// Returns `false` for any non-`Dimension` variant. This branch is unreachable
-  /// through the public parser (the combinator only yields `Dimension` tokens),
-  /// but the named function makes it coverable from tests.
+  /// Whether `token` is a `Dimension` with a valid resolution unit.
   pub(crate) fn is_valid_resolution_dimension(token: &SimpleToken) -> bool {
     if let SimpleToken::Dimension { unit, .. } = token {
       Self::is_valid_unit(unit)
@@ -52,11 +46,7 @@ impl Resolution {
     }
   }
 
-  /// Extract a `Resolution` from a `SimpleToken::Dimension`.
-  ///
-  /// Panics via `stylex_unreachable!` for any other token variant, which cannot
-  /// occur through the public parser. The named function makes that defensive
-  /// branch reachable from coverage tests.
+  /// Extract a `Resolution` from a `SimpleToken::Dimension`; other variants are unreachable.
   pub(crate) fn extract_dimension_token(token: SimpleToken) -> Resolution {
     if let SimpleToken::Dimension { value, unit } = token {
       Resolution::new(value, unit)

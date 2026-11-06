@@ -1,6 +1,3 @@
-// Tests extracted for css_types/color.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/css_types/color.rs
-
 use super::*;
 
 #[test]
@@ -10,11 +7,9 @@ fn test_named_color_validation() {
   assert!(NamedColor::is_valid_named_color("transparent"));
   assert!(NamedColor::is_valid_named_color("currentcolor"));
 
-  // Case insensitive
   assert!(NamedColor::is_valid_named_color("RED"));
   assert!(NamedColor::is_valid_named_color("Blue"));
 
-  // Invalid
   assert!(!NamedColor::is_valid_named_color("notacolor"));
   assert!(!NamedColor::is_valid_named_color(""));
 }
@@ -27,13 +22,11 @@ fn test_named_color_display() {
 
 #[test]
 fn test_hex_color_validation() {
-  // Valid formats
   assert!(HashColor::is_valid_hex("F00")); // 3-digit
   assert!(HashColor::is_valid_hex("FF0000")); // 6-digit
   assert!(HashColor::is_valid_hex("FF0000FF")); // 8-digit with alpha
   assert!(HashColor::is_valid_hex("123abc")); // lowercase
 
-  // Invalid formats
   assert!(!HashColor::is_valid_hex("GG0000")); // invalid hex
   assert!(!HashColor::is_valid_hex("FF00")); // wrong length
   assert!(!HashColor::is_valid_hex("")); // empty
@@ -41,20 +34,17 @@ fn test_hex_color_validation() {
 
 #[test]
 fn test_hex_color_rgb_extraction() {
-  // 6-digit hex
   let color = HashColor::new("FF0000".to_string());
   assert_eq!(color.r(), 255);
   assert_eq!(color.g(), 0);
   assert_eq!(color.b(), 0);
   assert_eq!(color.a(), 1.0);
 
-  // 3-digit hex
   let short_color = HashColor::new("F0A".to_string());
   assert_eq!(short_color.r(), 255); // F -> FF
   assert_eq!(short_color.g(), 0); // 0 -> 00
   assert_eq!(short_color.b(), 170); // A -> AA
 
-  // 8-digit with alpha
   let alpha_color = HashColor::new("FF000080".to_string());
   assert!((alpha_color.a() - 0.5).abs() < 0.01); // 80 hex = 128 dec ≈ 0.5 alpha
 }
@@ -103,7 +93,6 @@ fn test_color_enum_display() {
 
 #[test]
 fn test_color_parsers_creation() {
-  // Basic test that parsers can be created
   let _named = NamedColor::parse();
   let _hash = HashColor::parse();
   let _rgb = Rgb::parse();

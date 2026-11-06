@@ -1,6 +1,3 @@
-// Tests extracted for css_types/dashed_ident.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/css_types/dashed_ident.rs
-
 use super::*;
 
 #[test]
@@ -17,7 +14,6 @@ fn test_dashed_identifier_display() {
 
 #[test]
 fn test_valid_dashed_ident() {
-  // Valid dashed identifiers
   assert!(DashedIdentifier::is_valid_dashed_ident("--my-variable"));
   assert!(DashedIdentifier::is_valid_dashed_ident("--primary-color"));
   assert!(DashedIdentifier::is_valid_dashed_ident("--font-size"));
@@ -28,7 +24,6 @@ fn test_valid_dashed_ident() {
   assert!(DashedIdentifier::is_valid_dashed_ident("--kebab-case-var"));
   assert!(DashedIdentifier::is_valid_dashed_ident("--camelCaseVar"));
 
-  // Invalid dashed identifiers
   assert!(!DashedIdentifier::is_valid_dashed_ident("-single-dash"));
   assert!(!DashedIdentifier::is_valid_dashed_ident("no-dashes"));
   assert!(!DashedIdentifier::is_valid_dashed_ident("--")); // Only dashes, no name
@@ -39,7 +34,6 @@ fn test_valid_dashed_ident() {
 
 #[test]
 fn test_dashed_identifier_parser_creation() {
-  // Basic test that parser can be created
   let _parser = DashedIdentifier::parser();
 }
 
@@ -55,22 +49,18 @@ fn test_dashed_identifier_equality() {
 
 #[test]
 fn test_dashed_identifier_edge_cases() {
-  // Minimum valid length (3 characters: --, plus at least 1 more)
   assert!(DashedIdentifier::is_valid_dashed_ident("--a"));
   assert!(DashedIdentifier::is_valid_dashed_ident("--1"));
   assert!(DashedIdentifier::is_valid_dashed_ident("--_"));
 
-  // Just at the boundary
   assert!(!DashedIdentifier::is_valid_dashed_ident("--")); // Too short
 
-  // Multiple dashes should be fine
   assert!(DashedIdentifier::is_valid_dashed_ident("--my--var"));
   assert!(DashedIdentifier::is_valid_dashed_ident("-------"));
 }
 
 #[test]
 fn test_dashed_identifier_css_custom_properties() {
-  // Test common CSS custom property patterns
   let primary_color = DashedIdentifier::new("--primary-color".to_string());
   assert_eq!(primary_color.to_string(), "--primary-color");
 
@@ -80,7 +70,6 @@ fn test_dashed_identifier_css_custom_properties() {
   let spacing = DashedIdentifier::new("--spacing-sm".to_string());
   assert_eq!(spacing.to_string(), "--spacing-sm");
 
-  // All should be valid
   assert!(DashedIdentifier::is_valid_dashed_ident("--primary-color"));
   assert!(DashedIdentifier::is_valid_dashed_ident("--font-size-large"));
   assert!(DashedIdentifier::is_valid_dashed_ident("--spacing-sm"));
@@ -88,7 +77,6 @@ fn test_dashed_identifier_css_custom_properties() {
 
 #[test]
 fn test_dashed_identifier_various_formats() {
-  // Test different naming conventions that are all valid
   let kebab_case = "--kebab-case-var";
   let snake_case = "--snake_case_var";
   let camel_case = "--camelCaseVar";

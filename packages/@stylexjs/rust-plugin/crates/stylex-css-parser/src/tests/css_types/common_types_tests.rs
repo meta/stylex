@@ -1,6 +1,3 @@
-// Tests extracted for css_types/common_types.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/css_types/common_types.rs
-
 use super::*;
 
 #[test]
@@ -31,7 +28,6 @@ fn test_css_variable_display() {
 
 #[test]
 fn test_css_wide_keyword_parser() {
-  // Basic test that parser can be created
   let _parser = CssWideKeyword::parser();
   let _inherit = CssWideKeyword::inherit_parser();
   let _initial = CssWideKeyword::initial_parser();
@@ -41,7 +37,6 @@ fn test_css_wide_keyword_parser() {
 
 #[test]
 fn test_number_percentage_parsers() {
-  // Basic test that parsers can be created
   let _number = Number::parser();
   let _percentage = Percentage::parser();
   let _number_or_percentage = number_or_percentage_parser();
@@ -49,7 +44,6 @@ fn test_number_percentage_parsers() {
 
 #[test]
 fn test_auto_parser() {
-  // Basic test that parser can be created
   let _parser = auto_parser();
 }
 

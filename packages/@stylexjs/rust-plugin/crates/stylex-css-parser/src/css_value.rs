@@ -1,14 +1,6 @@
 /*!
-Universal CSS Value System for Dynamic Parsing
-
-This module implements a flexible value system that can represent any CSS value type,
-enabling dynamic parsing and type mixing in parser sequences.
-
-Key features:
-- Universal CssValue enum for any parsed result
-- Convenient property access (value.as_number(), etc.)
-- Dynamic type checking and conversion
-- Support for heterogeneous parser sequences
+`CssValue`: a universal value type so heterogeneous parser sequences can share one
+result type.
 */
 
 use stylex_utils::number::{to_js_string, write_js_number};
@@ -184,7 +176,7 @@ impl CssValue {
     }
   }
 
-  /// Convenience constructors
+  /// Construct a `Number` value.
   pub fn number(value: f64) -> Self {
     CssValue::Number(value)
   }
@@ -258,7 +250,6 @@ impl fmt::Display for CssValue {
   }
 }
 
-/// Convert from specific CSS types to CssValue
 impl From<f64> for CssValue {
   fn from(value: f64) -> Self {
     CssValue::Number(value)

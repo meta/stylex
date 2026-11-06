@@ -1,7 +1,6 @@
 /*!
 Basic shape CSS type tests.
 
-
 Test CSS Type: <basic-shape>
 Tests parsing of inset(), circle(), ellipse(), polygon(), and path() functions.
 */
@@ -17,7 +16,6 @@ use crate::css_types::{
 mod test_css_type_basic_shape {
   use super::*;
 
-  // Test Inset shapes
   mod inset {
     use stylex_macros::stylex_panic;
 
@@ -25,7 +23,6 @@ mod test_css_type_basic_shape {
 
     #[test]
     fn should_parse_valid_insets() {
-      // inset(10px) - single value
       let result = BasicShape::parse().parse_to_end("inset(10px)").unwrap();
       if let BasicShape::Inset {
         top,
@@ -56,7 +53,6 @@ mod test_css_type_basic_shape {
         stylex_panic!("Expected Inset variant");
       }
 
-      // inset(10px 20px) - two values
       let result = BasicShape::parse()
         .parse_to_end("inset(10px 20px)")
         .unwrap();
@@ -88,7 +84,6 @@ mod test_css_type_basic_shape {
         stylex_panic!("Expected Inset variant");
       }
 
-      // inset(10px 20px 30px) - three values
       let result = BasicShape::parse()
         .parse_to_end("inset(10px 20px 30px)")
         .unwrap();
@@ -120,7 +115,6 @@ mod test_css_type_basic_shape {
         stylex_panic!("Expected Inset variant");
       }
 
-      // inset(10px 20px 30px 40px) - four values
       let result = BasicShape::parse()
         .parse_to_end("inset(10px 20px 30px 40px)")
         .unwrap();
@@ -202,7 +196,6 @@ mod test_css_type_basic_shape {
     }
   }
 
-  // Test Circle shapes
   mod circle {
     use stylex_macros::stylex_panic;
 
@@ -210,7 +203,6 @@ mod test_css_type_basic_shape {
 
     #[test]
     fn should_parse_valid_circles() {
-      // circle(10px)
       let result = BasicShape::parse().parse_to_end("circle(10px)").unwrap();
       if let BasicShape::Circle { radius, position } = result {
         assert_eq!(
@@ -225,7 +217,6 @@ mod test_css_type_basic_shape {
         stylex_panic!("Expected Circle variant");
       }
 
-      // circle(closest-side)
       let result = BasicShape::parse()
         .parse_to_end("circle(closest-side)")
         .unwrap();
@@ -236,7 +227,6 @@ mod test_css_type_basic_shape {
         stylex_panic!("Expected Circle variant");
       }
 
-      // circle(farthest-side)
       let result = BasicShape::parse()
         .parse_to_end("circle(farthest-side)")
         .unwrap();
@@ -274,7 +264,6 @@ mod test_css_type_basic_shape {
     }
   }
 
-  // Test Ellipse shapes
   mod ellipse {
     use stylex_macros::stylex_panic;
 
@@ -282,7 +271,6 @@ mod test_css_type_basic_shape {
 
     #[test]
     fn should_parse_valid_ellipses() {
-      // ellipse(10px 20px)
       let result = BasicShape::parse()
         .parse_to_end("ellipse(10px 20px)")
         .unwrap();
@@ -311,7 +299,6 @@ mod test_css_type_basic_shape {
         stylex_panic!("Expected Ellipse variant");
       }
 
-      // ellipse(closest-side farthest-side)
       let result = BasicShape::parse()
         .parse_to_end("ellipse(closest-side farthest-side)")
         .unwrap();
@@ -371,7 +358,6 @@ mod test_css_type_basic_shape {
     }
   }
 
-  // Test Polygon shapes
   mod polygon {
     use super::*;
 
@@ -384,7 +370,6 @@ mod test_css_type_basic_shape {
       }) = result
       {
         assert_eq!(points.len(), 4);
-        // First point: 0% 0%
         assert_eq!(
           points[0].0,
           LengthPercentage::Percentage(Percentage::new(0.0))
@@ -393,7 +378,6 @@ mod test_css_type_basic_shape {
           points[0].1,
           LengthPercentage::Percentage(Percentage::new(0.0))
         );
-        // Second point: 100% 0%
         assert_eq!(
           points[1].0,
           LengthPercentage::Percentage(Percentage::new(100.0))
@@ -430,7 +414,6 @@ mod test_css_type_basic_shape {
     }
   }
 
-  // Test Path shapes
   mod path {
     use super::*;
 
@@ -459,7 +442,6 @@ mod test_css_type_basic_shape {
     }
   }
 
-  // Test string representations
   #[test]
   fn test_inset_string_representation() {
     let inset = BasicShape::Inset {
@@ -516,7 +498,6 @@ mod test_css_type_basic_shape {
     assert_eq!(ellipse.to_string(), "ellipse(farthest-side closest-side)");
   }
 
-  // Parse-and-to_string round-trip tests
   mod parse_to_string {
     use super::*;
 

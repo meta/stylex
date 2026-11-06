@@ -1,8 +1,5 @@
 /*!
-CSS Border Radius property parsing.
-
-Handles border-radius property syntax including individual values and shorthand notation.
-Supports both horizontal and vertical radius values with proper fallback logic.
+`border-radius` parsing: individual values and shorthand, with horizontal/vertical radii.
 */
 
 use stylex_macros::stylex_unreachable;
@@ -14,8 +11,7 @@ use crate::{
 };
 use std::fmt::{self, Display};
 
-/// Individual border radius value (can have different horizontal and vertical
-/// values)
+/// Individual border radius value (optional distinct vertical value)
 #[derive(Debug, Clone, PartialEq)]
 pub struct BorderRadiusIndividual {
   pub horizontal: LengthPercentage,
@@ -35,7 +31,6 @@ impl BorderRadiusIndividual {
   pub fn parser() -> TokenParser<BorderRadiusIndividual> {
     let whitespace = TokenParser::<SimpleToken>::token(SimpleToken::Whitespace, Some("Whitespace"));
 
-    // Use the WORKING pattern from BorderRadiusShorthand
     let first_value = length_percentage_parser();
     let second_value_optional = whitespace
       .flat_map(|_| length_percentage_parser(), Some("second_value"))
@@ -131,7 +126,6 @@ impl BorderRadiusShorthand {
     vertical_bottom_right: Option<LengthPercentage>,
     vertical_bottom_left: Option<LengthPercentage>,
   ) -> Self {
-    // CSS shorthand expansion logic
     let h_top_right = horizontal_top_right.unwrap_or(horizontal_top_left.clone());
     let h_bottom_right = horizontal_bottom_right.unwrap_or(horizontal_top_left.clone());
     let h_bottom_left = horizontal_bottom_left.unwrap_or(h_top_right.clone());
@@ -159,7 +153,7 @@ impl BorderRadiusShorthand {
     let whitespace = TokenParser::<SimpleToken>::token(SimpleToken::Whitespace, Some("Whitespace"));
     let slash = TokenParser::<SimpleToken>::token(SimpleToken::Delim('/'), Some("Slash"));
 
-    // Helper to parse 1-4 space-separated length/percentage values
+    // 1-4 space-separated length/percentage values
     let space_separated_radii = {
       let first_value = length_percentage_parser();
       let remaining_values = TokenParser::<LengthPercentage>::zero_or_more(
@@ -190,7 +184,7 @@ impl BorderRadiusShorthand {
       )
     };
 
-    // Parse optional " / vertical-radii" part
+    // Optional " / vertical-radii"
     let slash_vertical = {
       let whitespace_before_slash = whitespace.clone().optional();
       let whitespace_after_slash = whitespace.optional();
@@ -207,7 +201,6 @@ impl BorderRadiusShorthand {
         .optional()
     };
 
-    // Main parser: horizontal-radii [/ vertical-radii]?
     space_separated_radii.flat_map(
       move |horizontal_radii| {
         let h_radii = horizontal_radii;
@@ -230,7 +223,7 @@ impl BorderRadiusShorthand {
                 )
               },
               None => {
-                // Only horizontal radii provided, vertical defaults to horizontal
+                // Vertical defaults to horizontal
                 BorderRadiusShorthand::new(
                   h_tl,
                   Some(h_tr),
@@ -305,7 +298,6 @@ impl BorderRadiusShorthand {
       )
     };
 
-    // If horizontal and vertical are the same, just return horizontal
     if horizontal_str == vertical_str {
       horizontal_str
     } else {

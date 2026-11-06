@@ -1,6 +1,3 @@
-// Tests extracted for css_types/frequency.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/css_types/frequency.rs
-
 use super::*;
 
 #[test]
@@ -33,7 +30,6 @@ fn test_valid_frequency_units() {
   assert!(Frequency::is_valid_unit("Hz"));
   assert!(Frequency::is_valid_unit("KHz"));
 
-  // Invalid units
   assert!(!Frequency::is_valid_unit("px"));
   assert!(!Frequency::is_valid_unit("s"));
   assert!(!Frequency::is_valid_unit("deg"));
@@ -49,6 +45,5 @@ fn test_frequency_units_constant() {
 
 #[test]
 fn test_frequency_parser_creation() {
-  // Basic test that parser can be created
   let _parser = Frequency::parser();
 }

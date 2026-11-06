@@ -1,17 +1,5 @@
 /*!
-Token parser combinators for CSS parsing.
-
-This module provides a monadic parser combinator library for building CSS parsers,
-with a comprehensive set of parsing tools and combinators.
-
-**COMPREHENSIVE PARSING API**
-
-This implementation provides a complete parsing API with:
-- Return types: `T | Error` (using Result<T, CssParseError> in Rust)
-- Consistent method signatures
-- Helper classes: TokenZeroOrMoreParsers, TokenOneOrMoreParsers, etc.
-- Fluent APIs with .separated_by() methods
-- Static methods return specialized parser types
+Monadic token parser combinators for building CSS parsers.
 */
 
 use log::debug;
@@ -27,8 +15,7 @@ use std::{
   rc::Rc,
 };
 
-/// Provides: TokenParser.tokens.Ident, TokenParser.tokens.Whitespace.optional,
-/// etc.
+/// Token parsers: `tokens::ident()`, `tokens::whitespace()`, etc.
 pub mod tokens {
   use super::*;
 
@@ -155,23 +142,12 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
 
     let output = (self.run)(&mut tokens);
 
-    // The success/failure and leftover-token decisions are delegated to the
-    // non-generic `parse_to_end_error` so they are monomorphized exactly once.
-    // Keeping them inline here would duplicate the match/`if let` regions into
-    // every `TokenParser<T>` instantiation; a type whose tests only ever parse
-    // successfully would then leave the error arms unexercised in its own
-    // instantiation — a phantom coverage gap. `Option::map_or` (a std method,
-    // so its branch is not part of this crate's measured regions) then turns the
-    // optional error back into the result, leaving this body branch-free.
+    // Error decisions live in non-generic `parse_to_end_error` so they monomorphize once.
     let parse_error = output.as_ref().err().map(ToString::to_string);
     parse_to_end_error(&mut tokens, initial_index, &self.label, parse_error).map_or(output, Err)
   }
 
-  /// Map the output of this parser using a function
-  ///
-  /// De-branched: the `Err` rewind is delegated to the non-generic
-  /// `rewind_if_err`; `Result::map` (a core method) dispatches Ok vs Err
-  /// without creating a measured region in this crate's generic body.
+  /// Map the output of this parser using a function.
   pub fn map<U, F>(&self, f: F, label: Option<&str>) -> TokenParser<U>
   where
     U: Clone + Debug + 'static,
@@ -191,11 +167,7 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
     )
   }
 
-  /// Flat map operation for chaining parsers
-  ///
-  /// De-branched: both Err rewinds are delegated to `rewind_if_err`;
-  /// `Result::and_then` (core) dispatches Ok vs Err without generating a
-  /// measured branch region in this generic body.
+  /// Flat map operation for chaining parsers.
   pub fn flat_map<U, F>(&self, f: F, label: Option<&str>) -> TokenParser<U>
   where
     U: Clone + Debug + 'static,
@@ -219,10 +191,7 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
     )
   }
 
-  /// Try this parser, or fall back to another parser
-  ///
-  /// De-branched: `Result::map`/`Result::or_else` (core) dispatch Ok vs Err
-  /// without generating measured branch regions in this generic body.
+  /// Try this parser, or fall back to another parser.
   pub fn or<U>(&self, other: TokenParser<U>) -> TokenParser<Either<T, U>>
   where
     U: Clone + Debug + 'static,
@@ -275,12 +244,7 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
     self.where_predicate(predicate, label)
   }
 
-  /// Parse with prefix and suffix parsers
-  ///
-  /// De-branched: all three parser invocations delegate their Err-rewind to
-  /// `rewind_if_err`; the Ok-vs-Err dispatch is handled by core
-  /// `Result::and_then`/`Result::map` without creating measured branch
-  /// regions in this generic body.
+  /// Parse with prefix and suffix parsers.
   pub fn surrounded_by<P, S>(
     &self,
     prefix: TokenParser<P>,
@@ -400,11 +364,7 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
     &self.label
   }
 
-  /// Debug method that provides detailed parsing information
-  ///
-  /// De-branched: the `match &result { Ok => log, Err => log }` is delegated
-  /// to the non-generic `debug_log_result` helper so the branch is
-  /// monomorphized once; the generic body contains no measured branch regions.
+  /// Parse and log detailed parsing information.
   pub fn debug(&self, css: &str) -> Result<T, CssParseError> {
     debug!("Parsing '{}' with parser '{}'", css, self.label);
 
@@ -421,12 +381,7 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
     result
   }
 
-  /// Parse with detailed error context
-  ///
-  /// De-branched: `match result { Err => ..., Ok => ... }` is replaced by
-  /// extracting the error path into the non-generic
-  /// `build_parse_with_context_error` helper; `Option::map_or` (core) then
-  /// selects the final value without a measured branch region.
+  /// Parse with detailed error context.
   pub fn parse_with_context(&self, css: &str) -> Result<T, CssParseError> {
     let mut tokens = TokenList::new(css);
     let result = (self.run)(&mut tokens);
@@ -443,11 +398,7 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
     self
   }
 
-  /// Parser that always succeeds with the given value
-  ///
-  /// De-branched: the `if type_name == "()"` label selection is delegated to
-  /// the non-generic `always_make_label` helper so the branch is
-  /// monomorphized once; the generic body contains no measured branch region.
+  /// Parser that always succeeds with the given value.
   pub fn always(value: T) -> TokenParser<T> {
     let label = always_make_label(std::any::type_name::<T>(), &format!("{:?}", value));
     TokenParser::new(move |_| Ok(value.clone()), &label)
@@ -474,12 +425,7 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
       .one_or_more()
   }
 
-  /// Try multiple parsers in order
-  ///
-  /// De-branched: `Result::ok` (core) converts the per-iteration result to
-  /// `Option<T>` so the branch over Ok/Err does not appear as a measured
-  /// region; `results.extend(ok)` uses `Option`'s `IntoIterator` impl (core)
-  /// to push zero-or-one values without a measured branch.
+  /// Try multiple parsers in order.
   pub fn one_of(parsers: Vec<TokenParser<T>>) -> TokenParser<T> {
     TokenParser::new(
       move |tokens| {
@@ -502,8 +448,7 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
     )
   }
 
-  /// Parse a sequence of parsers (without separators)
-  ///
+  /// Parse a sequence of parsers (without separators).
   pub fn sequence<U: Clone + Debug + 'static>(parsers: Vec<TokenParser<U>>) -> TokenParser<Vec<U>> {
     TokenParser::new(
       move |tokens| {
@@ -533,9 +478,7 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
     SequenceParsers::new(parsers)
   }
 
-  /// Enhanced sequence parser that can handle mixed optional/required parsers
-  /// with separators This method takes a vector of Either<parser,
-  /// optional_parser> to distinguish behavior
+  /// Sequence of required (`Left`) and optional (`Right`) parsers with separators.
   pub fn flexible_sequence_separated_by<U: Clone + Debug + 'static, S: Clone + Debug + 'static>(
     parsers: Vec<Either<TokenParser<U>, TokenParser<Option<U>>>>,
     separator: TokenParser<S>,
@@ -546,14 +489,13 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
         let mut results = Vec::new();
 
         for (i, parser_either) in parsers.iter().enumerate() {
-          // For parsers after the first one, try separator first
           if i > 0 {
             let separator_index = tokens.current_index;
             let separator_consumed = (separator.run)(tokens).is_ok();
 
             match parser_either {
               Either::Left(required_parser) => {
-                // Required parser - must have separator if not first
+                // Required: must have a separator if not first
                 if !separator_consumed && i > 0 {
                   tokens.set_current_index(current_index);
                   return Err(CssParseError::ParseError {
@@ -570,10 +512,8 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
                 }
               },
               Either::Right(optional_parser) => {
-                // Optional parser - separator consumption depends on success
                 match (optional_parser.run)(tokens) {
                   Ok(Some(value)) => {
-                    // Optional parser succeeded - we needed the separator
                     if !separator_consumed && i > 0 {
                       tokens.set_current_index(current_index);
                       return Err(CssParseError::ParseError {
@@ -586,14 +526,14 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
                     results.push(Some(value));
                   },
                   Ok(None) => {
-                    // Optional parser returned None - rewind separator if consumed
+                    // None: rewind the separator if consumed
                     if separator_consumed {
                       tokens.set_current_index(separator_index);
                     }
                     results.push(None);
                   },
                   Err(_) => {
-                    // Optional parser failed - rewind separator if consumed
+                    // Failed: rewind the separator if consumed
                     if separator_consumed {
                       tokens.set_current_index(separator_index);
                     }
@@ -603,7 +543,6 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
               },
             }
           } else {
-            // First parser - no separator
             match parser_either {
               Either::Left(required_parser) => match (required_parser.run)(tokens) {
                 Ok(value) => results.push(Some(value)),
@@ -626,17 +565,12 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
     )
   }
 
-  /// Parse a set of parsers in any order (order-insensitive)
-  /// Returns a SetOfParsers builder that can be chained with .separated_by()
+  /// Parse a set of parsers in any order; chain `.separated_by()` on the result.
   pub fn set_of<U: Clone + Debug + 'static>(parsers: Vec<TokenParser<U>>) -> SetOfParsers<U> {
     SetOfParsers::new(parsers)
   }
 
-  /// Parse zero or more occurrences
-  ///
-  /// De-branched: `Result::ok` (core) converts the result to `Option<T>`;
-  /// `Option::extend` (core `IntoIterator`) pushes zero-or-one values without a
-  /// measured branch; `rewind_if_err` (non-generic) does the index rewind.
+  /// Parse zero or more occurrences.
   pub fn zero_or_more(parser: TokenParser<T>) -> TokenParser<Vec<T>> {
     let label = format!("ZeroOrMore<{}>", parser.label);
     TokenParser::new(
@@ -658,15 +592,7 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
     )
   }
 
-  /// Parse one or more occurrences
-  ///
-  /// De-branched: the first required match uses `rewind_if_err` + early return
-  /// via `r1.err().map_or(Ok(results_taken), Err)` — wait, actually we must
-  /// return the error to propagate. We use a direct pattern that keeps the
-  /// generic body branch-free for the loop portion by using the same
-  /// `Result::ok` + `extend` + `rewind_if_err` pattern as `zero_or_more`.
-  /// The first-match Err path is handled inline with `r1.is_err()` check and
-  /// `return r1.map(|_| unreachable!())` — a core method call with no branch.
+  /// Parse one or more occurrences.
   pub fn one_or_more(parser: TokenParser<T>) -> TokenParser<Vec<T>> {
     let label = format!("OneOrMore<{}>", parser.label);
     TokenParser::new(
@@ -674,7 +600,6 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
         let mut results = Vec::new();
         let start_index = tokens.current_index;
 
-        // Must match at least once
         let r1 = (parser.run)(tokens);
         rewind_if_err(tokens, start_index, r1.is_err());
         if r1.is_err() {
@@ -682,7 +607,6 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
         }
         results.extend(r1.ok());
 
-        // Then try to match more
         loop {
           let current_index = tokens.current_index;
           let r = (parser.run)(tokens);
@@ -742,12 +666,7 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
     Self::token(SimpleToken::Ident(String::new()), Some("Ident"))
   }
 
-  /// One or more separated by separator
-  ///
-  /// De-branched: the first required match is handled via `rewind_if_err` +
-  /// early return; the loop uses `Result::ok`/`extend`/`rewind_if_err` (all
-  /// core or non-generic) to push values without measured branch regions in
-  /// this generic body.
+  /// One or more separated by separator.
   pub fn one_or_more_separated_by<S>(
     parser: TokenParser<T>,
     separator: TokenParser<S>,
@@ -764,7 +683,6 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
         let mut results = Vec::new();
         let start_index = tokens.current_index;
 
-        // Must match at least once
         let r1 = (parser.run)(tokens);
         rewind_if_err(tokens, start_index, r1.is_err());
         if r1.is_err() {
@@ -772,7 +690,6 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
         }
         results.extend(r1.ok());
 
-        // Try to match additional occurrences with separators
         loop {
           let separator_index = tokens.current_index;
           let sep_ok = (separator.run)(tokens).is_ok();
@@ -781,7 +698,6 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
             break;
           }
 
-          // Separator found, try to parse next value
           let r = (parser.run)(tokens);
           let val_failed = r.is_err();
           rewind_if_err(tokens, separator_index, val_failed);
@@ -797,11 +713,7 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
     )
   }
 
-  /// Zero or more separated by separator
-  ///
-  /// De-branched: uses the same `Result::ok`/`extend`/`rewind_if_err`
-  /// pattern — all core or non-generic — leaving the generic body
-  /// branch-free.
+  /// Zero or more separated by separator.
   pub fn zero_or_more_separated_by<S>(
     parser: TokenParser<T>,
     separator: TokenParser<S>,
@@ -818,7 +730,6 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
         let mut results = Vec::new();
         let current_index = tokens.current_index;
 
-        // Try to match first occurrence
         let r0 = (parser.run)(tokens);
         let first_failed = r0.is_err();
         rewind_if_err(tokens, current_index, first_failed);
@@ -827,7 +738,6 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
         }
         results.extend(r0.ok());
 
-        // Try to match additional occurrences with separators
         loop {
           let separator_index = tokens.current_index;
           let sep_ok = (separator.run)(tokens).is_ok();
@@ -836,7 +746,6 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
             break;
           }
 
-          // Separator found, try to parse next value
           let r = (parser.run)(tokens);
           let val_failed = r.is_err();
           rewind_if_err(tokens, separator_index, val_failed);
@@ -870,11 +779,7 @@ impl<T: Clone + Debug + 'static> TokenOptionalParser<T> {
     Self { parser }
   }
 
-  /// Get the underlying parser as `TokenParser<Option<T>>`
-  ///
-  /// De-branched: `Result::ok` (core) converts the parser result to
-  /// `Option<T>`; wrapping in `Ok(...)` requires no branch in the generic
-  /// body.
+  /// Get the underlying parser as `TokenParser<Option<T>>`.
   pub fn as_token_parser(self) -> TokenParser<Option<T>> {
     let parser_run = self.parser.run;
     let label = format!("Optional<{}>", self.parser.label);
@@ -898,8 +803,7 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
   }
 }
 
-/// A parser that represents a main parser separated by a separator parser
-/// This allows for fluent API like: parser.separatedBy(comma).oneOrMore()
+/// A parser separated by a separator parser, e.g. `parser.separated_by(comma).one_or_more()`.
 #[derive(Clone)]
 pub struct SeparatedParser<T: Clone + Debug + 'static, S: Clone + Debug + 'static> {
   parser: TokenParser<T>,
@@ -1016,12 +920,11 @@ impl<T: Clone + Debug + 'static> SetOfParsers<T> {
         let mut used_indices = FxHashSet::default();
         let mut errors = Vec::new();
 
-        // Try to match each position in order, but parsers can match in any order
         for position in 0..parsers.len() {
           let mut found = false;
           let mut position_errors = Vec::new();
 
-          // Handle separator between elements (but not before first element)
+          // Separator between elements, not before the first
           if position > 0 {
             match (separator.run)(tokens) {
               Ok(_) => {
@@ -1040,7 +943,6 @@ impl<T: Clone + Debug + 'static> SetOfParsers<T> {
             }
           }
 
-          // Try each unused parser
           for (parser_index, parser) in parsers.iter().enumerate() {
             if used_indices.contains(&parser_index) {
               continue;
@@ -1074,10 +976,7 @@ impl<T: Clone + Debug + 'static> SetOfParsers<T> {
           }
         }
 
-        // Convert Option<T> to T.  The Err branch of collect_set_results is
-        // structurally unreachable (the loop returns early when !found), so
-        // unwrap_or_else is used with a named helper to allow the error path
-        // to be tested directly.
+        // The `Err` arm is unreachable: the loop returns early when a position is not found.
         set_of_incomplete_error(collect_set_results(results), tokens, start_index)
       },
       "setOfSeparatedBy",
@@ -1094,12 +993,10 @@ impl<T: Clone + Debug + 'static> SetOfParsers<T> {
         let mut used_indices = FxHashSet::default();
         let mut errors = Vec::new();
 
-        // Try to match each position in order, but parsers can match in any order
         for position in 0..parsers.len() {
           let mut found = false;
           let mut position_errors = Vec::new();
 
-          // Try each unused parser
           for (parser_index, parser) in parsers.iter().enumerate() {
             if used_indices.contains(&parser_index) {
               continue;
@@ -1133,7 +1030,7 @@ impl<T: Clone + Debug + 'static> SetOfParsers<T> {
           }
         }
 
-        // Same reasoning as the separated_by variant.
+        // `Err` unreachable, as in the separated_by variant.
         set_of_incomplete_error(collect_set_results(results), tokens, start_index)
       },
       "setOf",
@@ -1151,8 +1048,7 @@ impl<T: Clone + Debug + 'static> SequenceParsers<T> {
     Self { parsers }
   }
 
-  /// Parse a sequence without separators (consecutive parsing)
-  ///
+  /// Parse a sequence without separators.
   pub fn as_token_parser(self) -> TokenParser<Vec<T>> {
     let parsers = self.parsers;
     TokenParser::new(
@@ -1176,10 +1072,8 @@ impl<T: Clone + Debug + 'static> SequenceParsers<T> {
     )
   }
 
-  /// Parse a sequence with separators (like whitespace between elements)
-  /// Enhanced to handle optional parsers intelligently - when an optional
-  /// parser doesn't match, the separator is not consumed and parsing
-  /// continues
+  /// Parse a sequence with separators; a separator is optional when the element
+  /// only parses without it.
   pub fn separated_by<S: Clone + Debug + 'static>(
     self,
     separator: TokenParser<S>,
@@ -1191,39 +1085,30 @@ impl<T: Clone + Debug + 'static> SequenceParsers<T> {
         let mut results = Vec::new();
 
         for (i, parser) in parsers.iter().enumerate() {
-          // For parsers after the first one, handle separator logic
           if i > 0 {
             let separator_index = tokens.current_index;
 
-            // Try to consume separator
             let separator_consumed = (separator.run)(tokens).is_ok();
 
-            // Try to parse the element
             match (parser.run)(tokens) {
               Ok(value) => {
                 results.push(value);
                 // Success - continue to next parser
               },
               Err(_) => {
-                // Parser failed - check if this might be an optional parser scenario
                 if separator_consumed {
-                  // We consumed separator but parser failed
-                  // Rewind to before separator and try again
+                  // Rewind past the separator and retry without it
                   tokens.set_current_index(separator_index);
                   match (parser.run)(tokens) {
                     Ok(value) => {
                       results.push(value);
-                      // Continue - this handles cases where separator was
-                      // optional
                     },
                     Err(e) => {
-                      // Both attempts failed - this is a real error
                       tokens.set_current_index(current_index);
                       return Err(e);
                     },
                   }
                 } else {
-                  // No separator and parser failed - this is an error
                   tokens.set_current_index(current_index);
                   return Err(CssParseError::ParseError {
                     message: format!(
@@ -1235,7 +1120,6 @@ impl<T: Clone + Debug + 'static> SequenceParsers<T> {
               },
             }
           } else {
-            // First parser - no separator needed
             match (parser.run)(tokens) {
               Ok(value) => results.push(value),
               Err(e) => {
@@ -1425,9 +1309,7 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
     Tokens
   }
 
-  /// Create a helper for mixed sequence parsing
-  /// Usage: TokenParser::mixed_sequence([Left(foo), Right(bar.optional()),
-  /// Left(baz)]).separated_by(whitespace)
+  /// Mixed sequence builder: `mixed_sequence([Left(a), Right(b.optional())]).separated_by(ws)`.
   pub fn mixed_sequence<U: Clone + Debug + 'static>(
     parsers: Vec<Either<TokenParser<U>, TokenParser<Option<U>>>>,
   ) -> MixedSequenceBuilder<U> {
@@ -1454,22 +1336,14 @@ impl<T: Clone + Debug + 'static> MixedSequenceBuilder<T> {
   }
 }
 
-/// Consume the next token from `tokens` and check whether its discriminant
-/// matches `expected_token`. Returns the token on success; rewinds to
-/// `saved_index` and returns `Err` on mismatch or end-of-input.
-///
-/// `TokenList::consume_next_token` always returns `Ok(Some(...))` or
-/// `Ok(None)`. The `.ok()` call converts the infallible `Result` to an
-/// `Option<Option<SimpleToken>>`, and `unwrap_or(None)` flattens the
-/// impossible-`Err` case into a `None` (same effect as end-of-input),
-/// avoiding any uncovered error-propagation region.
+/// Consume the next token and check its discriminant matches `expected_token`; on mismatch or
+/// end of input, rewind to `saved_index` and return `Err`.
 pub fn match_next_token(
   tokens: &mut TokenList,
   saved_index: usize,
   expected_token: &SimpleToken,
 ) -> Result<SimpleToken, CssParseError> {
-  // .ok() converts Result<Option<T>, E> → Option<Option<T>>
-  // .unwrap_or(None) handles the infallible Err case (never fires in practice)
+  // `consume_next_token` cannot fail; `unwrap_or(None)` folds the impossible `Err` into EOF.
   let result_opt = tokens.consume_next_token().ok().unwrap_or(None);
   match result_opt {
     Some(token) => {
@@ -1491,17 +1365,8 @@ pub fn match_next_token(
   }
 }
 
-/// Decide whether a `parse_to_end` run failed, returning the error to surface or
-/// `None` when the whole input was consumed successfully.
-///
-/// Non-generic on purpose: it owns every branch of `parse_to_end` (parse
-/// failure vs. leftover input vs. success) so they are monomorphized once and
-/// fully exercised by the suite as a whole, instead of being duplicated — and
-/// left partly uncovered — across every `TokenParser<T>` instantiation.
-///
-/// `parse_error` carries the inner parser's error rendered with `Display` (the
-/// caller extracts it without consuming the result), so the message matches the
-/// previous inline behaviour exactly.
+/// The error a `parse_to_end` run surfaces, or `None` if all input was consumed.
+/// Non-generic so its branches monomorphize once.
 fn parse_to_end_error(
   tokens: &mut TokenList,
   initial_index: usize,
@@ -1519,8 +1384,7 @@ fn parse_to_end_error(
     });
   }
 
-  // No parse error: ensure all input was consumed. `peek_remaining` avoids the
-  // `?`-on-`Ok` region since `TokenList::peek` is structurally infallible.
+  // No parse error: ensure all input was consumed.
   if let Some(token) = tokens.peek_infallible() {
     let consumed_tokens = tokens.slice(initial_index, Some(tokens.current_index));
     return Some(CssParseError::ParseError {
@@ -1534,13 +1398,8 @@ fn parse_to_end_error(
   None
 }
 
-/// Convert a `collect_set_results` return value into the final parser result
-/// for `SetOfParsers`, rewinding the token list on the (structurally
-/// unreachable) `Err` case.
-///
-/// Extracted as a named function so that both the `Ok` path (normal operation)
-/// and the `Err` path (defensive guard for an impossible `None` in results)
-/// can be exercised directly in tests.
+/// Turn a `collect_set_results` value into the `SetOfParsers` result, rewinding on the
+/// (unreachable) `Err`.
 pub fn set_of_incomplete_error<T: Clone + Debug>(
   collected: Result<Vec<T>, String>,
   tokens: &mut TokenList,
@@ -1557,11 +1416,7 @@ pub fn set_of_incomplete_error<T: Clone + Debug>(
   }
 }
 
-/// Collect a `Vec<Option<T>>` into `Result<Vec<T>, String>`, mapping any
-/// remaining `None` entry to an error message that identifies the position.
-///
-/// Used by `SetOfParsers::separated_by` and `SetOfParsers::as_token_parser`
-/// as a named function so the `Err` arm is directly callable from tests.
+/// Collect `Vec<Option<T>>` into `Result`, erroring with the position of any remaining `None`.
 pub fn collect_set_results<T>(results: Vec<Option<T>>) -> Result<Vec<T>, String> {
   results
     .into_iter()
@@ -1570,10 +1425,7 @@ pub fn collect_set_results<T>(results: Vec<Option<T>>) -> Result<Vec<T>, String>
     .collect()
 }
 
-/// Extract the `String` value from a `SimpleToken::Ident` variant.
-/// The `else` arm is unreachable through the public parser (the token type is
-/// guaranteed by `TokenParser::token`), but is extracted here so tests can
-/// drive the defensive `stylex_unreachable!()` branch directly.
+/// Extract the `String` from a `SimpleToken::Ident`; other variants are unreachable.
 pub fn extract_ident_value(token: SimpleToken) -> String {
   if let SimpleToken::Ident(value) = token {
     value
@@ -1582,8 +1434,7 @@ pub fn extract_ident_value(token: SimpleToken) -> String {
   }
 }
 
-/// Extract the `String` value from a `SimpleToken::Function` variant.
-/// Same rationale as `extract_ident_value`.
+/// Extract the `String` from a `SimpleToken::Function`; other variants are unreachable.
 pub fn extract_function_value(token: SimpleToken) -> String {
   if let SimpleToken::Function(value) = token {
     value
@@ -1592,15 +1443,13 @@ pub fn extract_function_value(token: SimpleToken) -> String {
   }
 }
 
-/// Peek at what the next few tokens would be without consuming them
-/// Enhanced debugging utility function
+/// Peek at the next few tokens without consuming them (debugging aid).
 pub fn peek_tokens(css: &str, count: usize) -> Vec<SimpleToken> {
   let mut tokens = TokenList::new(css);
   let mut result = Vec::new();
   for _ in 0..count {
     if let Ok(Some(token)) = tokens.peek() {
       result.push(token);
-      // Move forward to see next token
       let _ = tokens.consume_next_token();
     } else {
       break;
@@ -1609,23 +1458,14 @@ pub fn peek_tokens(css: &str, count: usize) -> Vec<SimpleToken> {
   result
 }
 
-/// Rewind `tokens` to `saved_index` when `failed` is `true`.
-///
-/// Non-generic helper extracted so that the index-rewind branch is
-/// monomorphized exactly once. Generic combinators call this instead of
-/// writing `if r.is_err() { tokens.set_current_index(idx); }` inline, which
-/// would create per-instantiation phantom regions in llvm-cov.
+/// Rewind `tokens` to `saved_index` when `failed`; non-generic so it monomorphizes once.
 pub fn rewind_if_err(tokens: &mut TokenList, saved_index: usize, failed: bool) {
   if failed {
     tokens.set_current_index(saved_index);
   }
 }
 
-/// Build the label string for `TokenParser::always`.
-///
-/// Non-generic so the `type_name == "()"` branch is monomorphized once and
-/// both arms are exercised by the test suite as a whole, rather than leaving
-/// one arm phantom in instantiations where `T != ()`.
+/// Build the label string for `TokenParser::always`; non-generic so it monomorphizes once.
 pub fn always_make_label(type_name: &str, debug_str: &str) -> String {
   if type_name == "()" {
     "optional".to_string()
@@ -1634,11 +1474,7 @@ pub fn always_make_label(type_name: &str, debug_str: &str) -> String {
   }
 }
 
-/// Log the outcome of a `TokenParser::debug` call.
-///
-/// Non-generic so the `success` branch is monomorphized once. Both arms are
-/// exercised by the test suite (debug_method_success / debug_method_failure),
-/// so neither becomes a phantom in any generic instantiation.
+/// Log the outcome of a `TokenParser::debug` call; non-generic so it monomorphizes once.
 pub fn debug_log_result(success: bool, label: &str, idx: usize, error: &str) {
   if success {
     debug!(
@@ -1653,10 +1489,7 @@ pub fn debug_log_result(success: bool, label: &str, idx: usize, error: &str) {
   }
 }
 
-/// Build the enriched error returned by `TokenParser::parse_with_context`.
-///
-/// Non-generic so the error-path logic is monomorphized once and not
-/// duplicated across every `TokenParser<T>` instantiation.
+/// Build the error returned by `TokenParser::parse_with_context`; non-generic.
 pub fn build_parse_with_context_error(
   error: &CssParseError,
   css: &str,
@@ -1676,9 +1509,7 @@ pub fn build_parse_with_context_error(
   }
 }
 
-/// Build the `CssParseError` for `TokenParser::one_of` when all parsers fail.
-///
-/// Non-generic so the error-formatting logic is monomorphized once.
+/// Build the `TokenParser::one_of` error when all parsers fail; non-generic.
 pub fn one_of_error(errors: Vec<CssParseError>) -> CssParseError {
   CssParseError::ParseError {
     message: format!(

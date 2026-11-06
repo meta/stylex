@@ -1,7 +1,5 @@
 /*!
-CSS Calc type parsing with full arithmetic support.
-
-Implements complete calc() expression parsing with operator precedence.
+CSS `calc()` expression parsing with operator precedence.
 */
 
 use stylex_macros::stylex_unreachable;
@@ -125,23 +123,14 @@ pub enum CalcValueOrOperator {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum CalcValue {
-  /// number
   Number(f64),
-  /// `TokenDimension[4]`
   Dimension(CalcDimension),
-  /// Percentage
   Percentage(Percentage),
-  /// CalcConstant
   Constant(CalcConstant),
-  /// Addition
   Addition(Addition),
-  /// Subtraction
   Subtraction(Subtraction),
-  /// Multiplication
   Multiplication(Multiplication),
-  /// Division
   Division(Division),
-  /// Group
   Group(Group),
 }
 
@@ -160,8 +149,7 @@ impl CalcValue {
     TokenParser::new(Self::parse_calc_value, "calc_value")
   }
 
-  /// Helper: Parse a basic calc value (number, dimension, percentage, or
-  /// constant)
+  /// Parse a basic calc value: number, dimension, percentage, or constant.
   fn parse_calc_value(tokens: &mut TokenList) -> Result<CalcValue, CssParseError> {
     let token = tokens
       .consume_next_token_infallible()
@@ -179,7 +167,7 @@ impl CalcValue {
         Ok(CalcValue::Percentage(Percentage::new(value)))
       },
       SimpleToken::Ident(name) => {
-        // Try to parse as calc constant (pi, e, infinity, -infinity, NaN)
+        // Calc constant: pi, e, infinity, -infinity, NaN
         match CalcConstant::parse(&name) {
           Some(constant) => Ok(CalcValue::Constant(constant)),
           None => Err(CssParseError::ParseError {
@@ -219,36 +207,29 @@ impl CalcValue {
 
   /// Parse calc expression with operator precedence
   fn parse_calc_expression(tokens: &mut TokenList) -> Result<CalcValue, CssParseError> {
-    // Skip any leading whitespace
     skip_whitespace(tokens);
 
-    // Parse first value or group
     let first_value = match Self::try_parse_parenthesized_group(tokens) {
       Ok(grouped) => CalcValue::Group(grouped),
       Err(_) => Self::parse_calc_value(tokens)?,
     };
 
-    // Collect values and operators
     let mut values_and_operators = vec![CalcValueOrOperator::Value(first_value)];
 
     loop {
-      // Skip whitespace
       let had_ws_before = skip_whitespace(tokens);
 
-      // Check if we're at the end of the expression (RightParen means end for calc)
+      // RightParen ends the expression; the parent parser consumes it.
       if let Ok(Some(SimpleToken::RightParen)) = tokens.peek() {
-        // Don't consume the RightParen - let the parent parser handle it
         break;
       }
 
-      // Try to parse an operator
       let checkpoint = tokens.current_index;
       match Self::try_parse_operator(tokens) {
         Ok(operator) => {
           let requires_surrounding_ws = matches!(operator.as_str(), "+" | "-");
           values_and_operators.push(CalcValueOrOperator::Operator(operator));
 
-          // Skip whitespace after operator
           let had_ws_after = skip_whitespace(tokens);
           if requires_surrounding_ws && (!had_ws_before || !had_ws_after) {
             return Err(CssParseError::ParseError {
@@ -256,7 +237,6 @@ impl CalcValue {
             });
           }
 
-          // Parse next value or group
           let next_value = match Self::try_parse_parenthesized_group(tokens) {
             Ok(grouped) => CalcValue::Group(grouped),
             Err(_) => Self::parse_calc_value(tokens)?,
@@ -264,18 +244,12 @@ impl CalcValue {
           values_and_operators.push(CalcValueOrOperator::Value(next_value));
         },
         Err(_) => {
-          // No operator found, we're done
           tokens.set_current_index(checkpoint);
           break;
         },
       }
     }
 
-    // Trailing whitespace before the terminator is already consumed by the
-    // whitespace skip at the top of the loop above, so no extra skip is needed
-    // here.
-
-    // Apply operator precedence
     if values_and_operators.len() == 1 {
       Self::extract_single_calc_value(&values_and_operators[0])
     } else {
@@ -283,9 +257,7 @@ impl CalcValue {
     }
   }
 
-  /// Extract the CalcValue from a single CalcValueOrOperator.
-  /// The first element of values_and_operators is always a Value (guaranteed by
-  /// the parser), so the else arm is a defensive `stylex_unreachable!`.
+  /// The `CalcValue` of the first element, which the parser guarantees is a `Value`.
   fn extract_single_calc_value(item: &CalcValueOrOperator) -> Result<CalcValue, CssParseError> {
     if let CalcValueOrOperator::Value(value) = item {
       Ok(value.clone())
@@ -294,8 +266,7 @@ impl CalcValue {
     }
   }
 
-  /// Apply operator precedence: multiplication/division first, then
-  /// addition/subtraction
+  /// Apply operator precedence: `*` and `/` first, then `+` and `-`.
   fn split_by_multiplication_or_division(
     values_and_operators: Vec<CalcValueOrOperator>,
   ) -> Result<CalcValue, CssParseError> {
@@ -310,14 +281,13 @@ impl CalcValue {
       }
     }
 
-    // Find first * or / operator
     let first_operator = values_and_operators
       .iter()
       .position(|item| matches!(item, CalcValueOrOperator::Operator(op) if op == "*" || op == "/"));
 
     match first_operator {
       None => {
-        // No * or / found, handle + and -
+        // No `*` or `/`: handle `+` and `-`
         Self::compose_add_and_subtraction(values_and_operators)
       },
       Some(op_index) => {
@@ -332,12 +302,7 @@ impl CalcValue {
     }
   }
 
-  /// Apply a `*` or `/` operator to two already-parsed values.
-  ///
-  /// `op` is the element at the index returned by `position()`, which only
-  /// matches `CalcValueOrOperator::Operator(s)` where `s` is `"*"` or `"/"`.
-  /// The other arms are defensive guards; they are extracted as a named
-  /// function so they can be reached by a `#[should_panic]` test.
+  /// Apply a `*` or `/` operator to two parsed values; other operators are unreachable.
   fn apply_mult_div_operator(
     op: &CalcValueOrOperator,
     left: CalcValue,
@@ -373,7 +338,6 @@ impl CalcValue {
       }
     }
 
-    // Find first + or - operator
     let first_operator = values_and_operators
       .iter()
       .position(|item| matches!(item, CalcValueOrOperator::Operator(op) if op == "+" || op == "-"));
@@ -394,12 +358,7 @@ impl CalcValue {
     }
   }
 
-  /// Apply a `+` or `-` operator to two already-parsed values.
-  ///
-  /// `op` is the element at the index returned by `position()`, which only
-  /// matches `CalcValueOrOperator::Operator(s)` where `s` is `"+"` or `"-"`.
-  /// The other arms are defensive guards extracted so they can be covered by
-  /// `#[should_panic]` tests.
+  /// Apply a `+` or `-` operator to two parsed values; other operators are unreachable.
   fn apply_add_sub_operator(
     op: &CalcValueOrOperator,
     left: CalcValue,
@@ -422,10 +381,8 @@ impl CalcValue {
 
   /// Try to parse a parenthesized group
   fn try_parse_parenthesized_group(tokens: &mut TokenList) -> Result<Group, CssParseError> {
-    // Save checkpoint in case we need to rollback
     let checkpoint = tokens.current_index;
 
-    // Expect '('
     let open_paren_token =
       tokens
         .consume_next_token_infallible()
@@ -434,22 +391,17 @@ impl CalcValue {
         })?;
 
     if !matches!(open_paren_token, SimpleToken::LeftParen) {
-      // Rollback and return error
       tokens.set_current_index(checkpoint);
       return Err(CssParseError::ParseError {
         message: "Expected '(' token".to_string(),
       });
     }
 
-    // Skip optional whitespace
     skip_whitespace(tokens);
 
-    // Parse the inner expression recursively. Its own trailing whitespace is
-    // consumed by parse_calc_expression's internal loop, so the position is left
-    // at the closing parenthesis.
+    // Leaves the position at the closing parenthesis.
     let inner_expr = Self::parse_calc_expression(tokens)?;
 
-    // Expect ')'
     let close_paren_token =
       tokens
         .consume_next_token_infallible()
@@ -503,7 +455,7 @@ impl Display for CalcValue {
   }
 }
 
-/// Main Calc expression container
+/// Calc expression container
 #[derive(Debug, Clone, PartialEq)]
 pub struct Calc {
   pub value: CalcValue,
@@ -515,21 +467,18 @@ impl Calc {
     Calc { value }
   }
 
-  /// Parse method for compatibility with existing tests
+  /// Alias for [`Calc::parser`].
   pub fn parse() -> TokenParser<Calc> {
     Self::parser()
   }
 
   /// Parser for calc() expressions
   pub fn parser() -> TokenParser<Calc> {
-    // Custom parser that handles the specific calc() tokenization structure
     TokenParser::new(Self::parse_calc, "calc_parser")
   }
 
-  /// Parse a `calc(...)` token stream: `Function("calc")`, the inner expression,
-  /// then the closing parenthesis.
+  /// Parse a `calc(...)` token stream.
   fn parse_calc(tokens: &mut TokenList) -> Result<Calc, CssParseError> {
-    // First, expect Function("calc")
     let token = tokens
       .consume_next_token_infallible()
       .ok_or(CssParseError::ParseError {
@@ -548,10 +497,8 @@ impl Calc {
       });
     }
 
-    // Parse the calc expression content (everything until RightParen)
     let calc_value = CalcValue::parse_calc_expression(tokens)?;
 
-    // Consume the closing RightParen token
     let close_token = tokens
       .consume_next_token_infallible()
       .ok_or(CssParseError::ParseError {
@@ -605,8 +552,6 @@ pub fn calc_value_to_string(value: &CalcValue) -> String {
     CalcValue::Group(group) => format!("({})", calc_value_to_string(&group.expr)),
   }
 }
-
-// Tests are in calc_parsing_tests.rs
 
 #[cfg(test)]
 #[path = "../tests/css_types/calc_test.rs"]

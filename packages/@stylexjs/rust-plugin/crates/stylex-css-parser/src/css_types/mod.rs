@@ -1,46 +1,35 @@
 /*!
-CSS type parsers.
-
-This module contains parsers for all CSS value types, providing comprehensive CSS parsing capabilities.
-Each type has its own module with comprehensive parsing support.
+CSS type parsers, one module per value type.
 */
 
-// Basic types
 pub mod common_types;
 pub mod dimension;
 pub mod number;
 pub mod percentage;
 
-// Color types
 pub mod alpha_value;
 pub mod color;
 
-// Length and position types
 pub mod angle;
 pub mod angle_percentage;
 pub mod length;
 pub mod length_percentage;
 pub mod position;
 
-// Time and frequency types
 pub mod frequency;
 pub mod resolution;
 pub mod time;
 
-// Calculation types
 pub mod calc;
 pub mod calc_constant;
 
-// Identifier types
 pub mod custom_ident;
 pub mod dashed_ident;
 
-// Function types
 pub mod easing_function;
 pub mod filter_function;
 pub mod transform_function;
 
-// Shape and styling types
 pub mod basic_shape;
 pub mod blend_mode;
 pub mod flex;

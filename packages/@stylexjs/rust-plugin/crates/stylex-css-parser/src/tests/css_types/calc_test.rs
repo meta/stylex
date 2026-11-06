@@ -24,9 +24,7 @@ mod test_css_type_calc {
     let calc2 = Calc::parser().parse_to_end("calc(3.1415927)").unwrap();
     match &calc2.value {
       CalcValue::Number(num) => {
-        // The authored digits, not pi: `3.1415927` is what the source says and
-        // what a double holds. It used to read as `f32::consts::PI` only
-        // because that constant is spelled the same way.
+        // The authored digits, not `f32::consts::PI` (which is spelled the same).
         assert_eq!(num.to_string(), "3.1415927");
       },
       _ => stylex_panic!("Expected Number value"),
@@ -110,10 +108,8 @@ mod test_css_type_calc {
   fn parses_addition_operations() {
     let calc = Calc::parser().parse_to_end("calc(10px + 5px)").unwrap();
 
-    // Should parse as an addition operation
     match &calc.value {
       CalcValue::Addition(addition) => {
-        // Verify left operand
         match addition.left.as_ref() {
           CalcValue::Dimension(dim) => {
             assert_eq!(dim.value, 10.0);
@@ -122,7 +118,6 @@ mod test_css_type_calc {
           _ => stylex_panic!("Expected Dimension for left operand"),
         }
 
-        // Verify right operand
         match addition.right.as_ref() {
           CalcValue::Dimension(dim) => {
             assert_eq!(dim.value, 5.0);
@@ -141,10 +136,8 @@ mod test_css_type_calc {
   fn parses_subtraction_operations() {
     let calc = Calc::parser().parse_to_end("calc(100% - 20px)").unwrap();
 
-    // Should parse as a subtraction operation
     match &calc.value {
       CalcValue::Subtraction(subtraction) => {
-        // Verify left operand (percentage)
         match subtraction.left.as_ref() {
           CalcValue::Percentage(percentage) => {
             assert_eq!(percentage.value, 100.0);
@@ -152,7 +145,6 @@ mod test_css_type_calc {
           _ => stylex_panic!("Expected Percentage for left operand"),
         }
 
-        // Verify right operand (length)
         match subtraction.right.as_ref() {
           CalcValue::Dimension(dim) => {
             assert_eq!(dim.value, 20.0);
@@ -171,10 +163,8 @@ mod test_css_type_calc {
   fn parses_multiplication_operations() {
     let calc = Calc::parser().parse_to_end("calc(10px * 2)").unwrap();
 
-    // Should parse as a multiplication operation
     match &calc.value {
       CalcValue::Multiplication(multiplication) => {
-        // Verify left operand
         match multiplication.left.as_ref() {
           CalcValue::Dimension(dim) => {
             assert_eq!(dim.value, 10.0);
@@ -183,7 +173,6 @@ mod test_css_type_calc {
           _ => stylex_panic!("Expected Dimension for left operand"),
         }
 
-        // Verify right operand
         match multiplication.right.as_ref() {
           CalcValue::Number(num) => {
             assert_eq!(*num, 2.0);
@@ -201,10 +190,8 @@ mod test_css_type_calc {
   fn parses_division_operations() {
     let calc = Calc::parser().parse_to_end("calc(100px / 4)").unwrap();
 
-    // Should parse as a division operation
     match &calc.value {
       CalcValue::Division(division) => {
-        // Verify left operand
         match division.left.as_ref() {
           CalcValue::Dimension(dim) => {
             assert_eq!(dim.value, 100.0);
@@ -213,7 +200,6 @@ mod test_css_type_calc {
           _ => stylex_panic!("Expected Dimension for left operand"),
         }
 
-        // Verify right operand
         match division.right.as_ref() {
           CalcValue::Number(num) => {
             assert_eq!(*num, 4.0);
@@ -233,14 +219,8 @@ mod test_css_type_calc {
       .parse_to_end("calc(100% - 20px * 2 + 10px)")
       .unwrap();
 
-    // Should parse with correct operator precedence
-    // The multiplication should be evaluated first: 20px * 2
-    // Then the subtraction and addition from left to right
-    // Note: exact structure depends on implementation, but it should parse
-    // successfully
     assert!(!calc.to_string().is_empty());
 
-    // Verify round-trip parsing
     let reparsed = Calc::parser().parse_to_end(&calc.to_string()).unwrap();
     assert_eq!(calc.to_string(), reparsed.to_string());
   }
@@ -251,11 +231,9 @@ mod test_css_type_calc {
       .parse_to_end("calc((100% - 20px) * 2)")
       .unwrap();
 
-    // Should respect parentheses grouping
     assert!(!calc.to_string().is_empty());
     assert!(calc.to_string().contains("(100% - 20px)"));
 
-    // Verify round-trip parsing
     let reparsed = Calc::parser().parse_to_end(&calc.to_string()).unwrap();
     assert_eq!(calc.to_string(), reparsed.to_string());
   }
@@ -266,18 +244,14 @@ mod test_css_type_calc {
       .parse_to_end("calc(calc(100% - 10px) + calc(20px * 2))")
       .unwrap();
 
-    // Should handle nested calc expressions
     assert!(!calc.to_string().is_empty());
 
-    // Verify round-trip parsing
     let reparsed = Calc::parser().parse_to_end(&calc.to_string()).unwrap();
     assert_eq!(calc.to_string(), reparsed.to_string());
   }
 
   #[test]
   fn operator_precedence() {
-    // Test that multiplication/division has higher precedence than
-    // addition/subtraction
     let test_cases = vec![
       "calc(10 + 5 * 2)",    // Should be 10 + (5 * 2) = 20
       "calc(20 - 10 / 2)",   // Should be 20 - (10 / 2) = 15
@@ -287,10 +261,8 @@ mod test_css_type_calc {
     for input in test_cases {
       let calc = Calc::parser().parse_to_end(input).unwrap();
 
-      // Should parse successfully with correct precedence
       assert!(!calc.to_string().is_empty());
 
-      // Verify round-trip parsing maintains precedence
       let reparsed = Calc::parser().parse_to_end(&calc.to_string()).unwrap();
       assert_eq!(calc.to_string(), reparsed.to_string());
     }
@@ -312,8 +284,7 @@ mod test_css_type_calc {
 
   #[test]
   fn rejects_unspaced_dimension_addition() {
-    // Extra coverage case: cssparser tokenizes `10px+5px` as adjacent
-    // dimensions, not a binary `+` expression.
+    // cssparser tokenizes `10px+5px` as adjacent dimensions, not a binary `+`.
     assert!(Calc::parser().parse_to_end("calc(10px+5px)").is_err());
   }
 

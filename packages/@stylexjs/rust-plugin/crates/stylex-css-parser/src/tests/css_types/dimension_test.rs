@@ -19,7 +19,6 @@ mod test_css_type_dimension {
 
   #[test]
   fn parses_length_dimensions() {
-    // Test various length units
     let result = dimension().parse_to_end("16px").unwrap();
     if let Dimension::Length(length) = result {
       assert_eq!(length.value, 16.0);
@@ -47,7 +46,6 @@ mod test_css_type_dimension {
 
   #[test]
   fn parses_time_dimensions() {
-    // Test time units
     let result = dimension().parse_to_end("1.5s").unwrap();
     if let Dimension::Time(time) = result {
       assert_eq!(time.value, 1.5);
@@ -67,7 +65,6 @@ mod test_css_type_dimension {
 
   #[test]
   fn parses_frequency_dimensions() {
-    // Test frequency units
     let result = dimension().parse_to_end("440Hz").unwrap();
     if let Dimension::Frequency(freq) = result {
       assert_eq!(freq.value, 440.0);
@@ -87,7 +84,6 @@ mod test_css_type_dimension {
 
   #[test]
   fn parses_resolution_dimensions() {
-    // Test resolution units
     let result = dimension().parse_to_end("96dpi").unwrap();
     if let Dimension::Resolution(res) = result {
       assert_eq!(res.value, 96.0);
@@ -115,7 +111,6 @@ mod test_css_type_dimension {
 
   #[test]
   fn rejects_invalid_dimensions() {
-    // Invalid units should fail to parse
     assert!(dimension().parse_to_end("10invalid").is_err());
     assert!(dimension().parse_to_end("5deg").is_err()); // Angle units are not dimensions
     assert!(dimension().parse_to_end("50%").is_err()); // Percentages are not dimensions
@@ -124,7 +119,6 @@ mod test_css_type_dimension {
 
   #[test]
   fn dimension_display_formatting() {
-    // Test that dimensions display correctly
     let length = Dimension::Length(Length::new(16.0, "px".to_string()));
     assert_eq!(length.to_string(), "16px");
 

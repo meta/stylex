@@ -1,8 +1,5 @@
 /*!
-Base types and utilities for CSS parsing.
-
-This module provides fundamental types and utilities used throughout the CSS parser,
-including string manipulation utilities.
+Base string utilities used throughout the CSS parser.
 */
 
 use std::fmt::{self, Display};
@@ -26,7 +23,6 @@ impl SubString {
   }
 
   /// Check if the substring starts with the given string
-  /// Uses a loop to avoid creating a new string
   pub fn starts_with(&self, s: &str) -> bool {
     let chars: Vec<char> = self.string.chars().collect();
     let search_chars: Vec<char> = s.chars().collect();

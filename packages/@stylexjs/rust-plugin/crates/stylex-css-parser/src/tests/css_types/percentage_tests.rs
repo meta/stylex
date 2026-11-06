@@ -1,6 +1,3 @@
-// Tests extracted for css_types/percentage.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/css_types/percentage.rs
-
 use super::*;
 
 #[test]

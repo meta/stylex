@@ -1,6 +1,3 @@
-// Tests extracted for base_types.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/base_types.rs
-
 use super::*;
 
 #[test]
@@ -64,7 +61,6 @@ fn test_is_empty() {
   let empty_substr = SubString::new("");
   assert!(!empty_substr.is_empty()); // Even empty string has start_index=0, end_index=0
 
-  // Test with manually modified indices
   let mut modified_substr = SubString::new("hello");
   modified_substr.start_index = 3;
   modified_substr.end_index = 2; // start_index > end_index

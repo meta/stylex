@@ -1,6 +1,3 @@
-// Tests extracted for css_value.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/css_value.rs
-
 use super::*;
 
 #[test]
@@ -167,7 +164,6 @@ fn test_from_simple_token_ident() {
 #[test]
 fn test_from_simple_token_unknown() {
   use crate::token_types::SimpleToken;
-  // Tokens like Comma, Colon, etc. should become CssValue::Token
   let token = SimpleToken::Comma;
   let val: CssValue = token.into();
   matches!(val, CssValue::Token(_));

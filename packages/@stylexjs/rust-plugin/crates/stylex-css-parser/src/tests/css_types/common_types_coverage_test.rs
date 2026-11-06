@@ -1,6 +1,6 @@
 use super::*;
 
-// ── CssWideKeyword::extract_ident ─────────────────────────────────────────
+// ── CssWideKeyword::extract_ident ──
 
 #[test]
 fn extract_ident_happy_path() {
@@ -16,7 +16,7 @@ fn extract_ident_unreachable_arm_panics() {
   CssWideKeyword::extract_ident(SimpleToken::Whitespace);
 }
 
-// ── CssWideKeyword::ident_to_keyword ─────────────────────────────────────
+// ── CssWideKeyword::ident_to_keyword ──
 
 #[test]
 fn ident_to_keyword_all_valid_values() {
@@ -41,13 +41,11 @@ fn ident_to_keyword_all_valid_values() {
 #[test]
 #[should_panic]
 fn ident_to_keyword_wildcard_arm_panics() {
-  // A value that passes the `where_fn` filter would never reach here through
-  // the parser, but calling the named fn directly exercises the `_ =>
-  // stylex_unreachable!()` arm.
+  // Unreachable through the parser (`where_fn` filters it); called directly to cover the panic arm.
   CssWideKeyword::ident_to_keyword("unknown-keyword".to_string());
 }
 
-// ── Specific-keyword parsers (initial / unset / revert) ───────────────────
+// ── Specific-keyword parsers (initial / unset / revert) ──
 
 #[test]
 fn initial_parser_accepts_initial() {
@@ -100,7 +98,7 @@ fn revert_parser_rejects_unset() {
   );
 }
 
-// ── CssVariable::extract_ident_string ────────────────────────────────────
+// ── CssVariable::extract_ident_string ──
 
 #[test]
 fn css_variable_extract_ident_string_happy_path() {
@@ -111,17 +109,15 @@ fn css_variable_extract_ident_string_happy_path() {
 
 #[test]
 fn css_variable_extract_ident_string_non_ident_returns_empty() {
-  // The else branch returns String::new().
   let result = CssVariable::extract_ident_string(SimpleToken::Whitespace);
   assert_eq!(result, "");
 }
 
-// ── Percentage::token_to_percentage ──────────────────────────────────────
+// ── Percentage::token_to_percentage ──
 
 #[test]
 fn token_to_percentage_happy_path() {
-  // The token carries the authored percent, so `50%` is `50` and the type
-  // holds it unchanged rather than scaling a fraction back up.
+  // The token carries the authored percent (`50%` is `50`); it is held unscaled.
   let token = SimpleToken::Percentage(50.0);
   let pct = Percentage::token_to_percentage(token);
   assert_eq!(pct.value, 50.0);
@@ -134,7 +130,7 @@ fn token_to_percentage_unreachable_arm_panics() {
   Percentage::token_to_percentage(SimpleToken::Whitespace);
 }
 
-// ── Number::token_to_number ───────────────────────────────────────────────
+// ── Number::token_to_number ──
 
 #[test]
 fn token_to_number_happy_path() {

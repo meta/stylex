@@ -1,6 +1,3 @@
-// Tests extracted for token_parser.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/token_parser.rs
-
 use super::*;
 
 #[test]
@@ -86,7 +83,7 @@ fn test_or_parser() {
 #[test]
 fn test_parse_to_end() {
   let parser = TokenParser::always(42);
-  // This should work since always parser doesn't consume tokens
+  // `always` consumes no tokens.
   let result = parser.parse_to_end("").unwrap();
   assert_eq!(result, 42);
 }

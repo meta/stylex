@@ -1,6 +1,3 @@
-// Tests extracted for token_types.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/token_types.rs
-
 use super::*;
 
 #[test]
@@ -32,7 +29,6 @@ fn test_rewind_and_slice() {
 
   let slice = list.slice(1, Some(4));
   assert_eq!(slice.len(), 3);
-  // slice should include whitespace, then colon, then whitespace
   assert_eq!(slice[0], SimpleToken::Whitespace);
   assert_eq!(slice[1], SimpleToken::Colon);
 }

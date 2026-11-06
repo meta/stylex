@@ -1,6 +1,3 @@
-// Tests extracted for css_types/flex.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/css_types/flex.rs
-
 use super::*;
 
 #[test]
@@ -40,20 +37,17 @@ fn test_is_valid_fraction() {
   assert!(Flex::is_valid_fraction(2.5));
   assert!(Flex::is_valid_fraction(100.0));
 
-  // Negative values should be invalid
   assert!(!Flex::is_valid_fraction(-1.0));
   assert!(!Flex::is_valid_fraction(-0.5));
 }
 
 #[test]
 fn test_flex_parser_creation() {
-  // Basic test that parser can be created
   let _parser = Flex::parser();
 }
 
 #[test]
 fn test_flex_common_values() {
-  // Test common flex fraction values
   let one_fr = Flex::new(1.0);
   assert_eq!(one_fr.to_string(), "1fr");
 
@@ -66,7 +60,6 @@ fn test_flex_common_values() {
 
 #[test]
 fn test_flex_precision() {
-  // Test fractional values with precision
   let precise_flex = Flex::new(1.25);
   assert_eq!(precise_flex.to_string(), "1.25fr");
 
@@ -76,7 +69,6 @@ fn test_flex_precision() {
 
 #[test]
 fn test_flex_grid_layout_values() {
-  // Test typical grid layout flex values
   let equal_columns = Flex::new(1.0); // 1fr for equal columns
   assert_eq!(equal_columns.to_string(), "1fr");
 
@@ -89,7 +81,6 @@ fn test_flex_grid_layout_values() {
 
 #[test]
 fn test_flex_zero_value() {
-  // Test zero flex value (should be valid)
   let zero_flex = Flex::new(0.0);
   assert_eq!(zero_flex.fraction, 0.0);
   assert_eq!(zero_flex.to_string(), "0fr");
@@ -98,7 +89,6 @@ fn test_flex_zero_value() {
 
 #[test]
 fn test_flex_large_values() {
-  // Test large flex values
   let large_flex = Flex::new(100.0);
   assert_eq!(large_flex.to_string(), "100fr");
 
@@ -108,11 +98,9 @@ fn test_flex_large_values() {
 
 #[test]
 fn test_flex_decimal_precision() {
-  // Test various decimal precisions
   let three_decimals = Flex::new(1.125);
   assert_eq!(three_decimals.to_string(), "1.125fr");
 
   let many_decimals = Flex::new(1.234_567_9);
-  // Note: Display might round or truncate, but value should be preserved
   assert_eq!(many_decimals.fraction, 1.234_567_9);
 }

@@ -1,8 +1,5 @@
 /*!
-CSS Number type parsing.
-
-Handles pure number values without units.
-Provides number parsing functionality for CSS numeric values.
+CSS `<number>`: unitless numbers.
 */
 
 pub use crate::css_types::common_types::Number;

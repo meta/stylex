@@ -1,7 +1,5 @@
 /*!
-CSS Frequency type parsing.
-
-Handles frequency values with 'Hz' (hertz) and 'KHz' (kilohertz) units.
+CSS `<frequency>`: `Hz` and `KHz` units.
 */
 
 use stylex_utils::number::to_js_string;
@@ -38,12 +36,7 @@ impl Frequency {
     FREQUENCY_UNITS.contains(&unit)
   }
 
-  /// Extract a frequency `(value, unit)` pair from a `SimpleToken`.
-  ///
-  /// Returns `Some` when the token is a `Dimension` with a valid frequency unit,
-  /// `None` for an unrecognised unit, and `None` for any non-`Dimension` variant
-  /// (the latter branch is unreachable through the public parser, which guarantees
-  /// a `Dimension` token, but the named function makes it coverable from tests).
+  /// The `(value, unit)` of a `Dimension` with a valid frequency unit; `None` otherwise.
   pub(crate) fn extract_frequency_token(token: SimpleToken) -> Option<(f64, String)> {
     if let SimpleToken::Dimension { value, unit } = token {
       if Self::is_valid_unit(&unit) {

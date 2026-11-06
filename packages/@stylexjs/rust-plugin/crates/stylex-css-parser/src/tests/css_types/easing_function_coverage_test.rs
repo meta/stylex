@@ -1,10 +1,7 @@
 use super::*;
 use crate::token_types::{SimpleToken, TokenList};
 
-/// Build a TokenList directly from a Vec of SimpleTokens.
-/// TokenList::new() runs the full CSS tokenizer; here we bypass it so we can
-/// inject tokens that are unreachable through the normal tokenizer (e.g. a
-/// Function token immediately followed by None / by a non-RightParen closer).
+/// Builds a `TokenList` without the tokenizer, to inject sequences it never produces.
 fn make_token_list(tokens: Vec<SimpleToken>) -> TokenList {
   TokenList {
     tokens,
@@ -13,12 +10,10 @@ fn make_token_list(tokens: Vec<SimpleToken>) -> TokenList {
   }
 }
 
-// ── LinearEasingFunction parse_tokens — error branches ───────────────────────
+// ── LinearEasingFunction parse_tokens — error branches ──
 
 #[test]
 fn linear_parse_tokens_error_wrong_function_name() {
-  // Covers the `Some(token) => return Err(...)` arm at the first match when the
-  // Function token has a different name.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("cubic-bezier".to_string()),
     SimpleToken::RightParen,
@@ -29,7 +24,6 @@ fn linear_parse_tokens_error_wrong_function_name() {
 
 #[test]
 fn linear_parse_tokens_error_eof_at_start() {
-  // Covers the `None => return Err(...)` arm at the first match (empty input).
   let mut tl = make_token_list(vec![]);
   let result = LinearEasingFunction::parse_tokens(&mut tl);
   assert!(result.is_err());
@@ -37,7 +31,6 @@ fn linear_parse_tokens_error_eof_at_start() {
 
 #[test]
 fn linear_parse_tokens_error_not_a_function_token() {
-  // A plain Ident triggers the Some(token) => Err arm.
   let mut tl = make_token_list(vec![SimpleToken::Ident("ease".to_string())]);
   let result = LinearEasingFunction::parse_tokens(&mut tl);
   assert!(result.is_err());
@@ -45,7 +38,6 @@ fn linear_parse_tokens_error_not_a_function_token() {
 
 #[test]
 fn linear_parse_tokens_whitespace_skipped_before_numbers() {
-  // Exercises the whitespace-skip loop between the function token and the numbers.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("linear".to_string()),
     SimpleToken::Whitespace,
@@ -58,7 +50,6 @@ fn linear_parse_tokens_whitespace_skipped_before_numbers() {
 
 #[test]
 fn linear_parse_tokens_error_non_number_in_body() {
-  // Covers the `Some(token) => return Err(...)` inside the number loop.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("linear".to_string()),
     SimpleToken::Ident("ease".to_string()),
@@ -69,8 +60,6 @@ fn linear_parse_tokens_error_non_number_in_body() {
 
 #[test]
 fn linear_parse_tokens_error_eof_in_number_loop() {
-  // Covers the `None => return Err(...)` arm inside the number loop.
-  // Supply Function("linear") then immediately end — no number token.
   let mut tl = make_token_list(vec![SimpleToken::Function("linear".to_string())]);
   let result = LinearEasingFunction::parse_tokens(&mut tl);
   assert!(result.is_err());
@@ -78,7 +67,6 @@ fn linear_parse_tokens_error_eof_in_number_loop() {
 
 #[test]
 fn linear_parse_tokens_whitespace_skipped_after_number() {
-  // Exercises the whitespace-skip loop between number and comma/paren.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("linear".to_string()),
     SimpleToken::Number(1.0),
@@ -91,7 +79,6 @@ fn linear_parse_tokens_whitespace_skipped_after_number() {
 
 #[test]
 fn linear_parse_tokens_comma_consumed_then_whitespace_skipped() {
-  // Exercises the comma-consume + whitespace-after-comma loop.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("linear".to_string()),
     SimpleToken::Number(1.0),
@@ -106,8 +93,6 @@ fn linear_parse_tokens_comma_consumed_then_whitespace_skipped() {
 
 #[test]
 fn linear_parse_tokens_error_unexpected_token_after_number() {
-  // After a number, the parser now consumes the next token directly (no peek).
-  // An Ident token (not Comma or RightParen) triggers the `Some(token) => Err` arm.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("linear".to_string()),
     SimpleToken::Number(1.0),
@@ -119,8 +104,6 @@ fn linear_parse_tokens_error_unexpected_token_after_number() {
 
 #[test]
 fn linear_parse_tokens_error_eof_after_number() {
-  // After a number, the parser now consumes the next token directly (no peek).
-  // EOF triggers the `None => Err("Unexpected end of input")` arm.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("linear".to_string()),
     SimpleToken::Number(1.0),
@@ -131,8 +114,6 @@ fn linear_parse_tokens_error_eof_after_number() {
 
 #[test]
 fn linear_parse_tokens_error_wrong_separator_token() {
-  // After a number, an Ident token is consumed (not Comma or RightParen).
-  // Covers the `Some(token) => return Err(...)` arm in the loop's inner match.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("linear".to_string()),
     SimpleToken::Number(1.0),
@@ -144,12 +125,9 @@ fn linear_parse_tokens_error_wrong_separator_token() {
 
 #[test]
 fn linear_parse_tokens_error_eof_after_number_as_separator() {
-  // After a number, EOF is reached (not Comma or RightParen).
-  // Covers the `None => return Err(...)` arm in the loop's inner match.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("linear".to_string()),
     SimpleToken::Number(1.0),
-    // EOF after number — no comma or paren
   ]);
   let result = LinearEasingFunction::parse_tokens(&mut tl);
   assert!(result.is_err());
@@ -157,9 +135,7 @@ fn linear_parse_tokens_error_eof_after_number_as_separator() {
 
 #[test]
 fn linear_parse_tokens_error_empty_no_numbers() {
-  // Covers the early `if matches!(tokens.peek(), Ok(Some(SimpleToken::RightParen)))`
-  // check: linear() with no numbers — the closing paren is peeked immediately
-  // after the function token, triggering the "must have at least one point" error.
+  // `linear()` with no points: the closing paren is peeked straight after the function token.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("linear".to_string()),
     SimpleToken::RightParen,
@@ -170,18 +146,16 @@ fn linear_parse_tokens_error_empty_no_numbers() {
   assert!(err.to_string().contains("at least one point"));
 }
 
-// ── LinearEasingFunction parse via public API — error branches ───────────────
+// ── LinearEasingFunction parse via public API — error branches ──
 
 #[test]
 fn linear_parse_error_wrong_function_token() {
-  // "cubic-bezier(" is a Function token but not "linear".
   let result = LinearEasingFunction::parse().parse_to_end("cubic-bezier(0.25, 0.1, 0.25, 1)");
   assert!(result.is_err());
 }
 
 #[test]
 fn linear_parse_error_not_a_function() {
-  // A plain ident is not a Function token.
   let result = LinearEasingFunction::parse().parse_to_end("ease");
   assert!(result.is_err());
 }
@@ -206,10 +180,7 @@ fn linear_parse_error_unexpected_token_after_number() {
 
 #[test]
 fn linear_parse_accepts_missing_closing_paren() {
-  // The cssparser tokenizer synthesizes a RightParen for unbalanced function
-  // parentheses, so "linear(1,2" is accepted as if the paren were present.
-  // Coverage note: The parser silently accepts input with missing closing parens because
-  // the underlying CSS tokenizer (cssparser) auto-closes open function blocks.
+  // cssparser synthesises the closing paren for an unclosed function.
   let result = LinearEasingFunction::parse().parse_to_end("linear(1,2");
   assert!(result.is_ok());
 }
@@ -230,7 +201,7 @@ fn linear_parse_succeeds_single_point() {
   assert_eq!(result.points, vec![0.25]);
 }
 
-// ── CubicBezierEasingFunction parse_tokens — error branches ──────────────────
+// ── CubicBezierEasingFunction parse_tokens — error branches ──
 
 #[test]
 fn cubic_bezier_parse_tokens_error_wrong_function_name() {
@@ -261,7 +232,6 @@ fn cubic_bezier_parse_tokens_error_non_number_first_arg() {
 
 #[test]
 fn cubic_bezier_parse_tokens_error_eof_first_arg() {
-  // Covers the `None => return Err(...)` arm for the first number.
   let mut tl = make_token_list(vec![SimpleToken::Function("cubic-bezier".to_string())]);
   let result = CubicBezierEasingFunction::parse_tokens(&mut tl);
   assert!(result.is_err());
@@ -269,7 +239,6 @@ fn cubic_bezier_parse_tokens_error_eof_first_arg() {
 
 #[test]
 fn cubic_bezier_parse_tokens_whitespace_before_first_arg() {
-  // Exercises the initial whitespace-skip loop.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("cubic-bezier".to_string()),
     SimpleToken::Whitespace,
@@ -288,7 +257,6 @@ fn cubic_bezier_parse_tokens_whitespace_before_first_arg() {
 
 #[test]
 fn cubic_bezier_parse_tokens_error_wrong_comma_token() {
-  // Covers the `Some(token) => Err(...)` arm where comma is expected (i>0).
   let mut tl = make_token_list(vec![
     SimpleToken::Function("cubic-bezier".to_string()),
     SimpleToken::Number(0.25),
@@ -300,11 +268,9 @@ fn cubic_bezier_parse_tokens_error_wrong_comma_token() {
 
 #[test]
 fn cubic_bezier_parse_tokens_error_eof_where_comma_expected() {
-  // Covers the `None => Err(...)` arm where comma is expected (i>0).
   let mut tl = make_token_list(vec![
     SimpleToken::Function("cubic-bezier".to_string()),
     SimpleToken::Number(0.25),
-    // EOF — no comma
   ]);
   let result = CubicBezierEasingFunction::parse_tokens(&mut tl);
   assert!(result.is_err());
@@ -312,7 +278,6 @@ fn cubic_bezier_parse_tokens_error_eof_where_comma_expected() {
 
 #[test]
 fn cubic_bezier_parse_tokens_whitespace_before_comma_and_number() {
-  // Exercises the whitespace loops before comma and after comma.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("cubic-bezier".to_string()),
     SimpleToken::Number(0.25),
@@ -349,12 +314,10 @@ fn cubic_bezier_parse_tokens_error_non_number_second_arg() {
 
 #[test]
 fn cubic_bezier_parse_tokens_error_eof_second_arg() {
-  // Covers the None arm for number at i=1.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("cubic-bezier".to_string()),
     SimpleToken::Number(0.25),
     SimpleToken::Comma,
-    // EOF after comma
   ]);
   let result = CubicBezierEasingFunction::parse_tokens(&mut tl);
   assert!(result.is_err());
@@ -362,7 +325,6 @@ fn cubic_bezier_parse_tokens_error_eof_second_arg() {
 
 #[test]
 fn cubic_bezier_parse_tokens_whitespace_before_closing_paren() {
-  // Exercises the whitespace-skip loop before the closing paren.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("cubic-bezier".to_string()),
     SimpleToken::Number(0.25),
@@ -381,7 +343,6 @@ fn cubic_bezier_parse_tokens_whitespace_before_closing_paren() {
 
 #[test]
 fn cubic_bezier_parse_tokens_error_wrong_closing_token() {
-  // Covers the `Some(token) => Err(...)` arm in closing-paren match.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("cubic-bezier".to_string()),
     SimpleToken::Number(0.25),
@@ -399,7 +360,6 @@ fn cubic_bezier_parse_tokens_error_wrong_closing_token() {
 
 #[test]
 fn cubic_bezier_parse_tokens_error_none_closing_paren() {
-  // Covers the `None => Err(...)` arm in closing-paren match.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("cubic-bezier".to_string()),
     SimpleToken::Number(0.25),
@@ -409,13 +369,12 @@ fn cubic_bezier_parse_tokens_error_none_closing_paren() {
     SimpleToken::Number(0.25),
     SimpleToken::Comma,
     SimpleToken::Number(1.0),
-    // EOF — no closing paren
   ]);
   let result = CubicBezierEasingFunction::parse_tokens(&mut tl);
   assert!(result.is_err());
 }
 
-// ── CubicBezierEasingFunction parse via public API — error branches ───────────
+// ── CubicBezierEasingFunction parse via public API — error branches ──
 
 #[test]
 fn cubic_bezier_parse_error_wrong_function_token() {
@@ -468,18 +427,13 @@ fn cubic_bezier_parse_error_too_few_args() {
 
 #[test]
 fn cubic_bezier_parse_accepts_missing_closing_paren() {
-  // The cssparser tokenizer synthesizes a RightParen for unbalanced function
-  // parentheses, so the parser accepts input without an explicit closing paren.
-  // Coverage note: The parser silently accepts input with missing closing parens because
-  // the underlying CSS tokenizer (cssparser) auto-closes open function blocks.
+  // cssparser synthesises the closing paren for an unclosed function.
   let result = CubicBezierEasingFunction::parse().parse_to_end("cubic-bezier(0.25, 0.1, 0.25, 1");
   assert!(result.is_ok());
 }
 
 #[test]
 fn cubic_bezier_parse_succeeds_with_whitespace() {
-  // Exercises the whitespace-skipping loops in the cubic-bezier parser.
-  // The tokenizer reads the authored digits, so `0.1` is the double `0.1`.
   let result = CubicBezierEasingFunction::parse()
     .parse_to_end("cubic-bezier( 0.25 , 0.1 , 0.25 , 1 )")
     .unwrap();
@@ -489,7 +443,7 @@ fn cubic_bezier_parse_succeeds_with_whitespace() {
   assert_eq!(result.points[3], 1.0);
 }
 
-// ── CubicBezierKeyword::from_string ───────────────────────────────────────────
+// ── CubicBezierKeyword::from_string ──
 
 #[test]
 fn cubic_bezier_keyword_from_string_ease() {
@@ -521,12 +475,11 @@ fn cubic_bezier_keyword_from_string_ease_in_out() {
 
 #[test]
 fn cubic_bezier_keyword_from_string_unknown_returns_error() {
-  // Exercises the `_ => { return Err(...) }` arm in from_string.
   let result = CubicBezierKeyword::from_string("bounce");
   assert!(result.is_err());
 }
 
-// ── CubicBezierKeyword::is_easing_keyword ─────────────────────────────────────
+// ── CubicBezierKeyword::is_easing_keyword ──
 
 #[test]
 fn is_easing_keyword_returns_true_for_ease() {
@@ -560,12 +513,11 @@ fn is_easing_keyword_returns_false_for_unknown_ident() {
 
 #[test]
 fn is_easing_keyword_returns_false_for_non_ident_token() {
-  // The `else { false }` arm — reached when the token is not an Ident.
   let token = SimpleToken::Number(1.0);
   assert!(!CubicBezierKeyword::is_easing_keyword(&token));
 }
 
-// ── CubicBezierKeyword::extract_keyword_token ─────────────────────────────────
+// ── CubicBezierKeyword::extract_keyword_token ──
 
 #[test]
 fn extract_keyword_token_returns_ease() {
@@ -598,7 +550,7 @@ fn extract_keyword_token_returns_ease_in_out() {
 #[test]
 #[should_panic]
 fn extract_keyword_token_panics_for_unknown_ident() {
-  // Exercises the `_ => stylex_unreachable!()` arm in the inner match.
+  // Exercises the inner `_ => stylex_unreachable!()` arm.
   let token = SimpleToken::Ident("linear".to_string());
   CubicBezierKeyword::extract_keyword_token(token);
 }
@@ -610,7 +562,7 @@ fn extract_keyword_token_panics_for_non_ident() {
   CubicBezierKeyword::extract_keyword_token(SimpleToken::Number(1.0));
 }
 
-// ── StepsEasingFunction parse_tokens — error branches ────────────────────────
+// ── StepsEasingFunction parse_tokens — error branches ──
 
 #[test]
 fn steps_parse_tokens_error_wrong_function_name() {
@@ -631,7 +583,6 @@ fn steps_parse_tokens_error_eof_at_start() {
 
 #[test]
 fn steps_parse_tokens_whitespace_skipped_before_step_count() {
-  // Exercises the whitespace loop after the function token.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("steps".to_string()),
     SimpleToken::Whitespace,
@@ -646,7 +597,6 @@ fn steps_parse_tokens_whitespace_skipped_before_step_count() {
 
 #[test]
 fn steps_parse_tokens_error_non_number_step_count() {
-  // Covers the `Some(token) => Err(...)` arm for step count.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("steps".to_string()),
     SimpleToken::Ident("ease".to_string()),
@@ -657,7 +607,6 @@ fn steps_parse_tokens_error_non_number_step_count() {
 
 #[test]
 fn steps_parse_tokens_error_eof_step_count() {
-  // Covers the `None => Err(...)` arm for step count.
   let mut tl = make_token_list(vec![SimpleToken::Function("steps".to_string())]);
   let result = StepsEasingFunction::parse_tokens(&mut tl);
   assert!(result.is_err());
@@ -665,7 +614,6 @@ fn steps_parse_tokens_error_eof_step_count() {
 
 #[test]
 fn steps_parse_tokens_error_fractional_step_count() {
-  // Exercises the `else { return Err("Steps count must be a positive integer") }` branch.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("steps".to_string()),
     SimpleToken::Number(1.5),
@@ -676,7 +624,6 @@ fn steps_parse_tokens_error_fractional_step_count() {
 
 #[test]
 fn steps_parse_tokens_whitespace_before_comma() {
-  // Exercises the whitespace loop before the comma.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("steps".to_string()),
     SimpleToken::Number(4.0),
@@ -691,7 +638,6 @@ fn steps_parse_tokens_whitespace_before_comma() {
 
 #[test]
 fn steps_parse_tokens_error_wrong_token_instead_of_comma() {
-  // Covers the `Some(token) => Err(...)` arm where comma is expected.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("steps".to_string()),
     SimpleToken::Number(4.0),
@@ -703,11 +649,9 @@ fn steps_parse_tokens_error_wrong_token_instead_of_comma() {
 
 #[test]
 fn steps_parse_tokens_error_eof_where_comma_expected() {
-  // Covers the `None => Err(...)` arm where comma is expected.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("steps".to_string()),
     SimpleToken::Number(4.0),
-    // EOF
   ]);
   let result = StepsEasingFunction::parse_tokens(&mut tl);
   assert!(result.is_err());
@@ -715,7 +659,6 @@ fn steps_parse_tokens_error_eof_where_comma_expected() {
 
 #[test]
 fn steps_parse_tokens_whitespace_after_comma() {
-  // Exercises the whitespace loop after the comma.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("steps".to_string()),
     SimpleToken::Number(4.0),
@@ -730,7 +673,6 @@ fn steps_parse_tokens_whitespace_after_comma() {
 
 #[test]
 fn steps_parse_tokens_error_unknown_start_type() {
-  // Covers the `_ => Err(...)` inside the Ident match for start type.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("steps".to_string()),
     SimpleToken::Number(4.0),
@@ -743,7 +685,6 @@ fn steps_parse_tokens_error_unknown_start_type() {
 
 #[test]
 fn steps_parse_tokens_error_non_ident_start_type() {
-  // Covers the `Some(token) => Err(...)` arm for the start type (not an Ident).
   let mut tl = make_token_list(vec![
     SimpleToken::Function("steps".to_string()),
     SimpleToken::Number(4.0),
@@ -756,12 +697,10 @@ fn steps_parse_tokens_error_non_ident_start_type() {
 
 #[test]
 fn steps_parse_tokens_error_eof_start_type() {
-  // Covers the `None => Err(...)` arm for the start type.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("steps".to_string()),
     SimpleToken::Number(4.0),
     SimpleToken::Comma,
-    // EOF — no start/end ident
   ]);
   let result = StepsEasingFunction::parse_tokens(&mut tl);
   assert!(result.is_err());
@@ -769,7 +708,6 @@ fn steps_parse_tokens_error_eof_start_type() {
 
 #[test]
 fn steps_parse_tokens_whitespace_before_closing_paren() {
-  // Exercises the whitespace loop before the closing paren.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("steps".to_string()),
     SimpleToken::Number(4.0),
@@ -785,7 +723,6 @@ fn steps_parse_tokens_whitespace_before_closing_paren() {
 
 #[test]
 fn steps_parse_tokens_error_wrong_closing_token() {
-  // Covers the `Some(token) => Err(...)` arm in closing-paren match.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("steps".to_string()),
     SimpleToken::Number(4.0),
@@ -799,19 +736,17 @@ fn steps_parse_tokens_error_wrong_closing_token() {
 
 #[test]
 fn steps_parse_tokens_error_none_closing_paren() {
-  // Covers the `None => Err(...)` arm in closing-paren match.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("steps".to_string()),
     SimpleToken::Number(4.0),
     SimpleToken::Comma,
     SimpleToken::Ident("start".to_string()),
-    // EOF — no closing paren
   ]);
   let result = StepsEasingFunction::parse_tokens(&mut tl);
   assert!(result.is_err());
 }
 
-// ── StepsEasingFunction parse via public API ──────────────────────────────────
+// ── StepsEasingFunction parse via public API ──
 
 #[test]
 fn steps_parse_error_wrong_function_token() {
@@ -869,10 +804,7 @@ fn steps_parse_error_eof_after_comma() {
 
 #[test]
 fn steps_parse_accepts_missing_closing_paren() {
-  // The cssparser tokenizer synthesizes a RightParen for unbalanced function
-  // parentheses, so the parser accepts input without an explicit closing paren.
-  // Coverage note: The parser silently accepts input with missing closing parens because
-  // the underlying CSS tokenizer (cssparser) auto-closes open function blocks.
+  // cssparser synthesises the closing paren for an unclosed function.
   let result = StepsEasingFunction::parse().parse_to_end("steps(4, start");
   assert!(result.is_ok());
 }
@@ -895,7 +827,7 @@ fn steps_parse_succeeds_end_variant() {
   assert_eq!(result.start, StepsStartType::End);
 }
 
-// ── StepsKeyword::from_string ─────────────────────────────────────────────────
+// ── StepsKeyword::from_string ──
 
 #[test]
 fn steps_keyword_from_string_step_start() {
@@ -917,7 +849,7 @@ fn steps_keyword_from_string_unknown_returns_error() {
   assert!(result.is_err());
 }
 
-// ── StepsKeyword::is_steps_keyword ────────────────────────────────────────────
+// ── StepsKeyword::is_steps_keyword ──
 
 #[test]
 fn is_steps_keyword_returns_true_for_step_start() {
@@ -939,12 +871,11 @@ fn is_steps_keyword_returns_false_for_unknown_ident() {
 
 #[test]
 fn is_steps_keyword_returns_false_for_non_ident_token() {
-  // The `else { false }` arm.
   let token = SimpleToken::Number(1.0);
   assert!(!StepsKeyword::is_steps_keyword(&token));
 }
 
-// ── StepsKeyword::extract_steps_keyword_token ─────────────────────────────────
+// ── StepsKeyword::extract_steps_keyword_token ──
 
 #[test]
 fn extract_steps_keyword_token_returns_step_start() {
@@ -973,7 +904,7 @@ fn extract_steps_keyword_token_panics_for_non_ident() {
   StepsKeyword::extract_steps_keyword_token(SimpleToken::Number(1.0));
 }
 
-// ── Display impls ─────────────────────────────────────────────────────────────
+// ── Display impls ──
 
 #[test]
 fn display_easing_function_linear() {

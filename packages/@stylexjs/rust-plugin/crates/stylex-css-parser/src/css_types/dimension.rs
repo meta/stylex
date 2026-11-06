@@ -1,7 +1,5 @@
 /*!
-CSS Dimension type parsing.
-
-Handles dimensional values that can be lengths, times, frequencies, or resolutions.
+CSS dimension: a length, time, frequency or resolution.
 */
 
 use crate::{token_parser::TokenParser, token_types::SimpleToken};
@@ -45,13 +43,7 @@ impl Dimension {
     }
   }
 
-  /// Extract a `Dimension` from a `SimpleToken::Dimension`, returning `None` for
-  /// any other token variant.
-  ///
-  /// The `else` branch returning `None` cannot be reached through the public
-  /// parser because `tokens::dimension()` guarantees the token is a `Dimension`
-  /// variant. The named function makes that branch reachable from coverage tests
-  /// without modifying existing tests.
+  /// Extract a `Dimension` from a `SimpleToken::Dimension`; `None` for other variants.
   pub(crate) fn extract_dimension_token(token: SimpleToken) -> Option<Dimension> {
     if let SimpleToken::Dimension { value, unit } = token {
       Self::from_value_and_unit(value, unit)

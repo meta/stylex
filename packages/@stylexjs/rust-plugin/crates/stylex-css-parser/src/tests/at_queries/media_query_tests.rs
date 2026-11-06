@@ -1,6 +1,3 @@
-// Tests extracted for at_queries/media_query.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/at_queries/media_query.rs
-
 use stylex_macros::stylex_panic;
 
 use super::*;
@@ -51,7 +48,6 @@ fn test_validate_media_query_unbalanced_parens() {
 
 #[test]
 fn test_media_query_parser_creation() {
-  // Test that parser can be created (even if it's a placeholder)
   let _parser = MediaQuery::parser();
 }
 
@@ -77,8 +73,6 @@ fn test_media_query_clone() {
 
 #[test]
 fn test_common_media_queries() {
-  // Test currently implemented media query features.
-  // Each tuple is (input, expected serialization).
   let implemented_queries = vec![
     ("@media screen", "@media screen"),
     ("@media print", "@media print"),
@@ -107,10 +101,8 @@ fn test_common_media_queries() {
     println!("✅ Validated: {}", query_str);
   }
 
-  // All AND combinators are now implemented - test any remaining edge cases
   let edge_case_queries: Vec<&str> = vec![
-    // Complex nested NOT expressions might still have issues
-    // Add any edge cases here as they're discovered
+    // Add edge cases here as they're discovered.
   ];
 
   for query_str in edge_case_queries {
@@ -133,7 +125,6 @@ fn test_complex_parentheses() {
     result
   );
 
-  // Test complex query with AND combinators - now implemented and should work!
   let and_combinator_query = "@media screen and ((min-width: 768px) and (max-width: 1024px))";
   let result = validate_media_query(and_combinator_query);
   assert!(
@@ -154,7 +145,6 @@ fn test_media_query_normalization() {
   println!("Triple NOT input: {}", input);
   println!("Triple NOT output: {}", parsed);
 
-  // Should be normalized to single NOT
   match &parsed.queries {
     MediaQueryRule::Not(not_rule) => match &not_rule.rule.as_ref() {
       MediaQueryRule::Pair(pair) => {
@@ -166,13 +156,11 @@ fn test_media_query_normalization() {
     _ => stylex_panic!("Expected NOT rule at top level, got: {:?}", parsed.queries),
   }
 
-  // Test quadruple NOT normalization (should cancel out completely)
   let input_quad = "@media not (not (not (not (max-width: 500px))))";
   let parsed_quad = MediaQuery::parser().parse_to_end(input_quad).unwrap();
   println!("Quadruple NOT input: {}", input_quad);
   println!("Quadruple NOT output: {}", parsed_quad);
 
-  // Should be normalized to no NOT (just the pair)
   match &parsed_quad.queries {
     MediaQueryRule::Pair(pair) => {
       assert_eq!(pair.key, "max-width");
@@ -195,7 +183,6 @@ fn test_media_query_normalization() {
         "✅ Complex NOT-AND expression normalized to AND with {} rules",
         and_rules.rules.len()
       );
-      // Verify it contains both min and max constraints
       let has_min = and_rules
         .rules
         .iter()
@@ -236,8 +223,7 @@ fn test_nested_unbalanced_parentheses() {
 
 #[test]
 fn test_or_rule_with_only_empty_nested_or_serializes_to_not_all() {
-  // An `or` rule whose only members are empty `or` rules has every member
-  // filtered out, so it serializes to `not all`.
+  // An `or` of only empty `or` rules filters to nothing and serializes to `not all`.
   let query = MediaQuery::new(MediaQueryRule::Or(MediaOrRules::new(vec![
     MediaQueryRule::Or(MediaOrRules::new(vec![])),
   ])));
@@ -246,8 +232,7 @@ fn test_or_rule_with_only_empty_nested_or_serializes_to_not_all() {
 
 #[test]
 fn test_or_rule_filters_out_empty_nested_or() {
-  // Empty `or` rules are filtered out; a single remaining rule is serialized
-  // on its own, without `or` wrapping.
+  // A single rule left after filtering empty `or` rules serializes without `or` wrapping.
   let query = MediaQuery::new(MediaQueryRule::Or(MediaOrRules::new(vec![
     MediaQueryRule::Or(MediaOrRules::new(vec![])),
     MediaQueryRule::MediaKeyword(MediaKeyword::new("screen", false, false)),

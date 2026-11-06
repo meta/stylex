@@ -1,8 +1,5 @@
 /*!
-CSS Box Shadow property parsing.
-
-Handles box-shadow property syntax including offset, blur, spread, color, and inset values.
-Supports multiple shadow values separated by commas.
+`box-shadow` parsing: offsets, blur, spread, color, `inset`, and comma-separated lists.
 */
 
 use crate::{
@@ -270,7 +267,6 @@ impl BoxShadowList {
     let comma = TokenParser::<SimpleToken>::token(SimpleToken::Comma, Some("Comma"));
     let whitespace = TokenParser::<SimpleToken>::token(SimpleToken::Whitespace, Some("Whitespace"));
 
-    // Parse "none" keyword
     let none_parser =
       TokenParser::<SimpleToken>::token(SimpleToken::Ident("none".to_string()), Some("none_ident"))
         .where_fn(is_none_ident, Some("none_check"))
@@ -279,16 +275,13 @@ impl BoxShadowList {
           Some("empty_shadow_list"),
         );
 
-    // Parse comma with optional surrounding whitespace
     let comma_separator =
       comma.surrounded_by(whitespace.clone().optional(), Some(whitespace.optional()));
 
-    // Parse one or more shadows separated by commas
     let shadow_list_parser =
       TokenParser::one_or_more_separated_by(BoxShadow::parser(), comma_separator)
         .map(BoxShadowList::new, Some("shadow_list"));
 
-    // Try "none" first, then shadow list
     TokenParser::one_of(vec![none_parser, shadow_list_parser])
   }
 }

@@ -1,7 +1,5 @@
 /*!
-CSS Dashed Identifier type parsing.
-
-Handles dashed identifiers that start with '--' (CSS custom properties).
+CSS `<dashed-ident>`: identifiers starting with `--`.
 */
 
 use stylex_macros::stylex_unreachable;
@@ -23,19 +21,12 @@ impl DashedIdentifier {
     }
   }
 
-  /// Check if a string is a valid dashed identifier
-  /// Must start with '--' and have at least one character after
+  /// Whether `value` starts with `--` and has at least one character after it.
   pub fn is_valid_dashed_ident(value: &str) -> bool {
     value.starts_with("--") && value.len() > 2
   }
 
-  /// Parser for CSS dashed identifiers
-  /// Extract the identifier string from a `SimpleToken::Ident`.
-  ///
-  /// Panics via `stylex_unreachable!` when given any other token variant, which
-  /// cannot occur through the public parser because the `Ident` token matcher
-  /// guarantees the token variant. The named function makes that defensive branch
-  /// reachable from coverage tests without modifying existing tests.
+  /// Extract the identifier string from a `SimpleToken::Ident`; other variants are unreachable.
   pub(crate) fn extract_ident_token(token: SimpleToken) -> String {
     if let SimpleToken::Ident(value) = token {
       value

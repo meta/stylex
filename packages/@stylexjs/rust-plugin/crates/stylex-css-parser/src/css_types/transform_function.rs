@@ -152,7 +152,6 @@ pub enum SkewAxis2D {
   Y,
 }
 
-// Helper function to create a number parser
 fn number_parser() -> TokenParser<f64> {
   TokenParser::<SimpleToken>::token(SimpleToken::Number(0.0), Some("Number"))
     .map(extract_number_value, Some("to_f64"))
@@ -195,9 +194,7 @@ fn consume_right_paren(tokens: &mut TokenList, message: &str) -> Result<(), CssP
   }
 }
 
-// Extracted from the inline closure in number_parser so the defensive else-arm
-// is reachable in tests (the token is always Number when called from the parser,
-// but coverage requires calling this fn directly with a non-Number token).
+// The value of a Number token; 0.0 otherwise (unreachable from the parser).
 fn extract_number_value(t: SimpleToken) -> f64 {
   if let SimpleToken::Number(v) = t {
     v
@@ -215,10 +212,6 @@ impl Matrix {
     TokenParser::new(
       |tokens| {
         // Parse: matrix(a, b, c, d, tx, ty)
-
-        // Expect Function("matrix")
-        // consume_next_token() is infallible (always Ok); use ok().flatten() to
-        // remove the unreachable Err sub-region from coverage.
         let function_token =
           tokens
             .consume_next_token()
@@ -244,12 +237,10 @@ impl Matrix {
         let mut numbers = Vec::new();
         for i in 0..6 {
           if i > 0 {
-            // Skip optional whitespace before comma
             while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
               let _ = tokens.consume_next_token();
             }
 
-            // Expect comma
             let comma_token =
               tokens
                 .consume_next_token()
@@ -265,13 +256,10 @@ impl Matrix {
             }
           }
 
-          // Skip optional whitespace before each number (including first one after
-          // opening paren)
           while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
             let _ = tokens.consume_next_token();
           }
 
-          // Parse number
           let num_token =
             tokens
               .consume_next_token()
@@ -290,12 +278,10 @@ impl Matrix {
           }
         }
 
-        // Skip whitespace before closing paren
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
-        // Expect closing paren
         let close_token =
           tokens
             .consume_next_token()
@@ -336,8 +322,6 @@ impl Matrix3d {
 
     TokenParser::new(
       |tokens| {
-        // Expect "matrix3d" function
-        // consume_next_token() is infallible; ok().flatten() removes the Err sub-region.
         match tokens.consume_next_token_infallible() {
           Some(SimpleToken::Function(name)) if name == "matrix3d" => {},
           _ => {
@@ -350,12 +334,10 @@ impl Matrix3d {
         // Parse 16 comma-separated numbers with whitespace handling
         let mut values = [0.0; 16];
         for (i, value) in values.iter_mut().enumerate() {
-          // Skip any whitespace before number
           while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
             let _ = tokens.consume_next_token();
           }
 
-          // Parse number
           match tokens.consume_next_token_infallible() {
             Some(SimpleToken::Number(v)) => {
               *value = v;
@@ -367,9 +349,7 @@ impl Matrix3d {
             },
           }
 
-          // Expect comma (except for the last value)
           if i < 15 {
-            // Skip any whitespace before comma
             while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
               let _ = tokens.consume_next_token();
             }
@@ -385,12 +365,10 @@ impl Matrix3d {
           }
         }
 
-        // Skip any whitespace before closing paren
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
-        // Expect closing parenthesis
         match tokens.consume_next_token_infallible() {
           Some(SimpleToken::RightParen) => {},
           _ => {
@@ -497,8 +475,6 @@ impl Rotate3d {
 
     TokenParser::new(
       |tokens| {
-        // Expect "rotate3d" function
-        // consume_next_token() is infallible; ok().flatten() removes the Err sub-region.
         match tokens.consume_next_token_infallible() {
           Some(SimpleToken::Function(name)) if name == "rotate3d" => {},
           _ => {
@@ -508,20 +484,16 @@ impl Rotate3d {
           },
         }
 
-        // Skip any whitespace before x
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
-        // Parse x (first number)
         let x = (number_parser().run)(tokens)?;
 
-        // Skip any whitespace before comma
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
-        // Expect comma
         match tokens.consume_next_token_infallible() {
           Some(SimpleToken::Comma) => {},
           _ => {
@@ -531,20 +503,16 @@ impl Rotate3d {
           },
         }
 
-        // Skip any whitespace before y
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
-        // Parse y (second number)
         let y = (number_parser().run)(tokens)?;
 
-        // Skip any whitespace before comma
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
-        // Expect comma
         match tokens.consume_next_token_infallible() {
           Some(SimpleToken::Comma) => {},
           _ => {
@@ -554,20 +522,16 @@ impl Rotate3d {
           },
         }
 
-        // Skip any whitespace before z
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
-        // Parse z (third number)
         let z = (number_parser().run)(tokens)?;
 
-        // Skip any whitespace before comma
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
-        // Expect comma
         match tokens.consume_next_token_infallible() {
           Some(SimpleToken::Comma) => {},
           _ => {
@@ -577,20 +541,16 @@ impl Rotate3d {
           },
         }
 
-        // Skip any whitespace before angle
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
-        // Parse angle (fourth parameter)
         let angle = (Angle::parser().run)(tokens)?;
 
-        // Skip any whitespace before closing paren
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
-        // Expect closing parenthesis
         match tokens.consume_next_token_infallible() {
           Some(SimpleToken::RightParen) => {},
           _ => {
@@ -616,9 +576,6 @@ impl Scale {
     TokenParser::new(
       |tokens| {
         // Parse: scale(sx) or scale(sx, sy)
-
-        // Expect Function("scale")
-        // consume_next_token() is infallible; ok().flatten() removes the Err sub-region.
         let function_token =
           tokens
             .consume_next_token()
@@ -640,39 +597,31 @@ impl Scale {
           });
         }
 
-        // Parse first number/percentage (sx)
         let sx = (number_or_percentage_parser().run)(tokens)?;
 
         // Try to parse optional comma + second number/percentage
         let sy = {
-          // Skip whitespace
           while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
             let _ = tokens.consume_next_token();
           }
 
-          // Check if we have a comma
           if let Ok(Some(SimpleToken::Comma)) = tokens.peek() {
-            // Consume comma
             let _ = tokens.consume_next_token();
 
-            // Skip whitespace after comma
             while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
               let _ = tokens.consume_next_token();
             }
 
-            // Parse second number/percentage
             Some((number_or_percentage_parser().run)(tokens)?)
           } else {
             None
           }
         };
 
-        // Skip whitespace before closing paren
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
-        // Expect closing parenthesis
         let close_token =
           tokens
             .consume_next_token()
@@ -710,8 +659,6 @@ impl Scale3d {
 
     TokenParser::new(
       |tokens| {
-        // Expect "scale3d" function
-        // consume_next_token() is infallible; ok().flatten() removes the Err sub-region.
         match tokens.consume_next_token_infallible() {
           Some(SimpleToken::Function(name)) if name == "scale3d" => {},
           _ => {
@@ -721,20 +668,16 @@ impl Scale3d {
           },
         }
 
-        // Skip any whitespace before sx
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
-        // Parse sx (first scale value)
         let sx = (number_or_percentage_parser().run)(tokens)?;
 
-        // Skip any whitespace before comma
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
-        // Expect comma
         match tokens.consume_next_token_infallible() {
           Some(SimpleToken::Comma) => {},
           _ => {
@@ -744,20 +687,16 @@ impl Scale3d {
           },
         }
 
-        // Skip any whitespace before sy
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
-        // Parse sy (second scale value)
         let sy = (number_or_percentage_parser().run)(tokens)?;
 
-        // Skip any whitespace before comma
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
-        // Expect comma
         match tokens.consume_next_token_infallible() {
           Some(SimpleToken::Comma) => {},
           _ => {
@@ -767,20 +706,16 @@ impl Scale3d {
           },
         }
 
-        // Skip any whitespace before sz
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
-        // Parse sz (third scale value)
         let sz = (number_or_percentage_parser().run)(tokens)?;
 
-        // Skip any whitespace before closing paren
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
-        // Expect closing parenthesis
         match tokens.consume_next_token_infallible() {
           Some(SimpleToken::RightParen) => {},
           _ => {
@@ -920,9 +855,6 @@ impl Translate {
     TokenParser::new(
       |tokens| {
         // Parse: translate(tx) or translate(tx, ty)
-
-        // Expect Function("translate")
-        // consume_next_token() is infallible; ok().flatten() removes the Err sub-region.
         let function_token =
           tokens
             .consume_next_token()
@@ -944,39 +876,31 @@ impl Translate {
           });
         }
 
-        // Parse first length/percentage (tx)
         let tx = (length_percentage_parser().run)(tokens)?;
 
         // Try to parse optional comma + second length/percentage
         let ty = {
-          // Skip whitespace
           while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
             let _ = tokens.consume_next_token();
           }
 
-          // Check if we have a comma
           if let Ok(Some(SimpleToken::Comma)) = tokens.peek() {
-            // Consume comma
             let _ = tokens.consume_next_token();
 
-            // Skip whitespace after comma
             while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
               let _ = tokens.consume_next_token();
             }
 
-            // Parse second length/percentage
             Some((length_percentage_parser().run)(tokens)?)
           } else {
             None
           }
         };
 
-        // Skip whitespace before closing paren
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
-        // Expect closing parenthesis
         let close_token =
           tokens
             .consume_next_token()

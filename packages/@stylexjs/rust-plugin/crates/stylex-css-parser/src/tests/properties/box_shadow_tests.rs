@@ -1,6 +1,3 @@
-// Tests extracted for properties/box_shadow.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/properties/box_shadow.rs
-
 use super::*;
 use crate::css_types::{HashColor, NamedColor};
 
@@ -98,7 +95,6 @@ fn test_box_shadow_display_zero_values() {
     false,
   );
 
-  // Should omit zero blur and spread values
   assert_eq!(shadow.to_string(), "1px 2px black");
 }
 
@@ -155,7 +151,6 @@ fn test_box_shadow_list_display() {
 
 #[test]
 fn test_box_shadow_parser_creation() {
-  // Basic test that parsers can be created
   let _shadow_parser = BoxShadow::parser();
   let _list_parser = BoxShadowList::parser();
 }
@@ -195,9 +190,6 @@ fn test_box_shadow_equality() {
 
 #[test]
 fn test_box_shadow_common_values() {
-  // Test common box-shadow patterns
-
-  // Simple drop shadow
   let drop_shadow = BoxShadow::simple(
     Length::new(0.0, "px".to_string()),
     Length::new(2.0, "px".to_string()),
@@ -208,7 +200,6 @@ fn test_box_shadow_common_values() {
   );
   assert!(!drop_shadow.inset);
 
-  // Inner shadow
   let inner_shadow = BoxShadow::simple(
     Length::new(0.0, "px".to_string()),
     Length::new(1.0, "px".to_string()),
@@ -219,7 +210,6 @@ fn test_box_shadow_common_values() {
   );
   assert!(inner_shadow.inset);
 
-  // No shadow (all zero)
   let no_shadow = BoxShadow::simple(
     Length::new(0.0, "px".to_string()),
     Length::new(0.0, "px".to_string()),

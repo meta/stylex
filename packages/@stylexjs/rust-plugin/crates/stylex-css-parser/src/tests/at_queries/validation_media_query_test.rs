@@ -12,7 +12,6 @@ mod style_value_parser_at_queries {
     mod media_query_parser_with_simplified_errors {
       use super::*;
 
-      /// Helper function for parsing media queries
       fn parse(input: &str) -> Result<crate::at_queries::media_query::MediaQuery, String> {
         validate_media_query(input)
       }

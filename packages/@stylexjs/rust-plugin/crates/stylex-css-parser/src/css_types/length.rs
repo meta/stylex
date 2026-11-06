@@ -1,7 +1,5 @@
 /*!
-CSS Length type parsing.
-
-Handles all CSS length units including font-relative, viewport-relative,
+CSS `<length>`: absolute, font-, viewport- and container-relative units.
 */
 
 use stylex_utils::number::to_js_string;
@@ -54,11 +52,7 @@ impl Length {
     Self::units().contains(&unit)
   }
 
-  /// Extract a length `(value, unit)` pair from a `SimpleToken`.
-  ///
-  /// Returns `Some` when the token is a `Dimension`, `None` otherwise. The
-  /// `None` arm is unreachable through the public parser (which guarantees a
-  /// `Dimension` token), but the named function makes it coverable from tests.
+  /// The `(value, unit)` of a `Dimension` token; `None` otherwise (unreachable from the parser).
   pub(crate) fn extract_length_token(token: SimpleToken) -> Option<(f64, String)> {
     if let SimpleToken::Dimension { value, unit } = token {
       Some((value, unit))
@@ -67,12 +61,7 @@ impl Length {
     }
   }
 
-  /// Return `true` when `opt` is `Some` with a valid length unit.
-  ///
-  /// Returns `false` for `None` (unreachable through the public parser, since
-  /// the preceding `map` only returns `None` for non-`Dimension` tokens, which
-  /// the combinator excludes). The named function makes the `else` branch
-  /// coverable from tests.
+  /// Whether `opt` is `Some` with a valid length unit.
   pub(crate) fn is_valid_length_opt(opt: &Option<(f64, String)>) -> bool {
     if let Some((_, unit)) = opt {
       Self::is_valid_unit(unit)
@@ -81,11 +70,7 @@ impl Length {
     }
   }
 
-  /// Return `true` when `token` is a `Number` with value `0.0`.
-  ///
-  /// Returns `false` for any non-`Number` variant. This branch is unreachable
-  /// through the public parser (the combinator only yields `Number` tokens),
-  /// but the named function makes it coverable from tests.
+  /// Whether `token` is a `Number` with value `0.0`.
   pub(crate) fn is_zero_number(token: &SimpleToken) -> bool {
     if let SimpleToken::Number(value) = token {
       *value == 0.0
@@ -96,7 +81,6 @@ impl Length {
 
   /// Parser for CSS length values
   pub fn parser() -> TokenParser<Length> {
-    // Parser for dimension tokens with valid length units
     let dimension_parser = TokenParser::<SimpleToken>::token(
       SimpleToken::Dimension {
         value: 0.0,
@@ -114,12 +98,11 @@ impl Length {
       Some("to_length"),
     );
 
-    // Parser for zero without unit (special case for lengths)
+    // Unitless zero
     let zero_parser = TokenParser::<SimpleToken>::token(SimpleToken::Number(0.0), Some("Number"))
       .where_fn(Self::is_zero_number, Some("zero_value"))
       .map(|_| Length::new(0.0, String::new()), Some("zero_length"));
 
-    // Combine both parsers
     TokenParser::one_of(vec![dimension_parser, zero_parser])
   }
 }

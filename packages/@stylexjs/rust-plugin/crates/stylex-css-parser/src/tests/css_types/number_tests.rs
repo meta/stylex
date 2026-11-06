@@ -1,6 +1,3 @@
-// Tests extracted for css_types/number.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/css_types/number.rs
-
 use super::*;
 
 #[test]

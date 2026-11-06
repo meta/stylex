@@ -1,7 +1,5 @@
 /*!
-CSS Flex type parsing.
-
-Handles flex grid fraction values (e.g., 1fr, 2.5fr).
+CSS `<flex>`: grid fraction values such as `1fr`.
 */
 
 use stylex_macros::stylex_unreachable;
@@ -22,18 +20,12 @@ impl Flex {
     Self { fraction }
   }
 
-  /// Check if a fraction value is valid for flex
-  /// Flex values must be non-negative
+  /// Whether a fraction value is valid for flex (non-negative).
   pub fn is_valid_fraction(fraction: f64) -> bool {
     fraction >= 0.0
   }
 
-  /// Return `true` when `token` is a `Dimension` with unit `"fr"` and a
-  /// non-negative value.
-  ///
-  /// Returns `false` for any non-`Dimension` variant. This branch is unreachable
-  /// through the public parser (the combinator only yields `Dimension` tokens),
-  /// but the named function makes it coverable from tests.
+  /// Whether `token` is a `Dimension` with unit `"fr"` and a non-negative value.
   pub(crate) fn is_valid_fr_dimension(token: &SimpleToken) -> bool {
     if let SimpleToken::Dimension { value, unit } = token {
       unit == "fr" && *value >= 0.0
@@ -42,11 +34,7 @@ impl Flex {
     }
   }
 
-  /// Extract a `Flex` from a `SimpleToken::Dimension`.
-  ///
-  /// Panics via `stylex_unreachable!` for any other token variant, which cannot
-  /// occur through the public parser. The named function makes that defensive
-  /// branch reachable from coverage tests.
+  /// Extract a `Flex` from a `SimpleToken::Dimension`; other variants are unreachable.
   pub(crate) fn extract_dimension_token(token: SimpleToken) -> Flex {
     if let SimpleToken::Dimension { value, unit: _ } = token {
       Flex::new(value)

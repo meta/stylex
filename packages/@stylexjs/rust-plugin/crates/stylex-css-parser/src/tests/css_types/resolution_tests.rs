@@ -1,6 +1,3 @@
-// Tests extracted for css_types/resolution.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/css_types/resolution.rs
-
 use super::*;
 
 #[test]
@@ -28,7 +25,6 @@ fn test_valid_resolution_units() {
   assert!(Resolution::is_valid_unit("dpcm"));
   assert!(Resolution::is_valid_unit("dppx"));
 
-  // Invalid units
   assert!(!Resolution::is_valid_unit("px"));
   assert!(!Resolution::is_valid_unit("s"));
   assert!(!Resolution::is_valid_unit("Hz"));
@@ -46,6 +42,5 @@ fn test_resolution_units_constant() {
 
 #[test]
 fn test_resolution_parser_creation() {
-  // Basic test that parser can be created
   let _parser = Resolution::parser();
 }

@@ -3,8 +3,6 @@ use crate::token_types::{SimpleToken, TokenList};
 
 #[test]
 fn extract_percentage_token_returns_value_for_percentage() {
-  // Happy path: a Percentage token yields an AlphaValue. The token carries the
-  // authored percent, and an alpha is the fraction of it.
   let token = SimpleToken::Percentage(75.0);
   let result = AlphaValue::extract_percentage_token(token);
   assert_eq!(result.value, 0.75_f64);
@@ -13,16 +11,12 @@ fn extract_percentage_token_returns_value_for_percentage() {
 #[test]
 #[should_panic]
 fn extract_percentage_token_panics_for_non_percentage() {
-  // The else-branch inside extract_percentage_token is unreachable through the
-  // public parser (the token combinator only yields Percentage tokens). Calling
-  // the named function directly with a non-Percentage token exercises that
-  // defensive branch.
+  // Unreachable through the public parser; called directly to cover the defensive branch.
   AlphaValue::extract_percentage_token(SimpleToken::Number(0.5));
 }
 
 #[test]
 fn extract_number_token_returns_value_for_number() {
-  // Happy path: a Number token yields an AlphaValue.
   let token = SimpleToken::Number(0.25);
   let result = AlphaValue::extract_number_token(token);
   assert_eq!(result.value, 0.25_f64);
@@ -31,17 +25,11 @@ fn extract_number_token_returns_value_for_number() {
 #[test]
 #[should_panic]
 fn extract_number_token_panics_for_non_number() {
-  // The else-branch inside extract_number_token is unreachable through the
-  // public parser (the token combinator only yields Number tokens). Calling
-  // the named function directly with a non-Number token exercises that
-  // defensive branch.
+  // Unreachable through the public parser; called directly to cover the defensive branch.
   AlphaValue::extract_number_token(SimpleToken::Percentage(0.5));
 }
 
-// ── parse_alpha_token ────────────────────────────────────────────────
-
-// `rgba()` and `hsla()` both read their alpha through this one function, so it
-// is tested once here rather than once per colour type.
+// ── parse_alpha_token ──
 
 #[test]
 fn an_alpha_token_at_end_of_input_is_refused() {
@@ -53,12 +41,7 @@ fn an_alpha_token_at_end_of_input_is_refused() {
   assert!(parse_alpha_token(&mut tokens).is_err());
 }
 
-/// An alpha outside `0..=1` is carried through rather than refused.
-///
-/// The reference compiler's `alphaAsNumber` has no range predicate on it --
-/// only the channels beside it are bounded, to `0..=255` -- so `rgba(0,0,0,2)`
-/// parses there. This function used to refuse it, on a doc comment asserting
-/// the opposite of what the reference compiler does.
+/// Matches the reference compiler: its `alphaAsNumber` has no range check.
 #[test]
 fn an_alpha_outside_the_unit_range_is_carried_through() {
   for (token, expected) in [

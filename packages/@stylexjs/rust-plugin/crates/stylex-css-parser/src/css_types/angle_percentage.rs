@@ -1,7 +1,5 @@
 /*!
-CSS Angle-Percentage union type parsing.
-
-Handles values that can be either angle or percentage values.
+CSS `<angle-percentage>`: an angle or a percentage.
 */
 
 use crate::{

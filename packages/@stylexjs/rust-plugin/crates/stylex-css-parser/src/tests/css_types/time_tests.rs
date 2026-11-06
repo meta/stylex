@@ -1,6 +1,3 @@
-// Tests extracted for css_types/time.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/css_types/time.rs
-
 use super::*;
 
 #[test]
@@ -33,7 +30,6 @@ fn test_valid_time_units() {
   assert!(Time::is_valid_unit("s"));
   assert!(Time::is_valid_unit("ms"));
 
-  // Invalid units
   assert!(!Time::is_valid_unit("px"));
   assert!(!Time::is_valid_unit("deg"));
   assert!(!Time::is_valid_unit("Hz"));
@@ -49,6 +45,5 @@ fn test_time_units_constant() {
 
 #[test]
 fn test_time_parser_creation() {
-  // Basic test that parser can be created
   let _parser = Time::parser();
 }

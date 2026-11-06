@@ -1,9 +1,5 @@
 /**
- * CSS Basic Shape Type Parsers
- *
- * Provides comprehensive basic shape parsing for CSS clip-path and
- * shape-outside properties. Covers all shape types with essential
- * functionality and Rust type safety.
+ * CSS basic shape parsers for `clip-path` and `shape-outside`.
  */
 use crate::token_parser::TokenParser;
 use crate::{
@@ -141,7 +137,6 @@ impl BasicShape {
   fn inset_parser() -> TokenParser<BasicShape> {
     TokenParser::new(
       |tokens| {
-        // Parse 'inset(' function start
         match tokens.consume_next_token_infallible() {
           Some(SimpleToken::Function(fn_name)) if fn_name == "inset" => {},
           Some(token) => {
@@ -156,18 +151,14 @@ impl BasicShape {
           },
         }
 
-        // Parse first length-percentage (required)
         let top = (length_percentage_parser().run)(tokens)?;
 
-        // Skip optional whitespace
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
-        // Parse optional right value, or default to top
         let right = match (length_percentage_parser().run)(tokens) {
           Ok(right_val) => {
-            // Skip optional whitespace after right
             while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
               let _ = tokens.consume_next_token();
             }
@@ -176,10 +167,8 @@ impl BasicShape {
           _ => top.clone(),
         };
 
-        // Parse optional bottom value, or default to top
         let bottom = match (length_percentage_parser().run)(tokens) {
           Ok(bottom_val) => {
-            // Skip optional whitespace after bottom
             while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
               let _ = tokens.consume_next_token();
             }
@@ -188,10 +177,8 @@ impl BasicShape {
           _ => top.clone(),
         };
 
-        // Parse optional left value, or default to right
         let left = match (length_percentage_parser().run)(tokens) {
           Ok(left_val) => {
-            // Skip optional whitespace after left
             while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
               let _ = tokens.consume_next_token();
             }
@@ -200,20 +187,15 @@ impl BasicShape {
           _ => right.clone(),
         };
 
-        // Handle optional "round" parameter. Any whitespace before the keyword
-        // was already consumed by the value-parsing loops above (each greedily
-        // skips trailing whitespace).
+        // Optional `round`; preceding whitespace was consumed by the value loops.
         let round = if let Ok(Some(SimpleToken::Ident(keyword))) = tokens.peek() {
           if keyword == "round" {
-            // Consume the "round" keyword
             let _ = tokens.consume_next_token();
 
-            // Skip whitespace after round
             while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
               let _ = tokens.consume_next_token();
             }
 
-            // Parse a single border-radius value (length or percentage)
             let radius_value = (length_percentage_parser().run)(tokens)?;
             Some(radius_value)
           } else {
@@ -223,7 +205,6 @@ impl BasicShape {
           None
         };
 
-        // Parse closing paren
         match tokens.consume_next_token_infallible() {
           Some(SimpleToken::RightParen) => {},
           Some(token) => {
@@ -253,7 +234,6 @@ impl BasicShape {
   fn circle_parser() -> TokenParser<BasicShape> {
     TokenParser::new(
       |tokens| {
-        // Parse 'circle(' function start
         match tokens.consume_next_token_infallible() {
           Some(SimpleToken::Function(fn_name)) if fn_name == "circle" => {},
           Some(token) => {
@@ -280,7 +260,6 @@ impl BasicShape {
               CircleRadius::FarthestSide
             },
             _ => {
-              // Try to parse as length-percentage
               let lp = (length_percentage_parser().run)(tokens)?;
               CircleRadius::Length(lp)
             },
@@ -291,15 +270,12 @@ impl BasicShape {
           });
         };
 
-        // Skip optional whitespace
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
-        // Parse optional "at Position"
         let position = Self::parse_optional_position(tokens)?;
 
-        // Parse closing paren
         match tokens.consume_next_token_infallible() {
           Some(SimpleToken::RightParen) => {},
           Some(token) => {
@@ -323,7 +299,6 @@ impl BasicShape {
   fn ellipse_parser() -> TokenParser<BasicShape> {
     TokenParser::new(
       |tokens| {
-        // Parse 'ellipse(' function start
         match tokens.consume_next_token_infallible() {
           Some(SimpleToken::Function(fn_name)) if fn_name == "ellipse" => {},
           Some(token) => {
@@ -338,7 +313,6 @@ impl BasicShape {
           },
         }
 
-        // Helper function to parse radius
         let parse_radius = |tokens: &mut TokenList| -> Result<CircleRadius, CssParseError> {
           if let Some(token) = tokens.peek_infallible() {
             match token {
@@ -362,26 +336,20 @@ impl BasicShape {
           }
         };
 
-        // Parse radius_x
         let radius_x = parse_radius(tokens)?;
 
-        // Skip whitespace
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
-        // Parse radius_y
         let radius_y = parse_radius(tokens)?;
 
-        // Skip optional whitespace
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
-        // Parse optional "at Position"
         let position = Self::parse_optional_position(tokens)?;
 
-        // Parse closing paren
         match tokens.consume_next_token_infallible() {
           Some(SimpleToken::RightParen) => {},
           Some(token) => {
@@ -409,7 +377,6 @@ impl BasicShape {
   fn polygon_parser() -> TokenParser<BasicShape> {
     TokenParser::new(
       |tokens| {
-        // Parse 'polygon(' function start
         match tokens.consume_next_token_infallible() {
           Some(SimpleToken::Function(fn_name)) if fn_name == "polygon" => {},
           Some(token) => {
@@ -425,17 +392,15 @@ impl BasicShape {
         }
 
         // Parse optional fillRule (nonzero | evenodd)
-        // Skip whitespace after polygon(
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
         let fill_rule = if let Ok(Some(SimpleToken::Ident(rule))) = tokens.peek() {
           if rule == "nonzero" || rule == "evenodd" {
-            // Consume the fill-rule ident we matched above and reuse its value
-            // (the outer `if let ... Ident(rule)` guarantees what it is).
+            // Consume the fill-rule ident matched above.
             let _ = tokens.consume_next_token();
-            // Skip optional comma and whitespace after fill-rule
+            // Skip optional comma and whitespace
             while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
               let _ = tokens.consume_next_token();
             }
@@ -453,24 +418,20 @@ impl BasicShape {
           Some("nonzero".to_string()) // default
         };
 
-        // Parse at least one point (x y, x y, ...)
+        // At least one point (x y, x y, ...)
         let mut points = Vec::new();
 
         loop {
-          // Skip optional whitespace
           while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
             let _ = tokens.consume_next_token();
           }
 
-          // Check if we hit the end paren
           if let Ok(Some(SimpleToken::RightParen)) = tokens.peek() {
             break;
           }
 
-          // Parse point: x y
           let x = (length_percentage_parser().run)(tokens)?;
 
-          // Skip whitespace between x and y
           while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
             let _ = tokens.consume_next_token();
           }
@@ -479,7 +440,6 @@ impl BasicShape {
 
           points.push((x, y));
 
-          // Skip optional whitespace
           while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
             let _ = tokens.consume_next_token();
           }
@@ -510,9 +470,7 @@ impl BasicShape {
           }
         }
 
-        // Consume the closing paren. The points loop only exits via `break` when
-        // `tokens.peek()` returned `Some(SimpleToken::RightParen)`, so the next
-        // token is always that RightParen.
+        // The loop only breaks on a peeked RightParen; consume it.
         let _ = tokens.consume_next_token();
 
         if points.is_empty() {
@@ -530,7 +488,6 @@ impl BasicShape {
   fn path_parser() -> TokenParser<BasicShape> {
     TokenParser::new(
       |tokens| {
-        // Parse 'path(' function start
         match tokens.consume_next_token_infallible() {
           Some(SimpleToken::Function(fn_name)) if fn_name == "path" => {},
           Some(token) => {
@@ -546,17 +503,15 @@ impl BasicShape {
         }
 
         // Parse optional fillRule (nonzero | evenodd)
-        // Skip whitespace after path(
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
         let fill_rule = if let Ok(Some(SimpleToken::Ident(rule))) = tokens.peek() {
           if rule == "nonzero" || rule == "evenodd" {
-            // Consume the fill-rule ident we matched above and reuse its value
-            // (the outer `if let ... Ident(rule)` guarantees what it is).
+            // Consume the fill-rule ident matched above.
             let _ = tokens.consume_next_token();
-            // Skip optional comma and whitespace after fill-rule
+            // Skip optional comma and whitespace
             while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
               let _ = tokens.consume_next_token();
             }
@@ -574,11 +529,7 @@ impl BasicShape {
           Some("nonzero".to_string()) // default
         };
 
-        // Whitespace before the path string is already consumed: either by the
-        // "skip whitespace after path(" loop above (no fill-rule) or by the
-        // fill-rule block's own trailing whitespace skip.
-
-        // Parse path string literal
+        // Whitespace before the path string is already consumed.
         let path = match tokens.consume_next_token_infallible() {
           Some(SimpleToken::String(s)) => s,
           Some(token) => {
@@ -593,12 +544,10 @@ impl BasicShape {
           },
         };
 
-        // Skip optional whitespace
         while let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
 
-        // Parse closing paren
         match tokens.consume_next_token_infallible() {
           Some(SimpleToken::RightParen) => {},
           Some(token) => {
@@ -621,22 +570,17 @@ impl BasicShape {
 
   /// Parse optional "at Position" for circle and ellipse
   fn parse_optional_position(tokens: &mut TokenList) -> Result<Option<Position>, CssParseError> {
-    // Check if there's an "at" keyword for position
     let checkpoint = tokens.current_index;
 
-    // Skip optional leading whitespace. The public circle/ellipse parsers
-    // already drain whitespace before calling this, but the guard is exercised
-    // directly in tests by passing a token list that starts with whitespace.
+    // Callers already drain whitespace; tests exercise this guard directly.
     if let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
       let _ = tokens.consume_next_token();
     }
 
-    // Check for "at" keyword
     match tokens.peek_infallible() {
       Some(SimpleToken::Ident(keyword)) if keyword == "at" => {
         let _ = tokens.consume_next_token(); // consume "at"
 
-        // Skip optional whitespace after "at"
         if let Ok(Some(SimpleToken::Whitespace)) = tokens.peek() {
           let _ = tokens.consume_next_token();
         }
@@ -648,7 +592,7 @@ impl BasicShape {
         }
       },
       _ => {
-        // No "at" keyword, rewind to checkpoint
+        // No `at`: rewind
         tokens.set_current_index(checkpoint);
         Ok(None)
       },

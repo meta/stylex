@@ -65,11 +65,9 @@ mod test_base_types {
     assert!(!substr.is_empty());
 
     let empty_substr = SubString::new("");
-    // Even empty string should not be empty in this implementation
-    // because start_index=0 and end_index=0, so start_index <= end_index
+    // start_index == end_index == 0, so this implementation does not report empty.
     assert!(!empty_substr.is_empty());
 
-    // Test with manually set indices where start > end
     let mut modified_substr = SubString::new("hello");
     modified_substr.start_index = 3;
     modified_substr.end_index = 2; // start_index > end_index
@@ -89,7 +87,6 @@ mod test_base_types {
   fn starts_with_uses_loop_to_avoid_string_creation() {
     let substr = SubString::new("hello world");
 
-    // Test various edge cases that would reveal string creation issues
     assert!(substr.starts_with(""));
     assert!(substr.starts_with("h"));
     assert!(substr.starts_with("hello"));

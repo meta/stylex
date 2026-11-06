@@ -1,12 +1,7 @@
 use super::*;
 use crate::token_types::{SimpleToken, TokenList};
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-/// Build a `TokenList` from an explicit token slice, bypassing the CSS
-/// tokenizer.  This is the same pattern used in the easing-function coverage
-/// tests and lets us produce token sequences that would be normalised away by
-/// the tokenizer (e.g. auto-closed parens, synthetic whitespace).
+/// Builds a `TokenList` without the tokenizer, to inject sequences it would normalise away.
 fn make_token_list(tokens: Vec<SimpleToken>) -> TokenList {
   TokenList {
     tokens,
@@ -15,11 +10,10 @@ fn make_token_list(tokens: Vec<SimpleToken>) -> TokenList {
   }
 }
 
-// ── BlurFilterFunction::parse — error + whitespace branches ──────────────────
+// ── BlurFilterFunction::parse — error + whitespace branches ──
 
 #[test]
 fn blur_parse_tokens_error_wrong_function_name() {
-  // Covers `Some(token) => return Err(...)` arm when function name is not "blur".
   let mut tl = make_token_list(vec![
     SimpleToken::Function("brightness".to_string()),
     SimpleToken::RightParen,
@@ -31,7 +25,6 @@ fn blur_parse_tokens_error_wrong_function_name() {
 
 #[test]
 fn blur_parse_tokens_error_eof_at_start() {
-  // Covers `None => return Err(...)` arm — empty token stream.
   let mut tl = make_token_list(vec![]);
   let result = (BlurFilterFunction::parse().run)(&mut tl);
   assert!(result.is_err());
@@ -40,7 +33,6 @@ fn blur_parse_tokens_error_eof_at_start() {
 
 #[test]
 fn blur_parse_tokens_error_not_a_function_token() {
-  // A non-Function token triggers the `Some(token) => Err(...)` arm.
   let mut tl = make_token_list(vec![SimpleToken::Ident("blur".to_string())]);
   let result = (BlurFilterFunction::parse().run)(&mut tl);
   assert!(result.is_err());
@@ -48,8 +40,6 @@ fn blur_parse_tokens_error_not_a_function_token() {
 
 #[test]
 fn blur_parse_tokens_whitespace_before_length() {
-  // Exercises the whitespace-skip loop body between the function
-  // token and the Length argument.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("blur".to_string()),
     SimpleToken::Whitespace,
@@ -65,8 +55,6 @@ fn blur_parse_tokens_whitespace_before_length() {
 
 #[test]
 fn blur_parse_tokens_whitespace_after_length() {
-  // Exercises the second whitespace-skip loop body between the
-  // Length argument and the closing parenthesis.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("blur".to_string()),
     SimpleToken::Dimension {
@@ -82,7 +70,6 @@ fn blur_parse_tokens_whitespace_after_length() {
 
 #[test]
 fn blur_parse_tokens_error_wrong_closing_token() {
-  // Covers `Some(token) => return Err(...)` in the closing-paren match.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("blur".to_string()),
     SimpleToken::Dimension {
@@ -103,22 +90,18 @@ fn blur_parse_tokens_error_wrong_closing_token() {
 
 #[test]
 fn blur_parse_tokens_error_eof_on_closing_paren() {
-  // Covers `None => return Err(...)` in the closing-paren match.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("blur".to_string()),
     SimpleToken::Dimension {
       value: 5.0,
       unit: "px".to_string(),
     },
-    // No closing paren — EOF
   ]);
   let result = (BlurFilterFunction::parse().run)(&mut tl);
   assert!(result.is_err());
   assert!(result.unwrap_err().to_string().contains("end of input"));
 }
 
-// : the `?` Err-propagation when Length parsing itself fails.
-// Function("blur") is consumed, then an Ident appears where a Dimension is expected.
 #[test]
 fn blur_parse_tokens_error_bad_length_arg() {
   let mut tl = make_token_list(vec![
@@ -129,7 +112,6 @@ fn blur_parse_tokens_error_bad_length_arg() {
   assert!(result.is_err());
 }
 
-// Public API — exercises (the `?` after Length parse fails on bad arg)
 #[test]
 fn blur_parse_public_error_wrong_function() {
   let result = BlurFilterFunction::parse().parse_to_end("brightness(5px)");
@@ -151,7 +133,7 @@ fn blur_parse_public_happy_path() {
   assert_eq!(format!("{}", result), "blur(5px)");
 }
 
-// ── BrightnessFilterFunction::parse ──────────────────────────────────────────
+// ── BrightnessFilterFunction::parse ──
 
 #[test]
 fn brightness_parse_tokens_error_wrong_function_name() {
@@ -186,7 +168,6 @@ fn brightness_parse_tokens_error_not_a_function_token() {
 
 #[test]
 fn brightness_parse_tokens_whitespace_before_value() {
-  // Exercises the whitespace-skip loop body.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("brightness".to_string()),
     SimpleToken::Whitespace,
@@ -199,7 +180,6 @@ fn brightness_parse_tokens_whitespace_before_value() {
 
 #[test]
 fn brightness_parse_tokens_number_variant() {
-  // Exercises the `NumberOrPercentage::Number(n) => n.value` arm.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("brightness".to_string()),
     SimpleToken::Number(0.75),
@@ -211,9 +191,7 @@ fn brightness_parse_tokens_number_variant() {
 
 #[test]
 fn brightness_parse_tokens_percentage_variant() {
-  // Exercises the `NumberOrPercentage::Percentage(p) => ...` arm.
-  // A Percentage token carries the authored percent, so 150 means 150%. The
-  // filter parser wants a fraction and divides by 100 → 1.5.
+  // The token carries the authored percent (150 means 150%); the filter divides by 100.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("brightness".to_string()),
     SimpleToken::Percentage(150.0),
@@ -225,7 +203,6 @@ fn brightness_parse_tokens_percentage_variant() {
 
 #[test]
 fn brightness_parse_tokens_whitespace_after_value() {
-  // Exercises the second whitespace-skip loop body.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("brightness".to_string()),
     SimpleToken::Number(1.0),
@@ -238,7 +215,6 @@ fn brightness_parse_tokens_whitespace_after_value() {
 
 #[test]
 fn brightness_parse_tokens_error_wrong_closing_token() {
-  // Covers `Some(token) => return Err(...)` in the closing-paren match.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("brightness".to_string()),
     SimpleToken::Number(1.0),
@@ -256,7 +232,6 @@ fn brightness_parse_tokens_error_wrong_closing_token() {
 
 #[test]
 fn brightness_parse_tokens_error_eof_on_closing_paren() {
-  // Covers `None => return Err(...)` in the closing-paren match.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("brightness".to_string()),
     SimpleToken::Number(1.0),
@@ -266,7 +241,6 @@ fn brightness_parse_tokens_error_eof_on_closing_paren() {
   assert!(result.unwrap_err().to_string().contains("end of input"));
 }
 
-// : the `?` Err-propagation when number_or_percentage parse fails.
 #[test]
 fn brightness_parse_tokens_error_bad_value_arg() {
   let mut tl = make_token_list(vec![
@@ -298,7 +272,7 @@ fn brightness_parse_public_happy_path() {
   assert_eq!(format!("{}", result), "brightness(0.5)");
 }
 
-// ── ContrastFilterFunction::parse ─────────────────────────────────────────────
+// ── ContrastFilterFunction::parse ──
 
 #[test]
 fn contrast_parse_tokens_error_wrong_function_name() {
@@ -345,7 +319,6 @@ fn contrast_parse_tokens_whitespace_before_value() {
 
 #[test]
 fn contrast_parse_tokens_number_variant() {
-  // Covers `NumberOrPercentage::Number(n) => n.value` arm.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("contrast".to_string()),
     SimpleToken::Number(1.5),
@@ -357,8 +330,7 @@ fn contrast_parse_tokens_number_variant() {
 
 #[test]
 fn contrast_parse_tokens_percentage_variant() {
-  // Covers `NumberOrPercentage::Percentage(p) => ...` arm.
-  // A Percentage token carries the authored percent: 200 means 200%.
+  // `SimpleToken::Percentage` carries the authored percent, not a fraction.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("contrast".to_string()),
     SimpleToken::Percentage(200.0),
@@ -408,7 +380,6 @@ fn contrast_parse_tokens_error_eof_on_closing_paren() {
   assert!(result.unwrap_err().to_string().contains("end of input"));
 }
 
-// : the `?` Err-propagation when number_or_percentage parse fails.
 #[test]
 fn contrast_parse_tokens_error_bad_value_arg() {
   let mut tl = make_token_list(vec![
@@ -433,7 +404,6 @@ fn contrast_parse_public_error_eof() {
 
 #[test]
 fn contrast_parse_public_happy_path() {
-  // Use 0.5, which a double holds exactly, to avoid display imprecision.
   let result = ContrastFilterFunction::parse()
     .parse_to_end("contrast(0.5)")
     .unwrap();
@@ -441,7 +411,7 @@ fn contrast_parse_public_happy_path() {
   assert_eq!(format!("{}", result), "contrast(0.5)");
 }
 
-// ── GrayscaleFilterFunction::parse ────────────────────────────────────────────
+// ── GrayscaleFilterFunction::parse ──
 
 #[test]
 fn grayscale_parse_tokens_error_wrong_function_name() {
@@ -488,7 +458,6 @@ fn grayscale_parse_tokens_whitespace_before_value() {
 
 #[test]
 fn grayscale_parse_tokens_number_variant() {
-  // Covers `NumberOrPercentage::Number(n) => n.value` arm.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("grayscale".to_string()),
     SimpleToken::Number(0.75),
@@ -500,7 +469,7 @@ fn grayscale_parse_tokens_number_variant() {
 
 #[test]
 fn grayscale_parse_tokens_percentage_variant() {
-  // SimpleToken::Percentage(50.0) is the authored percent, not a fraction.
+  // `SimpleToken::Percentage` carries the authored percent, not a fraction.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("grayscale".to_string()),
     SimpleToken::Percentage(50.0),
@@ -550,7 +519,6 @@ fn grayscale_parse_tokens_error_eof_on_closing_paren() {
   assert!(result.unwrap_err().to_string().contains("end of input"));
 }
 
-// : the `?` Err-propagation when number_or_percentage parse fails.
 #[test]
 fn grayscale_parse_tokens_error_bad_value_arg() {
   let mut tl = make_token_list(vec![
@@ -582,7 +550,7 @@ fn grayscale_parse_public_happy_path() {
   assert_eq!(format!("{}", result), "grayscale(0.5)");
 }
 
-// ── HueRotateFilterFunction::parse ────────────────────────────────────────────
+// ── HueRotateFilterFunction::parse ──
 
 #[test]
 fn hue_rotate_parse_tokens_error_wrong_function_name() {
@@ -617,7 +585,6 @@ fn hue_rotate_parse_tokens_error_not_a_function_token() {
 
 #[test]
 fn hue_rotate_parse_tokens_whitespace_before_angle() {
-  // Exercises the whitespace-skip loop body before the Angle argument.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("hue-rotate".to_string()),
     SimpleToken::Whitespace,
@@ -633,7 +600,6 @@ fn hue_rotate_parse_tokens_whitespace_before_angle() {
 
 #[test]
 fn hue_rotate_parse_tokens_whitespace_after_angle() {
-  // Exercises the second whitespace-skip loop body after the Angle.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("hue-rotate".to_string()),
     SimpleToken::Dimension {
@@ -675,14 +641,12 @@ fn hue_rotate_parse_tokens_error_eof_on_closing_paren() {
       value: 90.0,
       unit: "deg".to_string(),
     },
-    // No closing paren
   ]);
   let result = (HueRotateFilterFunction::parse().run)(&mut tl);
   assert!(result.is_err());
   assert!(result.unwrap_err().to_string().contains("end of input"));
 }
 
-// : the `?` Err-propagation when Angle parse fails.
 #[test]
 fn hue_rotate_parse_tokens_error_bad_angle_arg() {
   let mut tl = make_token_list(vec![
@@ -714,7 +678,7 @@ fn hue_rotate_parse_public_happy_path() {
   assert_eq!(format!("{}", result), "hue-rotate(180deg)");
 }
 
-// ── InvertFilterFunction::parse ───────────────────────────────────────────────
+// ── InvertFilterFunction::parse ──
 
 #[test]
 fn invert_parse_tokens_error_wrong_function_name() {
@@ -756,7 +720,6 @@ fn invert_parse_tokens_whitespace_before_value() {
 
 #[test]
 fn invert_parse_tokens_number_variant() {
-  // Covers `NumberOrPercentage::Number(n) => n.value` arm.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("invert".to_string()),
     SimpleToken::Number(0.5),
@@ -768,7 +731,7 @@ fn invert_parse_tokens_number_variant() {
 
 #[test]
 fn invert_parse_tokens_percentage_variant() {
-  // SimpleToken::Percentage(100.0) is the authored percent, not a fraction.
+  // `SimpleToken::Percentage` carries the authored percent, not a fraction.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("invert".to_string()),
     SimpleToken::Percentage(100.0),
@@ -818,7 +781,6 @@ fn invert_parse_tokens_error_eof_on_closing_paren() {
   assert!(result.unwrap_err().to_string().contains("end of input"));
 }
 
-// : the `?` Err-propagation when number_or_percentage parse fails.
 #[test]
 fn invert_parse_tokens_error_bad_value_arg() {
   let mut tl = make_token_list(vec![
@@ -850,7 +812,7 @@ fn invert_parse_public_happy_path() {
   assert_eq!(format!("{}", result), "invert(0.75)");
 }
 
-// ── OpacityFilterFunction::parse ──────────────────────────────────────────────
+// ── OpacityFilterFunction::parse ──
 
 #[test]
 fn opacity_parse_tokens_error_wrong_function_name() {
@@ -892,7 +854,6 @@ fn opacity_parse_tokens_whitespace_before_value() {
 
 #[test]
 fn opacity_parse_tokens_number_variant() {
-  // Covers `NumberOrPercentage::Number(n) => n.value` arm.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("opacity".to_string()),
     SimpleToken::Number(0.25),
@@ -904,7 +865,7 @@ fn opacity_parse_tokens_number_variant() {
 
 #[test]
 fn opacity_parse_tokens_percentage_variant() {
-  // SimpleToken::Percentage(75.0) is the authored percent, not a fraction.
+  // `SimpleToken::Percentage` carries the authored percent, not a fraction.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("opacity".to_string()),
     SimpleToken::Percentage(75.0),
@@ -954,7 +915,6 @@ fn opacity_parse_tokens_error_eof_on_closing_paren() {
   assert!(result.unwrap_err().to_string().contains("end of input"));
 }
 
-// : the `?` Err-propagation when number_or_percentage parse fails.
 #[test]
 fn opacity_parse_tokens_error_bad_value_arg() {
   let mut tl = make_token_list(vec![
@@ -986,7 +946,7 @@ fn opacity_parse_public_happy_path() {
   assert_eq!(format!("{}", result), "opacity(0.5)");
 }
 
-// ── SaturateFilterFunction::parse ─────────────────────────────────────────────
+// ── SaturateFilterFunction::parse ──
 
 #[test]
 fn saturate_parse_tokens_error_wrong_function_name() {
@@ -1033,7 +993,6 @@ fn saturate_parse_tokens_whitespace_before_value() {
 
 #[test]
 fn saturate_parse_tokens_number_variant() {
-  // Covers `NumberOrPercentage::Number(n) => n.value` arm.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("saturate".to_string()),
     SimpleToken::Number(1.5),
@@ -1045,7 +1004,7 @@ fn saturate_parse_tokens_number_variant() {
 
 #[test]
 fn saturate_parse_tokens_percentage_variant() {
-  // SimpleToken::Percentage(150.0) is the authored percent, not a fraction.
+  // `SimpleToken::Percentage` carries the authored percent, not a fraction.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("saturate".to_string()),
     SimpleToken::Percentage(150.0),
@@ -1095,7 +1054,6 @@ fn saturate_parse_tokens_error_eof_on_closing_paren() {
   assert!(result.unwrap_err().to_string().contains("end of input"));
 }
 
-// : the `?` Err-propagation when number_or_percentage parse fails.
 #[test]
 fn saturate_parse_tokens_error_bad_value_arg() {
   let mut tl = make_token_list(vec![
@@ -1127,7 +1085,7 @@ fn saturate_parse_public_happy_path() {
   assert_eq!(format!("{}", result), "saturate(1.5)");
 }
 
-// ── SepiaFilterFunction::parse ────────────────────────────────────────────────
+// ── SepiaFilterFunction::parse ──
 
 #[test]
 fn sepia_parse_tokens_error_wrong_function_name() {
@@ -1169,7 +1127,6 @@ fn sepia_parse_tokens_whitespace_before_value() {
 
 #[test]
 fn sepia_parse_tokens_number_variant() {
-  // Covers `NumberOrPercentage::Number(n) => n.value` arm.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("sepia".to_string()),
     SimpleToken::Number(0.8),
@@ -1181,8 +1138,7 @@ fn sepia_parse_tokens_number_variant() {
 
 #[test]
 fn sepia_parse_tokens_percentage_variant() {
-  // Covers `NumberOrPercentage::Percentage(p) => p.value / 100.0` arm.
-  // SimpleToken::Percentage(50.0) is the authored percent, not a fraction.
+  // `SimpleToken::Percentage` carries the authored percent, not a fraction.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("sepia".to_string()),
     SimpleToken::Percentage(50.0),
@@ -1206,7 +1162,6 @@ fn sepia_parse_tokens_whitespace_after_value() {
 
 #[test]
 fn sepia_parse_tokens_error_wrong_closing_token() {
-  // Covers `Some(token) => return Err(...)` in the closing-paren match.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("sepia".to_string()),
     SimpleToken::Number(0.5),
@@ -1224,7 +1179,6 @@ fn sepia_parse_tokens_error_wrong_closing_token() {
 
 #[test]
 fn sepia_parse_tokens_error_eof_on_closing_paren() {
-  // Covers `None => return Err(...)` in the closing-paren match.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("sepia".to_string()),
     SimpleToken::Number(0.5),
@@ -1236,18 +1190,14 @@ fn sepia_parse_tokens_error_eof_on_closing_paren() {
 
 #[test]
 fn sepia_parse_tokens_error_wrong_function_token_in_body() {
-  // Covers `Some(token) => return Err(...)` when the token is a Function with wrong name,
-  // checking the `sepia` error path.
   let mut tl = make_token_list(vec![
     SimpleToken::Function("sepia".to_string()),
-    // Inject a non-number/percentage token to exercise (Err path):
     SimpleToken::Ident("something".to_string()),
   ]);
   let result = (SepiaFilterFunction::parse().run)(&mut tl);
   assert!(result.is_err());
 }
 
-// : the `?` Err-propagation when number_or_percentage parse fails.
 #[test]
 fn sepia_parse_tokens_error_bad_value_arg() {
   let mut tl = make_token_list(vec![
@@ -1272,7 +1222,6 @@ fn sepia_parse_public_error_eof() {
 
 #[test]
 fn sepia_parse_public_happy_path() {
-  // Use 0.5, which a double holds exactly, to avoid display imprecision.
   let result = SepiaFilterFunction::parse()
     .parse_to_end("sepia(0.5)")
     .unwrap();
@@ -1280,7 +1229,7 @@ fn sepia_parse_public_happy_path() {
   assert_eq!(format!("{}", result), "sepia(0.5)");
 }
 
-// ── FilterFunction top-level parser ───────────────────────────────────────────
+// ── FilterFunction top-level parser ──
 
 #[test]
 fn filter_function_parser_selects_blur() {

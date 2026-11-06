@@ -1,6 +1,3 @@
-// Tests extracted for css_types/position.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/css_types/position.rs
-
 use super::*;
 
 #[test]
@@ -67,8 +64,6 @@ fn test_keyword_with_offset_display() {
 
 #[test]
 fn test_numbers_only() {
-  // This would test: "50% 25%" -> Position with both horizontal and vertical
-  // length
   let pos = Position::new(
     Some(Horizontal::Length(LengthPercentage::Percentage(
       crate::css_types::Percentage::new(50.0),
@@ -99,7 +94,6 @@ fn test_two_keywords() {
 fn test_two_lengths() {
   let result = Position::parser().parse("50%");
   if let Ok(pos) = result {
-    // Single length should apply to both axes
     assert!(matches!(pos.horizontal, Some(Horizontal::Length(_))));
     assert!(matches!(pos.vertical, Some(Vertical::Length(_))));
   }

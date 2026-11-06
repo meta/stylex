@@ -1,8 +1,5 @@
 /*!
-At-rule parsing functionality.
-
-This module contains parsers for CSS at-rules, particularly media queries.
-Includes support for complex media query parsing, validation, and transformation.
+At-rule parsing: media query parsing, validation and transformation.
 */
 
 pub mod media_query;

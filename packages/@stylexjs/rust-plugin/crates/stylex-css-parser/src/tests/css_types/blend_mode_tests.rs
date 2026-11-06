@@ -1,6 +1,3 @@
-// Tests extracted for css_types/blend_mode.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/css_types/blend_mode.rs
-
 use super::*;
 
 #[test]
@@ -22,7 +19,6 @@ fn test_blend_mode_from_str() {
   assert_eq!(BlendMode::parse("color"), Some(BlendMode::Color));
   assert_eq!(BlendMode::parse("luminosity"), Some(BlendMode::Luminosity));
 
-  // Invalid values
   assert_eq!(BlendMode::parse("invalid"), None);
   assert_eq!(BlendMode::parse("NORMAL"), None);
   assert_eq!(BlendMode::parse(""), None);
@@ -63,7 +59,6 @@ fn test_blend_mode_is_valid() {
   assert!(BlendMode::is_valid_blend_mode("color-dodge"));
   assert!(BlendMode::is_valid_blend_mode("luminosity"));
 
-  // Invalid
   assert!(!BlendMode::is_valid_blend_mode("invalid"));
   assert!(!BlendMode::is_valid_blend_mode("NORMAL"));
   assert!(!BlendMode::is_valid_blend_mode(""));
@@ -74,7 +69,6 @@ fn test_blend_mode_all_values() {
   let values = BlendMode::all_values();
   assert_eq!(values.len(), 16);
 
-  // Test that all values can be parsed
   for value_str in values {
     assert!(BlendMode::parse(value_str).is_some());
   }
@@ -82,7 +76,6 @@ fn test_blend_mode_all_values() {
 
 #[test]
 fn test_blend_mode_parser_creation() {
-  // Basic test that parser can be created
   let _parser = BlendMode::parser();
 }
 
@@ -98,7 +91,6 @@ fn test_blend_mode_equality() {
 
 #[test]
 fn test_blend_mode_round_trip() {
-  // Test that parse and as_str are consistent
   for value_str in BlendMode::all_values() {
     let blend_mode = BlendMode::parse(value_str).unwrap();
     assert_eq!(blend_mode.as_str(), *value_str);
@@ -107,7 +99,6 @@ fn test_blend_mode_round_trip() {
 
 #[test]
 fn test_blend_mode_coverage() {
-  // Test that we have all the blend modes from CSS spec
   assert!(BlendMode::all_values().contains(&"normal"));
   assert!(BlendMode::all_values().contains(&"multiply"));
   assert!(BlendMode::all_values().contains(&"screen"));
@@ -128,7 +119,6 @@ fn test_blend_mode_coverage() {
 
 #[test]
 fn test_blend_mode_compositing_groups() {
-  // Test separable blend modes
   let separable = &[
     BlendMode::Normal,
     BlendMode::Multiply,
@@ -144,7 +134,6 @@ fn test_blend_mode_compositing_groups() {
     BlendMode::Exclusion,
   ];
 
-  // Test non-separable blend modes
   let non_separable = &[
     BlendMode::Hue,
     BlendMode::Saturation,
@@ -152,6 +141,5 @@ fn test_blend_mode_compositing_groups() {
     BlendMode::Luminosity,
   ];
 
-  // Verify all modes are accounted for
   assert_eq!(separable.len() + non_separable.len(), 16);
 }

@@ -1,7 +1,5 @@
 /*!
-CSS Color type parsing.
-
-Handles all CSS color formats: named colors, hex, rgb, rgba, hsl, hsla, and modern color spaces.
+CSS `<color>`: named, hex, rgb(a), hsl(a) and modern color spaces.
 */
 
 use stylex_macros::stylex_unreachable;
@@ -20,23 +18,12 @@ use crate::{
 use std::fmt::{self, Display};
 
 /// The alpha a modern colour space prints, or `None` where it prints no tail.
-///
-/// The reference implementation spells the tail
-/// `${this.alpha ? ` / ${this.alpha}` : ''}` -- a JavaScript *truthiness* test
-/// rather than a presence test, so an alpha of zero prints nothing at all and
-/// `lch(50 20 30 / 0)` is spelled `lch(50 20 30)`. A `NaN` alpha is falsy there
-/// for the same reason and so prints nothing here either.
-///
-/// The rule lives here rather than at each of the three call sites because
-/// getting it wrong is not a cosmetic slip: the printed spelling feeds the
-/// class-name hash, so an alpha tail this compiler prints and the reference
-/// compiler does not is an observable divergence.
+/// Matches upstream's truthiness test: an alpha of `0` or `NaN` prints no tail.
 fn printed_alpha(alpha: Option<f64>) -> Option<f64> {
   alpha.filter(|value| *value != 0.0 && !value.is_nan())
 }
 
-/// Extracts the numeric value from a Number token. Returns 0.0 for non-Number
-/// tokens (defensive fallback — guarded by tokens::number() in callers).
+/// The numeric value of a Number token; 0.0 for others (callers guard with `tokens::number()`).
 fn extract_number_from_token(token: SimpleToken) -> f64 {
   if let SimpleToken::Number(v) = token {
     v
@@ -45,16 +32,8 @@ fn extract_number_from_token(token: SimpleToken) -> f64 {
   }
 }
 
-/// A channel of a legacy `rgb()`/`rgba()` colour, read from the token list.
-///
-/// One reader for both, because the reference compiler has one: `rgbNumberParser`
-/// serves `rgb`, `rgba` and their space-separated forms alike, bounding the
-/// value to `0..=255` while keeping it a `number`. The bound is the channel's,
-/// not the alpha's -- see [`crate::css_types::alpha_value::parse_alpha_token`],
-/// which is deliberately unbounded.
-///
-/// A fraction inside the bound survives, since the field holds a double and only
-/// the range is checked: `rgb(2.5, 0, 0)` is `rgb(2.5,0,0)`.
+/// A legacy `rgb()`/`rgba()` channel, bounded to `0..=255` but kept fractional (upstream
+/// `rgbNumberParser`); the alpha ([`crate::css_types::alpha_value::parse_alpha_token`]) is not.
 fn parse_rgb_channel_token(tokens: &mut TokenList) -> Result<f64, CssParseError> {
   let token = tokens
     .consume_next_token_infallible()
@@ -80,10 +59,8 @@ fn rgb_number_parser() -> TokenParser<f64> {
     .where_fn(|v| *v >= 0.0 && *v <= 255.0, Some("0..255"))
 }
 
-/// Reads the `/ <alpha-value>` tail the modern colour spaces share, rewinding
-/// to where it started and answering `None` when there is no slash. The rewind
-/// puts back the whitespace it skipped looking for the slash, so a caller that
-/// asks and gets `None` still has to consume that whitespace itself.
+/// Read an optional `/ <alpha-value>` tail; with no slash, rewinds (including skipped
+/// whitespace) and returns `None`.
 fn parse_optional_slash_alpha(tokens: &mut TokenList) -> Result<Option<f64>, CssParseError> {
   let checkpoint = tokens.current_index;
 
@@ -99,8 +76,7 @@ fn parse_optional_slash_alpha(tokens: &mut TokenList) -> Result<Option<f64>, Css
         tokens.consume_next_token_infallible();
       }
 
-      // A slash was written, so a malformed alpha after it is an error rather
-      // than an absent alpha: no rewind on this arm.
+      // A slash was written, so a malformed alpha is an error: no rewind.
       alpha_as_number().run.as_ref()(tokens).map(Some)
     },
     _ => {
@@ -110,9 +86,7 @@ fn parse_optional_slash_alpha(tokens: &mut TokenList) -> Result<Option<f64>, Css
   }
 }
 
-/// Returns true when `token` is a Function token with the given name. Returns
-/// false for all other token kinds (defensive fallback — guarded by
-/// tokens::function() in callers).
+/// Whether `token` is a Function token with the given name.
 fn check_function_name(token: &SimpleToken, name: &str) -> bool {
   if let SimpleToken::Function(fn_name) = token {
     fn_name == name
@@ -134,8 +108,7 @@ fn function_parser(name: &'static str) -> TokenParser<()> {
 pub struct AdvancedColorParsers;
 
 impl AdvancedColorParsers {
-  /// Implements: TokenParser.sequence(fn, r, comma, g, comma, b,
-  /// closeParen).map(([_fn, r, _c, g, _c2, b, _cp]) => ...)
+  /// `rgb(r, g, b)` with commas.
   pub fn rgb_comma_full() -> TokenParser<(f64, f64, f64)> {
     function_parser("rgb")
       .flat_map(|_| rgb_number_parser(), Some("r"))
@@ -180,8 +153,7 @@ impl AdvancedColorParsers {
       )
   }
 
-  /// [_fn, r, _comma, g, _comma2, b, _comma3, a, _closeParen] => new Rgba(r, g,
-  /// b, a)
+  /// `rgba(r, g, b, a)` with commas.
   pub fn rgba_comma_full() -> TokenParser<(f64, f64, f64, f64)> {
     function_parser("rgba")
       .flat_map(|_| rgb_number_parser(), Some("r"))
@@ -218,9 +190,7 @@ impl AdvancedColorParsers {
       )
   }
 
-  /// Uses rgb() function with space-separated values and slash for alpha: rgb(r
-  /// g b / a) [_fn, _preSpace, r, _space, g, _space2, b, _slash, a,
-  /// _postSpace, _closeParen] => new Rgba(r, g, b, a)
+  /// `rgb(r g b / a)`: space-separated with a slash before alpha.
   pub fn rgba_space_slash_full() -> TokenParser<(f64, f64, f64, f64)> {
     function_parser("rgb") // Note: rgb function, not rgba!
       .flat_map(
@@ -251,7 +221,6 @@ impl AdvancedColorParsers {
       )
       .flat_map(
         |(r, g, b)| {
-          // Parse slash surrounded by optional whitespace
           tokens::whitespace().optional().flat_map(
             move |_| {
               tokens::delim('/').flat_map(
@@ -406,14 +375,9 @@ impl AdvancedColorParsers {
         Some("close"),
       )
   }
-
-  // NOTE: HSLA space/slash parser temporarily removed due to complex ownership
-  // issues This will be addressed in a future enhancement phase
-  // The comma parser already provides full functionality for most use cases
 }
 
-/// List of all valid CSS named colors
-/// This is a comprehensive list of CSS Level 4 named colors
+/// All CSS Level 4 named colors.
 const NAMED_COLORS: &[&str] = &[
   "aliceblue",
   "antiquewhite",
@@ -637,8 +601,7 @@ impl NamedColor {
     NAMED_COLORS.contains(&name.to_lowercase().as_str())
   }
 
-  /// Extracts the string value from an Ident token. Panics (unreachable) for
-  /// non-Ident tokens — guarded by tokens::ident() in the parser chain.
+  /// The string value of an Ident token; unreachable for others (guarded by `tokens::ident()`).
   fn extract_ident_value(token: SimpleToken) -> String {
     if let SimpleToken::Ident(value) = token {
       value
@@ -685,33 +648,19 @@ impl HashColor {
     valid_lengths.contains(&value.len()) && value.chars().all(|c| c.is_ascii_hexdigit())
   }
 
-  /// The `index`th hex digit of a 3-digit value, doubled: `#abc` reads `aa`,
-  /// `bb`, `cc`. `None` where there is no such digit.
-  ///
-  /// The parser's `is_valid_hex` guard excludes that case, but [`HashColor::new`]
-  /// is `pub` and the guard measures `len()`, which counts **bytes** where
-  /// `chars()` counts characters -- so a multi-byte value of byte length 3 has
-  /// fewer than three digits. `HashColor::new("éx")` was a panic in [`Self::b`].
+  /// The `index`th digit of a 3-digit value, doubled (`#abc` reads `aa`, `bb`, `cc`); `None` if
+  /// absent (`new` is `pub` and the length guard counts bytes).
   fn expanded_short_digit(&self, index: usize) -> Option<u8> {
     let digit = self.value.chars().nth(index)?;
 
-    // `d * 17` rather than parsing `"dd"`: doubling a hex digit is multiplying by
-    // `0x11`, so `f` is `0xff` and `a` is `0xaa`, and the parse allocated a
-    // two-character `String` per channel to reach the same answer. `u8` cannot
-    // overflow here -- the largest digit is 15, and `15 * 17` is 255.
+    // Doubling a hex digit is multiplying by `0x11`; `15 * 17` is 255, so no overflow.
     let doubled = digit.to_digit(16)? * 17;
 
     u8::try_from(doubled).ok()
   }
 
-  /// The two-byte hex pair starting at `start`, or `None` where the value has no
-  /// such pair.
-  ///
-  /// `get` rather than `[start..start + 2]` for the reason `from_offset` gives
-  /// about its own slice: the indexing form panics on a boundary that is not a
-  /// character boundary, and this crate runs inside a NAPI addon, where a slice
-  /// panic aborts the process with no diagnostic at all rather than surfacing as
-  /// a thrown error. `HashColor::new("aébcd")` is byte length 6 and splits `é`.
+  /// The two-byte hex pair starting at `start`, or `None` if absent or not on a char boundary
+  /// (a slice panic would abort the NAPI host).
   fn hex_pair(&self, start: usize) -> Option<u8> {
     let pair = self.value.get(start..start + 2)?;
 
@@ -719,7 +668,6 @@ impl HashColor {
   }
 
   /// Get red component (0-255)
-  /// IMPORTANT: Implements CORRECT CSS behavior for 3-digit hex expansion
   pub fn r(&self) -> u8 {
     match self.value.len() {
       // 3-digit hex: #RGB -> expand to #RRGGBB
@@ -731,7 +679,6 @@ impl HashColor {
   }
 
   /// Get green component (0-255)
-  /// IMPORTANT: Implements CORRECT CSS behavior for 3-digit hex expansion
   pub fn g(&self) -> u8 {
     match self.value.len() {
       3 => self.expanded_short_digit(1).unwrap_or(0),
@@ -741,7 +688,6 @@ impl HashColor {
   }
 
   /// Get blue component (0-255)
-  /// IMPORTANT: Implements CORRECT CSS behavior for 3-digit hex expansion
   pub fn b(&self) -> u8 {
     match self.value.len() {
       3 => self.expanded_short_digit(2).unwrap_or(0),
@@ -758,8 +704,7 @@ impl HashColor {
     }
   }
 
-  /// Extracts the string value from a Hash token. Panics (unreachable) for
-  /// non-Hash tokens — guarded by tokens::hash() in the parser chain.
+  /// The string value of a Hash token; unreachable for others (guarded by `tokens::hash()`).
   fn extract_hash_value(token: SimpleToken) -> String {
     if let SimpleToken::Hash(value) = token {
       value
@@ -805,7 +750,6 @@ impl Rgb {
   fn comma_parser() -> TokenParser<Rgb> {
     TokenParser::new(
       |tokens| {
-        // Expect Function("rgb")
         let function_token =
           tokens
             .consume_next_token_infallible()
@@ -825,32 +769,24 @@ impl Rgb {
           });
         }
 
-        // Skip optional whitespace before first value
         while let Some(SimpleToken::Whitespace) = tokens.peek_infallible() {
           tokens.consume_next_token_infallible();
         }
 
-        // Parse r value
         let r = parse_rgb_channel_token(tokens)?;
 
-        // Expect comma (with optional whitespace)
         Self::consume_comma_with_optional_whitespace(tokens)?;
 
-        // Parse g value
         let g = parse_rgb_channel_token(tokens)?;
 
-        // Expect comma (with optional whitespace)
         Self::consume_comma_with_optional_whitespace(tokens)?;
 
-        // Parse b value
         let b = parse_rgb_channel_token(tokens)?;
 
-        // Skip optional whitespace before closing paren
         while let Some(SimpleToken::Whitespace) = tokens.peek_infallible() {
           tokens.consume_next_token_infallible();
         }
 
-        // Expect closing paren
         let close_token =
           tokens
             .consume_next_token_infallible()
@@ -874,7 +810,6 @@ impl Rgb {
   fn space_parser() -> TokenParser<Rgb> {
     TokenParser::new(
       |tokens| {
-        // Expect Function("rgb")
         let function_token =
           tokens
             .consume_next_token_infallible()
@@ -894,10 +829,8 @@ impl Rgb {
           });
         }
 
-        // Parse r value
         let r = parse_rgb_channel_token(tokens)?;
 
-        // Expect whitespace
         let whitespace_token =
           tokens
             .consume_next_token_infallible()
@@ -910,10 +843,8 @@ impl Rgb {
           });
         }
 
-        // Parse g value
         let g = parse_rgb_channel_token(tokens)?;
 
-        // Expect whitespace
         let whitespace_token =
           tokens
             .consume_next_token_infallible()
@@ -926,10 +857,8 @@ impl Rgb {
           });
         }
 
-        // Parse b value
         let b = parse_rgb_channel_token(tokens)?;
 
-        // Expect closing paren
         let close_token =
           tokens
             .consume_next_token_infallible()
@@ -950,12 +879,10 @@ impl Rgb {
   }
 
   fn consume_comma_with_optional_whitespace(tokens: &mut TokenList) -> Result<(), CssParseError> {
-    // Skip optional whitespace before comma
     while let Some(SimpleToken::Whitespace) = tokens.peek_infallible() {
       tokens.consume_next_token_infallible();
     }
 
-    // Expect comma
     let comma_token = tokens
       .consume_next_token_infallible()
       .ok_or(CssParseError::ParseError {
@@ -968,7 +895,6 @@ impl Rgb {
       });
     }
 
-    // Skip optional whitespace after comma
     while let Some(SimpleToken::Whitespace) = tokens.peek_infallible() {
       tokens.consume_next_token_infallible();
     }
@@ -1012,7 +938,6 @@ impl Rgba {
   fn comma_parser() -> TokenParser<Rgba> {
     TokenParser::new(
       |tokens| {
-        // Expect Function("rgba")
         let function_token =
           tokens
             .consume_next_token_infallible()
@@ -1032,38 +957,28 @@ impl Rgba {
           });
         }
 
-        // Skip optional whitespace before first value
         while let Some(SimpleToken::Whitespace) = tokens.peek_infallible() {
           tokens.consume_next_token_infallible();
         }
 
-        // Parse r value
         let r = parse_rgb_channel_token(tokens)?;
 
-        // Expect comma (with optional whitespace)
         Self::consume_comma_with_optional_whitespace(tokens)?;
 
-        // Parse g value
         let g = parse_rgb_channel_token(tokens)?;
 
-        // Expect comma (with optional whitespace)
         Self::consume_comma_with_optional_whitespace(tokens)?;
 
-        // Parse b value
         let b = parse_rgb_channel_token(tokens)?;
 
-        // Expect comma (with optional whitespace)
         Self::consume_comma_with_optional_whitespace(tokens)?;
 
-        // Parse alpha value
         let a = parse_alpha_token(tokens)?;
 
-        // Skip optional whitespace before closing paren
         while let Some(SimpleToken::Whitespace) = tokens.peek_infallible() {
           tokens.consume_next_token_infallible();
         }
 
-        // Expect closing paren
         let close_token =
           tokens
             .consume_next_token_infallible()
@@ -1083,12 +998,10 @@ impl Rgba {
     )
   }
 
-  /// Parse space-separated RGBA with slash: rgb(255 0 0 / 0.5) or rgba(255 0 0
-  /// / 0.5)
+  /// Parse space-separated RGBA with slash: `rgb(255 0 0 / 0.5)` or `rgba(255 0 0 / 0.5)`.
   fn space_slash_parser() -> TokenParser<Rgba> {
     TokenParser::new(
       |tokens| {
-        // Expect Function("rgb" or "rgba")
         let function_token =
           tokens
             .consume_next_token_infallible()
@@ -1108,10 +1021,8 @@ impl Rgba {
           });
         }
 
-        // Parse r value
         let r = parse_rgb_channel_token(tokens)?;
 
-        // Expect whitespace
         let whitespace_token =
           tokens
             .consume_next_token_infallible()
@@ -1124,10 +1035,8 @@ impl Rgba {
           });
         }
 
-        // Parse g value
         let g = parse_rgb_channel_token(tokens)?;
 
-        // Expect whitespace
         let whitespace_token =
           tokens
             .consume_next_token_infallible()
@@ -1140,15 +1049,12 @@ impl Rgba {
           });
         }
 
-        // Parse b value
         let b = parse_rgb_channel_token(tokens)?;
 
-        // Expect whitespace before slash (optional)
         if let Some(SimpleToken::Whitespace) = tokens.peek_infallible() {
           tokens.consume_next_token_infallible();
         }
 
-        // Expect slash
         let slash_token =
           tokens
             .consume_next_token_infallible()
@@ -1161,15 +1067,12 @@ impl Rgba {
           });
         }
 
-        // Expect whitespace after slash (optional)
         if let Some(SimpleToken::Whitespace) = tokens.peek_infallible() {
           tokens.consume_next_token_infallible();
         }
 
-        // Parse alpha value
         let a = parse_alpha_token(tokens)?;
 
-        // Expect closing paren
         let close_token =
           tokens
             .consume_next_token_infallible()
@@ -1190,12 +1093,10 @@ impl Rgba {
   }
 
   fn consume_comma_with_optional_whitespace(tokens: &mut TokenList) -> Result<(), CssParseError> {
-    // Skip optional whitespace before comma
     while let Some(SimpleToken::Whitespace) = tokens.peek_infallible() {
       tokens.consume_next_token_infallible();
     }
 
-    // Expect comma
     let comma_token = tokens
       .consume_next_token_infallible()
       .ok_or(CssParseError::ParseError {
@@ -1208,7 +1109,6 @@ impl Rgba {
       });
     }
 
-    // Skip optional whitespace after comma
     while let Some(SimpleToken::Whitespace) = tokens.peek_infallible() {
       tokens.consume_next_token_infallible();
     }
@@ -1244,8 +1144,7 @@ impl Hsl {
     Self { h, s, l }
   }
 
-  /// Convenience constructor for backward compatibility with tests
-  /// Creates Hsl from primitive values
+  /// Construct from primitive values (used by tests).
   pub fn from_primitives(h: f64, s: f64, l: f64) -> Self {
     Self {
       h: Angle::new(h, "deg"),
@@ -1262,7 +1161,6 @@ impl Hsl {
   fn comma_parser() -> TokenParser<Hsl> {
     TokenParser::new(
       |tokens| {
-        // Expect Function("hsl")
         let function_token =
           tokens
             .consume_next_token_infallible()
@@ -1282,32 +1180,24 @@ impl Hsl {
           });
         }
 
-        // Skip optional whitespace before first value
         while let Some(SimpleToken::Whitespace) = tokens.peek_infallible() {
           tokens.consume_next_token_infallible();
         }
 
-        // Parse hue value (angle or number)
         let h = Self::parse_hsl_hue_token(tokens)?;
 
-        // Expect comma (with optional whitespace)
         Self::consume_comma_with_optional_whitespace(tokens)?;
 
-        // Parse saturation percentage
         let s = Self::parse_hsl_percentage_token(tokens)?;
 
-        // Expect comma (with optional whitespace)
         Self::consume_comma_with_optional_whitespace(tokens)?;
 
-        // Parse lightness percentage
         let l = Self::parse_hsl_percentage_token(tokens)?;
 
-        // Skip optional whitespace before closing paren
         while let Some(SimpleToken::Whitespace) = tokens.peek_infallible() {
           tokens.consume_next_token_infallible();
         }
 
-        // Expect closing paren
         let close_token =
           tokens
             .consume_next_token_infallible()
@@ -1331,7 +1221,6 @@ impl Hsl {
   fn space_parser() -> TokenParser<Hsl> {
     TokenParser::new(
       |tokens| {
-        // Expect Function("hsl")
         let function_token =
           tokens
             .consume_next_token_infallible()
@@ -1351,10 +1240,8 @@ impl Hsl {
           });
         }
 
-        // Parse hue value (angle or number)
         let h = Self::parse_hsl_hue_token(tokens)?;
 
-        // Expect whitespace
         let whitespace_token =
           tokens
             .consume_next_token_infallible()
@@ -1367,10 +1254,8 @@ impl Hsl {
           });
         }
 
-        // Parse saturation percentage
         let s = Self::parse_hsl_percentage_token(tokens)?;
 
-        // Expect whitespace
         let whitespace_token =
           tokens
             .consume_next_token_infallible()
@@ -1383,10 +1268,8 @@ impl Hsl {
           });
         }
 
-        // Parse lightness percentage
         let l = Self::parse_hsl_percentage_token(tokens)?;
 
-        // Expect closing paren
         let close_token =
           tokens
             .consume_next_token_infallible()
@@ -1416,7 +1299,6 @@ impl Hsl {
 
     match token {
       SimpleToken::Dimension { value, unit } => {
-        // Parse as angle with unit
         if Angle::is_valid_unit(&unit) {
           Ok(Angle::new(value, unit))
         } else {
@@ -1457,12 +1339,10 @@ impl Hsl {
   }
 
   fn consume_comma_with_optional_whitespace(tokens: &mut TokenList) -> Result<(), CssParseError> {
-    // Skip optional whitespace before comma
     while let Some(SimpleToken::Whitespace) = tokens.peek_infallible() {
       tokens.consume_next_token_infallible();
     }
 
-    // Expect comma
     let comma_token = tokens
       .consume_next_token_infallible()
       .ok_or(CssParseError::ParseError {
@@ -1475,7 +1355,6 @@ impl Hsl {
       });
     }
 
-    // Skip optional whitespace after comma
     while let Some(SimpleToken::Whitespace) = tokens.peek_infallible() {
       tokens.consume_next_token_infallible();
     }
@@ -1505,8 +1384,7 @@ impl Hsla {
     Self { h, s, l, a }
   }
 
-  /// Convenience constructor for backward compatibility with tests
-  /// Creates Hsla from primitive values
+  /// Construct from primitive values (used by tests).
   pub fn from_primitives(h: f64, s: f64, l: f64, a: f64) -> Self {
     Self {
       h: Angle::new(h, "deg"),
@@ -1524,7 +1402,6 @@ impl Hsla {
   fn comma_parser() -> TokenParser<Hsla> {
     TokenParser::new(
       |tokens| {
-        // Expect Function("hsla")
         let function_token =
           tokens
             .consume_next_token_infallible()
@@ -1544,28 +1421,20 @@ impl Hsla {
           });
         }
 
-        // Parse hue value (angle or number)
         let h = Self::parse_hsla_hue_token(tokens)?;
 
-        // Expect comma (with optional whitespace)
         Self::consume_comma_with_optional_whitespace(tokens)?;
 
-        // Parse saturation percentage
         let s = Self::parse_hsla_percentage_token(tokens)?;
 
-        // Expect comma (with optional whitespace)
         Self::consume_comma_with_optional_whitespace(tokens)?;
 
-        // Parse lightness percentage
         let l = Self::parse_hsla_percentage_token(tokens)?;
 
-        // Expect comma (with optional whitespace)
         Self::consume_comma_with_optional_whitespace(tokens)?;
 
-        // Parse alpha value
         let a = parse_alpha_token(tokens)?;
 
-        // Expect closing paren
         let close_token =
           tokens
             .consume_next_token_infallible()
@@ -1589,7 +1458,7 @@ impl Hsla {
   fn space_slash_parser() -> TokenParser<Hsla> {
     TokenParser::new(
       |tokens| {
-        // Expect Function("hsl") - note: hsl, not hsla!
+        // Function("hsl"), not hsla
         let function_token =
           tokens
             .consume_next_token_infallible()
@@ -1609,10 +1478,8 @@ impl Hsla {
           });
         }
 
-        // Parse hue value (angle or number)
         let h = Self::parse_hsla_hue_token(tokens)?;
 
-        // Expect whitespace
         let whitespace_token =
           tokens
             .consume_next_token_infallible()
@@ -1625,10 +1492,8 @@ impl Hsla {
           });
         }
 
-        // Parse saturation percentage
         let s = Self::parse_hsla_percentage_token(tokens)?;
 
-        // Expect whitespace
         let whitespace_token =
           tokens
             .consume_next_token_infallible()
@@ -1641,15 +1506,12 @@ impl Hsla {
           });
         }
 
-        // Parse lightness percentage
         let l = Self::parse_hsla_percentage_token(tokens)?;
 
-        // Expect whitespace before slash (optional)
         if let Some(SimpleToken::Whitespace) = tokens.peek_infallible() {
           tokens.consume_next_token_infallible();
         }
 
-        // Expect slash
         let slash_token =
           tokens
             .consume_next_token_infallible()
@@ -1662,15 +1524,12 @@ impl Hsla {
           });
         }
 
-        // Expect whitespace after slash (optional)
         if let Some(SimpleToken::Whitespace) = tokens.peek_infallible() {
           tokens.consume_next_token_infallible();
         }
 
-        // Parse alpha value
         let a = parse_alpha_token(tokens)?;
 
-        // Expect closing paren
         let close_token =
           tokens
             .consume_next_token_infallible()
@@ -1700,7 +1559,6 @@ impl Hsla {
 
     match token {
       SimpleToken::Dimension { value, unit } => {
-        // Parse as angle with unit
         if Angle::is_valid_unit(&unit) {
           Ok(Angle::new(value, unit))
         } else {
@@ -1741,12 +1599,10 @@ impl Hsla {
   }
 
   fn consume_comma_with_optional_whitespace(tokens: &mut TokenList) -> Result<(), CssParseError> {
-    // Skip optional whitespace before comma
     while let Some(SimpleToken::Whitespace) = tokens.peek_infallible() {
       tokens.consume_next_token_infallible();
     }
 
-    // Expect comma
     let comma_token = tokens
       .consume_next_token_infallible()
       .ok_or(CssParseError::ParseError {
@@ -1759,7 +1615,6 @@ impl Hsla {
       });
     }
 
-    // Skip optional whitespace after comma
     while let Some(SimpleToken::Whitespace) = tokens.peek_infallible() {
       tokens.consume_next_token_infallible();
     }
@@ -1830,12 +1685,10 @@ impl Lch {
     Self::new(l, c, LchHue::Number(h), alpha)
   }
 
-  /// Parses lch(lightness chroma hue) and lch(lightness chroma hue / alpha)
-  /// formats
+  /// Parses `lch(l c h)` and `lch(l c h / alpha)`.
   pub fn parse() -> TokenParser<Lch> {
     TokenParser::new(
       |tokens| {
-        // Expect Function("lch")
         let function_token =
           tokens
             .consume_next_token_infallible()
@@ -1855,10 +1708,8 @@ impl Lch {
           });
         }
 
-        // Parse lightness: percentage or number
         let l = Self::parse_lch_lightness_token(tokens)?;
 
-        // Expect whitespace
         let whitespace_token =
           tokens
             .consume_next_token_infallible()
@@ -1871,10 +1722,8 @@ impl Lch {
           });
         }
 
-        // Parse chroma: number
         let c = Self::parse_lch_chroma_token(tokens)?;
 
-        // Expect whitespace
         let whitespace_token =
           tokens
             .consume_next_token_infallible()
@@ -1887,13 +1736,10 @@ impl Lch {
           });
         }
 
-        // Parse hue: angle or number
         let h = Self::parse_lch_hue_token(tokens)?;
 
-        // Parse optional alpha: / <alpha-value>
         let alpha = parse_optional_slash_alpha(tokens)?;
 
-        // Expect closing paren
         let close_token =
           tokens
             .consume_next_token_infallible()
@@ -1963,7 +1809,6 @@ impl Lch {
 
     match token {
       SimpleToken::Dimension { value, unit } => {
-        // Parse as angle with unit
         if crate::css_types::Angle::is_valid_unit(&unit) {
           let angle = crate::css_types::Angle::new(value, unit);
           Ok(LchHue::Angle(angle))
@@ -2024,14 +1869,10 @@ impl Oklch {
     Self { l, c, h, alpha }
   }
 
-  /// Parser for OKLCH colors
-  /// - Lightness/Chroma: numbers, 'none' keyword (maps to 0)
-  /// - Hue: angles or numbers (numbers * 360 -> angle conversion)
-  /// - Alpha: optional with slash syntax
+  /// Parser for OKLCH colors; `none` maps to 0, alpha is optional after a slash.
   pub fn parse() -> TokenParser<Oklch> {
     TokenParser::new(
       move |input| {
-        // Parse 'oklch(' function start
         match input.consume_next_token_infallible() {
           Some(SimpleToken::Function(fn_name)) if fn_name.to_lowercase() == "oklch" => {},
           _ => {
@@ -2041,10 +1882,8 @@ impl Oklch {
           },
         }
 
-        // Parse lightness (l): number | 'none'
         let l = Self::parse_oklch_lc_value(input)?;
 
-        // Parse whitespace
         match input.consume_next_token_infallible() {
           Some(SimpleToken::Whitespace) => {},
           _ => {
@@ -2054,10 +1893,8 @@ impl Oklch {
           },
         }
 
-        // Parse chroma (c): number | 'none'
         let c = Self::parse_oklch_lc_value(input)?;
 
-        // Parse whitespace
         match input.consume_next_token_infallible() {
           Some(SimpleToken::Whitespace) => {},
           _ => {
@@ -2067,13 +1904,10 @@ impl Oklch {
           },
         }
 
-        // Parse hue (h): angle | number (number * 360 -> angle)
         let h = Self::parse_oklch_hue(input)?;
 
-        // Parse optional alpha: / <alpha-value>
         let alpha = parse_optional_slash_alpha(input)?;
 
-        // Parse closing paren
         match input.consume_next_token_infallible() {
           Some(SimpleToken::RightParen) => {},
           _ => {
@@ -2104,7 +1938,6 @@ impl Oklch {
   fn parse_oklch_hue(input: &mut crate::token_types::TokenList) -> Result<Angle, CssParseError> {
     match input.consume_next_token_infallible() {
       Some(SimpleToken::Dimension { value, unit }) => {
-        // Try to parse as angle
         if Angle::is_valid_unit(&unit) {
           Ok(Angle::new(value, unit))
         } else {
@@ -2159,13 +1992,10 @@ impl Oklab {
     Self { l, a, b, alpha }
   }
 
-  /// Parser for OKLAB colors
-  /// - L/A/B values: numbers, 'none' keyword (maps to 0)
-  /// - Alpha: optional with slash syntax
+  /// Parser for OKLAB colors; `none` maps to 0, alpha is optional after a slash.
   pub fn parse() -> TokenParser<Oklab> {
     TokenParser::new(
       move |input| {
-        // Parse 'oklab(' function start
         match input.consume_next_token_infallible() {
           Some(SimpleToken::Function(fn_name)) if fn_name.to_lowercase() == "oklab" => {},
           _ => {
@@ -2175,10 +2005,8 @@ impl Oklab {
           },
         }
 
-        // Parse lightness (l): number | 'none'
         let l = Self::parse_oklab_lab_value(input)?;
 
-        // Parse whitespace
         match input.consume_next_token_infallible() {
           Some(SimpleToken::Whitespace) => {},
           _ => {
@@ -2188,10 +2016,8 @@ impl Oklab {
           },
         }
 
-        // Parse a component (green-red): number | 'none'
         let a = Self::parse_oklab_lab_value(input)?;
 
-        // Parse whitespace
         match input.consume_next_token_infallible() {
           Some(SimpleToken::Whitespace) => {},
           _ => {
@@ -2201,13 +2027,10 @@ impl Oklab {
           },
         }
 
-        // Parse b component (blue-yellow): number | 'none'
         let b = Self::parse_oklab_lab_value(input)?;
 
-        // Parse optional alpha: / <alpha-value>
         let alpha = parse_optional_slash_alpha(input)?;
 
-        // Parse closing paren
         match input.consume_next_token_infallible() {
           Some(SimpleToken::RightParen) => {},
           _ => {

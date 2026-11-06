@@ -1,6 +1,3 @@
-// Tests extracted for css_types/length.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/css_types/length.rs
-
 use super::*;
 
 #[test]
@@ -21,7 +18,6 @@ fn test_length_display() {
 
 #[test]
 fn test_valid_units() {
-  // Font-relative units
   assert!(Length::is_valid_unit("em"));
   assert!(Length::is_valid_unit("rem"));
   assert!(Length::is_valid_unit("ch"));
@@ -30,16 +26,13 @@ fn test_valid_units() {
   assert!(Length::is_valid_unit("vw"));
   assert!(Length::is_valid_unit("vmin"));
 
-  // Container units
   assert!(Length::is_valid_unit("cqw"));
   assert!(Length::is_valid_unit("cqh"));
 
-  // Absolute units
   assert!(Length::is_valid_unit("px"));
   assert!(Length::is_valid_unit("cm"));
   assert!(Length::is_valid_unit("in"));
 
-  // Invalid units
   assert!(!Length::is_valid_unit("invalid"));
   assert!(!Length::is_valid_unit("deg"));
   assert!(!Length::is_valid_unit("s"));
@@ -61,7 +54,6 @@ fn test_units_constants() {
 
 #[test]
 fn test_length_parser_creation() {
-  // Basic test that parser can be created
   let _parser = Length::parser();
 }
 
@@ -69,7 +61,6 @@ fn test_length_parser_creation() {
 fn test_all_units_included() {
   let all_units = Length::units();
 
-  // Should include all categories
   assert!(all_units.len() > 20); // We have many units
   assert!(all_units.contains(&"px"));
   assert!(all_units.contains(&"em"));

@@ -33,17 +33,11 @@ macro_rules! printed {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Precision past six decimal places survives
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod precision_past_six_decimals_survives {
   use super::*;
 
-  /// The seventh decimal place is where the old helper rounded, so a `5` there
-  /// is the smallest input that shows the rounding: it used to round up and
-  /// change the matrix.
+  /// The seventh decimal is where the old helper rounded.
   #[test]
   fn a_matrix_keeps_every_argument_it_was_given() {
     assert_eq!(
@@ -52,8 +46,6 @@ mod precision_past_six_decimals_survives {
     );
   }
 
-  /// Sixteen more arguments through the same helper, on a separate display
-  /// arm that joined them rather than interpolating them.
   #[test]
   fn a_matrix3d_keeps_every_argument_it_was_given() {
     assert_eq!(
@@ -62,8 +54,6 @@ mod precision_past_six_decimals_survives {
     );
   }
 
-  /// Seventeen significant digits is the most a double carries, and none of it
-  /// is lost between the parse and the print.
   #[test]
   fn a_matrix_at_full_double_precision_round_trips() {
     assert_eq!(
@@ -72,7 +62,6 @@ mod precision_past_six_decimals_survives {
     );
   }
 
-  /// The scale and rotate arms took the helper too, on their own arguments.
   #[test]
   fn the_scale_and_rotate_arms_keep_their_arguments() {
     assert_eq!(
@@ -91,9 +80,7 @@ mod precision_past_six_decimals_survives {
     );
   }
 
-  /// The old helper trimmed a whole number to an integer via `as i64`, which
-  /// is a saturating cast: a value past the `i64` range became `i64::MAX`
-  /// rather than itself. Nothing does that now.
+  /// The old helper used a saturating `as i64` cast here.
   #[test]
   fn a_whole_number_past_the_i64_range_is_not_saturated() {
     assert_eq!(
@@ -104,17 +91,11 @@ mod precision_past_six_decimals_survives {
   }
 }
 
-// ---------------------------------------------------------------------------
-// The shared formatter's spellings reach here too
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod the_shared_formatter_spellings {
   use super::*;
 
-  /// Past 1e21 JavaScript goes exponential. The old helper's `{:.6}` never
-  /// did, so this value used to print with twenty-two digits and a decimal
-  /// point.
+  /// Past 1e21 JavaScript goes exponential.
   #[test]
   fn past_the_upper_threshold() {
     assert_eq!(printed!("scaleX(1e21)"), "scaleX(1e+21)");
@@ -124,8 +105,7 @@ mod the_shared_formatter_spellings {
     );
   }
 
-  /// Below 1e-6 it goes exponential downwards. The old helper rounded every
-  /// one of these to `0`, which is not a scale factor anyone wrote.
+  /// Below 1e-6 JavaScript goes exponential.
   #[test]
   fn past_the_lower_threshold() {
     assert_eq!(printed!("scaleX(1e-7)"), "scaleX(1e-7)");
@@ -136,7 +116,6 @@ mod the_shared_formatter_spellings {
     );
   }
 
-  /// A negative zero loses its sign, and an overflow is named `Infinity`.
   #[test]
   fn on_a_negative_zero_and_an_overflow() {
     assert_eq!(printed!("scaleX(-0)"), "scaleX(0)");
@@ -148,17 +127,14 @@ mod the_shared_formatter_spellings {
     assert_eq!(printed!("scaleX(-1e400)"), "scaleX(-Infinity)");
   }
 
-  /// The rotate3d arm dispatches on an exact comparison against 1 and 0
-  /// before it prints, so the axis shorthands have to survive the change of
-  /// formatter -- the comparison is on the value, not the spelling.
+  /// The rotate3d axis shorthands compare on the value, not the spelling.
   #[test]
   fn without_disturbing_the_rotate3d_axis_shorthands() {
     assert_eq!(printed!("rotate3d(1, 0, 0, 45deg)"), "rotateX(45deg)");
     assert_eq!(printed!("rotate3d(0, 1, 0, 45deg)"), "rotateY(45deg)");
     assert_eq!(printed!("rotate3d(0, 0, 1, 45deg)"), "rotateZ(45deg)");
-    // A negative zero compares equal to zero, so it takes the shorthand too.
+    // A negative zero compares equal to zero.
     assert_eq!(printed!("rotate3d(1, -0, -0, 45deg)"), "rotateX(45deg)");
-    // One digit off the axis and it is a general rotation again.
     assert_eq!(
       printed!("rotate3d(1.0000005, 0, 0, 45deg)"),
       "rotate3d(1.0000005, 0, 0, 45deg)"
@@ -166,16 +142,11 @@ mod the_shared_formatter_spellings {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Malformed and extreme input
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod malformed_and_extreme_input {
   use super::*;
 
-  /// Assert that a transform function is refused, so that a tolerated
-  /// malformed input is distinguishable from a refused one at a glance.
+  /// Asserts that a transform function is refused.
   macro_rules! refused {
     ($input:expr) => {
       assert!(
@@ -186,8 +157,6 @@ mod malformed_and_extreme_input {
     };
   }
 
-  /// Too few arguments, too many, and the wrong separator are all still
-  /// refused: deleting the helper moved the printing, not the parse.
   #[test]
   fn a_wrong_argument_count_is_still_refused() {
     refused!("matrix(1, 2, 3, 4, 5)");
@@ -197,8 +166,6 @@ mod malformed_and_extreme_input {
     refused!("matrix(1 2 3 4 5 6)");
   }
 
-  /// A dimension where a bare number belongs, and a bare number where an
-  /// angle belongs.
   #[test]
   fn an_argument_of_the_wrong_type_is_still_refused() {
     refused!("matrix(1px, 2, 3, 4, 5, 6)");
@@ -207,11 +174,7 @@ mod malformed_and_extreme_input {
     refused!("rotate3d(1, 0, 0, 45)");
   }
 
-  /// An unclosed function is tolerated rather than refused: the tokenizer
-  /// synthesises the closing paren, exactly as it does for `calc(`. Pinned
-  /// because deleting the rounding helper sits on this same path, and a
-  /// tolerance quietly turning into a refusal would be a behaviour change
-  /// hiding inside a formatting change.
+  /// The tokenizer synthesises the closing paren, as it does for `calc(`.
   #[test]
   fn an_unclosed_function_is_still_tolerated() {
     assert_eq!(
@@ -221,8 +184,6 @@ mod malformed_and_extreme_input {
     assert_eq!(printed!("scaleX(1e21"), "scaleX(1e+21)");
   }
 
-  /// An unclosed quote and a stray delimiter, neither of which may panic on
-  /// the way to a refusal.
   #[test]
   fn malformed_syntax_is_refused_rather_than_panicking() {
     refused!("matrix(\"1, 2, 3, 4, 5, 6)");
@@ -232,16 +193,13 @@ mod malformed_and_extreme_input {
     refused!("(1, 2, 3, 4, 5, 6)");
   }
 
-  /// A custom property reference is not a number.
   #[test]
   fn a_variable_argument_is_refused() {
     refused!("matrix(var(--a), 2, 3, 4, 5, 6)");
     refused!("scaleX(var(--s))");
   }
 
-  /// A properly escaped function name names the same function -- `\6d ` is
-  /// `m`, and the trailing space terminates the escape -- so the transform
-  /// parses and prints at full precision.
+  /// `\6d ` is `m`; the trailing space terminates the escape.
   #[test]
   fn an_escaped_function_name_still_names_the_function() {
     assert_eq!(
@@ -250,17 +208,12 @@ mod malformed_and_extreme_input {
     );
   }
 
-  /// An escape that runs into the next character is a different identifier:
-  /// `\6da` is one code point, not `m` followed by `a`, because `a` is a hex
-  /// digit and the escape swallows it.
+  /// `\6da` is one code point: `a` is a hex digit, so the escape swallows it.
   #[test]
   fn a_misread_escape_names_no_function() {
     refused!("\\6datrix(1, 2, 3, 4, 5, 6)");
   }
 
-  /// A mantissa far longer than a double's precision collapses to the nearest
-  /// double and is spelled from that, so the printed length is bounded by the
-  /// formatter rather than by the input.
   #[test]
   fn an_absurdly_long_argument_collapses_to_the_nearest_double() {
     let long = format!("scaleX(1.{})", "1".repeat(500));
@@ -271,15 +224,8 @@ mod malformed_and_extreme_input {
   }
 }
 
-/// The reference compiler's own `matrix` and `matrix3d` cases, ported verbatim.
-///
-/// Its suite asserts the parsed *value* -- `new Matrix(0.4, 0, 0.5, 1.2, 60,
-/// 10)` -- where this one asserts the printed text, because the text is what
-/// reaches a class name. They say the same thing: the arguments are reprinted
-/// from the number, not echoed from the source, so `1.200` prints as `1.2` and
-/// `.4` as `0.4`. Worth having verbatim because these are the whitespace and
-/// leading-dot shapes the prefix scanner reads, and nothing else in this file
-/// reaches them.
+/// The reference compiler's `matrix` and `matrix3d` cases, ported verbatim; asserted on the
+/// printed text rather than the parsed value.
 ///
 /// Source: `style-value-parser/src/css-types/__tests__/transform-function-test.js`.
 #[test]

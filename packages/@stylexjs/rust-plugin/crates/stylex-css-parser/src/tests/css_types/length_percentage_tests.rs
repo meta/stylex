@@ -1,6 +1,3 @@
-// Tests extracted for css_types/length_percentage.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/css_types/length_percentage.rs
-
 use super::*;
 
 #[test]
@@ -35,18 +32,15 @@ fn test_length_percentage_accessors() {
   let length = LengthPercentage::Length(length_val.clone());
   let percentage = LengthPercentage::Percentage(percentage_val.clone());
 
-  // Test as_length
   assert_eq!(length.as_length(), Some(&length_val));
   assert_eq!(percentage.as_length(), None);
 
-  // Test as_percentage
   assert_eq!(length.as_percentage(), None);
   assert_eq!(percentage.as_percentage(), Some(&percentage_val));
 }
 
 #[test]
 fn test_length_percentage_parser_creation() {
-  // Test both creation methods
   let _parser1 = LengthPercentage::parser();
   let _parser2 = length_percentage_parser();
 }
@@ -68,17 +62,14 @@ fn test_length_percentage_equality() {
 
 #[test]
 fn test_length_percentage_edge_cases() {
-  // Zero length
   let zero_length = LengthPercentage::Length(Length::new(0.0, String::new()));
   assert!(zero_length.is_length());
   assert_eq!(zero_length.to_string(), "0");
 
-  // Zero percentage
   let zero_percentage = LengthPercentage::Percentage(Percentage::new(0.0));
   assert!(zero_percentage.is_percentage());
   assert_eq!(zero_percentage.to_string(), "0%");
 
-  // Different length units
   let px_length = LengthPercentage::Length(Length::new(16.0, "px".to_string()));
   let em_length = LengthPercentage::Length(Length::new(1.0, "em".to_string()));
   assert_ne!(px_length, em_length);

@@ -1,7 +1,5 @@
 /*!
-CSS Transform property parsing.
-
-Handles transform property syntax with multiple transform functions.
+`transform` property parsing: a list of transform functions.
 */
 
 use crate::{css_types::transform_function::TransformFunction, token_parser::TokenParser};

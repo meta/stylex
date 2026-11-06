@@ -125,7 +125,6 @@ mod filter_function_parse {
 
   #[test]
   fn brightness_percentage_to_string() {
-    // 150% is parsed as 150/100 = 1.5
     assert_eq!(
       FilterFunction::parser()
         .parse_to_end("brightness(150%)")
@@ -137,7 +136,6 @@ mod filter_function_parse {
 
   #[test]
   fn contrast_to_string() {
-    // 200% is parsed as 200/100 = 2
     assert_eq!(
       FilterFunction::parser()
         .parse_to_end("contrast(200%)")
@@ -149,7 +147,6 @@ mod filter_function_parse {
 
   #[test]
   fn saturate_to_string() {
-    // 200% is parsed as 200/100 = 2
     assert_eq!(
       FilterFunction::parser()
         .parse_to_end("saturate(200%)")
@@ -172,7 +169,6 @@ mod filter_function_parse {
 
   #[test]
   fn grayscale_percentage_to_string() {
-    // 100% is parsed as 100/100 = 1
     assert_eq!(
       FilterFunction::parser()
         .parse_to_end("grayscale(100%)")
@@ -195,7 +191,6 @@ mod filter_function_parse {
 
   #[test]
   fn invert_to_string() {
-    // 100% is parsed as 100/100 = 1
     assert_eq!(
       FilterFunction::parser()
         .parse_to_end("invert(100%)")
@@ -207,7 +202,6 @@ mod filter_function_parse {
 
   #[test]
   fn opacity_percentage_to_string() {
-    // 50% is parsed as 50/100 = 0.5
     assert_eq!(
       FilterFunction::parser()
         .parse_to_end("opacity(50%)")
@@ -230,7 +224,6 @@ mod filter_function_parse {
 
   #[test]
   fn sepia_to_string() {
-    // 100% is parsed as 100/100 = 1
     assert_eq!(
       FilterFunction::parser()
         .parse_to_end("sepia(100%)")

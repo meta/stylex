@@ -314,7 +314,6 @@ mod test_css_type_color {
       Color::Oklch(ref oklch) => {
         assert_eq!(oklch.l, 0.7);
         assert_eq!(oklch.c, 0.15);
-        // Number 180 is interpreted as 180deg directly (CSS spec compliant)
         assert_eq!(oklch.h.value, 180.0);
         assert_eq!(oklch.h.unit, "deg");
         assert_eq!(oklch.alpha, None);
@@ -341,7 +340,6 @@ mod test_css_type_color {
 
   #[test]
   fn parses_modern_color_spaces_with_alpha() {
-    // LCH with alpha
     let lch_alpha = Color::parse()
       .parse_to_end("lch(50% 30 180deg / 0.8)")
       .unwrap();
@@ -361,7 +359,6 @@ mod test_css_type_color {
       _ => stylex_panic!("Expected Lch"),
     }
 
-    // OKLCH with alpha
     let oklch_alpha = Color::parse()
       .parse_to_end("oklch(0.7 0.15 180deg / 0.5)")
       .unwrap();
@@ -375,7 +372,6 @@ mod test_css_type_color {
       _ => stylex_panic!("Expected Oklch"),
     }
 
-    // OKLAB with alpha
     let oklab_alpha = Color::parse()
       .parse_to_end("oklab(0.7 -0.15 0.1 / 0.9)")
       .unwrap();
@@ -392,7 +388,6 @@ mod test_css_type_color {
 
   #[test]
   fn parses_modern_color_spaces_with_none_values() {
-    // OKLCH with 'none' values
     let oklch_none = Color::parse()
       .parse_to_end("oklch(none 0.15 none)")
       .unwrap();
@@ -405,7 +400,6 @@ mod test_css_type_color {
       _ => stylex_panic!("Expected Oklch"),
     }
 
-    // OKLAB with 'none' values
     let oklab_none = Color::parse().parse_to_end("oklab(0.5 none none)").unwrap();
     match oklab_none {
       Color::Oklab(ref oklab) => {
@@ -420,7 +414,6 @@ mod test_css_type_color {
   #[test]
   fn comprehensive_color_parsing() {
     let test_cases = vec![
-      // Named colors
       "red",
       "blue",
       "green",
@@ -428,7 +421,6 @@ mod test_css_type_color {
       "white",
       "transparent",
       "currentColor",
-      // Hex colors
       "#ff0000",
       "#00ff00",
       "#0000ff",
@@ -436,23 +428,18 @@ mod test_css_type_color {
       "#def",
       "#123456",
       "#abcdef",
-      // RGB colors
       "rgb(255, 0, 0)",
       "rgb(0, 255, 0)",
       "rgb(0, 0, 255)",
       "rgb(128, 128, 128)",
-      // RGBA colors
       "rgba(255, 0, 0, 0.5)",
       "rgba(0, 255, 0, 1.0)",
       "rgba(0, 0, 255, 0.25)",
-      // HSL colors
       "hsl(0, 100%, 50%)",
       "hsl(120, 100%, 50%)",
       "hsl(240, 100%, 50%)",
-      // HSLA colors
       "hsla(0, 100%, 50%, 0.5)",
       "hsla(120, 100%, 50%, 1.0)",
-      // Modern color spaces
       "lch(50% 30 180)",
       "oklch(0.7 0.15 180)",
       "oklab(0.7 -0.15 0.1)",
@@ -461,15 +448,12 @@ mod test_css_type_color {
     for input in test_cases {
       let color = Color::parse().parse_to_end(input).unwrap();
 
-      // Verify it produces valid output
       assert!(
         !color.to_string().is_empty(),
         "Should produce output for: {}",
         input
       );
 
-      // Verify round-trip parsing for most cases
-      // (some cases may have normalized output like hsl(120deg, 100%, 50%))
       let reparsed = Color::parse().parse_to_end(&color.to_string());
       assert!(
         reparsed.is_ok(),
@@ -516,7 +500,6 @@ mod test_css_type_color {
 
   #[test]
   fn edge_cases() {
-    // Test edge values
     let edge_cases = vec![
       "rgb(0, 0, 0)",           // Black
       "rgb(255, 255, 255)",     // White
@@ -546,7 +529,6 @@ mod test_css_type_color {
 
   #[test]
   fn oklch_hue_number_interpretation() {
-    // Test that numbers in OKLCH hue are interpreted as degrees directly
     let test_cases = vec![
       ("oklch(0.5 0.1 0)", 0.0),
       ("oklch(0.5 0.1 90)", 90.0),
@@ -837,12 +819,8 @@ mod test_css_type_color {
 mod the_optional_alpha_rewind {
   use super::*;
 
-  /// The reader for the `/ <alpha-value>` tail rewinds when it finds no slash,
-  /// which puts back the whitespace it skipped looking for one. The closing
-  /// paren check that follows does not skip whitespace itself, so a space
-  /// before the paren is refused. Pinned because the rewind is otherwise
-  /// unobservable, and because a reader that stopped rewinding would change
-  /// this without any other test noticing.
+  /// The alpha reader rewinds the whitespace it skipped, and the closing-paren check does not
+  /// skip it.
   #[test]
   fn a_space_before_the_closing_paren_is_refused_after_a_rewind() {
     for input in [
@@ -857,34 +835,17 @@ mod the_optional_alpha_rewind {
     }
   }
 
-  /// With a slash present the whitespace is consumed rather than put back, so
-  /// the same shape parses -- which is what shows the refusal above belongs to
-  /// the rewind and not to the paren check alone.
   #[test]
   fn the_same_space_is_accepted_when_an_alpha_follows_it() {
     match Color::parse().parse_to_end("lch(50 100 180 / 0.5)") {
-      // An `lch` hue with no unit stays a bare number, where `oklch` reads one
-      // as degrees.
+      // An `lch` hue with no unit stays a bare number; `oklch` reads it as degrees.
       Ok(color) => assert_eq!(color.to_string(), "lch(50 100 180 / 0.5)"),
       Err(error) => panic!("expected the alpha form to parse: {error:?}"),
     }
   }
-  /// The reference compiler's own `lch(50% 100 270deg)` case, ported -- but as
-  /// characterization rather than parity, because this is an
-  /// [unwitnessed parser](../../../CONTEXT.md).
-  ///
-  /// Two different answers, and neither is a defect in the other:
-  ///
-  /// - `Lch` stores the authored percent as a number and prints it back without
-  ///   the sign, so the round trip is `lch(50 100 270deg)`. That is what this
-  ///   test pins, and it is this crate's behaviour.
-  /// - The plugin emits `lch(50% 100 270deg)`, the percent echoed. It never runs
-  ///   this code: a colour is normalized as text and is not rebuilt from parsed
-  ///   channels.
-  ///
-  /// So the case is worth having for the parser's own consistency, and worth
-  /// labelling so nobody reads it as a statement about what the compiler emits.
-  /// Anyone putting these types on an emission path has to close that gap first.
+  /// The reference compiler's `lch(50% 100 270deg)` case, ported as characterization: this is
+  /// an [unwitnessed parser](../../../CONTEXT.md). `Lch` prints the percent without the sign;
+  /// the plugin echoes `50%` because it never rebuilds a colour from parsed channels.
   ///
   /// Source: `style-value-parser/src/css-types/__tests__/color-test.js`.
   #[test]

@@ -1,6 +1,3 @@
-// Tests extracted for css_types/angle.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/css_types/angle.rs
-
 use super::*;
 
 #[test]
@@ -24,7 +21,6 @@ fn test_angle_display() {
   let turns = Angle::new(0.25, "turn".to_string());
   assert_eq!(turns.to_string(), "0.25turn");
 
-  // Zero without unit
   let zero_angle = Angle::new(0.0, "deg".to_string());
   assert_eq!(zero_angle.to_string(), "0deg");
 }
@@ -36,7 +32,6 @@ fn test_valid_angle_units() {
   assert!(Angle::is_valid_unit("rad"));
   assert!(Angle::is_valid_unit("turn"));
 
-  // Invalid units
   assert!(!Angle::is_valid_unit("px"));
   assert!(!Angle::is_valid_unit("s"));
   assert!(!Angle::is_valid_unit("Hz"));
@@ -55,7 +50,6 @@ fn test_angle_units_constant() {
 
 #[test]
 fn test_angle_parser_creation() {
-  // Basic test that parser can be created
   let _parser = Angle::parser();
 }
 
@@ -73,7 +67,6 @@ fn test_angle_equality() {
 
 #[test]
 fn test_angle_units_coverage() {
-  // Test all standard CSS angle units are included
   assert!(Angle::is_valid_unit("deg")); // degrees (most common)
   assert!(Angle::is_valid_unit("grad")); // gradians
   assert!(Angle::is_valid_unit("rad")); // radians

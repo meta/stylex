@@ -1,10 +1,7 @@
 use stylex_macros::stylex_unreachable;
 
 /**
- * CSS Position Type Parser
- *
- * Provides comprehensive position parsing for CSS layout properties.
- * Covers all major CSS position parsing scenarios with Rust type safety.
+ * CSS `<position>` parser.
  */
 use crate::{
   CssParseError,
@@ -386,13 +383,7 @@ impl Position {
     Self::parse_numbers_only(tokens)
   }
 
-  /// Covers these key scenarios:
-  /// 1. Single keywords: "left", "top", "center", etc.
-  /// 2. Single lengths: "50%", "10px", etc.
-  /// 3. Two values: "left top", "50% 25%", "center 10px", etc.
-  /// 4. Keyword with offset: "left 10px", "top 20%", etc.
-  ///
-  /// while being much simpler and more maintainable in Rust.
+  /// Position parser: one or two keywords/lengths, or a keyword with offset (`left 10px`).
   pub fn parser() -> TokenParser<Position> {
     TokenParser::new(Self::parse_position, "position")
   }

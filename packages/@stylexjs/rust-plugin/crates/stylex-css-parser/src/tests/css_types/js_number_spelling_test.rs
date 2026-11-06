@@ -37,8 +37,7 @@ use crate::css_types::{
   time::Time,
 };
 
-/// Parse `input` with `parser` and return what it prints, so that every
-/// assertion below is about emitted text rather than a field's type.
+/// Parses `input` with `parser` and returns the printed text.
 macro_rules! printed {
   ($ty:ty, $input:expr) => {
     match <$ty>::parser().parse_to_end($input) {
@@ -53,8 +52,7 @@ macro_rules! printed {
   };
 }
 
-/// Assert that `$ty` refuses `$input`, so that a tolerated malformed input is
-/// distinguishable from a refused one at a glance.
+/// Asserts that `$ty` refuses `$input`.
 macro_rules! refused {
   ($ty:ty, $input:expr) => {
     assert!(
@@ -66,17 +64,11 @@ macro_rules! refused {
   };
 }
 
-// ---------------------------------------------------------------------------
-// The exponential-form thresholds
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod the_exponential_thresholds {
   use super::*;
 
-  /// JavaScript switches to exponential form at exactly 1e21, so the pair
-  /// either side of the threshold is the assertion that matters: one digit
-  /// more and the spelling changes shape.
+  /// JavaScript switches to exponential form at exactly 1e21.
   #[test]
   fn the_upper_threshold_is_one_e_twenty_one() {
     assert_eq!(printed!(Length, "1e20px"), "100000000000000000000px");
@@ -85,8 +77,7 @@ mod the_exponential_thresholds {
     assert_eq!(printed!(Length, "-1e21px"), "-1e+21px");
   }
 
-  /// Below 1e-6 JavaScript goes exponential downwards. Same shape of
-  /// assertion: the value either side of the threshold.
+  /// Below 1e-6 JavaScript goes exponential.
   #[test]
   fn the_lower_threshold_is_one_e_minus_seven() {
     assert_eq!(printed!(Length, "0.000001px"), "0.000001px");
@@ -95,9 +86,7 @@ mod the_exponential_thresholds {
     assert_eq!(printed!(Length, "-1e-7px"), "-1e-7px");
   }
 
-  /// Twenty-one significant digits does not survive as authored -- the nearest
-  /// double is a different number -- so this pins the spelling of the double,
-  /// not of the source text.
+  /// Twenty-one digits do not survive; this pins the spelling of the nearest double.
   #[test]
   fn a_value_past_seventeen_digits_prints_the_double_it_became() {
     assert_eq!(
@@ -106,8 +95,6 @@ mod the_exponential_thresholds {
     );
   }
 
-  /// The threshold is a property of the formatter, not of the length type, so
-  /// every dimension crosses it the same way.
   #[test]
   fn every_dimension_crosses_the_threshold_alike() {
     assert_eq!(printed!(Angle, "1e21deg"), "1e+21deg");
@@ -129,17 +116,11 @@ mod the_exponential_thresholds {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Negative zero
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod a_negative_zero_loses_its_sign {
   use super::*;
 
-  /// `String(-0)` is `"0"` in JavaScript, and the official compiler emits
-  /// `0px` for an authored `-0px`. Rust's `Display` writes `-0`, which is a
-  /// different string and therefore a different class name.
+  /// Matches JavaScript's `String(-0)` and the reference compiler's `0px` for `-0px`.
   #[test]
   fn on_every_dimension_and_number_type() {
     assert_eq!(printed!(Length, "-0px"), "0px");
@@ -152,8 +133,6 @@ mod a_negative_zero_loses_its_sign {
     assert_eq!(printed!(Calc, "calc(-0px)"), "calc(0px)");
   }
 
-  /// A negative zero the caller computed rather than authored takes the same
-  /// path, which is what makes this a property of the formatter.
   #[test]
   fn when_the_caller_computed_it_rather_than_authoring_it() {
     assert_eq!(Length::new(-0.0, "px").to_string(), "0px");
@@ -161,8 +140,7 @@ mod a_negative_zero_loses_its_sign {
     assert_eq!(AlphaValue::new(-0.0).to_string(), "0");
   }
 
-  /// A negative zero surviving a print-time division still loses its sign:
-  /// `-0 / 1000` is `-0`, and JavaScript spells that `0` too.
+  /// `-0 / 1000` is `-0`, which JavaScript spells `0`.
   #[test]
   fn after_a_print_time_division() {
     assert_eq!(printed!(Time, "-0ms"), "0s");
@@ -170,16 +148,11 @@ mod a_negative_zero_loses_its_sign {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Infinity
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod an_overflow_is_named_infinity {
   use super::*;
 
-  /// Rust's `Display` writes `inf`, which is not a CSS number and not what
-  /// JavaScript writes either.
+  /// Rust writes `inf`, which JavaScript does not.
   #[test]
   fn rather_than_abbreviated_the_way_rust_abbreviates_it() {
     assert_eq!(printed!(Length, "1e400px"), "Infinitypx");
@@ -189,7 +162,6 @@ mod an_overflow_is_named_infinity {
     assert_eq!(printed!(Angle, "-1e400rad"), "-Infinityrad");
   }
 
-  /// An infinity the caller handed in, rather than one an overflow produced.
   #[test]
   fn including_one_the_caller_handed_in_directly() {
     assert_eq!(Length::new(f64::INFINITY, "px").to_string(), "Infinitypx");
@@ -199,8 +171,6 @@ mod an_overflow_is_named_infinity {
     );
   }
 
-  /// Not-a-number has no CSS spelling, but the formatter still has to name it
-  /// the way JavaScript does rather than crash on it.
   #[test]
   fn and_not_a_number_is_named_the_way_javascript_names_it() {
     assert_eq!(Length::new(f64::NAN, "px").to_string(), "NaNpx");
@@ -208,16 +178,10 @@ mod an_overflow_is_named_infinity {
   }
 }
 
-// ---------------------------------------------------------------------------
-// The edges of the double range
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod the_edges_of_the_double_range {
   use super::*;
 
-  /// The largest finite double and the smallest subnormal, which are the two
-  /// values Rust's formatting spelled with three hundred digits.
   #[test]
   fn are_spelled_in_exponential_form() {
     assert_eq!(
@@ -233,8 +197,6 @@ mod the_edges_of_the_double_range {
     assert_eq!(printed!(Length, "1e-323px"), "1e-323px");
   }
 
-  /// A subnormal is not a rounding artefact of the formatter: it round-trips
-  /// back to the same double.
   #[test]
   fn and_round_trip_back_to_the_same_double() {
     for input in ["5e-324", "1.7976931348623157e308", "1e-323", "1e21"] {
@@ -248,17 +210,11 @@ mod the_edges_of_the_double_range {
   }
 }
 
-// ---------------------------------------------------------------------------
-// The three paths that compute at print time
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod a_print_time_division_is_spelled_the_same_way {
   use super::*;
 
-  /// Milliseconds are rewritten to seconds at print time, so the quotient --
-  /// not the authored value -- is what the formatter sees. A small enough
-  /// duration puts that quotient below the exponential threshold.
+  /// The millisecond-to-second quotient, not the authored value, reaches the formatter.
   #[test]
   fn a_duration_in_milliseconds_below_the_lower_threshold() {
     assert_eq!(printed!(Time, "0.0001ms"), "1.0000000000000001e-7s");
@@ -266,16 +222,12 @@ mod a_print_time_division_is_spelled_the_same_way {
     assert_eq!(printed!(Time, "1e24ms"), "1e+21s");
   }
 
-  /// The Hz-to-KHz rewrite is the same division on a different type.
   #[test]
   fn a_frequency_in_hertz_below_the_lower_threshold() {
     assert_eq!(printed!(Frequency, "0.0001Hz"), "1.0000000000000001e-7KHz");
     assert_eq!(printed!(Frequency, "1e24Hz"), "1e+21KHz");
   }
 
-  /// A percentage is stored as the authored percent rather than a fraction, so
-  /// it has no print-time arithmetic left -- pinned so that a future change
-  /// reintroducing the round trip shows up here.
   #[test]
   fn a_percentage_has_no_print_time_arithmetic_left() {
     assert_eq!(printed!(Percentage, "7%"), "7%");
@@ -283,17 +235,10 @@ mod a_print_time_division_is_spelled_the_same_way {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Composite types reach the formatter through their parts
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod a_composite_type_reaches_the_formatter_through_its_parts {
   use super::*;
 
-  /// A `calc()` tree prints its leaves through the same formatter at every
-  /// depth, so an exponential value inside a nested group is still spelled
-  /// exponentially.
   #[test]
   fn a_calc_tree_spells_every_leaf_the_same_way() {
     assert_eq!(
@@ -304,8 +249,6 @@ mod a_composite_type_reaches_the_formatter_through_its_parts {
     assert_eq!(printed!(Calc, "calc(1e21% / 2)"), "calc(1e+21% / 2)");
   }
 
-  /// A filter function's argument is a bare number or a percentage, and both
-  /// arms print through the formatter.
   #[test]
   fn a_filter_function_spells_its_argument_the_same_way() {
     assert_eq!(
@@ -318,18 +261,13 @@ mod a_composite_type_reaches_the_formatter_through_its_parts {
       printed!(FilterFunction, "hue-rotate(1e21deg)"),
       "hue-rotate(1e+21deg)"
     );
-    // A percentage argument is divided by 100 on the way in, and the quotient
-    // is the fraction the formatter spells: `1e-5 / 100` is not exactly 1e-7
-    // in double precision, and JavaScript spells the same inexact result.
+    // `1e-5 / 100` is inexact in double precision; JavaScript spells the same result.
     assert_eq!(
       printed!(FilterFunction, "invert(1e-5%)"),
       "invert(1.0000000000000001e-7)"
     );
   }
 
-  /// A bare number leaf of a `calc()` is a separate display arm from the
-  /// dimension leaf, and a separate helper prints it, so it carries its own
-  /// assertion.
   #[test]
   fn a_bare_calc_number_leaf_has_its_own_display_arm() {
     match Calc::parser().parse_to_end("calc(1e21)") {
@@ -342,26 +280,17 @@ mod a_composite_type_reaches_the_formatter_through_its_parts {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Malformed, extreme, and adversarial input
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod malformed_and_extreme_input {
   use super::*;
 
-  /// An unclosed `calc(` is tolerated rather than refused -- the closing paren
-  /// is synthesised by the tokenizer. Pinned because the formatter sits on the
-  /// same path, and a swap that turned tolerance into a refusal would be a
-  /// behaviour change hiding inside a formatting change.
+  /// The tokenizer synthesises the closing paren.
   #[test]
   fn an_unclosed_function_is_still_tolerated() {
     assert_eq!(printed!(Calc, "calc(1e21px"), "calc(1e+21px)");
     assert_eq!(printed!(Calc, "calc((1e-7px"), "calc((1e-7px))");
   }
 
-  /// A stray closing paren, a stray operator, and an empty function are all
-  /// still refused.
   #[test]
   fn structurally_invalid_input_is_still_refused() {
     refused!(Calc, "calc()");
@@ -372,9 +301,6 @@ mod malformed_and_extreme_input {
     refused!(Number, "1px");
   }
 
-  /// An unclosed quote is tolerated by the tokenizer and is not a number, so
-  /// every numeric type refuses it rather than panicking on the unterminated
-  /// string token.
   #[test]
   fn an_unclosed_quote_is_refused_rather_than_panicking() {
     refused!(Length, "\"1px");
@@ -382,19 +308,13 @@ mod malformed_and_extreme_input {
     refused!(Calc, "calc(\"1px)");
   }
 
-  /// An escaped unit is a real unit: `\70x` escapes to `px`, so the length
-  /// parses and prints with the unescaped unit. The formatter changed the
-  /// number's spelling and must not have changed the unit's. The six-digit
-  /// form is here too, because a CSS escape takes at most six hex digits --
-  /// a seventh would leave a stray `0` in the unit and refuse the value.
+  /// `\70x` escapes to `px`; a CSS escape takes at most six hex digits.
   #[test]
   fn an_escaped_unit_still_names_the_unit_it_escapes_to() {
     assert_eq!(printed!(Length, "1e21\\70x"), "1e+21px");
     assert_eq!(printed!(Length, "1e-7\\000070x"), "1e-7px");
   }
 
-  /// A unit spelled with non-ASCII characters is not a CSS unit, and the
-  /// formatter must not turn a refusal into a panic on the way past it.
   #[test]
   fn a_non_ascii_unit_is_refused_rather_than_panicking() {
     refused!(Length, "1e21пикс");
@@ -402,9 +322,6 @@ mod malformed_and_extreme_input {
     refused!(Length, "1e21px\u{0}");
   }
 
-  /// A digit string far longer than any double's precision is read as the
-  /// nearest double and spelled from that, rather than overflowing a buffer
-  /// or being echoed back at length.
   #[test]
   fn an_absurdly_long_digit_string_collapses_to_the_nearest_double() {
     let long = format!("1{}px", "0".repeat(400));
@@ -413,22 +330,16 @@ mod malformed_and_extreme_input {
     let many_decimals = format!("1.{}1px", "0".repeat(400));
     assert_eq!(printed!(Length, &many_decimals), "1px");
 
-    // Nine hundred significant digits is still one double, and the printed
-    // form is bounded by the formatter rather than by the input.
     let wide = format!("{}px", "9".repeat(900));
     assert_eq!(printed!(Length, &wide), "Infinitypx");
   }
 
-  /// A deeply nested `calc()` recurses once per group on the way in and once
-  /// per group on the way out, and the formatter is called at the bottom of
-  /// both. This is the depth at which a stack problem would show up.
   #[test]
   fn a_deeply_nested_calc_prints_without_exhausting_the_stack() {
     const DEPTH: usize = 200;
     let input = format!("calc({}1e21px{})", "(".repeat(DEPTH), ")".repeat(DEPTH));
 
-    // A refusal is an acceptable answer at this depth; a panic is not, and
-    // returning at all is what this asserts.
+    // A refusal is acceptable at this depth; a panic is not.
     if let Ok(calc) = Calc::parser().parse_to_end(&input) {
       let printed = calc.to_string();
       assert!(printed.contains("1e+21px"), "{printed}");
@@ -436,9 +347,6 @@ mod malformed_and_extreme_input {
     }
   }
 
-  /// A custom property is a dashed identifier, not a number, so it takes no
-  /// numeric display path at all -- asserted so that the formatter's reach is
-  /// bounded by the numeric types rather than by every value in the crate.
   #[test]
   fn a_custom_property_reference_takes_no_numeric_path() {
     refused!(Length, "var(--x)");
@@ -446,8 +354,6 @@ mod malformed_and_extreme_input {
     refused!(Calc, "calc(var(--x))");
   }
 
-  /// A vendor-prefixed unit is not a unit this crate knows, and the refusal is
-  /// unchanged by the formatter.
   #[test]
   fn a_vendor_prefixed_unit_is_still_refused() {
     refused!(Length, "1e21-webkit-px");

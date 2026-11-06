@@ -1,13 +1,7 @@
 use crate::at_queries::media_query::MediaQuery;
 
-/// Assertions over a parsed `MediaQueryRule` tree.
-///
-/// Walking the tree inline costs a nested `match` per level, each with a panic
-/// arm, which buries the values a test is actually pinning under its own
-/// scaffolding. These read a level at a time instead: the `*_branches`
-/// functions descend one combinator and hand back its rules, and the
-/// `assert_*` functions pin one leaf. Every panic names the rule it wanted, so
-/// a failure still says which level of the tree went wrong.
+/// Assertions over a parsed `MediaQueryRule` tree: `*_branches` descend one combinator and
+/// `assert_*` pin one leaf.
 #[cfg(test)]
 mod rule_assertions {
   use stylex_macros::stylex_panic;
@@ -116,7 +110,6 @@ mod style_value_parser_at_queries {
       fn media_screen() {
         let parsed = MediaQuery::parser().parse_to_end("@media screen").unwrap();
 
-        // Verify structure matches expected format
         match &parsed.queries {
           crate::at_queries::media_query::MediaQueryRule::MediaKeyword(keyword) => {
             assert_eq!(keyword.r#type, "media-keyword");
@@ -194,7 +187,6 @@ mod style_value_parser_at_queries {
             assert_eq!(and_rules.r#type, "and");
             assert_eq!(and_rules.rules.len(), 2);
 
-            // First rule should be the keyword
             match &and_rules.rules[0] {
               crate::at_queries::media_query::MediaQueryRule::MediaKeyword(keyword) => {
                 assert_eq!(keyword.r#type, "media-keyword");
@@ -205,7 +197,6 @@ mod style_value_parser_at_queries {
               _ => stylex_panic!("Expected MediaKeyword rule for print"),
             }
 
-            // Second rule should be the word rule
             match &and_rules.rules[1] {
               crate::at_queries::media_query::MediaQueryRule::WordRule(word_rule) => {
                 assert_eq!(word_rule.r#type, "word-rule");
@@ -231,7 +222,6 @@ mod style_value_parser_at_queries {
             assert_eq!(and_rules.r#type, "and");
             assert_eq!(and_rules.rules.len(), 2);
 
-            // First rule should be the keyword
             match &and_rules.rules[0] {
               crate::at_queries::media_query::MediaQueryRule::MediaKeyword(keyword) => {
                 assert_eq!(keyword.r#type, "media-keyword");
@@ -242,7 +232,6 @@ mod style_value_parser_at_queries {
               _ => stylex_panic!("Expected MediaKeyword rule for screen"),
             }
 
-            // Second rule should be the max-width pair
             match &and_rules.rules[1] {
               crate::at_queries::media_query::MediaQueryRule::Pair(pair) => {
                 assert_eq!(pair.r#type, "pair");
@@ -286,13 +275,8 @@ mod style_value_parser_at_queries {
         assert_eq!(parsed.to_string(), "@media not screen");
       }
 
-      /// `not only <type>` is accepted, and the `only` is not printed.
-      ///
-      /// The reference implementation's `mediaKeywordParser` takes both
-      /// modifiers as independently optional, so the pair parses, and its
-      /// serializer reads `not` first and never reaches the `only`. Measured on
-      /// 0.19.0: `@media not only screen` prints `@media not screen`, and
-      /// `@media not only print` prints `@media not print`.
+      /// `not only <type>` parses and prints without `only`, as upstream 0.19.0 does
+      /// (`@media not only screen` prints `@media not screen`).
       #[test]
       fn media_accepts_not_only_and_drops_the_only() {
         let parsed = MediaQuery::parser()
@@ -311,12 +295,7 @@ mod style_value_parser_at_queries {
         );
       }
 
-      /// The two spellings the reference implementation *does* refuse.
-      ///
-      /// Both are `No parser matched` there: a media type is not a
-      /// `<media-in-parens>`, and `only` cannot precede `not`. Only the
-      /// unparenthesized `not only <type>` above is accepted, so the refusal
-      /// stays where upstream puts it rather than being widened along with it.
+      /// The two spellings upstream refuses with `No parser matched`.
       #[test]
       fn media_rejects_the_modifier_spellings_upstream_rejects() {
         assert!(
@@ -3076,7 +3055,6 @@ mod style_value_parser_at_queries {
         let input = "@media (1000px <= width <= 700px)";
         let parsed = MediaQuery::parser().parse_to_end(input).unwrap();
 
-        // This should result in an impossible constraint (always false)
         match &parsed.queries {
           crate::at_queries::media_query::MediaQueryRule::MediaKeyword(keyword) => {
             assert_eq!(keyword.r#type, "media-keyword");
@@ -3303,7 +3281,6 @@ mod style_value_parser_at_queries {
         let input = "@media (min-width: 100px) and (not (max-width: 99.99px))";
         let parsed = MediaQuery::parser().parse_to_end(input).unwrap();
 
-        // This should simplify to just min-width: 100px
         match &parsed.queries {
           crate::at_queries::media_query::MediaQueryRule::And(and_rules) => {
             assert_eq!(and_rules.r#type, "and");
@@ -3335,8 +3312,6 @@ mod style_value_parser_at_queries {
         let input = "@media (max-width: 200px) and (not (max-width: 300px))";
         let parsed = MediaQuery::parser().parse_to_end(input).unwrap();
 
-        // This creates a logical contradiction: width ≤ 200px AND width > 300px
-        // The result should be an impossible constraint (not all)
         match &parsed.queries {
           crate::at_queries::media_query::MediaQueryRule::MediaKeyword(keyword) => {
             assert_eq!(keyword.r#type, "media-keyword");
@@ -3355,9 +3330,7 @@ mod style_value_parser_at_queries {
         let input = "@media (min-width: 100px) and (not (max-width: 50px))";
         let parsed = MediaQuery::parser().parse_to_end(input).unwrap();
 
-        // (min-width: 100px) and (not (max-width: 50px)) simplifies to (min-width:
-        // 100px) because 100px > 50px is already satisfied by the min-width
-        // constraint
+        // The min-width constraint already satisfies the negated max-width.
         match &parsed.queries {
           crate::at_queries::media_query::MediaQueryRule::And(and_rules) => {
             assert_eq!(and_rules.r#type, "and");
@@ -3394,7 +3367,6 @@ mod style_value_parser_at_queries {
             assert_eq!(and_rules.r#type, "and");
             assert_eq!(and_rules.rules.len(), 2);
 
-            // Should be simplified to (min-width: 100px) and (max-width: 500px)
             match &and_rules.rules[0] {
               crate::at_queries::media_query::MediaQueryRule::Pair(pair) => {
                 assert_eq!(pair.r#type, "pair");
@@ -3444,7 +3416,6 @@ mod style_value_parser_at_queries {
             assert_eq!(and_rules.r#type, "and");
             assert_eq!(and_rules.rules.len(), 2);
 
-            // Should be simplified to (min-width: 200.01px) and (max-width: 500px)
             match &and_rules.rules[0] {
               crate::at_queries::media_query::MediaQueryRule::Pair(pair) => {
                 assert_eq!(pair.r#type, "pair");
@@ -3489,7 +3460,7 @@ mod style_value_parser_at_queries {
         let input = "@media (min-width: 100px) and (orientation: landscape)";
         let parsed = MediaQuery::parser().parse_to_end(input).unwrap();
 
-        // This should not simplify since orientation is not a numeric constraint
+        // orientation is not a numeric constraint, so nothing simplifies.
         match &parsed.queries {
           crate::at_queries::media_query::MediaQueryRule::And(and_rules) => {
             assert_eq!(and_rules.r#type, "and");
@@ -3538,7 +3509,7 @@ mod style_value_parser_at_queries {
         let input = "@media (min-width: calc(100px + 2em)) and (max-width: 500px)";
         let parsed = MediaQuery::parser().parse_to_end(input).unwrap();
 
-        // This should not simplify since calc() expressions are not simplified
+        // calc() expressions are not simplified.
         match &parsed.queries {
           crate::at_queries::media_query::MediaQueryRule::And(and_rules) => {
             assert_eq!(and_rules.r#type, "and");

@@ -1,7 +1,5 @@
 /*!
-CSS Custom Identifier type parsing.
-
-Handles custom identifiers that exclude CSS reserved keywords.
+CSS `<custom-ident>`: identifiers excluding CSS reserved keywords.
 */
 
 use stylex_macros::stylex_unreachable;
@@ -53,13 +51,7 @@ impl CustomIdentifier {
     RESERVED_KEYWORDS
   }
 
-  /// Parser for CSS custom identifiers
-  /// Extract the identifier string from a `SimpleToken::Ident`.
-  ///
-  /// Panics via `stylex_unreachable!` when given any other token variant, which
-  /// cannot occur through the public parser because the `Ident` token matcher
-  /// guarantees the token variant. The named function makes that defensive branch
-  /// reachable from coverage tests without modifying existing tests.
+  /// Extract the identifier string from a `SimpleToken::Ident`; other variants are unreachable.
   pub(crate) fn extract_ident_token(token: SimpleToken) -> String {
     if let SimpleToken::Ident(value) = token {
       value

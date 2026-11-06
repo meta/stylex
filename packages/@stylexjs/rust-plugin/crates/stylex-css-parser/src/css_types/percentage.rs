@@ -1,8 +1,5 @@
 /*!
-CSS Percentage type parsing.
-
-Handles percentage values like "50%".
-Provides percentage parsing functionality for CSS percentage values.
+CSS `<percentage>` values such as `50%`.
 */
 
 pub use crate::css_types::common_types::Percentage;

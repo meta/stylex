@@ -1,6 +1,3 @@
-// Tests extracted for properties/border_radius.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/properties/border_radius.rs
-
 use super::*;
 use crate::css_types::{Length, Percentage};
 
@@ -41,7 +38,6 @@ fn test_border_radius_shorthand_creation() {
   let shorthand =
     BorderRadiusShorthand::new(value.clone(), None, None, None, None, None, None, None);
 
-  // All corners should be the same
   assert_eq!(shorthand.horizontal_top_left, value);
   assert_eq!(shorthand.horizontal_top_right, value);
   assert_eq!(shorthand.horizontal_bottom_right, value);
@@ -84,13 +80,11 @@ fn test_border_radius_shorthand_css_expansion() {
 
 #[test]
 fn test_border_radius_individual_parser_creation() {
-  // Basic test that parser can be created
   let _parser = BorderRadiusIndividual::parser();
 }
 
 #[test]
 fn test_border_radius_shorthand_parser_creation() {
-  // Basic test that parser can be created
   let _parser = BorderRadiusShorthand::parser();
 }
 
@@ -110,7 +104,6 @@ fn test_border_radius_equality() {
 
 #[test]
 fn test_border_radius_common_css_values() {
-  // Test common border-radius values
   let small = LengthPercentage::Length(Length::new(3.0, "px".to_string()));
   let medium = LengthPercentage::Length(Length::new(6.0, "px".to_string()));
   let large = LengthPercentage::Length(Length::new(12.0, "px".to_string()));
@@ -131,7 +124,6 @@ fn test_border_radius_common_css_values() {
 
 #[test]
 fn test_border_radius_elliptical() {
-  // Test elliptical border radius (different horizontal and vertical)
   let horizontal = LengthPercentage::Length(Length::new(20.0, "px".to_string()));
   let vertical = LengthPercentage::Length(Length::new(10.0, "px".to_string()));
 
@@ -141,7 +133,6 @@ fn test_border_radius_elliptical() {
 
 #[test]
 fn test_border_radius_mixed_units() {
-  // Test mixing different units
   let pixels = LengthPercentage::Length(Length::new(5.0, "px".to_string()));
   let percentage = LengthPercentage::Percentage(Percentage::new(25.0));
 
@@ -151,7 +142,6 @@ fn test_border_radius_mixed_units() {
 
 #[test]
 fn test_border_radius_shorthand_slash_separated() {
-  // Test asymmetric border radius: 10px 20px / 5px 15px
   let h_tl = LengthPercentage::Length(Length::new(10.0, "px".to_string()));
   let h_tr = LengthPercentage::Length(Length::new(20.0, "px".to_string()));
   let v_tl = LengthPercentage::Length(Length::new(5.0, "px".to_string()));
@@ -168,7 +158,6 @@ fn test_border_radius_shorthand_slash_separated() {
     None,
   );
 
-  // Should output the slash-separated format when horizontal and vertical differ
   let result = radius.to_string();
   assert!(result.contains("/"));
   assert!(result.contains("10px"));
@@ -179,7 +168,6 @@ fn test_border_radius_shorthand_slash_separated() {
 
 #[test]
 fn test_border_radius_shorthand_no_slash_when_same() {
-  // Test when horizontal and vertical radii are the same, no slash should appear
   let value = LengthPercentage::Length(Length::new(10.0, "px".to_string()));
 
   let radius = BorderRadiusShorthand::new(
@@ -200,7 +188,6 @@ fn test_border_radius_shorthand_no_slash_when_same() {
 
 #[test]
 fn test_border_radius_parser_creation() {
-  // Test that both parsers can be created without issues
   let _individual = BorderRadiusIndividual::parser();
   let _shorthand = BorderRadiusShorthand::parser();
 }

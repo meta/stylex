@@ -3,7 +3,6 @@ use crate::token_types::SimpleToken;
 
 #[test]
 fn extract_time_token_returns_some_for_valid_s() {
-  // Happy path: Dimension token with unit "s" returns Some.
   let token = SimpleToken::Dimension {
     value: 1.5,
     unit: "s".to_string(),
@@ -17,7 +16,6 @@ fn extract_time_token_returns_some_for_valid_s() {
 
 #[test]
 fn extract_time_token_returns_some_for_valid_ms() {
-  // Happy path: Dimension token with unit "ms" returns Some.
   let token = SimpleToken::Dimension {
     value: 500.0,
     unit: "ms".to_string(),
@@ -31,8 +29,6 @@ fn extract_time_token_returns_some_for_valid_ms() {
 
 #[test]
 fn extract_time_token_returns_none_for_invalid_unit() {
-  // The inner `else { None }` branch: a Dimension token with an unrecognised
-  // unit (e.g. "px") yields None.
   let token = SimpleToken::Dimension {
     value: 10.0,
     unit: "px".to_string(),
@@ -42,9 +38,7 @@ fn extract_time_token_returns_none_for_invalid_unit() {
 
 #[test]
 fn extract_time_token_returns_none_for_non_dimension_token() {
-  // The outer `else { None }` branch: a non-Dimension token yields None.
-  // This branch is unreachable through the public parser (which guarantees a
-  // Dimension token) but is now coverable via the named function.
+  // Unreachable through the public parser; called directly to cover the defensive branch.
   let token = SimpleToken::Number(1.0);
   assert!(Time::extract_time_token(token).is_none());
 }

@@ -1,7 +1,5 @@
 use super::*;
 
-// ── is_calc ───────────────────────────────────────────────────────────────
-
 #[test]
 fn is_calc_returns_true_for_calc_variant() {
   let calc_val = LengthPercentage::parser()
@@ -22,8 +20,6 @@ fn is_calc_returns_false_for_percentage_variant() {
   assert!(!pct_val.is_calc());
 }
 
-// ── as_calc ───────────────────────────────────────────────────────────────
-
 #[test]
 fn as_calc_returns_some_for_calc_variant() {
   let calc_val = LengthPercentage::parser()
@@ -31,7 +27,6 @@ fn as_calc_returns_some_for_calc_variant() {
     .unwrap();
   let calc_ref = calc_val.as_calc();
   assert!(calc_ref.is_some());
-  // The Calc Display includes "calc(" prefix.
   assert!(calc_ref.unwrap().to_string().starts_with("calc("));
 }
 

@@ -1,6 +1,3 @@
-// Tests extracted for properties/transform.rs behaviors and edge cases.
-// Source: crates/stylex-css-parser/src/properties/transform.rs
-
 use super::*;
 use crate::css_types::{Angle, Length, LengthPercentage, Percentage, transform_function::*};
 
@@ -11,7 +8,6 @@ fn test_transform_function_creation() {
     Axis::X,
   ));
 
-  // Test that it can be created without issues
   assert!(matches!(translate, TransformFunction::TranslateAxis(_)));
 }
 
@@ -78,7 +74,6 @@ fn test_transform_equality() {
 
 #[test]
 fn test_transform_parser_creation() {
-  // Test that the parser can be created without panicking
   let _parser = Transform::parser();
 }
 
@@ -121,7 +116,6 @@ fn test_transform_complex_combination() {
 
 #[test]
 fn test_transform_common_functions() {
-  // Test various common transform functions
   let translate = TransformFunction::Translate(Translate::new(
     LengthPercentage::Length(Length::new(10.0, "px".to_string())),
     Some(LengthPercentage::Length(Length::new(

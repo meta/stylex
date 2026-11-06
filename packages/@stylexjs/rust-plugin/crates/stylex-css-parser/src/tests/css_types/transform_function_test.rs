@@ -46,31 +46,26 @@ mod test_css_type_transform_function {
 
     #[test]
     fn invalid_uses() {
-      // Not enough values
       assert!(
         TransformFunction::parse()
           .parse_to_end("matrix(1, 0, 0, 1, 0)")
           .is_err()
       );
-      // Too many values
       assert!(
         TransformFunction::parse()
           .parse_to_end("matrix(1, 0, 0, 1, 0, 0, 0)")
           .is_err()
       );
-      // Non-numeric values
       assert!(
         TransformFunction::parse()
           .parse_to_end("matrix(1, 0, 0, 1, 0, foo)")
           .is_err()
       );
-      // wrong type of values
       assert!(
         TransformFunction::parse()
           .parse_to_end("matrix(1px, 0, 0, 1, 0, 0)")
           .is_err()
       );
-      // wrong separator
       assert!(
         TransformFunction::parse()
           .parse_to_end("matrix(1 0 0 1 0 0)")
@@ -132,13 +127,11 @@ mod test_css_type_transform_function {
 
     #[test]
     fn invalid_uses() {
-      // Non-numeric values
       assert!(
         TransformFunction::parse()
           .parse_to_end("perspective(foo)")
           .is_err()
       );
-      // wrong type of values
       assert!(
         TransformFunction::parse()
           .parse_to_end("perspective(1)")
@@ -258,13 +251,11 @@ mod test_css_type_transform_function {
 
     #[test]
     fn invalid_uses() {
-      // Non-numeric values
       assert!(
         TransformFunction::parse()
           .parse_to_end("rotate(foo)")
           .is_err()
       );
-      // wrong type of values
       assert!(
         TransformFunction::parse()
           .parse_to_end("rotate(1)")

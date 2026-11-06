@@ -20,7 +20,6 @@ mod test_token_parser {
 
     #[test]
     fn parses_the_first_parser() {
-      // Create parser that matches either "foo" ident or any number
       let foo_parser = tokens::ident()
         .map(
           |token| {
@@ -49,12 +48,10 @@ mod test_token_parser {
 
       assert!(parser.parse("bar").is_err());
 
-      // Test parsing "foo" - should return "foo"
       let result = parser.parse_to_end("foo");
       assert!(result.is_ok());
       assert_eq!(result.unwrap(), "foo");
 
-      // Test parsing "123" - should return "123"
       let result = parser.parse_to_end("123");
       assert!(result.is_ok());
       assert_eq!(result.unwrap(), "123");
@@ -90,7 +87,6 @@ mod test_token_parser {
 
       assert_eq!(parser.parse("foo").unwrap(), "foo");
 
-      // Test parsing "baz" - should fail
       let result = parser.parse("baz");
       assert!(result.is_err());
     }
@@ -182,8 +178,7 @@ mod test_token_parser {
         )
         .where_fn(|value: &String| value == "baz", None);
 
-      // This test requires TokenParser::sequence_separated_by
-      // Using available TokenParser::sequence method instead for now
+      // Built with `sequence`, standing in for `sequence_separated_by`.
       let parser = TokenParser::<String>::sequence(vec![
         foo_parser,
         tokens::whitespace().map(|_| String::new(), None),
@@ -253,33 +248,28 @@ mod test_token_parser {
       ])
       .separated_by(tokens::whitespace());
 
-      // Test case 1: All elements present - "foo bar baz"
       let result = parser.parse_to_end("foo bar baz").unwrap();
       assert_eq!(result.len(), 3);
       assert_eq!(result[0], Some("foo".to_string()));
       assert_eq!(result[1], Some("bar".to_string()));
       assert_eq!(result[2], Some("baz".to_string()));
 
-      // Test case 2: Optional element missing - "foo baz"
-      // Key behavior: no separator required between foo and baz when bar is missing
+      // No separator is required between foo and baz when bar is missing.
       let result = parser.parse_to_end("foo baz").unwrap();
       assert_eq!(result.len(), 3);
       assert_eq!(result[0], Some("foo".to_string()));
       assert_eq!(result[1], None); // bar is optional and not present
       assert_eq!(result[2], Some("baz".to_string()));
 
-      // Test case 3: Invalid - missing required element should fail
       let result = parser.parse_to_end("foo bar");
       assert!(result.is_err());
 
-      // Test case 4: Another invalid case - missing first required element
       let result = parser.parse_to_end("baz");
       assert!(result.is_err());
     }
 
     #[test]
     fn debug_optional_parser() {
-      // Debug test to understand what's happening with optional parsers
       let bar_parser = tokens::ident()
         .map(
           |token| {
@@ -293,19 +283,16 @@ mod test_token_parser {
         )
         .where_fn(|value: &String| value == "bar", None);
 
-      // Test the bar parser on "baz" - should fail
       let result = bar_parser.parse("baz");
       println!("bar_parser on 'baz': {:?}", result);
       assert!(result.is_err());
 
-      // Test the optional bar parser on "baz" - should succeed with None
       let optional_bar = bar_parser.clone().optional();
       let result = optional_bar.parse("baz");
       println!("optional bar_parser on 'baz': {:?}", result);
       assert!(result.is_ok());
       assert_eq!(result.unwrap(), None);
 
-      // Test with unwrap_or_default
       let optional_bar_with_default = bar_parser
         .optional()
         .map(|opt| opt.unwrap_or_default(), None);
@@ -317,7 +304,6 @@ mod test_token_parser {
 
     #[test]
     fn debug_sequence_with_optional() {
-      // Debug the actual sequence issue
       let foo_parser = tokens::ident()
         .map(
           |token| {
@@ -366,17 +352,14 @@ mod test_token_parser {
       ])
       .separated_by(tokens::whitespace());
 
-      // Test with success case first
       println!("Testing 'foo bar baz'...");
       let result = parser.parse_to_end("foo bar baz");
       println!("Result: {:?}", result);
       assert!(result.is_ok());
 
-      // Test with missing optional element
       println!("Testing 'foo baz'...");
       let result = parser.parse_to_end("foo baz");
       println!("Result: {:?}", result);
-      // This is where it should succeed but probably fails
       if let Err(err) = result {
         println!("ERROR: {:?}", err);
       }
@@ -384,7 +367,6 @@ mod test_token_parser {
 
     #[test]
     fn debug_individual_parsers() {
-      // Test each parser individually to find the issue
       let foo_parser = tokens::ident()
         .map(
           |token| {
@@ -465,7 +447,6 @@ mod test_token_parser {
         )
         .where_fn(|value: &String| value == "baz", None);
 
-      // Create a separator that is comma optionally surrounded by whitespace
       let comma_with_optional_whitespace = TokenParser::<String>::sequence(vec![
         tokens::whitespace().optional().map(|_| String::new(), None),
         tokens::comma().map(|_| String::new(), None),
@@ -478,19 +459,16 @@ mod test_token_parser {
         comma_with_optional_whitespace,
       );
 
-      // Should parse "foo, bar, baz"
       let result = parser.parse_to_end("foo, bar, baz");
       assert!(result.is_ok());
       let parsed = result.unwrap();
       assert_eq!(parsed, vec!["foo", "bar", "baz"]);
 
-      // Should parse "foo,bar,baz"
       let result = parser.parse_to_end("foo,bar,baz");
       assert!(result.is_ok());
       let parsed = result.unwrap();
       assert_eq!(parsed, vec!["foo", "bar", "baz"]);
 
-      // Should parse "foo  ,  bar  ,  baz"
       let result = parser.parse_to_end("foo  ,  bar  ,  baz");
       assert!(result.is_ok());
       let parsed = result.unwrap();
@@ -530,18 +508,14 @@ mod test_token_parser {
         )
         .where_fn(|value: &String| value == "baz", None);
 
-      // Using set_of to parse in any order with whitespace separators
       let parser = TokenParser::<String>::set_of(vec![foo_parser, baz_parser])
         .separated_by(tokens::whitespace());
 
-      // Should parse "foo baz" - order preserved in result
       let result = parser.parse_to_end("foo baz");
       assert!(result.is_ok());
       let parsed = result.unwrap();
       assert_eq!(parsed, vec!["foo", "baz"]);
 
-      // Should parse "baz foo" - different input order but result should be
-      // consistent
       let result = parser.parse_to_end("baz foo");
       assert!(result.is_ok());
       let parsed = result.unwrap();
@@ -555,7 +529,6 @@ mod test_token_parser {
       let bar_parser = TokenParser::<String>::string("bar").optional();
       let baz_parser = TokenParser::<String>::string("baz");
 
-      // Test individual parsers first to ensure they work
       assert_eq!(foo_parser.parse("foo").unwrap(), "foo");
       assert_eq!(bar_parser.parse("bar").unwrap(), Some("bar".to_string()));
       assert_eq!(bar_parser.parse("notbar").unwrap(), None);
@@ -577,7 +550,6 @@ mod test_token_parser {
       ])
       .separated_by(tokens::whitespace());
 
-      // Test case 1: All elements present - "foo bar baz"
       let result = parser.parse_to_end("foo bar baz");
       assert!(result.is_ok());
       let parsed = result.unwrap();
@@ -590,7 +562,6 @@ mod test_token_parser {
         ]
       );
 
-      // Test case 2: Optional element missing - "foo baz"
       let result = parser.parse_to_end("foo baz");
       assert!(result.is_ok());
       let parsed = result.unwrap();
@@ -623,12 +594,10 @@ mod test_token_parser {
       let parser =
         TokenParser::one_or_more_separated_by(foo_parser, tokens::whitespace().map(|_| (), None));
 
-      // Test single "foo"
       let result = parser.parse_to_end("foo");
       assert!(result.is_ok());
       assert_eq!(result.unwrap(), vec!["foo"]);
 
-      // Test multiple "foo"s
       let result = parser.parse_to_end("foo foo");
       assert!(result.is_ok());
       assert_eq!(result.unwrap(), vec!["foo", "foo"]);
@@ -666,7 +635,6 @@ mod test_token_parser {
 
       assert_eq!(parser.parse("foo").unwrap(), vec!["foo"]);
 
-      // Test parsing "bar" - should fail
       let result = parser.parse("bar");
       assert!(result.is_err());
     }
@@ -694,17 +662,14 @@ mod test_token_parser {
       let parser =
         TokenParser::zero_or_more_separated_by(foo_parser, tokens::whitespace().map(|_| (), None));
 
-      // Test empty string - should return empty array
       let result = parser.parse("");
       assert!(result.is_ok());
       assert_eq!(result.unwrap(), Vec::<String>::new());
 
-      // Test single "foo"
       let result = parser.parse("foo");
       assert!(result.is_ok());
       assert_eq!(result.unwrap(), vec!["foo"]);
 
-      // Test multiple "foo"s
       let result = parser.parse("foo foo");
       assert!(result.is_ok());
       assert_eq!(result.unwrap(), vec!["foo", "foo"]);
@@ -713,7 +678,6 @@ mod test_token_parser {
       assert!(result.is_ok());
       assert_eq!(result.unwrap(), vec!["foo", "foo", "foo"]);
 
-      // Test with different string at end - should consume what it can
       let result = parser.parse("foo foo foo bar");
       assert!(result.is_ok());
       assert_eq!(result.unwrap(), vec!["foo", "foo", "foo"]);
@@ -853,7 +817,6 @@ mod test_token_parser {
 
       let parser = TokenParser::<String>::set_of(vec![p_foo, p_comma]).as_token_parser();
 
-      // Input ",foo" - comma first, then foo
       let result = parser.parse_to_end(",foo");
       assert!(result.is_ok());
       // Results are ordered by parser index, not input order
@@ -867,7 +830,6 @@ mod test_token_parser {
 
       let parser = TokenParser::<String>::set_of(vec![p_foo, p_comma]).as_token_parser();
 
-      // Input "foo," - already in parser order
       let result = parser.parse_to_end("foo,");
       assert!(result.is_ok());
       assert_eq!(result.unwrap(), vec!["foo", ","]);

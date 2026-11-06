@@ -1,7 +1,5 @@
 /*!
-CSS Calc Constants type parsing.
-
-Handles calc constants like 'pi', 'e', 'infinity', '-infinity', 'NaN'.
+CSS calc constants: `pi`, `e`, `infinity`, `-infinity`, `NaN`.
 */
 
 use crate::token_parser::TokenParser;

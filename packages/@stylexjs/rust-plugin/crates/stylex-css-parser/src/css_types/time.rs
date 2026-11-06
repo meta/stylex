@@ -1,7 +1,5 @@
 /*!
-CSS Time type parsing.
-
-Handles time values with 's' (seconds) and 'ms' (milliseconds) units.
+CSS `<time>`: `s` and `ms` units.
 */
 
 use stylex_utils::number::to_js_string;
@@ -38,12 +36,7 @@ impl Time {
     TIME_UNITS.contains(&unit)
   }
 
-  /// Extract a time `(value, unit)` pair from a `SimpleToken`.
-  ///
-  /// Returns `Some` when the token is a `Dimension` with a valid time unit,
-  /// `None` for an unrecognised unit, and `None` for any non-`Dimension` variant
-  /// (the latter branch is unreachable through the public parser, which guarantees
-  /// a `Dimension` token, but the named function makes it coverable from tests).
+  /// The `(value, unit)` of a `Dimension` with a valid time unit; `None` otherwise.
   pub(crate) fn extract_time_token(token: SimpleToken) -> Option<(f64, String)> {
     if let SimpleToken::Dimension { value, unit } = token {
       if Self::is_valid_unit(&unit) {

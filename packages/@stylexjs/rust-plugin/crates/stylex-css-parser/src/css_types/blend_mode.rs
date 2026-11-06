@@ -1,7 +1,5 @@
 /*!
-CSS Blend Mode type parsing.
-
-Handles blend mode values for properties like mix-blend-mode and background-blend-mode.
+CSS `<blend-mode>` values (`mix-blend-mode`, `background-blend-mode`).
 */
 
 use stylex_macros::stylex_unreachable;
@@ -103,12 +101,7 @@ impl BlendMode {
     Self::all_values().contains(&s)
   }
 
-  /// Extract the identifier string from a `SimpleToken::Ident`.
-  ///
-  /// Panics via `stylex_unreachable!` when given any other token variant, which
-  /// cannot occur through the public parser because `tokens::ident()` guarantees
-  /// the token is an `Ident`. The named function makes that defensive branch
-  /// reachable from coverage tests without modifying existing tests.
+  /// Extract the identifier string from a `SimpleToken::Ident`; other variants are unreachable.
   pub(crate) fn extract_ident_token(token: SimpleToken) -> String {
     if let SimpleToken::Ident(value) = token {
       value

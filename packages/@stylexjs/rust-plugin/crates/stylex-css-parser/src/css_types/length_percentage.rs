@@ -1,7 +1,5 @@
 /*!
-CSS Length-Percentage union type parsing.
-
-Handles values that can be either length or percentage values.
+CSS `<length-percentage>`: a length or a percentage.
 */
 
 use crate::{
