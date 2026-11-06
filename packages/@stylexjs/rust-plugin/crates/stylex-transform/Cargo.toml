@@ -1,0 +1,83 @@
+[package]
+description = "The SWC visitor that finds every StyleX call and rewrites the module it is given"
+edition.workspace = true
+license.workspace = true
+name = "stylex_transform"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+
+[lib]
+crate-type = ["rlib"]
+doctest = false
+
+[dependencies]
+indexmap.workspace = true
+log.workspace = true
+path-clean.workspace = true
+phf = { workspace = true, features = ["macros"] }
+rustc-hash.workspace = true
+serde.workspace = true
+serde_json = { workspace = true, features = ["preserve_order"] }
+stylex_ast = { path = "../stylex-ast" }
+stylex_atoms = { path = "../stylex-atoms" }
+stylex_constants = { path = "../stylex-constants" }
+stylex_css = { path = "../stylex-css" }
+stylex_css_parser = { path = "../stylex-css-parser" }
+stylex_diagnostics = { path = "../stylex-diagnostics" }
+stylex_enums = { path = "../stylex-enums" }
+stylex_evaluator = { path = "../stylex-evaluator" }
+stylex_macros = { path = "../stylex-macros" }
+stylex_nested_config = { path = "../stylex-nested-config" }
+stylex_path_resolver = { path = "../stylex-path-resolver" }
+stylex_regex = { path = "../stylex-regex" }
+stylex_state = { path = "../stylex-state" }
+stylex_state_index = { path = "../stylex-state-index" }
+stylex_structures = { path = "../stylex-structures" }
+stylex_styleq = { path = "../stylex-styleq" }
+stylex_types = { path = "../stylex-types" }
+stylex_utils = { path = "../stylex-utils" }
+swc_compiler_base = { workspace = true, features = ["node"] }
+swc_config.workspace = true
+swc_core = { workspace = true, features = [
+  "common",
+  "ecma_codegen",
+  "ecma_parser",
+  "ecma_plugin_transform",
+  "ecma_transforms_typescript",
+  "ecma_utils",
+] }
+swc_ecma_parser = { workspace = true, features = ["verify"] }
+swc_sourcemap.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+# The test binary prepares itself before any case runs, and prints what it logs.
+# Both belong to the suite, as they do in every other crate here.
+ctor.workspace = true
+insta = { workspace = true, features = ["yaml"] }
+pretty_env_logger.workspace = true
+# One test helper reads the language's truthiness table, which the coercion
+# crate owns. Nothing else here needs the crate, and the engine-fold bench that
+# was the other reason left with the evaluator.
+stylex_js = { path = "../stylex-js" }
+swc_core = { workspace = true, features = [
+  "ecma_parser",
+  "ecma_utils",
+  "testing_transform",
+] }
+# The shipped `.node` runs mimalloc on every published target, so a bench that
+# does not link this measures the system allocator, and a change that reduces
+# allocation reads larger there than it does in production. Rust links a
+# dev-dependency only where a target names it, so each bench in this crate
+# writes `use swc_malloc as _;`.
+swc_malloc.workspace = true
+testing.workspace = true
+
+
+
+
+
+[lints]
+workspace = true

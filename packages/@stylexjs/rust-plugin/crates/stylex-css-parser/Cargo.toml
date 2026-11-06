@@ -1,0 +1,40 @@
+[package]
+description = "CSS value parser"
+edition.workspace = true
+license.workspace = true
+name = "stylex_css_parser"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+
+[lib]
+crate-type = ["rlib"]
+doctest = false
+
+[dependencies]
+cssparser.workspace = true
+log.workspace = true
+rustc-hash.workspace = true
+serde_json = { workspace = true, features = ["preserve_order"] }
+swc_core = { workspace = true, features = [
+  "common",
+  "ecma_codegen",
+  "ecma_parser",
+  "ecma_plugin_transform",
+  "ecma_utils",
+] }
+thiserror.workspace = true
+
+stylex_macros = { path = "../stylex-macros" }
+stylex_utils = { path = "../stylex-utils" }
+
+[dev-dependencies]
+criterion.workspace = true
+swc_malloc.workspace = true
+
+
+
+
+[lints]
+workspace = true

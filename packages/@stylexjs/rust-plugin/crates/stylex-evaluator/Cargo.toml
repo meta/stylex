@@ -1,0 +1,55 @@
+[package]
+description = "The JavaScript evaluator the StyleX compiler folds authored expressions with"
+edition.workspace = true
+license.workspace = true
+name = "stylex_evaluator"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+
+[lib]
+crate-type = ["rlib"]
+doctest = false
+
+[dependencies]
+anyhow.workspace = true
+boa_engine.workspace = true
+indexmap.workspace = true
+log.workspace = true
+rustc-hash.workspace = true
+stacker.workspace = true
+swc_core = { workspace = true, features = [
+  "common",
+  "ecma_ast",
+  "ecma_utils",
+  "ecma_visit",
+] }
+# `verify` decides whether an object key is spelled as an identifier or quoted:
+# without it every reserved word reads as quotable, and the fold writes a key the
+# source does not describe.
+swc_ecma_parser = { workspace = true, features = ["verify"] }
+
+stylex_ast = { path = "../stylex-ast" }
+stylex_constants = { path = "../stylex-constants" }
+stylex_diagnostics = { path = "../stylex-diagnostics" }
+stylex_enums = { path = "../stylex-enums" }
+stylex_js = { path = "../stylex-js" }
+stylex_macros = { path = "../stylex-macros" }
+stylex_regex = { path = "../stylex-regex" }
+stylex_state = { path = "../stylex-state" }
+stylex_structures = { path = "../stylex-structures" }
+stylex_utils = { path = "../stylex-utils" }
+
+[dev-dependencies]
+criterion.workspace = true
+ctor.workspace = true
+pretty_env_logger.workspace = true
+swc_core = { workspace = true, features = ["ecma_parser"] }
+swc_malloc.workspace = true
+
+
+
+
+[lints]
+workspace = true

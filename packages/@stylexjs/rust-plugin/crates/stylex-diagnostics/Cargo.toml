@@ -1,0 +1,43 @@
+[package]
+description = "Code frames and declaration positions for the errors StyleX raises"
+edition.workspace = true
+license.workspace = true
+name = "stylex_diagnostics"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+
+[lib]
+crate-type = ["rlib"]
+doctest = false
+
+[dependencies]
+anyhow.workspace = true
+log.workspace = true
+rustc-hash.workspace = true
+smallvec.workspace = true
+swc_compiler_base.workspace = true
+swc_config.workspace = true
+swc_core = { workspace = true, features = [
+  "common",
+  "ecma_ast",
+  "ecma_codegen",
+  "ecma_parser",
+  "ecma_transforms_typescript",
+  "ecma_utils",
+  "ecma_visit",
+] }
+
+stylex_ast = { path = "../stylex-ast" }
+stylex_macros = { path = "../stylex-macros" }
+stylex_regex = { path = "../stylex-regex" }
+stylex_state_index = { path = "../stylex-state-index" }
+stylex_utils = { path = "../stylex-utils" }
+
+[dev-dependencies]
+ctor.workspace = true
+url.workspace = true
+
+[lints]
+workspace = true

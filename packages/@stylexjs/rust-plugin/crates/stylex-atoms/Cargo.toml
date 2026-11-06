@@ -1,0 +1,32 @@
+[package]
+description = "StyleX atoms for the StyleX SWC plugin"
+edition.workspace = true
+license.workspace = true
+name = "stylex_atoms"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+
+[lib]
+crate-type = ["rlib"]
+doctest = false
+
+[dependencies]
+rustc-hash.workspace = true
+swc_core = { workspace = true, features = [
+  "common",
+  "ecma_ast",
+  "ecma_utils",
+  "ecma_visit",
+] }
+
+stylex_ast = { path = "../stylex-ast" }
+stylex_constants = { path = "../stylex-constants" }
+
+[dev-dependencies]
+ctor.workspace = true
+pretty_env_logger.workspace = true
+
+[lints]
+workspace = true
