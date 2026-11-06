@@ -1795,16 +1795,16 @@ describe('@stylexjs/babel-plugin', () => {
       `);
     });
 
-    test('does not sort rem breakpoints', () => {
-      // A rem bound needs a root font size that is unknown at build time, so
-      // these fall through to the existing sort rather than being guessed at.
+    test('sorts rem breakpoints by value within the rem unit', () => {
+      // A rem bound's px value needs a root font size that is unknown at build
+      // time, but two rem bounds keep their order for any root size, so they
+      // sort against each other just like px does.
       const mk = (cls, query) => [
         cls,
         { ltr: `${query}{.${cls}.${cls}{color:red}}`, rtl: null },
         3000,
       ];
-      // 100rem vs 48rem: numerically ascending order would put 48rem first,
-      // so the fall-through order is distinguishable from a width sort.
+      // 100rem processed before 48rem: a width sort must put 48rem first.
       const rules = [
         mk('xWide', '@media (min-width: 100rem)'),
         mk('xNarrow', '@media (min-width: 48rem)'),
@@ -1815,8 +1815,37 @@ describe('@stylexjs/babel-plugin', () => {
         legacyDisableLayers: true,
       });
       expect(css).toMatchInlineSnapshot(`
-        "@media (min-width: 100rem){.xWide.xWide{color:red}}
-        @media (min-width: 48rem){.xNarrow.xNarrow{color:red}}"
+        "@media (min-width: 48rem){.xNarrow.xNarrow{color:red}}
+        @media (min-width: 100rem){.xWide.xWide{color:red}}"
+      `);
+    });
+
+    test('groups px and rem breakpoints by unit, each ascending', () => {
+      // px and rem are not commensurable without a known root font size, so
+      // they are kept in separate blocks (by unit) rather than interleaved by
+      // their bare numbers — but within each unit they sort by value.
+      const mk = (cls, query) => [
+        cls,
+        { ltr: `${query}{.${cls}.${cls}{color:red}}`, rtl: null },
+        3000,
+      ];
+      // Scrambled input, mixing units: each unit must come out ascending.
+      const rules = [
+        mk('xRemWide', '@media (min-width: 90rem)'),
+        mk('xPxNarrow', '@media (min-width: 768px)'),
+        mk('xRemNarrow', '@media (min-width: 48rem)'),
+        mk('xPxWide', '@media (min-width: 1024px)'),
+      ];
+
+      const css = stylexPlugin.processStylexRules(rules, {
+        useLayers: false,
+        legacyDisableLayers: true,
+      });
+      expect(css).toMatchInlineSnapshot(`
+        "@media (min-width: 768px){.xPxNarrow.xPxNarrow{color:red}}
+        @media (min-width: 1024px){.xPxWide.xPxWide{color:red}}
+        @media (min-width: 48rem){.xRemNarrow.xRemNarrow{color:red}}
+        @media (min-width: 90rem){.xRemWide.xRemWide{color:red}}"
       `);
     });
 
@@ -1930,30 +1959,30 @@ describe('@stylexjs/babel-plugin', () => {
       });
 
       expect(output1).toMatchInlineSnapshot(`
-        "@container card (min-width: 31.25rem){.xContainer1{display:flex}}
+        "@media (min-width: 48rem){.xMedia1{display:none}}
+        @container card (min-width: 31.25rem){.xContainer1{display:flex}}
         .xPlain1{display:none}
-        @media (min-width: 48rem){.xMedia1{display:none}}
         var(--x10fi87w){.xVar1.xVar1{grid-template-columns:repeat(2,1fr)}}
-        .xPseudo1::before{inset:0}
         @media (min-width: 64rem){.xMedia2{inset:0}}
+        .xPseudo1::before{inset:0}
         @starting-style{.xStarting1{opacity:0}}"
       `);
       expect(output2).toMatchInlineSnapshot(`
-        "@container card (min-width: 31.25rem){.xContainer1{display:flex}}
+        "@media (min-width: 48rem){.xMedia1{display:none}}
+        @container card (min-width: 31.25rem){.xContainer1{display:flex}}
         .xPlain1{display:none}
-        @media (min-width: 48rem){.xMedia1{display:none}}
         var(--x10fi87w){.xVar1.xVar1{grid-template-columns:repeat(2,1fr)}}
-        .xPseudo1::before{inset:0}
         @media (min-width: 64rem){.xMedia2{inset:0}}
+        .xPseudo1::before{inset:0}
         @starting-style{.xStarting1{opacity:0}}"
       `);
       expect(output3).toMatchInlineSnapshot(`
-        "@container card (min-width: 31.25rem){.xContainer1{display:flex}}
+        "@media (min-width: 48rem){.xMedia1{display:none}}
+        @container card (min-width: 31.25rem){.xContainer1{display:flex}}
         .xPlain1{display:none}
-        @media (min-width: 48rem){.xMedia1{display:none}}
         var(--x10fi87w){.xVar1.xVar1{grid-template-columns:repeat(2,1fr)}}
-        .xPseudo1::before{inset:0}
         @media (min-width: 64rem){.xMedia2{inset:0}}
+        .xPseudo1::before{inset:0}
         @starting-style{.xStarting1{opacity:0}}"
       `);
     });
