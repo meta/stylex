@@ -70,10 +70,15 @@ pretty_assertions = "1.4.1"
 [patch.crates-io]
 swc_ecma_parser = { path = "vendor/swc_ecma_parser" }
 
+# The Node addon is built as a cdylib-only final artifact (scripts/build.cjs:
+# `cargo rustc --crate-type cdylib`), which is what lets fat LTO run: rustc
+# performs LTO only for a final artifact, and the package's `rlib` crate type
+# (kept for the Rust API and tests) would otherwise make it skip LTO entirely.
 [profile.release]
-lto = "thin"
+lto = "fat"
 codegen-units = 1
-strip = "debuginfo"
+opt-level = 3
+strip = "symbols"
 
 [workspace]
 resolver = "2"
