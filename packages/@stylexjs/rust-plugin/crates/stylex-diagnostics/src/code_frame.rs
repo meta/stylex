@@ -210,7 +210,21 @@ fn read_source_file(file_name: &FileName) -> Result<String, std::io::Error> {
   match file_name {
     FileName::Real(path) => fs::read_to_string(path),
     FileName::Custom(path) => fs::read_to_string(path),
-    FileName::Url(url) => fs::read_to_string(Path::new(url.path())),
+    // The path a `file:` URL names, as this platform spells it: percent-escapes
+    // decoded, and on Windows the drive letter without the leading slash and
+    // with backslashes. The URL's raw `path()` is none of these
+    // (`/D:/a%20b/c.tsx`), so it is not a path to open. A URL that names no
+    // local file -- another scheme, or a remote host -- is an error rather than
+    // a guess.
+    FileName::Url(url) => {
+      if url.scheme() != "file" {
+        return Err(std::io::Error::other("Not a file URL"));
+      }
+      let path = url
+        .to_file_path()
+        .map_err(|()| std::io::Error::other("The file URL names no local path"))?;
+      fs::read_to_string(path)
+    },
     _ => Err(std::io::Error::other("Unsupported file name type")),
   }
 }
