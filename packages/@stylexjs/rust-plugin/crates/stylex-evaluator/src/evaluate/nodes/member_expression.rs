@@ -456,7 +456,7 @@ pub(in super::super) fn evaluate(
           deopt(
             &stylex_diagnostics::code_frame::unlocated_hole_fault(),
             state,
-            PATH_WITHOUT_NODE,
+            &format!("{PATH_WITHOUT_NODE}\n"),
           )
         },
         None => deopt(path, state, SPREAD_ELEMENT),

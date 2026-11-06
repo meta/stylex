@@ -570,10 +570,11 @@ mod isolation_tests {
             isolated(|| {
                 let mut state = stylex_state::state_manager::StateManager::default();
                 let _quiet = stylex_macros::stylex_error::SuppressPanicStderr::new();
+                let message = "unlocated diagnostic\n";
                 let payload = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     stylex_macros::stylex_panic!(
                         "{}",
-                        build_code_frame_error(&fault, &fault, "unlocated diagnostic", &mut state)
+                        build_code_frame_error(&fault, &fault, message, &mut state)
                     );
                 }))
                 .unwrap_err();
@@ -585,7 +586,7 @@ mod isolation_tests {
                 let error = super::core_error(&payload, &module);
                 let diagnostic = crate::utils::diagnostics::from_error(&error);
                 assert_eq!(diagnostic.name, kind);
-                assert_eq!(diagnostic.message, "unlocated diagnostic");
+                assert_eq!(diagnostic.message, message);
                 assert!(diagnostic.range.is_none());
             });
         }

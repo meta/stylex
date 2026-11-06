@@ -234,7 +234,7 @@ fn a_holey_literals_length_composes_as_a_number() {
 /// Babel has no node for a hole, but names a spread reached before the hole.
 #[test]
 fn a_holey_literal_carrying_a_spread_refuses_the_count() {
-  assert_deopt_reason_is("[, ...[1, 2]].length", PATH_WITHOUT_NODE);
+  assert_deopt_reason_is("[, ...[1, 2]].length", &format!("{PATH_WITHOUT_NODE}\n"));
   assert_deopt_reason_is("[...[1, 2], , 3].length", SPREAD_ELEMENT);
 }
 
