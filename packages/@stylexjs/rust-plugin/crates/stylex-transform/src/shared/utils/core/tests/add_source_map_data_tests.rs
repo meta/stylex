@@ -425,7 +425,7 @@ mod short_filenames {
   };
 
   /// A relative path as `path.relative` writes it on this platform.
-  fn platform(path: &str) -> String {
+  pub(super) fn platform(path: &str) -> String {
     path.replace('/', std::path::MAIN_SEPARATOR_STR)
   }
 
@@ -1188,7 +1188,10 @@ mod over_the_authored_text {
 
     assert_eq!(
       annotate(&mut state, &call),
-      FlatCompiledStylesValue::String("src/Original.tsx:42".to_owned())
+      FlatCompiledStylesValue::String(format!(
+        "{}:42",
+        super::short_filenames::platform("src/Original.tsx")
+      ))
     );
   }
 
