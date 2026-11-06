@@ -134,4 +134,5 @@ jobs:
           packages/@stylexjs/rust-plugin/tests/creation_callback_effects_current.cjs
           packages/@stylexjs/rust-plugin/tests/theme_projection_current.cjs
           packages/@stylexjs/rust-plugin/tests/count_refusal_current.cjs
+          packages/@stylexjs/rust-plugin/tests/memo_parameter_identity_current.cjs
           packages/@stylexjs/rust-plugin/tests/unplugin_current.cjs
