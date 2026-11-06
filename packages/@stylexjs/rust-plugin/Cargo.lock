@@ -2837,8 +2837,6 @@ dependencies = [
  "anyhow",
  "base64",
  "bytes-str",
- "napi",
- "napi-derive",
  "once_cell",
  "pathdiff",
  "rustc-hash",

@@ -38,7 +38,6 @@ stylex_structures = { path = "../stylex-structures" }
 stylex_styleq = { path = "../stylex-styleq" }
 stylex_types = { path = "../stylex-types" }
 stylex_utils = { path = "../stylex-utils" }
-swc_compiler_base = { workspace = true, features = ["node"] }
 swc_config.workspace = true
 swc_core = { workspace = true, features = [
   "common",
@@ -74,6 +73,11 @@ swc_core = { workspace = true, features = [
 # writes `use swc_malloc as _;`.
 swc_malloc.workspace = true
 testing.workspace = true
+# Only the Babel-reference test prints with it. Its `node` feature (napi
+# bindings) is for SWC's own Node addon: enabled here, it linked napi into
+# every build of this crate and of the compiler's cdylib, whose undefined
+# napi symbols macOS refuses without the addon's link flags.
+swc_compiler_base.workspace = true
 
 
 
