@@ -81,9 +81,15 @@ pub(crate) fn try_resolve_path(
     #[cfg(not(test))]
     let processing_path = processing_file.to_path_buf();
 
+    // Named with `/` on every platform in unit tests, as resolved paths are.
+    #[cfg(test)]
+    let processing_path = to_forward_slashes(processing_path.display().to_string());
+    #[cfg(not(test))]
+    let processing_path = processing_path.display();
+
     stylex_panic!(
       r#"Resolve path must be a file, but got: {}"#,
-      processing_path.display()
+      processing_path
     );
   }
 

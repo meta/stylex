@@ -24,6 +24,24 @@ fn get_root_dir(test_path: &Path) -> PathBuf {
   new_cwd
 }
 
+/// `path` without the trailing directories `dirs` names (`/apps/web`), read by
+/// component so it holds whatever separator the platform writes.
+#[allow(dead_code)]
+fn without_trailing_dirs(path: impl Into<PathBuf>, dirs: &str) -> String {
+  let mut path = path.into();
+  let dirs = Path::new(dirs.trim_start_matches('/'));
+  assert!(
+    path.ends_with(dirs),
+    "{} does not end with {}",
+    path.display(),
+    dirs.display()
+  );
+  for _ in dirs.components() {
+    path.pop();
+  }
+  path.display().to_string()
+}
+
 #[allow(dead_code)]
 fn fixture(test_path: &PathBuf, part: &str) -> PathBuf {
   PathBuf::from(
@@ -675,10 +693,8 @@ mod resolve_path_exports_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_root
+      .unwrap_or_default(),
+      PathBuf::from(expected_root)
     );
 
     // Test wildcard export (./* -> ./src/*.ts)
@@ -695,10 +711,8 @@ mod resolve_path_exports_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_colors
+      .unwrap_or_default(),
+      PathBuf::from(expected_colors)
     );
 
     // Test nested wildcard export (./icons/* -> ./src/icons/*.tsx)
@@ -715,10 +729,8 @@ mod resolve_path_exports_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_icon
+      .unwrap_or_default(),
+      PathBuf::from(expected_icon)
     );
   }
 
@@ -1090,10 +1102,8 @@ mod resolve_path_application_pnpm_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
   }
 
@@ -1121,10 +1131,8 @@ mod resolve_path_application_pnpm_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
   }
 
@@ -1153,10 +1161,8 @@ mod resolve_path_application_pnpm_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
   }
 
@@ -1183,10 +1189,8 @@ mod resolve_path_application_pnpm_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
   }
 
@@ -1215,10 +1219,8 @@ mod resolve_path_application_pnpm_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
   }
 
@@ -1247,10 +1249,8 @@ mod resolve_path_application_pnpm_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
   }
 
@@ -1294,10 +1294,8 @@ mod resolve_path_application_pnpm_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
   }
 
@@ -1328,10 +1326,8 @@ mod resolve_path_application_pnpm_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
   }
 
@@ -1361,10 +1357,8 @@ mod resolve_path_application_pnpm_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
   }
 
@@ -1396,10 +1390,8 @@ mod resolve_path_application_pnpm_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
   }
 
@@ -1431,10 +1423,8 @@ mod resolve_path_application_pnpm_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
   }
 
@@ -1466,10 +1456,8 @@ mod resolve_path_application_pnpm_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
   }
 }
@@ -1481,7 +1469,10 @@ mod resolve_path_application_npm_tests {
   use path_clean::PathClean;
   use rustc_hash::FxHashMap;
 
-  use crate::resolvers::{resolve_file_path, tests::get_root_dir};
+  use crate::resolvers::{
+    resolve_file_path,
+    tests::{get_root_dir, without_trailing_dirs},
+  };
 
   use std::{collections::HashMap, path::PathBuf};
 
@@ -1509,10 +1500,8 @@ mod resolve_path_application_npm_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
   }
 
@@ -1540,10 +1529,8 @@ mod resolve_path_application_npm_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
   }
 
@@ -1572,10 +1559,8 @@ mod resolve_path_application_npm_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
   }
 
@@ -1619,10 +1604,8 @@ mod resolve_path_application_npm_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
   }
 
@@ -1641,7 +1624,7 @@ mod resolve_path_application_npm_tests {
 
     let expected_result = format!(
       "{}/{}",
-      root_path.replace("/apps/web", ""),
+      without_trailing_dirs(&root_path, "/apps/web"),
       "node_modules/stylex-lib-dist-main/dist/index.jsx"
     );
 
@@ -1654,10 +1637,8 @@ mod resolve_path_application_npm_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
   }
 
@@ -1671,10 +1652,7 @@ mod resolve_path_application_npm_tests {
       "{}/src/pages/home.js",
       get_root_dir(&test_path).as_path().display()
     );
-    let root_path = get_root_dir(&test_path)
-      .display()
-      .to_string()
-      .replace("/apps/web", "");
+    let root_path = without_trailing_dirs(get_root_dir(&test_path), "/apps/web");
     let aliases = FxHashMap::default();
 
     let expected_result = format!(
@@ -1691,10 +1669,8 @@ mod resolve_path_application_npm_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
   }
 }
@@ -1836,10 +1812,8 @@ mod resolve_file_path_aliases_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
   }
 
@@ -1868,10 +1842,8 @@ mod resolve_file_path_aliases_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
   }
 
@@ -1901,10 +1873,8 @@ mod resolve_file_path_aliases_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
   }
 }
@@ -1917,7 +1887,10 @@ mod resolve_nested_external_imports_tests {
 
   use crate::{
     package_json::find_closest_node_modules,
-    resolvers::{resolve_file_path, tests::get_root_dir},
+    resolvers::{
+      resolve_file_path,
+      tests::{get_root_dir, without_trailing_dirs},
+    },
   };
 
   use std::{collections::HashMap, path::PathBuf};
@@ -1932,10 +1905,10 @@ mod resolve_nested_external_imports_tests {
       "{}/dist/index.jsx",
       get_root_dir(&test_path).as_path().display()
     );
-    let root_path = get_root_dir(&test_path)
-      .display()
-      .to_string()
-      .replace("/node_modules/stylex-lib-dist-main", "");
+    let root_path = without_trailing_dirs(
+      get_root_dir(&test_path),
+      "/node_modules/stylex-lib-dist-main",
+    );
     let aliases = FxHashMap::default();
 
     let expected_result = format!(
@@ -1952,10 +1925,8 @@ mod resolve_nested_external_imports_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
   }
 
@@ -1969,10 +1940,10 @@ mod resolve_nested_external_imports_tests {
       "{}/dist/index.jsx",
       get_root_dir(&test_path).as_path().display()
     );
-    let root_path = get_root_dir(&test_path)
-      .display()
-      .to_string()
-      .replace("/node_modules/stylex-lib-dist-main", "");
+    let root_path = without_trailing_dirs(
+      get_root_dir(&test_path),
+      "/node_modules/stylex-lib-dist-main",
+    );
     let aliases = FxHashMap::default();
 
     let expected_result = format!(
@@ -1989,10 +1960,8 @@ mod resolve_nested_external_imports_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
 
     let test_nested_package_path = &get_root_dir(&test_path);
@@ -2020,10 +1989,7 @@ mod resolve_nested_external_imports_tests {
       "{}/dist/index.jsx",
       get_root_dir(&test_path).as_path().display()
     );
-    let root_path = get_root_dir(&test_path)
-      .display()
-      .to_string()
-      .replace("/node_modules/stylex-lib-dist-exports-commonjs-esm", "");
+    let root_path = get_root_dir(&test_path).display().to_string();
     let aliases = FxHashMap::default();
 
     let expected_result = format!(
@@ -2040,10 +2006,8 @@ mod resolve_nested_external_imports_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
 
     let test_nested_package_path = &get_root_dir(&test_path);
@@ -2071,10 +2035,7 @@ mod resolve_nested_external_imports_tests {
       "{}/dist/index.jsx",
       get_root_dir(&test_path).as_path().display()
     );
-    let root_path = get_root_dir(&test_path)
-      .display()
-      .to_string()
-      .replace("/node_modules/stylex-lib-dist-exports-commonjs-esm", "");
+    let root_path = get_root_dir(&test_path).display().to_string();
     let aliases = FxHashMap::default();
 
     let expected_result = format!(
@@ -2091,10 +2052,8 @@ mod resolve_nested_external_imports_tests {
         None,
         &mut HashMap::default(),
       )
-      .unwrap_or_default()
-      .display()
-      .to_string(),
-      expected_result
+      .unwrap_or_default(),
+      PathBuf::from(expected_result)
     );
 
     let test_nested_package_path = &get_root_dir(&test_path);
