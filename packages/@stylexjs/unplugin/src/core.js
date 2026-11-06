@@ -252,6 +252,8 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
 
   // Shared state across a single compilation (used for builds)
   const stylexRulesById = new Map(); // id -> Rule[]
+  // Vite supplies a store scoped to its development server or application build.
+  let sharedStore = null;
   // Global shared store for Vite dev to aggregate across environments (client/ssr/rsc)
   function getSharedStore() {
     try {
@@ -370,8 +372,7 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
       } catch {}
     }
     try {
-      const shared = getSharedStore().rulesById;
-      for (const [k, v] of shared.entries()) merged.set(k, v);
+      for (const [k, v] of sharedStore?.rulesById ?? []) merged.set(k, v);
     } catch {}
     for (const [k, v] of stylexRulesById.entries()) merged.set(k, v);
     const allRules = Array.from(merged.values()).flat();
@@ -444,15 +445,17 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
           metadata &&
           Array.isArray(metadata.stylex) &&
           metadata.stylex.length > 0;
-        const shared = getSharedStore();
+        const shared = sharedStore;
         if (hasRules) {
           stylexRulesById.set(id, metadata.stylex);
-          shared.rulesById.set(id, metadata.stylex);
-          shared.version++;
+          if (shared) {
+            shared.rulesById.set(id, metadata.stylex);
+            shared.version++;
+          }
           await persistRulesToDisk(id, metadata.stylex);
         } else {
           stylexRulesById.delete(id);
-          if (shared.rulesById.has(id)) {
+          if (shared?.rulesById.has(id)) {
             shared.rulesById.delete(id);
             shared.version++;
           }
@@ -502,6 +505,9 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
   plugin.__stylexCollectCss = collectCss;
   plugin.__stylexResetState = resetState;
   plugin.__stylexGetSharedStore = getSharedStore;
+  plugin.__stylexSetSharedStore = (store) => {
+    sharedStore = store;
+  };
   plugin.__stylexDevMode = devMode;
   plugin.__stylexCssInjectionTarget = cssInjectionTarget;
   plugin.__stylexPackages = stylexPackages;
