@@ -66,11 +66,16 @@ pub(crate) fn on_a_thread_of<R: Send + 'static>(
   }
 }
 
-/// Give a trusted deep fixture's parse/walk/drop a per-level stack envelope.
-/// The allowance matches the growable-stack parser estimate (64 KiB per level)
-/// with a megabyte for entry frames. It changes neither source nor fold limits.
-pub(crate) fn on_a_stack_for<R>(levels: usize, work: impl FnOnce() -> R) -> R {
-  let claim = levels.saturating_mul(64 * 1024).saturating_add(1024 * 1024);
+/// Give a trusted deep fixture's parse/walk/drop a measured per-level envelope
+/// plus a megabyte for entry frames. It changes neither source nor fold limits.
+pub(crate) fn on_a_stack_for<R>(
+  levels: usize,
+  bytes_per_level: usize,
+  work: impl FnOnce() -> R,
+) -> R {
+  let claim = levels
+    .saturating_mul(bytes_per_level)
+    .saturating_add(1024 * 1024);
   stacker::maybe_grow(claim, claim, work)
 }
 

@@ -255,8 +255,11 @@ fn a_tree_past_the_largest_claim_is_counted_no_further() {
   let answered = on_a_thread_of(LARGE_THREAD, || {
     let levels = MAX_EVALUATION_DEPTH_LIMIT * 2;
     // This deliberately out-of-public-parser-range fixture only tests the
-    // bounded nesting counter. Size its parse/walk/drop from its known depth.
-    super::scaffolding::on_a_stack_for(levels, || nesting_of(&parse_expr(&nested_literal(levels))))
+    // bounded nesting counter. The Linux O0 parser costs about 10 KiB/level;
+    // 24 KiB keeps arm64 headroom without reserving a 1 GiB segment.
+    super::scaffolding::on_a_stack_for(levels, 24 * 1024, || {
+      nesting_of(&parse_expr(&nested_literal(levels)))
+    })
   });
 
   assert_eq!(answered, MAX_EVALUATION_DEPTH_LIMIT + 1);

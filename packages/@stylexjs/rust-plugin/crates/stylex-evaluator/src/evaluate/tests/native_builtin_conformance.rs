@@ -1019,7 +1019,7 @@ fn a_raised_ceiling_raises_the_nesting_the_fold_accepts() {
   // The fixture parser is unchecked recursive setup. Claim room for these
   // 200 array levels plus call/receiver syntax before parsing, just as the
   // production frontend does; the evaluator's 200-level bound stays exact.
-  crate::tests::scaffolding::on_a_stack_for(204, || {
+  crate::tests::scaffolding::on_a_stack_for(204, 64 * 1024, || {
     // Two levels go to the call and its receiver, so a ceiling of 200 admits 198
     // levels of array and refuses the 199th.
     assert_folds_to_string_with_ceiling(&nest(198), "a", 200);
