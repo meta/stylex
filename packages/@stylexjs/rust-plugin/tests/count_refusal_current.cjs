@@ -5,7 +5,7 @@ const babel = require("@babel/core");
 const original = require("../../babel-plugin/lib");
 const facade = require("../babel");
 const native = require("..");
-const filename = "/app/Count.js";
+const filename = require("node:path").resolve("/app/Count.js");
 const options = { unstable_moduleResolution: { type: "haste" } };
 const source =
   "import * as stylex from '@stylexjs/stylex';export const s=stylex.create({root:{width:[-1,2].map(each=>'x'.repeat(each*2))}});";
@@ -36,9 +36,13 @@ function assertExistingRefusal(error) {
   assert.equal(error.code, "BABEL_TRANSFORM_ERROR");
 }
 test("negative repeat callback keeps the direct PR-head thrown refusal", () => {
+  const runtimeCountError = thrown(() => "x".repeat(-2));
+  assert.equal(runtimeCountError.name, "RangeError");
   const oracle = thrown(() => transformed(original, source));
-  assert.equal(oracle.name, "RangeError");
-  assert.equal(oracle.message, `${filename}: Invalid count value: -2`);
+  assert.equal(oracle.name, runtimeCountError.name);
+  // V8's message differs between supported Node versions; match this runtime
+  // exactly, including Babel's resolved filename prefix.
+  assert.equal(oracle.message, `${filename}: ${runtimeCountError.message}`);
   assertExistingRefusal(
     thrown(() => native.transformSync(source, { filename, ...options })),
   );
