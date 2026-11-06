@@ -104,6 +104,14 @@ pub(crate) fn parse_ts_expr(source: &str) -> Expr {
   parse_expr_under(source, ts_syntax())
 }
 
+// Match the production parser's dedicated stack envelope. Unchecked parser
+// recursion must not inherit a test thread's incidental remaining stack.
+const FIXTURE_PARSE_STACK: usize = 256 * 1024 * 1024;
+
+fn fixture_parser_on_stack<R>(work: impl FnOnce() -> R) -> R {
+  crate::growable_stack::grown_per_level(work)
+}
+
 fn parse_expr_under(source: &str, syntax: Syntax) -> Expr {
   let file = anonymous_file(source);
   let mut recovered_errors = Vec::new();
@@ -111,7 +119,7 @@ fn parse_expr_under(source: &str, syntax: Syntax) -> Expr {
   // Parsing is fixture setup, not the evaluator under test. Use the same
   // bounded stack guard as the source frontend while leaving the actual fold
   // on the explicitly small worker stack.
-  let parsed = crate::growable_stack::grown_per_level(|| {
+  let parsed = fixture_parser_on_stack(|| {
     parse_file_as_expr(
       &file,
       syntax,
@@ -185,8 +193,34 @@ pub(crate) fn parser_for(file: &SourceFile) -> Parser<Lexer<'_>> {
 }
 
 mod tests {
-  use super::parse_expr;
+  use super::{FIXTURE_PARSE_STACK, fixture_parser_on_stack, on_a_thread_of, parse_expr};
   use swc_core::ecma::ast::Expr;
+
+  #[test]
+  fn fixture_parser_uses_a_dedicated_segment_before_recursive_descent() {
+    let room = on_a_thread_of(1536 * 1024, || {
+      fixture_parser_on_stack(stacker::remaining_stack)
+    });
+    if let Some(bytes) = room {
+      assert!(
+        bytes >= FIXTURE_PARSE_STACK / 2,
+        "fixture parsing inherited only {bytes} bytes from the caller"
+      );
+    }
+  }
+
+  #[test]
+  fn fixture_parser_returns_to_the_callers_stack_before_evaluation() {
+    on_a_thread_of(1536 * 1024, || {
+      let before = stacker::remaining_stack();
+      let expression = parse_expr("'a'");
+      let after = stacker::remaining_stack();
+      assert!(matches!(expression, Expr::Lit(_)));
+      if let (Some(before), Some(after)) = (before, after) {
+        assert!(before.abs_diff(after) < 16 * 1024);
+      }
+    });
+  }
 
   /// `await` tells the two grammars apart. A parser without module context
   /// reads it as a name, and every case that parses source then reads a tree
