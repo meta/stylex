@@ -59,8 +59,32 @@ fn memo_call_time_context_bypasses_even_parameter_independent_ancestors() {
 }
 
 #[test]
+fn memo_matching_subtree_witness_reuses_only_its_exact_answer() {
+  let mut traversal = StateManager::default();
+  let path = math();
+  let mut calls = 0;
+  for _ in 0..2 {
+    let result = memoized_fold(
+      &path,
+      &mut EvaluationState::default(),
+      &mut traversal,
+      |_, _| {
+        calls += 1;
+        Some(EvaluateResultValue::Expr(create_number_expr(3.0)))
+      },
+    );
+    assert_eq!(
+      result,
+      Some(EvaluateResultValue::Expr(create_number_expr(3.0)))
+    );
+  }
+  assert_eq!(calls, 1);
+  assert_eq!(traversal.seen.len(), 1);
+}
+
+#[test]
 fn memo_hash_bucket_requires_a_matching_subtree_witness() {
-  for missing in [false, true] {
+  for (missing, resolved) in [(false, true), (true, true), (false, false), (true, false)] {
     let mut traversal = StateManager::default();
     let path = math();
     memoized_fold(
@@ -72,6 +96,7 @@ fn memo_hash_bucket_requires_a_matching_subtree_witness() {
     .unwrap();
     let entry = traversal.seen.values_mut().next().unwrap();
     let entry = std::rc::Rc::make_mut(entry);
+    entry.resolved = resolved;
     entry.expression = if missing {
       None
     } else {
