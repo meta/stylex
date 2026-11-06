@@ -157,7 +157,6 @@ fn get_common_js_module_resolution() {
 
 #[test]
 fn stylex_options_deref_mut_updates_core() {
-  // Exercise DerefMut so mutable access goes through the core options bridge.
   let mut opts = StyleXOptions::default();
   std::ops::DerefMut::deref_mut(&mut opts).class_name_prefix = "mutated".into();
   assert_eq!(opts.class_name_prefix, "mutated");

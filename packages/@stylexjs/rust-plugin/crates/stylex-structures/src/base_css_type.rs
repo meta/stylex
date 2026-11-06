@@ -67,21 +67,14 @@ impl BaseCSSType {
   }
 }
 
-/// The value a CSS-typed declaration carries, and the type declaration itself
-/// where the value is one.
-///
-/// `defineVars` accepts either a plain value or a `{ syntax, value }` object
-/// that states the value's CSS type. This reads the second shape apart into the
-/// value the stylesheet takes and the type declaration `@property` needs, and
-/// hands a plain value straight back with no type.
+/// Splits a `defineVars` `{ syntax, value }` object into its value and `@property` type;
+/// a plain value comes back with no type.
 pub fn get_css_value(key_value: KeyValueProp) -> (Box<Expr>, Option<BaseCSSType>) {
   let Some(obj) = key_value.value.as_object() else {
     return (key_value.value, None);
   };
 
-  // A typed declaration is the one that names a syntax and gives a value.
-  // Short of either name the object is an ordinary value, and it is handed
-  // back whole.
+  // Without both `syntax` and `value` the object is an ordinary value.
   let Some(value) = value_named(obj, "syntax").and_then(|_| value_named(obj, "value")) else {
     return (key_value.value, None);
   };
@@ -89,48 +82,8 @@ pub fn get_css_value(key_value: KeyValueProp) -> (Box<Expr>, Option<BaseCSSType>
   (Box::new(value.into_owned()), Some(obj.clone().into()))
 }
 
-/// The value written under `name` in `object`, read where it lies.
-///
-/// The key is named through the reader the rest of the workspace names a key
-/// with, so every way of writing one is read. The four that can write `syntax`
-/// or `value` are bare, quoted, computed from static text, and the shorthand:
-/// `{ syntax: x }`, `{ "syntax": x }`, `{ ["syntax"]: x }` and `{ syntax }` all
-/// name `syntax`. A number and a big integer are named too, and neither can
-/// spell either word.
-///
-/// The value is borrowed from the object, except for a shorthand, which holds
-/// only the name and so has no value node to borrow.
-///
-/// The match and the answer are one step on purpose. They used to be two, and
-/// the two readings disagreed for exactly one spelling: a property was matched
-/// through the pair a shorthand stands for, so `{ value }` matched, and the
-/// value was then taken from the property as the object holds it, where a
-/// shorthand has no pair to take. It matched and then could not be read.
-///
-/// The spellings are read through the same helper the rest of the workspace
-/// names a key with. Before that, only a bare key was read, while the reader
-/// beside this one -- which builds the type from the same object -- read all
-/// of them. The two never disagreed where anyone could see it, because this
-/// one guards the door: a quoted or computed name was not recognised, so the
-/// object was handed back as an ordinary value and the other reader never
-/// ran on a shape it would have accepted.
-///
-/// Asked twice for one object, which is why it is one function rather than a
-/// walk spelled out at each reader.
-///
-/// **A shorthand answers an identifier, and an identifier is not a value the
-/// caller can finish with.** [`BaseCSSType`] needs a string for `syntax` and a
-/// literal or an object for `value`, so `{ syntax: '<color>', value }` is
-/// still refused -- with the sentence the written-out pair is refused with,
-/// which is the point. Reading the value is what stops the two spellings
-/// disagreeing; it is not what makes the declaration compile.
-///
-/// No source reaches any spelling but the bare one. Both callers of
-/// [`get_css_value`] are given a declaration the evaluator rebuilt, and the
-/// rebuild writes every key as a bare name and expands every shorthand. The
-/// other three spellings are therefore held by the suite alone. They are read
-/// so that one object has one meaning here, not because a build depends on
-/// it.
+/// The value under `name` in `object`, for every key spelling (bare, quoted, computed,
+/// shorthand). A shorthand yields an identifier, which [`BaseCSSType`] still refuses.
 fn value_named<'object>(object: &'object ObjectLit, name: &str) -> Option<Cow<'object, Expr>> {
   object.props.iter().find_map(|prop| match prop {
     PropOrSpread::Spread(_) => stylex_unimplemented!("{}", SPREAD_NOT_SUPPORTED),
@@ -138,10 +91,7 @@ fn value_named<'object>(object: &'object ObjectLit, name: &str) -> Option<Cow<'o
       Prop::Shorthand(ident) => {
         (ident.sym == *name).then(|| Cow::Owned(Expr::Ident(ident.clone())))
       },
-      // Every way of writing a key is read, because a bare name, a quoted
-      // name and a computed one name the same property in JavaScript. A key
-      // with no static name, unreadable text included, is not the name this
-      // reader was asked for.
+      // Bare, quoted and computed keys name the same property; non-static keys never match.
       Prop::KeyValue(key_value) => try_namespace_name_from_prop_key(&key_value.key)
         .is_some_and(|key| key == *name)
         .then(|| Cow::Borrowed(key_value.value.as_ref())),

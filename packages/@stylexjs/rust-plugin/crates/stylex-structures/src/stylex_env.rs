@@ -2,14 +2,8 @@ use std::{fmt, rc::Rc};
 
 use swc_core::ecma::ast::Expr;
 
-/// An entry in the `env` configuration map.
-///
-/// - `Expr(Expr)` — any static compile-time value (string, number, object,
-///   array, …)
-/// - `Function(JSFunction)` — a callable that receives `Vec<Expr>` and returns
-///   `Expr` (embedders without a JavaScript host)
-/// - `Host(HostValue)` — a value owned by a JavaScript host (see [`HostEnv`]):
-///   read, called and compared lazily, as the live JavaScript value.
+/// An entry in the `env` configuration map: a static value, a native function (embedders
+/// without a JavaScript host), or a live value owned by a [`HostEnv`].
 #[derive(Clone, Debug)]
 pub enum EnvEntry {
   Expr(Expr),
@@ -50,7 +44,6 @@ impl EnvEntry {
 }
 
 /// A compile-time function from the `env` config.
-/// Wraps a closure that takes `Expr` arguments and returns an `Expr`.
 #[derive(Clone)]
 pub struct JSFunction {
   inner: Rc<dyn Fn(Vec<Expr>) -> Expr>,
@@ -73,33 +66,22 @@ impl JSFunction {
     (self.inner)(args)
   }
 
-  /// A token naming this function instance (its shared allocation), equal
-  /// for clones and distinct for separately created functions while both are
-  /// alive. Hold a clone alongside the token so the allocation cannot be
-  /// reused for another function while a cache keyed on it exists.
+  /// Identity token, equal for clones; hold a clone while a cache keys on it so the
+  /// allocation cannot be reused.
   pub fn identity(&self) -> usize {
     Rc::as_ptr(&self.inner) as *const () as usize
   }
 
-  /// Whether `self` and `other` are the same function instance (clones of
-  /// one `JSFunction`), never merely equal behavior.
+  /// Whether `self` and `other` are clones of one function instance.
   pub fn same_instance(&self, other: &JSFunction) -> bool {
     Rc::ptr_eq(&self.inner, &other.inner)
   }
 }
 
-// ── JavaScript host values ─────────────────────────────────────────────────
-//
-// A JavaScript host (the Node.js binding) owns every non-primitive value the
-// compiler reads from user configuration or user callbacks. Those values cross
-// into the compiler only as references, so identity, receivers, getters,
-// proxies, sparse arrays and later mutations behave exactly as in Babel's
-// evaluator, which works with the live objects. Nothing here evaluates source
-// text: the host performs the fixed JavaScript operations below on its own
-// values, and user source can only reach them through the evaluator.
+// JavaScript host values: non-primitive config/callback values cross only as references, so
+// identity, getters, proxies and mutations behave as in Babel's evaluator on live objects.
 
-/// What a reference is, known without running user code (no getters, no
-/// proxy traps), so the compiler never needs a round trip to classify one.
+/// What a reference is, known without running user code.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum HostKind {
   Function,
@@ -135,10 +117,7 @@ impl HostKind {
 }
 
 /// A live JavaScript value owned by one host instance (one transform).
-///
-/// `owner` names that host; a host refuses references it did not issue. The
-/// same JavaScript value always has the same `id` within its owner, so
-/// identity can be compared without a round trip.
+/// A host refuses references it did not issue; one value always has the same `id` per owner.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct HostRef {
   pub owner: u64,
@@ -146,20 +125,16 @@ pub struct HostRef {
   pub kind: HostKind,
 }
 
-/// A compiler function (an author's arrow evaluated by the compiler) as the
-/// host knows it once [`HostEnv::register_function`] handed it to JavaScript.
+/// A compiler function as registered with [`HostEnv::register_function`].
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct HostFunctionRef {
-  /// The host instance that registered it; like [`HostRef::owner`], a host
-  /// refuses functions another host registered.
+  /// The registering host; other hosts refuse it.
   pub owner: u64,
   pub id: Rc<str>,
 }
 
 /// A value crossing between the compiler and its JavaScript host.
-///
-/// `Array`/`Object` are data: freshly built containers (an argument list, the
-/// entries of a spread). Every existing JavaScript object is a `Ref`.
+/// `Array`/`Object` are freshly built data; every existing JavaScript object is a `Ref`.
 #[derive(Clone, Debug, PartialEq)]
 pub enum HostValue {
   Undefined,
@@ -167,8 +142,7 @@ pub enum HostValue {
   Bool(bool),
   Number(f64),
   String(String),
-  /// A JavaScript string that is not well-formed UTF-16 (it holds a lone
-  /// surrogate), as its exact code units. Never replaced with U+FFFD.
+  /// A string with a lone surrogate, as exact code units (never U+FFFD).
   Utf16(Rc<[u16]>),
   Array(Vec<HostValue>),
   Object(Vec<(String, HostValue)>),
@@ -185,10 +159,8 @@ impl HostValue {
   }
 }
 
-/// An exception raised by JavaScript (a user callback, getter or proxy trap)
-/// or by the host itself. The original JavaScript exception stays with the
-/// owning host, which rethrows it unchanged to the caller of the transform;
-/// the compiler only needs to stop evaluating (deopt with this error).
+/// An exception raised by JavaScript or the host; the host rethrows the original, the
+/// compiler only deopts.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HostError {
   pub message: String,
@@ -204,14 +176,10 @@ impl std::error::Error for HostError {}
 
 pub type HostResult<T> = Result<T, HostError>;
 
-/// Compiler data about a compiler function's own failure (for example the
-/// evaluator's failure kind and span), opaque to the host. See
-/// [`HostEnv::register_causal_function`] and [`HostEnv::failure_cause`].
+/// Compiler data about a compiler function's own failure, opaque to the host.
 pub type HostFailureCause = Rc<dyn std::any::Any>;
 
-/// How a [`HostCausalFunction`] fails: the error, and the compiler's cause when
-/// the compiler itself failed (`None` when, for example, JavaScript it called
-/// threw).
+/// How a [`HostCausalFunction`] fails; `cause` is `None` unless the compiler itself failed.
 #[derive(Clone)]
 pub struct HostCallbackFailure {
   pub error: HostError,
@@ -247,20 +215,13 @@ pub enum Materialized {
   },
 }
 
-/// An object or array the compiler created from source (a literal it
-/// evaluated), to become one live JavaScript value (see [`HostEnv::adopt`]).
+/// An object or array the compiler evaluated from source (see [`HostEnv::adopt`]).
 #[derive(Clone, Debug, PartialEq)]
 pub enum Adoptable {
   /// `None` is a hole (`[, 1]`), not `undefined`.
   Array(Vec<Option<HostValue>>),
-  /// Already-evaluated own enumerable data properties in insertion order;
-  /// the prototype is `Object.prototype`, or `null` when `null_prototype`. The
-  /// host never parses source: the evaluator decides which source properties
-  /// are data. `__proto__: p` and `'__proto__': p` in a literal set the
-  /// prototype and are not entries; a computed `['__proto__']` key, a
-  /// shorthand, or an own key from `Object.fromEntries`/JSON is an ordinary
-  /// entry. An object with any other prototype cannot be adopted: keep it
-  /// native or deopt, never substitute `Object.prototype`.
+  /// Own data properties in insertion order; prototype is `Object.prototype` or `null`.
+  /// Literal `__proto__: p` is not an entry; other prototypes cannot be adopted.
   Object {
     null_prototype: bool,
     entries: Vec<(String, HostValue)>,
@@ -268,21 +229,15 @@ pub enum Adoptable {
 }
 
 /// A compiler function JavaScript may call: `(this, arguments) -> result`.
-/// It owns everything it needs (its lexical snapshot, its host), because
-/// JavaScript may keep and call it after the transform that created it.
+/// Must own its captures: JavaScript may call it after the transform ends.
 pub type HostFunction = Rc<dyn Fn(&HostValue, &[HostValue]) -> HostResult<HostValue>>;
 
-/// A [`HostFunction`] whose failures may carry a compiler cause (see
-/// [`HostEnv::register_causal_function`]).
+/// A [`HostFunction`] whose failures may carry a compiler cause.
 pub type HostCausalFunction =
   Rc<dyn Fn(&HostValue, &[HostValue]) -> Result<HostValue, HostCallbackFailure>>;
 
 /// The fixed JavaScript operations a host performs on its own values.
-///
-/// Every method may run user code (getters, proxy traps, `valueOf`, …) and
-/// may therefore fail; on failure the compiler deopts and the host rethrows the
-/// original JavaScript exception. Operations happen when and as often as the
-/// compiled code performs them, never earlier.
+/// Any method may run user code and fail; call only when and as often as the code would.
 pub trait HostEnv {
   /// The host instance; equals [`HostRef::owner`] of the references it issues.
   fn owner(&self) -> u64;
@@ -297,8 +252,7 @@ pub trait HostEnv {
   ) -> HostResult<HostValue>;
   /// `Object.is(left, right)`.
   fn same_value(&self, left: &HostValue, right: &HostValue) -> HostResult<bool>;
-  /// `left <operator> right` for a binary operator (`+`, `===`, `<`, `in`,
-  /// `instanceof`, …).
+  /// `left <operator> right` for a binary operator.
   fn binary(&self, operator: &str, left: &HostValue, right: &HostValue) -> HostResult<HostValue>;
   /// `<operator> value` for `+`, `-`, `~`, `!`, `typeof` or `void`.
   fn unary(&self, operator: &str, value: &HostValue) -> HostResult<HostValue>;
@@ -314,65 +268,45 @@ pub trait HostEnv {
   fn type_of(&self, value: &HostRef) -> &'static str {
     value.kind.type_of()
   }
-  /// `Object.entries(value)` (object spread, `Object.values`): own enumerable
-  /// string keys, each read once, now.
+  /// `Object.entries(value)`: own enumerable string keys, each read once.
   fn own_entries(&self, value: &HostRef) -> HostResult<Vec<(String, HostValue)>>;
-  /// `[...value]` (array and argument spread, `Array.from`, `for…of`).
+  /// `[...value]`.
   fn iterate(&self, value: &HostRef) -> HostResult<Vec<HostValue>>;
   /// `Array.isArray(value)`.
   fn is_array(&self, value: &HostRef) -> HostResult<bool>;
-  /// One of the pure allowlisted statics (`Object.keys`, `Object.hasOwn`,
-  /// `Object.fromEntries`, `Array.from`, `String.raw`, …) applied to live
-  /// values. Own-key inspection never reads property values.
+  /// An allowlisted pure static (`Object.keys`, `Array.from`, …) applied to live values.
   fn static_builtin(
     &self,
     namespace: &str,
     method: &str,
     arguments: &[HostValue],
   ) -> HostResult<HostValue>;
-  /// The data form of an array or plain object at a compile-time result
-  /// boundary (a style object, a theme), as StyleX traverses the real object;
-  /// `None` for anything else, which stays a live value.
+  /// The data form of an array or plain object; `None` for anything else.
   fn materialize(&self, value: &HostRef) -> HostResult<Option<Materialized>>;
-  /// Creates the live JavaScript value for an object or array the compiler
-  /// built, the first time it crosses to JavaScript. The compiler then keeps
-  /// the returned reference in place of its own copy, so the value keeps one
-  /// identity (passing it twice passes the same object) and later reads see
-  /// mutations JavaScript made, as with the real object in Babel.
+  /// Creates the live value for a compiler-built object; the compiler then uses the returned
+  /// reference instead of its copy, so identity and mutations match Babel.
   fn adopt(&self, _value: Adoptable) -> HostResult<HostRef> {
     Err(HostError {
       message: "this host cannot create JavaScript values".to_owned(),
     })
   }
-  /// Hands a compiler function to JavaScript: the result is callable from
-  /// JavaScript, keeps working after the transform, and is released when
-  /// JavaScript drops it.
+  /// Hands a compiler function to JavaScript; it outlives the transform.
   fn register_function(&self, function: HostFunction) -> HostResult<HostValue>;
-  /// [`register_function`](HostEnv::register_function) for a function whose
-  /// failures may carry a cause: the cause travels with the JavaScript
-  /// exception the host raises for that failure. Unless user code the function
-  /// called threw first: that exception propagates unchanged, without a cause.
-  /// The default drops causes.
+  /// [`register_function`](HostEnv::register_function), attaching failure causes to the
+  /// raised exception (user exceptions pass through without one). The default drops causes.
   fn register_causal_function(&self, function: HostCausalFunction) -> HostResult<HostValue> {
     self.register_function(Rc::new(move |this, arguments| {
       function(this, arguments).map_err(|failure| failure.error)
     }))
   }
-  /// The cause of the operation on this host that just failed, when it failed
-  /// because the very JavaScript exception raised for a caused failure of a
-  /// [causal function](HostEnv::register_causal_function) of this host escaped
-  /// uncaught (rethrowing that same exception keeps it); `None` for every
-  /// other failure, including user code that caught it and threw something
-  /// else. Ask immediately after the failed operation: the next operation on
-  /// this host resets it. Causes never cross hosts (transforms or workers).
+  /// The cause carried by the exception that just failed an operation, if it came from a
+  /// causal function of this host; the next operation on this host resets it.
   fn failure_cause(&self) -> Option<HostFailureCause> {
     None
   }
 }
 
-/// The JavaScript host of one transform, as installed in the options: the
-/// operations, and `env` as the host presents it (the frozen shallow copy
-/// Babel makes per transform; the receiver of `env` methods).
+/// The JavaScript host of one transform and its `env` (Babel's frozen per-transform copy).
 #[derive(Clone)]
 pub struct HostEnvironment {
   pub host: Rc<dyn HostEnv>,

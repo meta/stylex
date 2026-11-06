@@ -2,11 +2,8 @@ use swc_core::ecma::ast::Expr;
 
 use crate::raw_value::TRawValue;
 
-/// A style value on its way to becoming a CSS declaration:
-/// `string | number | Array<string | number>`.
-///
-/// `Raw` keeps the authored JS type, which decides whether a unit suffix is
-/// appended: `width: 1` compiles to `1px`, `width: '1'` to `1`.
+/// A style value becoming a CSS declaration: `string | number | Array<string | number>`.
+/// `Raw` keeps the JS type, which decides units: `width: 1` is `1px`, `width: '1'` is `1`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PreRuleValue {
   Expr(Expr),

@@ -45,7 +45,6 @@ fn test_thread_unique_identifiers() {
   let id1 = generator.generate();
   let id2 = generator.generate();
 
-  // Both should contain thread ID and be unique
   assert!(id1.starts_with("_test_"));
   assert!(id2.starts_with("_test_"));
   assert_ne!(id1, id2);
@@ -66,10 +65,8 @@ fn test_parallel_thread_local_isolation() {
     let handle = thread::spawn(move || {
       let generator = UidGenerator::new("test", CounterMode::ThreadLocal);
 
-      // Wait for both threads to be ready
       barrier.wait();
 
-      // Each thread should get the same sequence independently
       let results = (0..3).map(|_| generator.generate()).collect::<Vec<_>>();
       (thread_num, results)
     });
@@ -78,7 +75,6 @@ fn test_parallel_thread_local_isolation() {
 
   let results: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
 
-  // Both threads should generate the same sequence because they're isolated
   assert_eq!(results[0].1, vec!["_test", "_test2", "_test3"]);
   assert_eq!(results[1].1, vec!["_test", "_test2", "_test3"]);
 }
@@ -106,7 +102,6 @@ fn test_clear_global() {
   let mut uid = UidGenerator::new("gclr", CounterMode::_Global);
   let _ = uid.generate();
   uid.clear();
-  // After clearing, creating a new generator should start fresh
   let uid2 = UidGenerator::new("gclr", CounterMode::_Global);
   assert_eq!(uid2.generate(), "_gclr");
 }
@@ -114,7 +109,6 @@ fn test_clear_global() {
 #[test]
 fn test_clear_thread_unique() {
   let mut uid = UidGenerator::new("tuclr", CounterMode::_ThreadUnique);
-  // _ThreadUnique clear is a no-op, should not panic
   uid.clear();
 }
 

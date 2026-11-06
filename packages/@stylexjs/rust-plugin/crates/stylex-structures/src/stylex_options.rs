@@ -48,25 +48,17 @@ pub struct StyleXOptionsParams {
   #[serde(rename = "unstable_moduleResolution")]
   pub unstable_module_resolution: Option<ModuleResolution>,
   pub sx_prop_name: Option<SxPropNameParam>,
-  /// How many levels the evaluator may descend before refusing to fold, as
-  /// `maxEvaluationDepth`. Absent means the environment decides, and failing
-  /// that the built-in default -- see
-  /// [`crate::evaluation_depth`].
+  /// `maxEvaluationDepth`; `None` defers to the environment, then the default.
   pub max_evaluation_depth: Option<usize>,
-  /// How many UTF-16 code units of string one fold may build or carry, as
-  /// `maxFoldedCharacters`. Absent resolves the same way -- see
-  /// [`crate::fold_ceilings`].
+  /// `maxFoldedCharacters`; resolved like `max_evaluation_depth`.
   pub max_folded_characters: Option<usize>,
-  /// How many array elements and object properties one fold may build or carry,
-  /// as `maxFoldedEntries`. Absent resolves the same way -- see
-  /// [`crate::fold_ceilings`].
+  /// `maxFoldedEntries`; resolved like `max_evaluation_depth`.
   pub max_folded_entries: Option<usize>,
   #[serde(skip)]
   pub env: Option<IndexMap<String, EnvEntry>>,
   #[serde(skip)]
   pub debug_file_path: Option<JSFunction>,
-  /// The embedding host (the Node addon's JavaScript bridge), through which
-  /// `env` values that are live JavaScript values are read and called.
+  /// The Node addon's JavaScript bridge, for `env` values that are live JavaScript values.
   #[serde(skip)]
   pub host_environment: Option<HostEnvironment>,
   /// Resolves theme imports through the host (see `ImportResolver`).
@@ -376,12 +368,7 @@ impl From<StyleXOptionsParams> for StyleXOptions {
       .with_sx_prop_name(match options.sx_prop_name {
         None => Some(STYLEX_SX.to_string()),
         Some(SxPropNameParam::Disabled) => None,
-        // A blank name names no prop. The raw markup path cannot match one --
-        // a JSX attribute name is never empty -- so accepting it verbatim
-        // would let the compiled path rewrite `{ "": value }`, which no author
-        // wrote as an `sx` prop. The module-selection scan refuses a blank
-        // name for the same reason, so this keeps the two sides answering
-        // alike.
+        // A blank name disables the prop, matching the module-selection scan.
         Some(SxPropNameParam::Enabled(name)) if name.trim().is_empty() => None,
         Some(SxPropNameParam::Enabled(name)) => Some(name),
       })

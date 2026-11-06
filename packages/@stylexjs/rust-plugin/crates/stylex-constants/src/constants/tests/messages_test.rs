@@ -37,9 +37,6 @@ fn test_non_static_value_with_vowel_api_name() {
 
 #[test]
 fn test_non_static_value_with_empty_api_name_falls_back_to_a() {
-  // Defensive: covers the `None` branch of `indefinite_article` so an empty
-  // API name still produces a grammatically valid (if useless) sentence rather
-  // than panicking.
   assert_eq!(
     non_static_value(""),
     "Only static values are allowed inside of a () call."
@@ -114,16 +111,8 @@ fn test_unknown_define_vars_reference() {
   );
 }
 
-/// The refusal a `defineVars()` variable gets when its object carries no
-/// `default` key.
-///
-/// Byte-identical to `'Default value is not defined for ' + key + ' variable.'`,
-/// which upstream builds at `shared/stylex-vars-utils.js:45` and again at
-/// `visitors/stylex-define-vars.js:313` (0.19.0). Two details are load-bearing
-/// and both used to be wrong here. The name is *unquoted*, which is the whole of
-/// what a build error read differently between the two compilers for this input;
-/// and the key is the top-level variable rather than the nested key the
-/// recursion is standing on, which is why a nested case answers the root name.
+/// Matches Babel `shared/stylex-vars-utils.js:45` / `visitors/stylex-define-vars.js:313` (0.19.0):
+/// unquoted, naming the top-level variable.
 #[test]
 fn test_missing_default_value_names_the_variable_unquoted() {
   assert_eq!(
@@ -135,7 +124,6 @@ fn test_missing_default_value_names_the_variable_unquoted() {
     "Default value is not defined for primaryColor variable."
   );
 
-  // No quoting, whatever the key looks like.
   assert!(!missing_default_value("k").contains('"'));
   assert!(!missing_default_value("k").contains('\''));
 }

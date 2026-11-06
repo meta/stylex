@@ -19,7 +19,5 @@ pub const STYLEX_TYPES: &str = "types";
 pub const STYLEX_VIEW_TRANSITION_CLASS: &str = "viewTransitionClass";
 pub const STYLEX_WHEN: &str = "when";
 
-/// The only key a function config carries in the reference implementation, which
-/// spells one as `{ fn }`. Read where a folded function map materializes the
-/// object a single config stands for.
+/// The only key of a function config (`{ fn }` in Babel).
 pub const FUNCTION_CONFIG_FN_KEY: &str = "fn";

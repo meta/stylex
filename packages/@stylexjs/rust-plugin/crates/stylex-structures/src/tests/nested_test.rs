@@ -19,8 +19,6 @@ fn separator_is_dot() {
   assert_eq!(SEPARATOR, ".");
 }
 
-// ---------- NestedStringValue ----------
-
 #[test]
 fn string_namespace_returns_inner_map() {
   let inner = map(vec![("a", NestedStringValue::Str("x".into()))]);
@@ -44,8 +42,6 @@ fn is_string_leaf_returns_false_for_namespace() {
   let ns = NestedStringValue::Namespace(IndexMap::new());
   assert!(!is_string_leaf(&ns));
 }
-
-// ---------- NestedConstsValue ----------
 
 #[test]
 fn consts_namespace_returns_inner_map() {
@@ -77,8 +73,6 @@ fn is_consts_leaf_rejects_namespace() {
     IndexMap::new()
   )));
 }
-
-// ---------- flatten_nested_string_config ----------
 
 #[test]
 fn flatten_nested_string_config_flattens_single_level() {

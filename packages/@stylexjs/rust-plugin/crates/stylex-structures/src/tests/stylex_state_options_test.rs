@@ -95,14 +95,11 @@ fn from_stylex_options_preserves_fields() {
 
 #[test]
 fn stylex_state_options_deref_mut_updates_core() {
-  // Ensure mutable deref reaches the embedded CoreStyleXOptions value.
   let mut opts = StyleXStateOptions::default();
   std::ops::DerefMut::deref_mut(&mut opts).class_name_prefix = "state-mutated".into();
   assert_eq!(opts.class_name_prefix, "state-mutated");
 }
 
-/// The shared default is the default, and it is one value: a reader that keeps
-/// the address it was handed sees the same address on the next read.
 #[test]
 fn the_shared_default_options_are_one_value() {
   let first = with_default_options(|options| options as *const StyleXStateOptions);

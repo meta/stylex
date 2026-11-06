@@ -112,7 +112,6 @@ fn into_expr_emits_syntax_and_value_props() {
   };
   let expr: Expr = css.into();
   let kvs = unwrap_props(expr);
-  // Expect at least a "syntax" prop and a "value" prop.
   assert!(kvs.iter().any(|kv| key_of(kv) == "syntax"));
   assert!(kvs.iter().any(|kv| key_of(kv) == "value"));
 }
@@ -229,8 +228,6 @@ fn from_object_lit_panics_when_syntax_missing() {
   let _: BaseCSSType = outer.into();
 }
 
-// Helpers for triggering specific panic arms.
-
 fn null_lit_expr() -> Expr {
   Expr::Lit(swc_core::ecma::ast::Lit::Null(swc_core::ecma::ast::Null {
     span: swc_core::common::DUMMY_SP,
@@ -298,12 +295,7 @@ fn from_object_lit_panics_when_mid_level_value_is_null_lit() {
   let _: BaseCSSType = outer.into();
 }
 
-// The three catch-alls below name the node kind of the value they could not
-// read. They used to print `Expr::get_type`, which answers the *value* an
-// expression would produce and is `Unknown` for every expression that reaches
-// one of these arms — so the label was `Unknown` in every case it was printed.
-// Each expectation names the kind, not just the message prefix: a prefix-only
-// expectation is what let the vague label live here unnoticed.
+// The catch-alls below must name the node kind, not `Expr::get_type` (always `Unknown`).
 
 #[test]
 #[should_panic(expected = "Value must be a string or object, but got: Identifier")]
@@ -349,9 +341,6 @@ mod get_css_value_tests {
   };
 
   /// The property `key: value`, however the key is written.
-  ///
-  /// The four spellings below differ by the key alone, so each one names its
-  /// key and hands the rest to this.
   fn keyed(key: PropName, value: Expr) -> PropOrSpread {
     PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
       key,
@@ -381,8 +370,7 @@ mod get_css_value_tests {
     keyed(bare_key(name), value)
   }
 
-  /// The pair `"name": value`, whose key is quoted. JavaScript reads it as the
-  /// same name as the bare one.
+  /// The pair `"name": value`.
   fn quoted(name: &str, value: Expr) -> PropOrSpread {
     keyed(quoted_key(name), value)
   }
@@ -417,11 +405,7 @@ mod get_css_value_tests {
     }
   }
 
-  /// Writes a typed declaration with `write`, and holds it to what the bare
-  /// spelling of the same two names answers.
-  ///
-  /// The answer is pinned as well as compared, so a case cannot pass by both
-  /// spellings being broken the same way.
+  /// Asserts `write` answers what the bare spelling answers (and pins that answer).
   fn assert_typed_like_the_bare_spelling(write: fn(&str, Expr) -> PropOrSpread) {
     let written = outcome_of(declaration_of(vec![
       write("syntax", create_string_expr("<color>")),
@@ -436,27 +420,10 @@ mod get_css_value_tests {
     assert_eq!(written, Ok("literal typed=true".to_owned()));
   }
 
-  // ---------- a shorthand names the pair it stands for ----------
-  //
-  // Each case below compares two spellings of one object rather than pinning
-  // one answer, because the defect was that the two disagreed and a pinned
-  // answer records whichever spelling was written down.
-  //
-  // Most of the answers compared are refusals, and that is the result, not a
-  // gap in the cases. A shorthand can only ever name an identifier, and
-  // neither `syntax` nor `value` accepts one. What changed is that both
-  // spellings are now refused by the same sentence, where the shorthand used
-  // to be refused earlier and for the wrong reason.
+  // ---------- key spellings agree (shorthands still refused: they name identifiers) ----------
 
-  /// What `get_css_value` answers for one declaration: the kind of value it
-  /// hands back, or the message it stopped with.
-  ///
-  /// Both spellings of a name are put through this and compared, because the
-  /// point of each case below is that they agree.
-  /// The hook is swapped only to keep an expected panic off the test output.
-  /// It is process-global, and the repository runs the suites under
-  /// `cargo nextest`, which gives each case its own process, so the swap
-  /// cannot race another case.
+  /// What `get_css_value` answers: the value's kind, or the panic message.
+  /// The panic hook swap is safe because `cargo nextest` runs each case in its own process.
   fn outcome_of(declaration: KeyValueProp) -> Result<String, String> {
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
@@ -481,8 +448,7 @@ mod get_css_value_tests {
     }
   }
 
-  /// The text a caught panic carries, whichever of the two payload types it
-  /// was raised with.
+  /// The text a caught panic carries.
   fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
     if let Some(text) = payload.downcast_ref::<String>() {
       return text.clone();
@@ -494,10 +460,6 @@ mod get_css_value_tests {
     }
   }
 
-  /// `{ syntax: '<color>', value }` states the value through a shorthand. The
-  /// reader used to match that name and then refuse to take it, with
-  /// "Expected key-value property". It answers what `{ value: value }`
-  /// answers now.
   #[test]
   fn a_shorthand_value_answers_what_its_pair_answers() {
     let short = outcome_of(declaration_of(vec![
@@ -517,9 +479,6 @@ mod get_css_value_tests {
     );
   }
 
-  /// A shorthand `syntax` names an identifier rather than a CSS type, so the
-  /// declaration is refused -- by the same sentence its written-out pair is
-  /// refused with.
   #[test]
   fn a_shorthand_syntax_answers_what_its_pair_answers() {
     let short = outcome_of(declaration_of(vec![
@@ -534,8 +493,6 @@ mod get_css_value_tests {
     assert_eq!(short, spelled);
   }
 
-  /// Both names written short, which is the whole shape as JavaScript allows
-  /// it to be spelled.
   #[test]
   fn two_shorthand_names_answer_what_their_pairs_answer() {
     let short = outcome_of(declaration_of(vec![
@@ -550,20 +507,11 @@ mod get_css_value_tests {
     assert_eq!(short, spelled);
   }
 
-  /// A quoted key names the same property a bare one names, so
-  /// `{ "syntax": '<color>', "value": 'red' }` is the typed declaration that
-  /// `{ syntax: '<color>', value: 'red' }` is.
-  ///
-  /// The reader beside this one, which builds the type itself, already reads a
-  /// quoted key. This one did not, so one object had two names and only one of
-  /// them was found.
   #[test]
   fn a_quoted_key_answers_what_the_bare_key_answers() {
     assert_typed_like_the_bare_spelling(quoted);
   }
 
-  /// The two spellings mixed in one object, which is what an author who edits
-  /// only one of the two names leaves behind.
   #[test]
   fn a_quoted_key_beside_a_bare_one_is_still_a_typed_declaration() {
     let mixed = outcome_of(declaration_of(vec![
@@ -574,8 +522,6 @@ mod get_css_value_tests {
     assert_eq!(mixed, Ok("literal typed=true".to_owned()));
   }
 
-  /// A quoted key under some other name is passed over, exactly as a bare one
-  /// under that name is.
   #[test]
   fn a_quoted_key_under_another_name_leaves_the_object_whole() {
     let declaration = declaration_of(vec![quoted("colour", create_string_expr("red"))]);
@@ -586,18 +532,12 @@ mod get_css_value_tests {
     assert!(expr.is_object());
   }
 
-  /// A computed key names the property its text spells, so `{ ["syntax"]: x }`
-  /// is the same declaration `{ syntax: x }` is.
   #[test]
   fn a_computed_key_answers_what_the_bare_key_answers() {
     assert_typed_like_the_bare_spelling(computed);
   }
 
-  /// A key whose text has no UTF-8 form is not the name the reader asked for,
-  /// so it is passed over instead of stopping the build.
-  ///
-  /// An unpaired surrogate is a legal JavaScript string, which is why the
-  /// reader answers this rather than refusing it.
+  /// An unpaired surrogate is a legal JavaScript string, so the key is skipped, not refused.
   #[test]
   fn a_key_that_is_not_readable_text_is_not_the_name_asked_for() {
     let unreadable = Wtf8Atom::from(Wtf8Buf::from_ill_formed_utf16(&[0xD83D]));
@@ -624,8 +564,6 @@ mod get_css_value_tests {
     assert!(expr.is_object());
   }
 
-  /// A shorthand under some other name is not a typed declaration, so the
-  /// object is handed back whole rather than refused.
   #[test]
   fn a_shorthand_under_another_name_leaves_the_object_whole() {
     let declaration = declaration_of(vec![shorthand("colour")]);
@@ -636,8 +574,6 @@ mod get_css_value_tests {
     assert!(expr.is_object());
   }
 
-  /// A `syntax` with no `value` beside it is not typed, whichever way the one
-  /// name is written.
   #[test]
   fn a_shorthand_syntax_with_no_value_leaves_the_object_whole() {
     let declaration = declaration_of(vec![shorthand("syntax")]);
@@ -648,8 +584,6 @@ mod get_css_value_tests {
     assert!(expr.is_object());
   }
 
-  /// The name is matched against the whole of a shorthand, not a part of it,
-  /// so a longer name that begins the same way is not the one that is read.
   #[test]
   fn a_shorthand_whose_name_only_begins_with_value_is_not_it() {
     let declaration = declaration_of(vec![
@@ -663,8 +597,6 @@ mod get_css_value_tests {
     assert!(expr.is_object());
   }
 
-  /// A name written twice, once short and once in full, still answers what
-  /// the two written-out pairs answer.
   #[test]
   fn a_repeated_name_answers_what_its_pairs_answer() {
     let short = outcome_of(declaration_of(vec![
@@ -859,9 +791,7 @@ mod get_css_value_panic_tests {
   #[test]
   #[should_panic]
   fn syntax_obj_with_num_key_prop_hits_false_branch() {
-    // A syntax obj with a non-ident (Num) key causes the find closure
-    // to fall through to the `false` return path. The conversion to
-    // BaseCSSType then panics for the unsupported numeric key.
+    // A numeric key in the syntax object panics in the conversion.
     let syntax_prop = PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
       key: PropName::Ident(IdentName {
         span: DUMMY_SP,

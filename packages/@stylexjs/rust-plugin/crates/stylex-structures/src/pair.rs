@@ -16,22 +16,13 @@ impl Pair {
     }
   }
 
-  /// The `key:value;` CSS text this pair spells, or `None` when it spells none.
-  ///
-  /// A half that is [blank CSS text](is_blank_css_text) leaves nothing to
-  /// declare: `top:` is not valid CSS and a browser discards it, so the text is
-  /// omitted rather than emitted empty. Every at-rule body assembled from pairs
-  /// asks this, so that a blank value drops before the body is hashed and the
-  /// name is the one a body without it produces.
+  /// The `key:value;` CSS text, or `None` when either half is [blank](is_blank_css_text).
   pub fn as_css_text(&self) -> Option<String> {
     css_text_of(&self.key, &self.value)
   }
 }
 
-/// The `key:value;` text the two halves spell, or `None` when they spell none.
-///
-/// Both pair kinds ask this, so the rule that a blank half declares nothing is
-/// stated once.
+/// The `key:value;` text, or `None` when either half is blank.
 fn css_text_of(key: &str, value: &str) -> Option<String> {
   if is_blank_css_text(key) || is_blank_css_text(value) {
     return None;
@@ -53,10 +44,7 @@ pub struct PairCow<'a> {
 }
 
 impl<'a> PairCow<'a> {
-  /// The `key:value;` CSS text this pair spells, or `None` when it spells none.
-  ///
-  /// The same answer [`Pair::as_css_text`] gives, without making the pair own
-  /// its halves first.
+  /// [`Pair::as_css_text`] without owning the halves.
   pub fn as_css_text(&self) -> Option<String> {
     css_text_of(&self.key, &self.value)
   }

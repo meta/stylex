@@ -5,10 +5,6 @@ use swc_core::{
 
 use crate::{pre_rule_value::PreRuleValue, raw_value::TRawValue};
 
-// ──────────────────────────────────────────────
-// PreRuleValue::string
-// ──────────────────────────────────────────────
-
 #[test]
 fn wraps_a_borrowed_string() {
   assert_eq!(
@@ -17,8 +13,6 @@ fn wraps_a_borrowed_string() {
   );
 }
 
-/// The constructor takes any value that converts into a `String`. An owned
-/// value must give the same result as a borrowed one.
 #[test]
 fn wraps_an_owned_string() {
   assert_eq!(
@@ -35,8 +29,7 @@ fn wraps_an_empty_string() {
   );
 }
 
-/// A numeric-looking string stays a string. This difference decides whether a
-/// unit suffix is added later, so the constructor must keep it.
+/// Whether a unit suffix is added later depends on this.
 #[test]
 fn keeps_a_numeric_looking_string_a_string() {
   assert_ne!(PreRuleValue::string("1"), PreRuleValue::number(1.0));
@@ -61,8 +54,6 @@ fn wraps_text_verbatim() {
   }
 }
 
-/// A template literal can build a megabyte of text. The constructor must keep
-/// all of it, and must not fail or cut it short.
 #[test]
 fn wraps_a_very_large_string() {
   let huge = "a".repeat(1024 * 1024);
@@ -74,10 +65,6 @@ fn wraps_a_very_large_string() {
     other => panic!("expected a raw string, got {other:?}"),
   }
 }
-
-// ──────────────────────────────────────────────
-// PreRuleValue::number
-// ──────────────────────────────────────────────
 
 #[test]
 fn wraps_a_number() {
@@ -111,8 +98,7 @@ fn wraps_the_extremes_of_the_number_range() {
   }
 }
 
-/// `NaN` is never equal to itself, so a comparison cannot show that it came
-/// through. Read the value back out instead.
+/// `NaN != NaN`, so read the value back out.
 #[test]
 fn wraps_nan_without_comparing_it() {
   match PreRuleValue::number(f64::NAN) {
@@ -121,9 +107,6 @@ fn wraps_nan_without_comparing_it() {
   }
 }
 
-/// Positive and negative zero are equal, so only the sign bit tells them
-/// apart. It must survive: JS shows both as `0`, but arithmetic on them
-/// differs.
 #[test]
 fn keeps_the_sign_of_negative_zero() {
   match PreRuleValue::number(-0.0) {
@@ -132,12 +115,6 @@ fn keeps_the_sign_of_negative_zero() {
   }
 }
 
-// ──────────────────────────────────────────────
-// The variants the constructors do not build
-// ──────────────────────────────────────────────
-
-/// A list keeps its order and its element types. Both decide the CSS that
-/// comes out of a shorthand, so neither may be normalised away.
 #[test]
 fn holds_a_list_of_raw_values_in_order() {
   let value = PreRuleValue::Vec(vec![
@@ -179,8 +156,7 @@ fn holds_an_expression() {
   );
 }
 
-/// `Null` is the absent value. It must not be equal to an empty string or to
-/// zero, because a missing declaration and an empty one compile differently.
+/// A missing declaration and an empty one compile differently.
 #[test]
 fn null_differs_from_empty_and_zero() {
   assert_ne!(PreRuleValue::Null, PreRuleValue::string(""));
@@ -188,8 +164,6 @@ fn null_differs_from_empty_and_zero() {
   assert_ne!(PreRuleValue::Null, PreRuleValue::Vec(vec![]));
 }
 
-/// A clone must be independent of the original, and the debug text must name
-/// the variant. Both are read while debugging a wrong declaration.
 #[test]
 fn clones_and_prints_every_variant() {
   let cases = [

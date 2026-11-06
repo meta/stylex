@@ -14,7 +14,6 @@ use crate::{
   stylex_options::{CheckModuleResolution, ModuleResolution},
 };
 
-/// Direct `with_*` setters should mutate all targeted fields.
 #[test]
 fn core_stylex_options_direct_setters_cover_all_fields() {
   let mut aliases = FxHashMap::default();
@@ -159,7 +158,6 @@ fn core_stylex_options_optional_setters_skip_none_values() {
   );
 }
 
-/// Optional `maybe_*` setters should apply values only when `Some`.
 #[test]
 fn core_stylex_options_optional_setters_apply_some_values() {
   let opts = CoreStyleXOptions::default()

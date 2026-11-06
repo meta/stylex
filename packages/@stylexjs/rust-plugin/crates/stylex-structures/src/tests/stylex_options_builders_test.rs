@@ -10,8 +10,6 @@ use crate::{
   },
 };
 
-/// `StyleXOptions` fluent setters should update both core fields and runtime
-/// injection.
 #[test]
 fn stylex_options_builders_update_supported_fields() {
   let opts = StyleXOptions::default()
@@ -48,7 +46,6 @@ fn stylex_options_builders_update_supported_fields() {
   ));
 }
 
-/// Conversion should preserve explicit regular injection and custom `sx` name.
 #[test]
 fn from_params_handles_regular_runtime_and_custom_sx_name() {
   let params = StyleXOptionsParams {
@@ -65,7 +62,6 @@ fn from_params_handles_regular_runtime_and_custom_sx_name() {
   assert_eq!(opts.sx_prop_name, Some("sx2".to_string()));
 }
 
-/// Conversion should disable `sx` prop when explicitly requested.
 #[test]
 fn from_params_handles_disabled_sx_prop_name() {
   let params = StyleXOptionsParams {
@@ -76,10 +72,7 @@ fn from_params_handles_disabled_sx_prop_name() {
   assert_eq!(opts.sx_prop_name, None);
 }
 
-/// A name that is blank, or only spaces, names no prop. Upstream compares the
-/// name against a JSX attribute name, which is never empty, so a blank name is
-/// enabled there and simply never matches. Resolving it to disabled reaches
-/// the same outcome on every path, the compiled one included.
+/// Babel enables a blank name but it never matches a JSX attribute; disabling it is equivalent.
 #[test]
 fn from_params_handles_a_blank_sx_prop_name_as_disabled() {
   for name in ["", " ", "\t\n"] {
@@ -94,7 +87,6 @@ fn from_params_handles_a_blank_sx_prop_name_as_disabled() {
   }
 }
 
-/// Module resolution helper constructors should set the correct discriminator.
 #[test]
 fn module_resolution_helper_builders_have_expected_type() {
   let common = ModuleResolution::common_js(Some("/common".to_string()));
@@ -106,8 +98,6 @@ fn module_resolution_helper_builders_have_expected_type() {
   assert_eq!(cross.kind, ModuleResolutionKind::CrossFileParsing);
 }
 
-/// Named runtime injection path should survive `StyleXOptionsParams`
-/// conversion.
 #[test]
 fn from_params_keeps_named_runtime_injection() {
   let params = StyleXOptionsParams {
@@ -122,7 +112,6 @@ fn from_params_keeps_named_runtime_injection() {
   assert!(matches!(opts.runtime_injection, RuntimeInjection::Named(_)));
 }
 
-/// `DerefMut` should expose mutable access to the embedded core options.
 #[test]
 fn stylex_options_deref_mut_exposes_core_fields() {
   let opts = StyleXOptions::default().with_class_name_prefix("mutated");

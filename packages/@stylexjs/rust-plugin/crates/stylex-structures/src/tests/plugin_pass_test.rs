@@ -5,7 +5,6 @@ use std::path::PathBuf;
 use crate::plugin_pass::PluginPass;
 use swc_core::common::FileName;
 
-/// Default plugin pass should start with anonymous filename and no cwd.
 #[test]
 fn plugin_pass_default_values() {
   let pass = PluginPass::default();
@@ -13,7 +12,6 @@ fn plugin_pass_default_values() {
   assert!(matches!(pass.filename, FileName::Anon));
 }
 
-/// `new(None, None)` should inject fixture defaults used by transform tests.
 #[test]
 fn plugin_pass_new_applies_fixture_fallbacks() {
   let pass = PluginPass::new(None, None);
@@ -21,7 +19,6 @@ fn plugin_pass_new_applies_fixture_fallbacks() {
   assert!(matches!(pass.filename, FileName::Real(_)));
 }
 
-/// Builder methods should override cwd and filename fields.
 #[test]
 fn plugin_pass_builder_methods_override_fields() {
   let pass = PluginPass::default()

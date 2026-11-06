@@ -8,7 +8,6 @@ use crate::{
   stylex_state_options::StyleXStateOptions,
 };
 
-/// `with_*` methods should update core fields and runtime injection state.
 #[test]
 fn stylex_state_options_builders_update_all_supported_fields() {
   let state = StyleXStateOptions::default()
@@ -50,7 +49,6 @@ fn stylex_state_options_builders_update_all_supported_fields() {
   ));
 }
 
-/// `DerefMut` should expose mutable access to the embedded core options.
 #[test]
 fn stylex_state_options_deref_mut_exposes_core_fields() {
   let state = StyleXStateOptions::default().with_class_name_prefix("mutated");

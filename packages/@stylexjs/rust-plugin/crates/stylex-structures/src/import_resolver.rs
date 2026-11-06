@@ -1,34 +1,22 @@
 use std::fmt;
 
-/// Resolves a theme file import the way the embedding host's StyleX
-/// configuration does.
-///
-/// The Node addon implements it over the JavaScript host, so `commonJS`
-/// resolution and a `custom` `filePathResolver`/`getCanonicalFilePath` pair
-/// answer exactly as they do in the Babel plugin. Without one, `commonJS`
+/// Resolves theme file imports like the host's StyleX configuration; without one, `commonJS`
 /// resolves natively and `custom` resolves nothing.
 pub trait ImportResolver: fmt::Debug {
-  /// The canonical file path a theme import names (what the Babel plugin
-  /// passes to `getCanonicalFilePath` after resolving it), or `None` when the
-  /// import does not resolve. An `Err` carries a host failure; the host
-  /// reports the exception itself.
+  /// The canonical path a theme import names (Babel's `getCanonicalFilePath`), or `None`.
+  /// `Err` carries a host failure the host reports itself.
   fn resolve_theme_import(
     &self,
     import_path: &str,
     source_file_path: &str,
   ) -> Result<Option<String>, String>;
 
-  /// For `custom` module resolution: the canonical name of `file_path` as the
-  /// host's `getCanonicalFilePath` answers it, which a theme file's own
-  /// variables are hashed under. `None` leaves the compiler's own answer.
+  /// `custom` resolution: the host's canonical name for `file_path`; `None` keeps the compiler's.
   fn canonical_file_path(&self, _file_path: &str) -> Result<Option<String>, String> {
     Ok(None)
   }
 
-  /// For the `rewriteAliases` option: the relative specifier (`./theme/x.stylex`)
-  /// a theme import is rewritten to, as the Babel plugin writes it after
-  /// resolving the import through its aliases, or `None` when it does not
-  /// resolve. Hosts that cannot answer leave imports as written.
+  /// `rewriteAliases`: the relative specifier a theme import is rewritten to, or `None`.
   fn rewrite_alias_import(
     &self,
     _import_path: &str,
@@ -38,9 +26,7 @@ pub trait ImportResolver: fmt::Debug {
   }
 }
 
-/// Names a file in the `$$css` debug labels the way the host's
-/// `debugFilePath` option does: given the file's absolute path, the name the
-/// Babel plugin writes before `:<line>` (`''` writes no label).
+/// Names a file in `$$css` debug labels like the host's `debugFilePath` (`''` writes no label).
 pub trait DebugFileNamer: fmt::Debug {
   fn debug_file_name(&self, absolute_path: &str) -> Result<String, String>;
 }

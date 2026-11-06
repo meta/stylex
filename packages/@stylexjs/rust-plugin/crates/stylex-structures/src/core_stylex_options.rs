@@ -17,11 +17,7 @@ use crate::{
   stylex_options::CheckModuleResolution,
 };
 
-/// Shared configuration fields between `StyleXOptions` and
-/// `StyleXStateOptions`.
-///
-/// Both option structs embed this via a `core` field and implement
-/// `Deref`/`DerefMut` so all fields are transparently accessible.
+/// Fields shared by `StyleXOptions` and `StyleXStateOptions`, exposed through their `Deref`.
 #[derive(Deserialize, Clone, Debug)]
 pub struct CoreStyleXOptions {
   pub dev: bool,
@@ -34,13 +30,7 @@ pub struct CoreStyleXOptions {
   pub enable_media_query_order: bool,
   pub enable_logical_styles_polyfill: bool,
   pub enable_legacy_value_flipping: bool,
-  // Kept because callers configure it: the value flows in from the plugin
-  // options through `StyleXOptions`. The transform does not read it yet, so it
-  // is written and never used.
-  //
-  // The attribute does no work here, measured: the lint does not fire on a
-  // public field of a public struct in a library crate. It is a note for the
-  // reader.
+  // Configured by callers but not yet read by the transform.
   #[allow(dead_code)]
   pub enable_ltr_rtl_comments: bool,
   pub enable_minified_keys: bool,
@@ -48,40 +38,21 @@ pub struct CoreStyleXOptions {
   pub use_real_file_for_source: bool,
   pub class_name_prefix: String,
   pub style_resolution: StyleResolution,
-  /// Configured StyleX import sources in fixed order
-  /// (`[@stylexjs/stylex, stylex, ...configured]`). An insertion-ordered
-  /// `IndexSet` so selection stays deterministic (first-configured-wins)
-  /// while preserving the dedup the previous `FxHashSet` provided.
+  /// Import sources in fixed order (`[@stylexjs/stylex, stylex, ...configured]`), deduplicated;
+  /// first configured wins.
   pub import_sources: IndexSet<ImportSources>,
   pub treeshake_compensation: bool,
   pub inject_stylex_side_effects: bool,
   pub aliases: Option<FxHashMap<String, Vec<String>>>,
   pub unstable_module_resolution: CheckModuleResolution,
   pub sx_prop_name: Option<String>,
-  /// How many levels the evaluator will descend before refusing to fold.
-  ///
-  /// Resolved once, from the configured value, then the environment, then the
-  /// built-in default -- see
-  /// [`crate::evaluation_depth`]. Held as a plain number here because by the
-  /// time options exist the question of where it came from is settled.
+  /// Evaluator depth ceiling, already resolved (see [`crate::evaluation_depth`]).
   pub max_evaluation_depth: usize,
-  /// How many UTF-16 code units of string one fold may build or carry.
-  ///
-  /// Resolved the same way, from [`crate::fold_ceilings`], and held as a plain
-  /// number for the same reason.
+  /// String ceiling per fold, already resolved (see [`crate::fold_ceilings`]).
   pub max_folded_characters: usize,
-  /// How many array elements and object properties one fold may build or carry.
-  ///
-  /// Resolved the same way, from [`crate::fold_ceilings`], and held as a plain
-  /// number for the same reason.
+  /// Entry ceiling per fold, already resolved (see [`crate::fold_ceilings`]).
   pub max_folded_entries: usize,
-  /// The `env` option's object, shared rather than copied.
-  ///
-  /// Registered per `stylex` import name per `create` call, from three places,
-  /// so a copy per registration made a configured `env` cost its own size once
-  /// per style object. It is read-only once options are built, which is what
-  /// makes one shared handle sound -- and holding the handle here rather than
-  /// snapshotting it elsewhere is what keeps there being one of it.
+  /// The `env` option's object, shared rather than copied; read-only once options are built.
   #[serde(skip)]
   pub env: Rc<IndexMap<String, EnvEntry>>,
   #[serde(skip)]
@@ -139,7 +110,7 @@ impl Default for CoreStyleXOptions {
 /// `with_*` methods set a field unconditionally.
 /// `maybe_*` methods set a field only when the `Option` is `Some`.
 impl CoreStyleXOptions {
-  // ── direct setters ──────────────────────────────────────────────
+  // Direct setters.
 
   pub fn with_dev(mut self, dev: bool) -> Self {
     self.dev = dev;
@@ -196,8 +167,7 @@ impl CoreStyleXOptions {
     self
   }
 
-  /// Set the evaluator's ceiling, resolving an absent value the same way the
-  /// default does: environment, then the built-in default.
+  /// Set the evaluator's ceiling; `None` falls back to the environment, then the default.
   pub fn maybe_max_evaluation_depth(mut self, depth: Option<usize>) -> Self {
     self.max_evaluation_depth = MAX_EVALUATION_DEPTH.resolve(depth);
     self
@@ -295,7 +265,7 @@ impl CoreStyleXOptions {
     self
   }
 
-  // ── optional setters (apply only when Some) ─────────────────────
+  // Optional setters.
 
   pub fn maybe_dev(mut self, dev: Option<bool>) -> Self {
     if let Some(v) = dev {

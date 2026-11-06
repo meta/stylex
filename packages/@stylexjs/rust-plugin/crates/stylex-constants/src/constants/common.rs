@@ -10,29 +10,13 @@ pub static VALID_CALLEES: phf::Set<&'static str> = phf_set! {
   "String", "Number", "Math", "Object", "Array"
 };
 
-/// The globals the fold recognises only where their *name* is written.
-///
-/// `Boolean` is never a callee — the reference implementation does not fold
-/// `Boolean(x)` — but `[…].filter(Boolean)` is how an author reaches for it, so
-/// it has to be recognised somewhere or it reads as a constant nothing
-/// declared. Beside [`VALID_CALLEES`] because a value position claims both sets
-/// and a reader looking for one will find the other.
+/// Globals recognised only as a value, e.g. `[…].filter(Boolean)`; Babel never folds `Boolean(x)`.
 pub static VALUE_ONLY_GLOBALS: phf::Set<&'static str> = phf_set! {
   "Boolean"
 };
 
-/// The static methods a fold may call on the globals in [`VALID_CALLEES`].
-///
-/// An allowlist and not a denylist, because `Object` carries reflective
-/// methods -- `getPrototypeOf`, `getOwnPropertyDescriptor`, `create` -- that
-/// hand back an object from the prototype chain. Any one of them is a step
-/// from a plain object to `Function`, and so to arbitrary code inside the
-/// compiler. A denylist over that surface can never be complete: the method
-/// nobody listed is the next way out. Only methods that answer plain data are
-/// listed.
-///
-/// One set per global rather than one shared set, so that a method of one
-/// global cannot be called on another.
+/// The `String` statics a fold may call. Per-global allowlists, not denylists: reflective
+/// statics lead from plain data to `Function`.
 pub static VALID_STRING_METHODS: phf::Set<&'static str> = phf_set! {
   "fromCharCode",
   "fromCodePoint",
@@ -49,15 +33,7 @@ pub static VALID_NUMBER_METHODS: phf::Set<&'static str> = phf_set! {
   "parseInt",
 };
 
-/// The `Math` statics a fold may call. See [`VALID_STRING_METHODS`].
-///
-/// `random` is absent on purpose: a build has to answer the same value every
-/// time it reads the same source.
-///
-/// `f16round` is listed although no test names it. The engine the fold runs
-/// carries it and Node 22 does not, so a case written against it would answer
-/// one way here and another way there. It is listed because the surface is the
-/// language's, not because this compiler exercises it.
+/// The `Math` statics a fold may call; `random` is excluded so builds are deterministic.
 pub static VALID_MATH_METHODS: phf::Set<&'static str> = phf_set! {
   "abs",
   "acos",
@@ -96,14 +72,7 @@ pub static VALID_MATH_METHODS: phf::Set<&'static str> = phf_set! {
   "trunc",
 };
 
-/// The `Object` statics a fold may call. See [`VALID_STRING_METHODS`].
-///
-/// Every one of these answers plain data: own values, own names, or a boolean.
-/// Left out are the mutating statics (`assign`, `defineProperty`, `freeze`,
-/// `seal`, `preventExtensions`) and the reflective ones (`create`,
-/// `getPrototypeOf`, `setPrototypeOf`, `getOwnPropertyDescriptor`,
-/// `getOwnPropertyDescriptors`), which hand back an object from the prototype
-/// chain.
+/// The `Object` statics a fold may call; mutating and reflective statics are excluded.
 pub static VALID_OBJECT_METHODS: phf::Set<&'static str> = phf_set! {
   "entries",
   "fromEntries",
@@ -126,12 +95,7 @@ pub static VALID_ARRAY_METHODS: phf::Set<&'static str> = phf_set! {
   "of",
 };
 
-/// Array methods that change their receiver.
-///
-/// These drive binding disqualification -- a name whose value one of them is
-/// called on stops being a constant -- which is a different rule from the
-/// static allowlists above. Some names appear in both, and that is a
-/// coincidence of the language rather than a duplicate list.
+/// Array methods that mutate their receiver, disqualifying the binding as a constant.
 pub static MUTATING_ARRAY_METHODS: phf::Set<&'static str> = phf_set! {
   "push",
   "pop",
@@ -144,10 +108,7 @@ pub static MUTATING_ARRAY_METHODS: phf::Set<&'static str> = phf_set! {
   "copyWithin",
 };
 
-/// `Object` statics that change the object they are handed.
-///
-/// Read by binding disqualification, like [`MUTATING_ARRAY_METHODS`], and not
-/// by the static allowlists above.
+/// `Object` statics that mutate their argument; used like [`MUTATING_ARRAY_METHODS`].
 pub static MUTATING_OBJECT_METHODS: phf::Set<&'static str> = phf_set! {
   "assign",
   "defineProperty",
@@ -177,10 +138,8 @@ pub static COLOR_FUNCTION_LISTED_NORMALIZED_PROPERTY_VALUES: Lazy<[&str; 9]> = L
   ]
 });
 
-/// CSS color functions that support relative color syntax, e.g.
-/// `rgb(from red r g b)`. SWC's CSS parser cannot parse the relative form, so
-/// values using it are normalized via spacing only (like the functions in
-/// `COLOR_FUNCTION_LISTED_NORMALIZED_PROPERTY_VALUES`).
+/// Color functions supporting relative syntax (`rgb(from red r g b)`); SWC cannot parse it,
+/// so these values are only re-spaced.
 pub static COLOR_RELATIVE_VALUE_FUNCTIONS: Lazy<[&str; 10]> = Lazy::new(|| {
   [
     "rgb", "rgba", "hsl", "hsla", "hwb", "lab", "lch", "oklab", "oklch", "color",
@@ -274,41 +233,14 @@ pub static VALID_VIEW_TRANSITION_CLASS_PROPERTIES: Lazy<[&str; 4]> =
 
 pub static CONSTS_FILE_EXTENSION: &str = ".const";
 
-/// CSS custom property used in the logical float/clear value polyfill system.
-/// Represents the logical "start" direction for float/clear, which maps to the
-/// physical direction "left" in left-to-right (LTR) text direction and "right"
-/// in right-to-left (RTL). This variable should be defined on the root or
-/// relevant container elements, typically by a polyfill or runtime logic that
-/// sets its value based on the current text direction.
-///
-/// This ensures that logical float/clear values behave correctly in both LTR
-/// and RTL contexts.
+/// Custom property for the logical float/clear polyfill's start direction (`left` in LTR).
 pub static LOGICAL_FLOAT_START_VAR: &str = "--stylex-logical-start";
 
-/// CSS custom property used in the logical float/clear value polyfill system.
-/// Represents the logical "end" direction for float/clear, which maps to the
-/// physical direction "right" in left-to-right (LTR) text direction and "left"
-/// in right-to-left (RTL). This variable should be defined on the root or
-/// relevant container elements, typically by a polyfill or runtime logic that
-/// sets its value based on the current text direction.
-///
-/// This ensures that logical float/clear values behave correctly in both LTR
-/// and RTL contexts.
+/// Custom property for the logical float/clear polyfill's end direction (`right` in LTR).
 pub static LOGICAL_FLOAT_END_VAR: &str = "--stylex-logical-end";
 
-/// List of valid JSX runtime call names to check against when determining if a
-/// call expression is a JSX runtime call. This includes both the classic
-/// React.createElement and the newer jsx/jsxs calls, as well as their DEV
-/// variants.
-///
-/// Supported:
-/// - React runtime: `_jsx`, `_jsxs`
-/// - React classic: `createElement`, `React.createElement`
-/// - Vue runtime: `_createElementBlock`, `_createElementVNode`, `_createVNode`
-///
-///   The DEV variants (e.g., `_jsxDEV`) are also included by checking for a
-///   "DEV" suffix,   which is commonly used in development builds of React to
-///   provide additional debugging information.
+/// JSX runtime call names (React classic and automatic runtime, Vue); `DEV` variants are
+/// matched by suffix.
 pub static RUNTIME_JSX_CALL_NAMES: &[&str] = &[
   "jsx",
   "jsxs",

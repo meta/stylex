@@ -10,8 +10,7 @@ use crate::constants::common::{
   VALID_STRING_METHODS, VALID_VIEW_TRANSITION_CLASS_PROPERTIES, VAR_GROUP_HASH_KEY,
 };
 
-/// Scalar constants should remain stable because they are externally consumed
-/// identifiers.
+/// Scalar constants are externally consumed identifiers.
 #[test]
 fn scalar_constants_match_expected_contracts() {
   assert_eq!(DEFAULT_INJECT_PATH, "@stylexjs/stylex/lib/stylex-inject");
@@ -37,8 +36,6 @@ fn method_sets_include_expected_members() {
   assert!(MUTATING_OBJECT_METHODS.contains("defineProperty"));
 }
 
-/// The per-global allowlists, asked for a static each global carries and for
-/// one it does not.
 #[test]
 fn static_allowlists_include_expected_members() {
   assert!(VALID_STRING_METHODS.contains("fromCharCode"));
@@ -62,9 +59,7 @@ fn static_allowlists_include_expected_members() {
   assert_eq!(VALID_ARRAY_METHODS.len(), 3);
 }
 
-/// What the allowlists must not hold: a static that answers anew on every
-/// build, one that changes what it was handed, and one that answers with an
-/// object from the prototype chain.
+/// Excludes non-deterministic, mutating and prototype-reaching statics.
 #[test]
 fn static_allowlists_exclude_the_statics_that_are_refused() {
   assert!(!VALID_MATH_METHODS.contains("random"));
@@ -92,8 +87,6 @@ fn static_allowlists_exclude_the_statics_that_are_refused() {
   }
 }
 
-/// Lazy lists used by normalizers and runtime checks should be initialized and
-/// validated.
 #[test]
 fn lazy_constant_lists_have_expected_shape() {
   assert_eq!(COLOR_FUNCTION_LISTED_NORMALIZED_PROPERTY_VALUES.len(), 9);
@@ -113,8 +106,6 @@ fn lazy_constant_lists_have_expected_shape() {
   assert!(CSS_CONTENT_KEYWORDS.contains(&"revert-layer"));
 }
 
-/// Position/transition property allow-lists should keep their canonical
-/// entries.
 #[test]
 fn property_allow_lists_stay_consistent() {
   assert_eq!(VALID_POSITION_TRY_PROPERTIES.len(), 40);
@@ -126,8 +117,6 @@ fn property_allow_lists_stay_consistent() {
   assert!(VALID_VIEW_TRANSITION_CLASS_PROPERTIES.contains(&"new"));
 }
 
-/// Runtime JSX helper names should include both classic and modern factory
-/// calls.
 #[test]
 fn runtime_jsx_call_names_include_expected_variants() {
   assert!(RUNTIME_JSX_CALL_NAMES.contains(&"jsx"));

@@ -174,8 +174,7 @@ impl HostEnv for DataOnlyHost {
   fn materialize(&self, _: &HostRef) -> HostResult<Option<Materialized>> {
     unreachable!()
   }
-  /// Runs the function once instead of keeping it: enough to observe what
-  /// the default causal registration hands over.
+  /// Runs the function once instead of keeping it.
   fn register_function(&self, function: HostFunction) -> HostResult<HostValue> {
     function(&HostValue::Undefined, &[])
   }
@@ -207,7 +206,6 @@ fn hosts_without_failure_causes_register_causal_functions_plainly() {
       })
     }))
     .unwrap_err();
-  // The default strips the cause and registers the plain function.
   assert_eq!(error.message, "evaluation failed");
   assert!(DataOnlyHost.failure_cause().is_none());
 }
