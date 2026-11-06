@@ -125,6 +125,12 @@ Transform and output (`stylex-transform`, `stylex-state`, `stylex-css`)
 - `defineVars` normalizes stored callbacks after its first argument;
   `createTheme` and the nested forms read their arguments as data.
 - With `test: true`, `createTheme` emits only the test label class.
+- Dev and debug labels (`$$css`, `data-style-src`) are measured from the root
+  or package as Node's `path.relative` measures them on the platform, with its
+  separator: a file outside the root reads `../…` and a manifest without `name`
+  gives `undefined:`. Upstream wrote `/` everywhere and fell back to the last two
+  segments outside the root; its unit tests for those cases were ported to the
+  Babel plugin's names.
 
 Diagnostics (`stylex-diagnostics`, `stylex-macros`)
 - Errors carry the Babel plugin's message and the span of the node it reports
