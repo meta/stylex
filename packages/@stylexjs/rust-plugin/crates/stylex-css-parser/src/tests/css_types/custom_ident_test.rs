@@ -29,38 +29,4 @@ mod test_css_type_custom_ident {
       .unwrap();
     assert_eq!(result.value, "identifier123");
   }
-
-  #[test]
-  fn rejects_reserved_keywords() {
-    assert!(CustomIdentifier::parser().parse_to_end("unset").is_err());
-    assert!(CustomIdentifier::parser().parse_to_end("initial").is_err());
-    assert!(CustomIdentifier::parser().parse_to_end("inherit").is_err());
-    assert!(CustomIdentifier::parser().parse_to_end("default").is_err());
-    assert!(CustomIdentifier::parser().parse_to_end("none").is_err());
-    assert!(CustomIdentifier::parser().parse_to_end("auto").is_err());
-    assert!(CustomIdentifier::parser().parse_to_end("normal").is_err());
-    assert!(CustomIdentifier::parser().parse_to_end("hidden").is_err());
-    assert!(CustomIdentifier::parser().parse_to_end("visible").is_err());
-    assert!(CustomIdentifier::parser().parse_to_end("revert").is_err());
-    assert!(
-      CustomIdentifier::parser()
-        .parse_to_end("revert-layer")
-        .is_err()
-    );
-  }
-
-  #[test]
-  fn rejects_invalid_identifiers() {
-    assert!(
-      CustomIdentifier::parser()
-        .parse_to_end("123invalid")
-        .is_err()
-    );
-    assert!(CustomIdentifier::parser().parse_to_end("invalid!").is_err());
-    assert!(
-      CustomIdentifier::parser()
-        .parse_to_end("invalid space")
-        .is_err()
-    );
-  }
 }

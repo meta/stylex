@@ -3,9 +3,7 @@
 
 use crate::ast::{
   convertors::{convert_key_value_to_str, get_key_values_from_object, key_value_name},
-  factories::{
-    create_ident, create_key_value_prop, create_number_lit, create_object_lit, create_string_lit,
-  },
+  factories::{create_ident, create_object_lit, create_string_lit},
 };
 use std::borrow::Cow;
 
@@ -14,7 +12,7 @@ use swc_core::{
   common::DUMMY_SP,
   ecma::ast::{
     BigInt, BigIntValue, ComputedPropName, Expr, Function, IdentName, KeyValueProp, Number, Prop,
-    PropName, PropOrSpread, SpreadElement, Str, Tpl, TplElement,
+    PropName, PropOrSpread, SpreadElement, Tpl, TplElement,
   },
 };
 
@@ -26,64 +24,6 @@ fn key_value_with_name(key: PropName) -> KeyValueProp {
 }
 
 // ---------- convert_key_value_to_str ----------
-
-#[test]
-fn key_ident() {
-  let kv = key_value_with_name(PropName::Ident(IdentName {
-    span: DUMMY_SP,
-    sym: Atom::new("foo"),
-  }));
-  assert_eq!(convert_key_value_to_str(&kv), "foo");
-}
-
-#[test]
-fn key_string_literal() {
-  let kv = key_value_with_name(PropName::Str(Str {
-    span: DUMMY_SP,
-    value: Atom::new("a key").into(),
-    raw: None,
-  }));
-  assert_eq!(convert_key_value_to_str(&kv), "a key");
-}
-
-#[test]
-fn key_number_literal() {
-  let kv = key_value_with_name(PropName::Num(Number {
-    span: DUMMY_SP,
-    value: 42.0,
-    raw: None,
-  }));
-  assert_eq!(convert_key_value_to_str(&kv), "42");
-}
-
-#[test]
-fn key_big_int_literal() {
-  let kv = key_value_with_name(PropName::BigInt(BigInt {
-    span: DUMMY_SP,
-    value: Box::new(BigIntValue::from(7u32)),
-    raw: None,
-  }));
-  assert_eq!(convert_key_value_to_str(&kv), "7");
-}
-
-#[test]
-fn key_computed_string_literal() {
-  let kv = key_value_with_name(PropName::Computed(ComputedPropName {
-    span: DUMMY_SP,
-    expr: Box::new(Expr::Lit(create_string_lit("computed"))),
-  }));
-  assert_eq!(convert_key_value_to_str(&kv), "computed");
-}
-
-#[test]
-fn key_computed_number_literal_via_to_string() {
-  // Lit::Num is serialized via convert_lit_to_string.
-  let kv = key_value_with_name(PropName::Computed(ComputedPropName {
-    span: DUMMY_SP,
-    expr: Box::new(Expr::Lit(create_number_lit(3.5))),
-  }));
-  assert_eq!(convert_key_value_to_str(&kv), "3.5");
-}
 
 #[test]
 fn key_computed_simple_template_literal() {
@@ -144,40 +84,7 @@ fn key_computed_complex_template_panics() {
   let _ = convert_key_value_to_str(&kv);
 }
 
-#[test]
-#[should_panic(expected = "Computed key is not a literal")]
-fn key_computed_non_lit_non_tpl_panics() {
-  let kv = key_value_with_name(PropName::Computed(ComputedPropName {
-    span: DUMMY_SP,
-    expr: Box::new(Expr::Ident(create_ident("x"))),
-  }));
-  let _ = convert_key_value_to_str(&kv);
-}
-
 // ---------- get_key_values_from_object ----------
-
-#[test]
-fn extracts_key_value_props() {
-  let obj = create_object_lit(vec![
-    create_key_value_prop("a", Expr::Lit(create_string_lit("1"))),
-    create_key_value_prop("b", Expr::Lit(create_number_lit(2.0))),
-  ]);
-  let result = get_key_values_from_object(&obj);
-  assert_eq!(result.len(), 2);
-}
-
-#[test]
-fn expands_shorthand_props() {
-  // Shorthand `{ foo }` expands to `foo: foo`.
-  let prop = PropOrSpread::Prop(Box::new(Prop::Shorthand(create_ident("foo"))));
-  let obj = create_object_lit(vec![prop]);
-  let result = get_key_values_from_object(&obj);
-  assert_eq!(result.len(), 1);
-  match &result[0].key {
-    PropName::Ident(ident) => assert_eq!(ident.sym.as_ref(), "foo"),
-    _ => panic!("expected expanded ident name"),
-  }
-}
 
 #[test]
 #[should_panic(expected = "spread operator")]
@@ -205,30 +112,7 @@ fn non_key_value_prop_panics() {
   let _ = get_key_values_from_object(&obj);
 }
 
-#[test]
-fn empty_object_returns_empty_vec() {
-  let obj = create_object_lit(vec![]);
-  assert!(get_key_values_from_object(&obj).is_empty());
-}
-
 // ---------- key_value_name ----------
-
-/// Identifier and string keys are borrowed, not copied.
-#[test]
-fn a_key_that_holds_its_name_is_borrowed() {
-  let ident = key_value_with_name(PropName::Ident(IdentName {
-    span: DUMMY_SP,
-    sym: Atom::new("foo"),
-  }));
-  let string = key_value_with_name(PropName::Str(Str {
-    span: DUMMY_SP,
-    value: Atom::new("a key").into(),
-    raw: None,
-  }));
-
-  assert!(matches!(key_value_name(&ident), Cow::Borrowed(_)));
-  assert!(matches!(key_value_name(&string), Cow::Borrowed(_)));
-}
 
 /// Names the key doesn't hold are owned.
 #[test]

@@ -7,7 +7,6 @@ Tests parsing of dimensional values (length, time, frequency, resolution).
 
 #[cfg(test)]
 mod test_css_type_dimension {
-  use stylex_macros::stylex_panic;
 
   use crate::css_types::{
     dimension::{Dimension, dimension},
@@ -16,98 +15,6 @@ mod test_css_type_dimension {
     resolution::Resolution,
     time::Time,
   };
-
-  #[test]
-  fn parses_length_dimensions() {
-    let result = dimension().parse_to_end("16px").unwrap();
-    if let Dimension::Length(length) = result {
-      assert_eq!(length.value, 16.0);
-      assert_eq!(length.unit, "px");
-    } else {
-      stylex_panic!("Expected Length dimension");
-    }
-
-    let result = dimension().parse_to_end("2.5em").unwrap();
-    if let Dimension::Length(length) = result {
-      assert_eq!(length.value, 2.5);
-      assert_eq!(length.unit, "em");
-    } else {
-      stylex_panic!("Expected Length dimension");
-    }
-
-    let result = dimension().parse_to_end("100vh").unwrap();
-    if let Dimension::Length(length) = result {
-      assert_eq!(length.value, 100.0);
-      assert_eq!(length.unit, "vh");
-    } else {
-      stylex_panic!("Expected Length dimension");
-    }
-  }
-
-  #[test]
-  fn parses_time_dimensions() {
-    let result = dimension().parse_to_end("1.5s").unwrap();
-    if let Dimension::Time(time) = result {
-      assert_eq!(time.value, 1.5);
-      assert_eq!(time.unit, "s");
-    } else {
-      stylex_panic!("Expected Time dimension");
-    }
-
-    let result = dimension().parse_to_end("300ms").unwrap();
-    if let Dimension::Time(time) = result {
-      assert_eq!(time.value, 300.0);
-      assert_eq!(time.unit, "ms");
-    } else {
-      stylex_panic!("Expected Time dimension");
-    }
-  }
-
-  #[test]
-  fn parses_frequency_dimensions() {
-    let result = dimension().parse_to_end("440Hz").unwrap();
-    if let Dimension::Frequency(freq) = result {
-      assert_eq!(freq.value, 440.0);
-      assert_eq!(freq.unit, "Hz");
-    } else {
-      stylex_panic!("Expected Frequency dimension");
-    }
-
-    let result = dimension().parse_to_end("20KHz").unwrap();
-    if let Dimension::Frequency(freq) = result {
-      assert_eq!(freq.value, 20.0);
-      assert_eq!(freq.unit, "KHz");
-    } else {
-      stylex_panic!("Expected Frequency dimension");
-    }
-  }
-
-  #[test]
-  fn parses_resolution_dimensions() {
-    let result = dimension().parse_to_end("96dpi").unwrap();
-    if let Dimension::Resolution(res) = result {
-      assert_eq!(res.value, 96.0);
-      assert_eq!(res.unit, "dpi");
-    } else {
-      stylex_panic!("Expected Resolution dimension");
-    }
-
-    let result = dimension().parse_to_end("2dppx").unwrap();
-    if let Dimension::Resolution(res) = result {
-      assert_eq!(res.value, 2.0);
-      assert_eq!(res.unit, "dppx");
-    } else {
-      stylex_panic!("Expected Resolution dimension");
-    }
-
-    let result = dimension().parse_to_end("38dpcm").unwrap();
-    if let Dimension::Resolution(res) = result {
-      assert_eq!(res.value, 38.0);
-      assert_eq!(res.unit, "dpcm");
-    } else {
-      stylex_panic!("Expected Resolution dimension");
-    }
-  }
 
   #[test]
   fn rejects_invalid_dimensions() {

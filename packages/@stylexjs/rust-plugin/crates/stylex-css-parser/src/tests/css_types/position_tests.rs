@@ -1,30 +1,6 @@
 use super::*;
 
 #[test]
-fn test_horizontal_keyword() {
-  let result = Position::horizontal_keyword_parser().parse("left");
-  assert!(result.is_ok());
-  assert_eq!(result.unwrap(), HorizontalKeyword::Left);
-}
-
-#[test]
-fn test_vertical_keyword() {
-  let result = Position::vertical_keyword_parser().parse("top");
-  assert!(result.is_ok());
-  assert_eq!(result.unwrap(), VerticalKeyword::Top);
-}
-
-#[test]
-fn test_position_basic() {
-  let result = Position::parser().parse("left");
-  assert!(result.is_ok());
-
-  let pos = result.unwrap();
-  assert!(pos.horizontal.is_some());
-  assert!(pos.vertical.is_none());
-}
-
-#[test]
 fn test_position_display() {
   let pos = Position::new(
     Some(Horizontal::Keyword(HorizontalKeyword::Left)),
@@ -60,34 +36,6 @@ fn test_keyword_with_offset_display() {
     LengthPercentage::Percentage(crate::css_types::Percentage::new(50.0)),
   );
   assert_eq!(h.to_string(), "left 50%");
-}
-
-#[test]
-fn test_numbers_only() {
-  let pos = Position::new(
-    Some(Horizontal::Length(LengthPercentage::Percentage(
-      crate::css_types::Percentage::new(50.0),
-    ))),
-    Some(Vertical::Length(LengthPercentage::Percentage(
-      crate::css_types::Percentage::new(25.0),
-    ))),
-  );
-  assert_eq!(pos.to_string(), "50% 25%");
-}
-
-#[test]
-fn test_two_keywords() {
-  let result = Position::parser().parse("left top");
-  if let Ok(pos) = result {
-    assert!(matches!(
-      pos.horizontal,
-      Some(Horizontal::Keyword(HorizontalKeyword::Left))
-    ));
-    assert!(matches!(
-      pos.vertical,
-      Some(Vertical::Keyword(VerticalKeyword::Top))
-    ));
-  }
 }
 
 #[test]

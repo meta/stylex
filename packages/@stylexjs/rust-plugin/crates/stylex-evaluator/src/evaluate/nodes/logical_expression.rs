@@ -191,11 +191,3 @@ mod tests;
 #[cfg(test)]
 #[path = "tests/unfoldable_operand_tests.rs"]
 mod unfoldable_operand_tests;
-
-#[cfg(test)]
-pub(in super::super) fn evaluates_its_right_operand(
-  op: LogicalOp,
-  left: &EvaluateResultValue,
-) -> bool {
-  !matches!(decide(op, Some(left)), Decision::Left)
-}

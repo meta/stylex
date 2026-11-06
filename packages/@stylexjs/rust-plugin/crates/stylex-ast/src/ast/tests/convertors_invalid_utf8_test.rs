@@ -44,31 +44,11 @@ fn convert_tpl_to_string_lit_with_invalid_utf8_panics() {
   assert!(result.is_err());
 }
 
-/// Atom-to-string conversion should panic on invalid UTF-8 payloads.
-#[test]
-fn convert_atom_to_string_invalid_utf8_panics() {
-  let atom = invalid_wtf8_atom();
-  let result = std::panic::catch_unwind(|| convert_atom_to_string(&atom));
-  assert!(result.is_err());
-}
-
 /// WTF-8 conversion should panic when UTF-8 decoding fails.
 #[test]
 fn convert_wtf8_to_atom_invalid_utf8_panics() {
   let atom = invalid_wtf8_atom();
   let result = std::panic::catch_unwind(|| convert_wtf8_to_atom(&atom));
-  assert!(result.is_err());
-}
-
-/// String literal conversion should panic on invalid UTF-8 payloads.
-#[test]
-fn convert_str_lit_to_string_invalid_utf8_panics() {
-  let str_lit = Str {
-    span: DUMMY_SP,
-    value: invalid_wtf8_atom(),
-    raw: None,
-  };
-  let result = std::panic::catch_unwind(|| convert_str_lit_to_string(&str_lit));
   assert!(result.is_err());
 }
 

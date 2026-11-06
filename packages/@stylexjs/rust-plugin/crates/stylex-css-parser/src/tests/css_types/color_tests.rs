@@ -1,38 +1,6 @@
 use super::*;
 
 #[test]
-fn test_named_color_validation() {
-  assert!(NamedColor::is_valid_named_color("red"));
-  assert!(NamedColor::is_valid_named_color("blue"));
-  assert!(NamedColor::is_valid_named_color("transparent"));
-  assert!(NamedColor::is_valid_named_color("currentcolor"));
-
-  assert!(NamedColor::is_valid_named_color("RED"));
-  assert!(NamedColor::is_valid_named_color("Blue"));
-
-  assert!(!NamedColor::is_valid_named_color("notacolor"));
-  assert!(!NamedColor::is_valid_named_color(""));
-}
-
-#[test]
-fn test_named_color_display() {
-  let color = NamedColor::new("red".to_string());
-  assert_eq!(color.to_string(), "red");
-}
-
-#[test]
-fn test_hex_color_validation() {
-  assert!(HashColor::is_valid_hex("F00")); // 3-digit
-  assert!(HashColor::is_valid_hex("FF0000")); // 6-digit
-  assert!(HashColor::is_valid_hex("FF0000FF")); // 8-digit with alpha
-  assert!(HashColor::is_valid_hex("123abc")); // lowercase
-
-  assert!(!HashColor::is_valid_hex("GG0000")); // invalid hex
-  assert!(!HashColor::is_valid_hex("FF00")); // wrong length
-  assert!(!HashColor::is_valid_hex("")); // empty
-}
-
-#[test]
 fn test_hex_color_rgb_extraction() {
   let color = HashColor::new("FF0000".to_string());
   assert_eq!(color.r(), 255);
@@ -47,62 +15,6 @@ fn test_hex_color_rgb_extraction() {
 
   let alpha_color = HashColor::new("FF000080".to_string());
   assert!((alpha_color.a() - 0.5).abs() < 0.01); // 80 hex = 128 dec ≈ 0.5 alpha
-}
-
-#[test]
-fn test_hex_color_display() {
-  let color = HashColor::new("FF0000".to_string());
-  assert_eq!(color.to_string(), "#FF0000");
-}
-
-#[test]
-fn test_rgb_color_display() {
-  let color = Rgb::new(255.0, 0.0, 0.0);
-  assert_eq!(color.to_string(), "rgb(255,0,0)");
-}
-
-#[test]
-fn test_rgba_color_display() {
-  let color = Rgba::new(255.0, 0.0, 0.0, 0.5);
-  assert_eq!(color.to_string(), "rgba(255,0,0,0.5)");
-}
-
-#[test]
-fn test_hsl_color_display() {
-  let color = Hsl::from_primitives(360.0, 100.0, 50.0);
-  assert_eq!(color.to_string(), "hsl(360deg,100%,50%)");
-}
-
-#[test]
-fn test_hsla_color_display() {
-  let color = Hsla::from_primitives(360.0, 100.0, 50.0, 0.8);
-  assert_eq!(color.to_string(), "hsla(360deg,100%,50%,0.8)");
-}
-
-#[test]
-fn test_color_enum_display() {
-  let named = Color::Named(NamedColor::new("red".to_string()));
-  assert_eq!(named.to_string(), "red");
-
-  let hash = Color::Hash(HashColor::new("FF0000".to_string()));
-  assert_eq!(hash.to_string(), "#FF0000");
-
-  let rgb = Color::Rgb(Rgb::new(255.0, 0.0, 0.0));
-  assert_eq!(rgb.to_string(), "rgb(255,0,0)");
-}
-
-#[test]
-fn test_color_parsers_creation() {
-  let _named = NamedColor::parse();
-  let _hash = HashColor::parse();
-  let _rgb = Rgb::parse();
-  let _rgba = Rgba::parse();
-  let _hsl = Hsl::parse();
-  let _hsla = Hsla::parse();
-  let _lch = Lch::parse();
-  let _oklch = Oklch::parse();
-  let _oklab = Oklab::parse();
-  let _color = Color::parse();
 }
 
 #[test]

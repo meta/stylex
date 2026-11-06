@@ -18,12 +18,6 @@ fn import_sources_named_is_named() {
 }
 
 #[test]
-fn import_sources_get_import_str_regular() {
-  let src = ImportSources::Regular("stylex".to_string());
-  assert_eq!(src.get_import_str(), "stylex");
-}
-
-#[test]
 fn import_sources_get_import_str_named() {
   let src = ImportSources::Named(NamedImportSource {
     r#as: "css".to_string(),

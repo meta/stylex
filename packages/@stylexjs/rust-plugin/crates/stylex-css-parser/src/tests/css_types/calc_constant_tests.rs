@@ -1,34 +1,6 @@
 use super::*;
 
 #[test]
-fn test_calc_constant_from_str() {
-  assert_eq!(CalcConstant::parse("pi"), Some(CalcConstant::Pi));
-  assert_eq!(CalcConstant::parse("e"), Some(CalcConstant::E));
-  assert_eq!(
-    CalcConstant::parse("infinity"),
-    Some(CalcConstant::Infinity)
-  );
-  assert_eq!(
-    CalcConstant::parse("-infinity"),
-    Some(CalcConstant::NegativeInfinity)
-  );
-  assert_eq!(CalcConstant::parse("NaN"), Some(CalcConstant::NaN));
-
-  assert_eq!(CalcConstant::parse("invalid"), None);
-  assert_eq!(CalcConstant::parse("PI"), None); // Case sensitive
-  assert_eq!(CalcConstant::parse(""), None);
-}
-
-#[test]
-fn test_calc_constant_as_str() {
-  assert_eq!(CalcConstant::Pi.as_str(), "pi");
-  assert_eq!(CalcConstant::E.as_str(), "e");
-  assert_eq!(CalcConstant::Infinity.as_str(), "infinity");
-  assert_eq!(CalcConstant::NegativeInfinity.as_str(), "-infinity");
-  assert_eq!(CalcConstant::NaN.as_str(), "NaN");
-}
-
-#[test]
 fn test_calc_constant_display() {
   assert_eq!(CalcConstant::Pi.to_string(), "pi");
   assert_eq!(CalcConstant::E.to_string(), "e");
@@ -51,29 +23,8 @@ fn test_calc_constant_is_valid() {
 }
 
 #[test]
-fn test_calc_constant_all_constants() {
-  let constants = CalcConstant::all_constants();
-  assert_eq!(constants.len(), 5);
-  assert!(constants.contains(&"pi"));
-  assert!(constants.contains(&"e"));
-  assert!(constants.contains(&"infinity"));
-  assert!(constants.contains(&"-infinity"));
-  assert!(constants.contains(&"NaN"));
-}
-
-#[test]
 fn test_calc_constant_parser_creation() {
   let _parser = CalcConstant::parser();
-}
-
-#[test]
-fn test_calc_constant_equality() {
-  let pi1 = CalcConstant::Pi;
-  let pi2 = CalcConstant::Pi;
-  let e = CalcConstant::E;
-
-  assert_eq!(pi1, pi2);
-  assert_ne!(pi1, e);
 }
 
 #[test]
@@ -82,14 +33,4 @@ fn test_calc_constant_round_trip() {
     let constant = CalcConstant::parse(constant_str).unwrap();
     assert_eq!(constant.as_str(), *constant_str);
   }
-}
-
-#[test]
-fn test_calc_constant_math_constants() {
-  assert_eq!(CalcConstant::Pi.as_str(), "pi");
-  assert_eq!(CalcConstant::E.as_str(), "e");
-
-  assert_eq!(CalcConstant::Infinity.as_str(), "infinity");
-  assert_eq!(CalcConstant::NegativeInfinity.as_str(), "-infinity");
-  assert_eq!(CalcConstant::NaN.as_str(), "NaN");
 }

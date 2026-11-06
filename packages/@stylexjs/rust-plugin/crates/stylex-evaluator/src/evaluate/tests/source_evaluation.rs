@@ -198,25 +198,6 @@ pub(crate) fn assert_ts_deopt_reason_contains(source: &str, expected: &str) {
 }
 
 #[track_caller]
-pub(crate) fn ts_folded_in_a_module_binding(name: &str, init: &str, source: &str) -> String {
-  let globals = Globals::new();
-
-  let result = GLOBALS.set(&globals, || {
-    let mut traversal_state = StateManager::new(StyleXOptions::default());
-
-    traversal_state.push_declaration(declarator_of(name, parse_expr(init)));
-
-    evaluate(
-      &parse_ts_expr(source),
-      &mut traversal_state,
-      &FunctionMap::default(),
-    )
-  });
-
-  folded_text_of(result, &binding_case(name, init, source))
-}
-
-#[track_caller]
 pub(crate) fn assert_folds(source: &str) -> Expr {
   assert_folds_result(*evaluate_source(source), source)
 }

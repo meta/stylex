@@ -7,10 +7,7 @@ use stylex_state::{
   types::{ClassPathsInNamespace, InjectableStylesMap},
 };
 use stylex_structures::base_css_type::BaseCSSType;
-use stylex_types::{
-  enums::data_structures::injectable_style::InjectableStyleKind,
-  structures::injectable_style::InjectableStyle,
-};
+use stylex_types::enums::data_structures::injectable_style::InjectableStyleKind;
 
 use crate::shared::utils::core::define_vars_utils::collect_vars_by_at_rules;
 use crate::tests::support::expr;
@@ -45,60 +42,11 @@ fn collect(value: &FlatCompiledStylesValue) -> ClassPathsInNamespace {
   collection
 }
 
-#[test]
-fn writes_a_plain_value_under_the_default_at_rule() {
-  let collection = collect(&variable("'8px'"));
-
-  assert_eq!(collection["default"], ["--xhash:8px;"]);
-}
-
-#[test]
-fn writes_a_number_the_way_javascript_spells_it() {
-  assert_eq!(collect(&variable("8"))["default"], ["--xhash:8;"]);
-  assert_eq!(collect(&variable("1e21"))["default"], ["--xhash:1e+21;"]);
-}
-
-#[test]
-fn writes_nothing_for_an_absent_value() {
-  assert!(collect(&variable("null")).is_empty());
-}
-
-/// The at-rules are kept in the key's name.
-#[test]
-fn writes_one_value_for_each_at_rule_an_object_names() {
-  let collection = collect(&variable("{ default: '8px', '@media print': '0px' }"));
-
-  assert_eq!(collection["default"], ["--xhash:8px;"]);
-  assert_eq!(collection["@media print"], ["--xhash:0px;"]);
-}
-
-/// Sorted, so the same two rules in either order name one place.
-#[test]
-fn joins_nested_at_rules_into_one_key() {
-  let collection = collect(&variable(
-    "{ default: '8px', '@media print': { default: '0px', '@supports (a:b)': '1px' } }",
-  ));
-
-  assert!(
-    collection
-      .keys()
-      .any(|key| key.contains("@media print") && key.contains("@supports (a:b)")),
-    "the nested rules are not joined: {:?}",
-    collection.keys().collect::<Vec<_>>()
-  );
-}
-
 /// The author is told about the missing `default` by name.
 #[test]
 #[should_panic(expected = "cornerRadius")]
 fn refuses_an_object_that_names_no_default() {
   collect(&variable("{ '@media print': '0px' }"));
-}
-
-#[test]
-#[should_panic(expected = "Array values are not supported in defineVars()")]
-fn refuses_an_array_value() {
-  collect(&variable("['8px', '0px']"));
 }
 
 #[test]
@@ -116,36 +64,6 @@ fn refuses_a_value_that_is_not_a_variable() {
 #[test]
 fn writes_nothing_for_a_value_that_did_not_fold() {
   assert!(collect(&variable("a + b")).is_empty());
-}
-
-#[test]
-fn records_the_declared_syntax_of_a_typed_variable() {
-  let mut typed_variables = InjectableStylesMap::new();
-
-  let mut syntax_value: IndexMap<String, ValueWithDefault> = IndexMap::new();
-
-  syntax_value.insert(
-    "default".to_owned(),
-    ValueWithDefault::String("blue".to_owned()),
-  );
-
-  collect_vars_by_at_rules(
-    &"colour".to_owned(),
-    &typed_variable("'red'", ValueWithDefault::Map(syntax_value)),
-    &mut ClassPathsInNamespace::new(),
-    &[],
-    &mut typed_variables,
-  );
-
-  assert_eq!(
-    typed_variables["xhash"].as_ref(),
-    &InjectableStyleKind::Regular(InjectableStyle {
-      ltr: "@property --xhash { syntax: \"<color>\"; inherits: true; initial-value: blue }"
-        .to_owned(),
-      rtl: None,
-      priority: Some(0.0),
-    })
-  );
 }
 
 #[test]

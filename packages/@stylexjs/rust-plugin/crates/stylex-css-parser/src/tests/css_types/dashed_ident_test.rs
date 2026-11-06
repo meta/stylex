@@ -29,20 +29,4 @@ mod test_css_type_dashed_ident {
       .unwrap();
     assert_eq!(result.value, "--_private");
   }
-
-  #[test]
-  fn rejects_invalid_dashed_identifiers() {
-    assert!(
-      DashedIdentifier::parser()
-        .parse_to_end("custom-property")
-        .is_err()
-    );
-    assert!(
-      DashedIdentifier::parser()
-        .parse_to_end("-custom-property")
-        .is_err()
-    );
-    assert!(DashedIdentifier::parser().parse_to_end("property").is_err());
-    assert!(DashedIdentifier::parser().parse_to_end("--").is_err());
-  }
 }

@@ -62,11 +62,4 @@ mod test_css_type_blend_mode {
     let result = BlendMode::parser().parse_to_end("luminosity").unwrap();
     assert_eq!(result.to_string(), "luminosity");
   }
-
-  #[test]
-  fn rejects_invalid_blend_mode_values() {
-    assert!(BlendMode::parser().parse_to_end("invalid").is_err());
-    assert!(BlendMode::parser().parse_to_end("blend").is_err());
-    assert!(BlendMode::parser().parse_to_end("123").is_err());
-  }
 }

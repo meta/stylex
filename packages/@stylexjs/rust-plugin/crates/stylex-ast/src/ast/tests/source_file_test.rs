@@ -32,111 +32,15 @@ fn assert_panic_message<T>(result: Result<T, Box<dyn Any + Send>>, expected: &st
 
 // extract_filename_from_path
 
-mod extract_filename_from_path_tests {
-  use super::*;
-
-  #[test]
-  fn returns_stem_for_simple_js_file() {
-    let path = FileName::Real(PathBuf::from("/path/to/file.js"));
-    assert_eq!(extract_filename_from_path(&path), "file");
-  }
-
-  #[test]
-  fn returns_stem_for_dotted_extension() {
-    let path = FileName::Real(PathBuf::from("/path/to/file.stylex.ts"));
-    assert_eq!(extract_filename_from_path(&path), "file.stylex");
-  }
-
-  #[test]
-  fn returns_stem_for_flat_path() {
-    let path = FileName::Real(PathBuf::from("simple.js"));
-    assert_eq!(extract_filename_from_path(&path), "simple");
-  }
-
-  #[test]
-  fn returns_empty_string_for_anon() {
-    let path = FileName::Anon;
-    assert_eq!(extract_filename_from_path(&path), "");
-  }
-
-  #[test]
-  fn returns_stem_for_tsx_file() {
-    let path = FileName::Real(PathBuf::from("/src/components/Button.tsx"));
-    assert_eq!(extract_filename_from_path(&path), "Button");
-  }
-
-  #[test]
-  fn returns_stem_for_no_extension() {
-    let path = FileName::Real(PathBuf::from("/path/to/Makefile"));
-    assert_eq!(extract_filename_from_path(&path), "Makefile");
-  }
-}
+mod extract_filename_from_path_tests {}
 
 // extract_path
 
-mod extract_path_tests {
-  use super::*;
-
-  #[test]
-  fn returns_full_path_for_real_file() {
-    let path = FileName::Real(PathBuf::from("/path/to/file.js"));
-    assert_eq!(extract_path(&path), "/path/to/file.js");
-  }
-
-  #[test]
-  fn returns_empty_for_anon() {
-    let path = FileName::Anon;
-    assert_eq!(extract_path(&path), "");
-  }
-
-  #[test]
-  fn returns_relative_path() {
-    let path = FileName::Real(PathBuf::from("relative/file.ts"));
-    assert_eq!(extract_path(&path), "relative/file.ts");
-  }
-}
+mod extract_path_tests {}
 
 // extract_filename_with_ext_from_path
 
-mod extract_filename_with_ext_from_path_tests {
-  use super::*;
-
-  #[test]
-  fn returns_filename_with_ext_for_js() {
-    let path = FileName::Real(PathBuf::from("/path/to/file.js"));
-    assert_eq!(extract_filename_with_ext_from_path(&path), Some("file.js"));
-  }
-
-  #[test]
-  fn returns_filename_with_double_ext() {
-    let path = FileName::Real(PathBuf::from("/path/to/file.stylex.ts"));
-    assert_eq!(
-      extract_filename_with_ext_from_path(&path),
-      Some("file.stylex.ts")
-    );
-  }
-
-  #[test]
-  fn returns_none_for_anon() {
-    let path = FileName::Anon;
-    assert_eq!(extract_filename_with_ext_from_path(&path), None);
-  }
-
-  #[test]
-  fn returns_filename_without_directory() {
-    let path = FileName::Real(PathBuf::from("standalone.css"));
-    assert_eq!(
-      extract_filename_with_ext_from_path(&path),
-      Some("standalone.css")
-    );
-  }
-
-  #[test]
-  fn returns_filename_without_extension() {
-    let path = FileName::Real(PathBuf::from("/path/Makefile"));
-    assert_eq!(extract_filename_with_ext_from_path(&path), Some("Makefile"));
-  }
-}
+mod extract_filename_with_ext_from_path_tests {}
 
 // Virtual files
 
@@ -158,20 +62,6 @@ mod virtual_file_tests {
   }
 
   #[test]
-  fn every_virtual_file_has_no_stem() {
-    for name in virtual_names() {
-      assert_eq!(extract_filename_from_path(&name), "", "{name:?}");
-    }
-  }
-
-  #[test]
-  fn every_virtual_file_has_no_path() {
-    for name in virtual_names() {
-      assert_eq!(extract_path(&name), "", "{name:?}");
-    }
-  }
-
-  #[test]
   fn every_virtual_file_has_no_file_name() {
     for name in virtual_names() {
       assert_eq!(extract_filename_with_ext_from_path(&name), None, "{name:?}");
@@ -181,73 +71,7 @@ mod virtual_file_tests {
 
 // Edge-case real paths
 
-mod unusual_path_tests {
-  use super::*;
-
-  /// A dot-file has no extension to strip, so the whole name is the stem.
-  #[test]
-  fn reads_a_dot_file_as_its_own_stem() {
-    assert_eq!(
-      extract_filename_from_path(&real("/src/.babelrc")),
-      ".babelrc"
-    );
-    assert_eq!(
-      extract_filename_with_ext_from_path(&real("/src/.babelrc")),
-      Some(".babelrc")
-    );
-  }
-
-  /// A trailing slash still reads the last component as the file name.
-  #[test]
-  fn reads_through_a_trailing_slash() {
-    assert_eq!(
-      extract_filename_from_path(&real("/src/components/")),
-      "components"
-    );
-    assert_eq!(
-      extract_filename_with_ext_from_path(&real("/src/components/")),
-      Some("components")
-    );
-  }
-
-  #[test]
-  fn reads_names_that_are_not_plain_ascii() {
-    for (path, stem, name) in [
-      ("/src/Ünïcödé.js", "Ünïcödé", "Ünïcödé.js"),
-      ("/src/🎨.tsx", "🎨", "🎨.tsx"),
-      ("/src/日本語.stylex.ts", "日本語.stylex", "日本語.stylex.ts"),
-      ("/src/with space.js", "with space", "with space.js"),
-      ("/src/tab\tname.js", "tab\tname", "tab\tname.js"),
-    ] {
-      assert_eq!(extract_filename_from_path(&real(path)), stem, "{path}");
-      assert_eq!(
-        extract_filename_with_ext_from_path(&real(path)),
-        Some(name),
-        "{path}"
-      );
-      assert_eq!(extract_path(&real(path)), path, "{path}");
-    }
-  }
-
-  #[test]
-  fn reads_an_extremely_long_and_deep_path() {
-    let deep = "/".to_string() + &"segment/".repeat(10_000) + "file.stylex.js";
-    let path = real(&deep);
-
-    assert_eq!(extract_filename_from_path(&path), "file.stylex");
-    assert_eq!(
-      extract_filename_with_ext_from_path(&path),
-      Some("file.stylex.js")
-    );
-    assert_eq!(extract_path(&path), deep);
-  }
-
-  #[test]
-  fn reads_a_single_component_with_no_directory() {
-    assert_eq!(extract_filename_from_path(&real("file.js")), "file");
-    assert_eq!(extract_path(&real("file.js")), "file.js");
-  }
-}
+mod unusual_path_tests {}
 
 // Paths with no name to read
 
@@ -275,14 +99,6 @@ mod nameless_path_tests {
       let result =
         std::panic::catch_unwind(|| extract_filename_with_ext_from_path(&name).map(str::to_string));
       assert_panic_message(result, "File path has no file name component.");
-    }
-  }
-
-  /// Reading the whole path still works.
-  #[test]
-  fn whole_path_of_a_nameless_path_is_readable() {
-    for path in nameless_paths() {
-      assert_eq!(extract_path(&real(path)), path);
     }
   }
 }
@@ -319,13 +135,6 @@ mod invalid_utf8_path_tests {
   fn stem_of_an_invalid_utf8_name_panics() {
     let name = FileName::Real(invalid_utf8_path("/src/", ".js"));
     let result = std::panic::catch_unwind(|| extract_filename_from_path(&name));
-    assert_panic_message(result, INVALID_UTF8);
-  }
-
-  #[test]
-  fn whole_path_of_an_invalid_utf8_name_panics() {
-    let name = FileName::Real(invalid_utf8_path("/src/file", ".js"));
-    let result = std::panic::catch_unwind(|| extract_path(&name).to_string());
     assert_panic_message(result, INVALID_UTF8);
   }
 

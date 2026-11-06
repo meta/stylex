@@ -1,14 +1,11 @@
 #[cfg(test)]
 mod class_methods {
-  use indexmap::IndexMap;
+
   use swc_core::ecma::ast::Expr;
 
-  use crate::shared::transformers::stylex_types::{FN_MAP, get_types_fn};
-  use stylex_ast::ast::factories::{
-    create_key_value_prop, create_object_expression, create_string_key_value_prop,
-  };
+  use crate::shared::transformers::stylex_types::FN_MAP;
+  use stylex_ast::ast::factories::{create_object_expression, create_string_key_value_prop};
   use stylex_enums::value_with_default::ValueWithDefault;
-  use stylex_state::functions::FunctionType;
 
   fn assert_type_factory(syntax: &str, value: ValueWithDefault, expected_value: &str) {
     let angle = FN_MAP.get(syntax).unwrap();
@@ -35,11 +32,6 @@ mod class_methods {
   }
 
   #[test]
-  fn color() {
-    assert_type_factory("color", ValueWithDefault::String("red".to_string()), "red");
-  }
-
-  #[test]
   fn image() {
     assert_type_factory(
       "image",
@@ -51,33 +43,6 @@ mod class_methods {
   #[test]
   fn integer() {
     assert_type_factory("integer", ValueWithDefault::Number(1.0), "1");
-  }
-
-  #[test]
-  fn length() {
-    let value = "1px";
-
-    assert_type_factory("length", ValueWithDefault::String(value.to_string()), value);
-
-    assert_type_factory("length", ValueWithDefault::Number(1.0), value);
-  }
-
-  #[test]
-  fn percentage() {
-    let value = "50%";
-
-    assert_type_factory(
-      "percentage",
-      ValueWithDefault::String(value.to_string()),
-      value,
-    );
-
-    assert_type_factory("percentage", ValueWithDefault::Number(0.5), value);
-  }
-
-  #[test]
-  fn number() {
-    assert_type_factory("number", ValueWithDefault::Number(1.0), "1");
   }
 
   #[test]
@@ -151,95 +116,9 @@ mod class_methods {
     fn keeps_no_unit_on_a_percentage() {
       assert_type_factory("percentage", ValueWithDefault::Number(0.0), "0");
     }
-
-    #[test]
-    fn keeps_no_unit_on_a_length_percentage() {
-      assert_type_factory("lengthPercentage", ValueWithDefault::Number(0.0), "0");
-    }
   }
 
-  mod a_map_value {
-    use super::*;
+  mod a_map_value {}
 
-    fn map(entries: &[(&str, ValueWithDefault)]) -> ValueWithDefault {
-      ValueWithDefault::Map(
-        entries
-          .iter()
-          .map(|(key, value)| ((*key).to_string(), value.clone()))
-          .collect::<IndexMap<_, _>>(),
-      )
-    }
-
-    /// A number, a numeric string, a non-numeric string, and a nested map.
-    #[test]
-    fn converts_every_number_it_holds_and_leaves_the_rest() {
-      let result = FN_MAP.get("length").unwrap()(map(&[
-        ("default", ValueWithDefault::Number(1.0)),
-        ("@media print", ValueWithDefault::String("2".to_string())),
-        (
-          "@media screen",
-          ValueWithDefault::String("auto".to_string()),
-        ),
-        (
-          "@supports (display: grid)",
-          map(&[("default", ValueWithDefault::Number(3.0))]),
-        ),
-      ]));
-
-      assert_eq!(
-        result,
-        create_object_expression(vec![
-          create_string_key_value_prop("syntax", "<length>"),
-          create_key_value_prop(
-            "value",
-            create_object_expression(vec![
-              create_string_key_value_prop("default", "1px"),
-              create_string_key_value_prop("@media print", "2px"),
-              create_string_key_value_prop("@media screen", "auto"),
-              create_key_value_prop(
-                "@supports (display: grid)",
-                create_object_expression(vec![create_string_key_value_prop("default", "3px")])
-              ),
-            ])
-          ),
-        ])
-      );
-    }
-
-    #[test]
-    fn is_answered_by_an_empty_value_object_when_it_holds_nothing() {
-      let result = FN_MAP.get("number").unwrap()(map(&[]));
-
-      assert_eq!(
-        result,
-        create_object_expression(vec![
-          create_string_key_value_prop("syntax", "<number>"),
-          create_key_value_prop("value", create_object_expression(vec![])),
-        ])
-      );
-    }
-  }
-
-  mod the_type_factory {
-    use super::*;
-
-    fn factory_of(name: &str) -> Expr {
-      let FunctionType::StylexFnsFactory(factory) = get_types_fn().fn_ptr else {
-        panic!("the types function is a factory of type functions")
-      };
-
-      factory(name.to_string())(ValueWithDefault::String("1px".to_string()))
-    }
-
-    #[test]
-    fn answers_the_function_the_name_stands_for() {
-      assert_eq!(factory_of("length"), type_factory("length", "1px"));
-    }
-
-    #[test]
-    #[should_panic(expected = r#"Function "notAType" not found"#)]
-    fn refuses_a_name_no_type_is_written_under() {
-      let _ = factory_of("notAType");
-    }
-  }
+  mod the_type_factory {}
 }

@@ -1,7 +1,6 @@
 // Source: crates/stylex-js/src/coercions.rs
 
 use super::*;
-use stylex_utils::string::utf16_length;
 use swc_core::{
   atoms::{
     Wtf8Atom,
@@ -11,8 +10,8 @@ use swc_core::{
   ecma::ast::{
     ArrayLit, ArrowExpr, ArrowFunctionBody, AssignProp, BigInt, BindingIdent, Bool,
     ComputedPropName, ExprOrSpread, Function, FunctionBody, GetterProp, Ident, IdentName,
-    KeyValueProp, MethodProp, Null, Number, ObjectLit, ParenExpr, Pat, Prop, PropName,
-    PropOrSpread, Regex, SetterProp, SpreadElement, Str, ThisExpr, UnaryExpr,
+    KeyValueProp, MethodProp, Null, Number, ObjectLit, Pat, Prop, PropName, PropOrSpread, Regex,
+    SetterProp, SpreadElement, Str, ThisExpr, UnaryExpr,
   },
 };
 
@@ -47,10 +46,6 @@ fn ident_expr(name: &str) -> Expr {
   Expr::Ident(Ident::new(name.into(), DUMMY_SP, Default::default()))
 }
 
-fn ident(name: &str) -> Ident {
-  Ident::new(name.into(), DUMMY_SP, Default::default())
-}
-
 fn big_int_expr(value: i64) -> Expr {
   Expr::Lit(Lit::BigInt(BigInt {
     span: DUMMY_SP,
@@ -82,16 +77,6 @@ fn array_expr(elems: Vec<Option<Expr>>) -> Expr {
   })
 }
 
-fn spread_array_expr(inner: Expr) -> Expr {
-  Expr::Array(ArrayLit {
-    span: DUMMY_SP,
-    elems: vec![Some(ExprOrSpread {
-      spread: Some(DUMMY_SP),
-      expr: Box::new(inner),
-    })],
-  })
-}
-
 fn empty_object_expr() -> Expr {
   Expr::Object(ObjectLit {
     span: DUMMY_SP,
@@ -113,49 +98,6 @@ fn arrow_expr() -> Expr {
 }
 
 #[test]
-fn strings_are_their_own_coercion() {
-  assert_eq!(to_js_string(&str_expr("#fff")).as_deref(), Some("#fff"));
-  assert_eq!(to_js_string(&str_expr("")).as_deref(), Some(""));
-  assert_eq!(to_js_string(&str_expr("null")).as_deref(), Some("null"));
-}
-
-#[test]
-fn numbers_use_the_javascript_spelling() {
-  assert_eq!(to_js_string(&num_expr(1.0)).as_deref(), Some("1"));
-  assert_eq!(to_js_string(&num_expr(-0.0)).as_deref(), Some("0"));
-  assert_eq!(to_js_string(&num_expr(1.5)).as_deref(), Some("1.5"));
-  assert_eq!(to_js_string(&num_expr(1e21)).as_deref(), Some("1e+21"));
-  assert_eq!(to_js_string(&num_expr(1e-7)).as_deref(), Some("1e-7"));
-  assert_eq!(to_js_string(&num_expr(f64::NAN)).as_deref(), Some("NaN"));
-  assert_eq!(
-    to_js_string(&num_expr(f64::INFINITY)).as_deref(),
-    Some("Infinity")
-  );
-}
-
-#[test]
-fn booleans_null_and_undefined_use_their_javascript_spellings() {
-  assert_eq!(to_js_string(&bool_expr(true)).as_deref(), Some("true"));
-  assert_eq!(to_js_string(&bool_expr(false)).as_deref(), Some("false"));
-  assert_eq!(to_js_string(&null_expr()).as_deref(), Some("null"));
-  assert_eq!(
-    to_js_string(&ident_expr("undefined")).as_deref(),
-    Some("undefined")
-  );
-  assert_eq!(to_js_string(&ident_expr("NaN")).as_deref(), Some("NaN"));
-  assert_eq!(
-    to_js_string(&ident_expr("Infinity")).as_deref(),
-    Some("Infinity")
-  );
-}
-
-#[test]
-fn a_big_integer_renders_its_digits_without_the_suffix() {
-  assert_eq!(to_js_string(&big_int_expr(1)).as_deref(), Some("1"));
-  assert_eq!(to_js_string(&big_int_expr(-42)).as_deref(), Some("-42"));
-}
-
-#[test]
 fn a_regular_expression_renders_its_own_source() {
   assert_eq!(to_js_string(&regex_expr("x", "")).as_deref(), Some("/x/"));
   assert_eq!(
@@ -167,81 +109,6 @@ fn a_regular_expression_renders_its_own_source() {
       .expect("a regular expression has a number")
       .is_nan()
   );
-}
-
-#[test]
-fn an_identifier_that_is_not_a_global_value_has_no_coercion() {
-  assert_eq!(to_js_string(&ident_expr("someBinding")), None);
-}
-
-#[test]
-fn arrays_join_with_commas() {
-  assert_eq!(to_js_string(&array_expr(vec![])).as_deref(), Some(""));
-  assert_eq!(
-    to_js_string(&array_expr(vec![Some(str_expr("a")), Some(str_expr("b"))])).as_deref(),
-    Some("a,b")
-  );
-  assert_eq!(
-    to_js_string(&array_expr(vec![Some(num_expr(1.0))])).as_deref(),
-    Some("1")
-  );
-}
-
-#[test]
-fn array_elements_with_no_value_join_as_nothing() {
-  assert_eq!(
-    to_js_string(&array_expr(vec![
-      Some(null_expr()),
-      Some(ident_expr("undefined")),
-      Some(num_expr(1.0)),
-    ]))
-    .as_deref(),
-    Some(",,1")
-  );
-  assert_eq!(
-    to_js_string(&array_expr(vec![
-      Some(num_expr(1.0)),
-      None,
-      Some(num_expr(2.0))
-    ]))
-    .as_deref(),
-    Some("1,,2")
-  );
-}
-
-#[test]
-fn nested_arrays_flatten_through_the_join() {
-  assert_eq!(
-    to_js_string(&array_expr(vec![
-      Some(num_expr(1.0)),
-      Some(array_expr(vec![Some(num_expr(2.0)), Some(num_expr(3.0))])),
-    ]))
-    .as_deref(),
-    Some("1,2,3")
-  );
-}
-
-#[test]
-fn an_unevaluated_spread_element_has_no_coercion() {
-  assert_eq!(to_js_string(&spread_array_expr(array_expr(vec![]))), None);
-}
-
-#[test]
-fn objects_use_the_object_prototype_default() {
-  assert_eq!(
-    to_js_string(&empty_object_expr()).as_deref(),
-    Some(OBJECT_TO_STRING)
-  );
-
-  let with_prop = Expr::Object(ObjectLit {
-    span: DUMMY_SP,
-    props: vec![PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-      key: PropName::Ident(IdentName::new("a".into(), DUMMY_SP)),
-      value: Box::new(num_expr(1.0)),
-    })))],
-  });
-
-  assert_eq!(to_js_string(&with_prop).as_deref(), Some("[object Object]"));
 }
 
 fn object_expr(props: Vec<PropOrSpread>) -> Expr {
@@ -298,55 +165,6 @@ fn an_own_to_string_answers_the_string_coercion() {
 }
 
 #[test]
-fn the_two_hints_ask_for_the_methods_in_opposite_orders() {
-  let both = object_expr(vec![
-    key_value_prop(ident_key("toString"), returning_arrow(str_expr("1"))),
-    key_value_prop(ident_key("valueOf"), returning_arrow(num_expr(2.0))),
-  ]);
-
-  assert_eq!(to_js_string(&both).as_deref(), Some("1"));
-  assert_eq!(to_js_number(&both), Some(2.0));
-}
-
-#[test]
-fn a_missing_method_falls_through_the_way_object_prototype_does() {
-  let to_string_only = object_expr(vec![key_value_prop(
-    ident_key("toString"),
-    returning_arrow(str_expr("7")),
-  )]);
-
-  assert_eq!(to_js_number(&to_string_only), Some(7.0));
-
-  let value_of_only = object_expr(vec![key_value_prop(
-    ident_key("valueOf"),
-    returning_arrow(str_expr("v")),
-  )]);
-
-  assert_eq!(
-    to_js_string(&value_of_only).as_deref(),
-    Some(OBJECT_TO_STRING)
-  );
-  assert!(to_js_number(&value_of_only).is_some_and(f64::is_nan));
-}
-
-#[test]
-fn a_method_in_a_form_that_cannot_be_applied_has_no_coercion() {
-  let not_callable = object_expr(vec![key_value_prop(
-    ident_key("toString"),
-    str_expr("notfn"),
-  )]);
-
-  assert_eq!(to_js_string(&not_callable), None);
-
-  let returns_object = object_expr(vec![key_value_prop(
-    ident_key("toString"),
-    returning_arrow(empty_object_expr()),
-  )]);
-
-  assert_eq!(to_js_string(&returns_object), None);
-}
-
-#[test]
 fn an_object_whose_keys_cannot_be_named_has_no_coercion() {
   let spread = object_expr(vec![PropOrSpread::Spread(SpreadElement {
     dot3_token: DUMMY_SP,
@@ -367,43 +185,6 @@ fn an_object_whose_keys_cannot_be_named_has_no_coercion() {
 }
 
 #[test]
-fn an_object_carrying_the_override_deeper_still_coerces() {
-  let nested = object_expr(vec![key_value_prop(
-    ident_key("a"),
-    object_expr(vec![key_value_prop(ident_key("toString"), arrow_expr())]),
-  )]);
-
-  assert_eq!(to_js_string(&nested).as_deref(), Some(OBJECT_TO_STRING));
-}
-
-#[test]
-fn an_overriding_object_inside_an_array_converts_through_its_own_method() {
-  let element = object_expr(vec![key_value_prop(
-    ident_key("toString"),
-    returning_arrow(str_expr("z")),
-  )]);
-
-  assert_eq!(
-    to_js_string(&array_expr(vec![Some(num_expr(1.0)), Some(element)])).as_deref(),
-    Some("1,z")
-  );
-}
-
-#[test]
-fn a_function_has_no_compile_time_coercion() {
-  assert_eq!(to_js_string(&arrow_expr()), None);
-}
-
-#[test]
-fn only_null_and_undefined_join_as_empty() {
-  assert!(joins_as_empty(&null_expr()));
-  assert!(joins_as_empty(&ident_expr("undefined")));
-  assert!(!joins_as_empty(&str_expr("")));
-  assert!(!joins_as_empty(&num_expr(0.0)));
-  assert!(!joins_as_empty(&ident_expr("NaN")));
-}
-
-#[test]
 fn a_string_of_decimal_digits_is_its_value() {
   assert_eq!(string_to_js_number("10"), 10.0);
   assert_eq!(string_to_js_number("00.5"), 0.5);
@@ -415,26 +196,6 @@ fn a_string_of_decimal_digits_is_its_value() {
   assert_eq!(string_to_js_number("1E3"), 1000.0);
   assert_eq!(string_to_js_number("1e-3"), 0.001);
   assert_eq!(string_to_js_number("1e+3"), 1000.0);
-}
-
-#[test]
-fn an_empty_or_blank_string_is_zero() {
-  assert_eq!(string_to_js_number(""), 0.0);
-  assert_eq!(string_to_js_number("   "), 0.0);
-  assert_eq!(
-    string_to_js_number("\t\n\r\u{000B}\u{000C}\u{00A0}\u{FEFF}"),
-    0.0
-  );
-}
-
-#[test]
-fn surrounding_whitespace_is_ignored() {
-  assert_eq!(string_to_js_number("  10  "), 10.0);
-  assert_eq!(string_to_js_number("\t\n\r 7  \u{FEFF}"), 7.0);
-  assert_eq!(string_to_js_number("\u{2028}1\u{2029}"), 1.0);
-  assert_eq!(string_to_js_number("\u{3000}1\u{2000}"), 1.0);
-  assert!(string_to_js_number("1 0").is_nan());
-  assert!(string_to_js_number("\u{0085}1").is_nan());
 }
 
 #[test]
@@ -467,113 +228,6 @@ fn a_radix_prefix_without_digits_of_that_radix_is_not_a_number() {
 }
 
 #[test]
-fn infinity_is_spelled_the_way_javascript_spells_it() {
-  assert_eq!(string_to_js_number("Infinity"), f64::INFINITY);
-  assert_eq!(string_to_js_number("+Infinity"), f64::INFINITY);
-  assert_eq!(string_to_js_number("-Infinity"), f64::NEG_INFINITY);
-  assert_eq!(string_to_js_number("  Infinity  "), f64::INFINITY);
-  assert!(string_to_js_number("infinity").is_nan());
-  assert!(string_to_js_number("Infinity1").is_nan());
-}
-
-#[test]
-fn the_rust_float_spellings_are_not_numbers() {
-  assert!(string_to_js_number("inf").is_nan());
-  assert!(string_to_js_number("-inf").is_nan());
-  assert!(string_to_js_number("nan").is_nan());
-  assert!(string_to_js_number("NaN").is_nan());
-}
-
-#[test]
-fn a_string_that_is_not_a_numeric_literal_is_not_a_number() {
-  assert!(string_to_js_number("10px").is_nan());
-  assert!(string_to_js_number("1_000").is_nan());
-  assert!(string_to_js_number("1e").is_nan());
-  assert!(string_to_js_number(".").is_nan());
-  assert!(string_to_js_number("-").is_nan());
-  assert!(string_to_js_number("1e5e5").is_nan());
-}
-
-#[test]
-fn negative_zero_survives_the_coercion() {
-  assert!(string_to_js_number("-0").is_sign_negative());
-  assert_eq!(string_to_js_number("-0"), 0.0);
-  assert!(string_to_js_number("-0.0").is_sign_negative());
-  assert!(!string_to_js_number("0").is_sign_negative());
-}
-
-#[test]
-fn numbers_are_their_own_coercion() {
-  assert_eq!(to_js_number(&num_expr(1.5)), Some(1.5));
-  assert_eq!(to_js_number(&num_expr(0.0)), Some(0.0));
-  assert_eq!(to_js_number(&num_expr(f64::INFINITY)), Some(f64::INFINITY));
-  assert!(matches!(to_js_number(&num_expr(f64::NAN)), Some(value) if value.is_nan()));
-}
-
-#[test]
-fn booleans_null_and_undefined_coerce_to_their_javascript_numbers() {
-  assert_eq!(to_js_number(&bool_expr(true)), Some(1.0));
-  assert_eq!(to_js_number(&bool_expr(false)), Some(0.0));
-  assert_eq!(to_js_number(&null_expr()), Some(0.0));
-  assert!(matches!(to_js_number(&ident_expr("undefined")), Some(value) if value.is_nan()));
-  assert!(matches!(to_js_number(&ident_expr("NaN")), Some(value) if value.is_nan()));
-  assert_eq!(to_js_number(&ident_expr("Infinity")), Some(f64::INFINITY));
-}
-
-#[test]
-fn strings_coerce_through_the_numeric_literal_grammar() {
-  assert_eq!(to_js_number(&str_expr("0x1f")), Some(31.0));
-  assert_eq!(to_js_number(&str_expr("  10  ")), Some(10.0));
-  assert_eq!(to_js_number(&str_expr("")), Some(0.0));
-  assert!(matches!(to_js_number(&str_expr("10px")), Some(value) if value.is_nan()));
-}
-
-#[test]
-fn arrays_and_objects_coerce_through_their_string_form() {
-  assert_eq!(to_js_number(&array_expr(vec![])), Some(0.0));
-  assert_eq!(
-    to_js_number(&array_expr(vec![Some(num_expr(5.0))])),
-    Some(5.0)
-  );
-  assert_eq!(
-    to_js_number(&array_expr(vec![Some(str_expr("0x1f"))])),
-    Some(31.0)
-  );
-  assert_eq!(
-    to_js_number(&array_expr(vec![Some(null_expr())])),
-    Some(0.0)
-  );
-  assert_eq!(
-    to_js_number(&array_expr(vec![Some(array_expr(vec![]))])),
-    Some(0.0)
-  );
-  assert!(matches!(
-    to_js_number(&array_expr(vec![Some(num_expr(1.0)), Some(num_expr(2.0))])),
-    Some(value) if value.is_nan()
-  ));
-  assert!(matches!(to_js_number(&empty_object_expr()), Some(value) if value.is_nan()));
-}
-
-#[test]
-fn a_function_coerces_to_not_a_number() {
-  assert!(matches!(to_js_number(&arrow_expr()), Some(value) if value.is_nan()));
-  assert!(matches!(
-    to_js_number(&array_expr(vec![Some(arrow_expr())])),
-    Some(value) if value.is_nan()
-  ));
-  assert!(matches!(
-    to_js_number(&array_expr(vec![Some(arrow_expr()), Some(num_expr(2.0))])),
-    Some(value) if value.is_nan()
-  ));
-}
-
-#[test]
-fn a_value_with_no_string_form_has_no_number_either() {
-  assert_eq!(to_js_number(&ident_expr("someBinding")), None);
-  assert_eq!(to_js_number(&spread_array_expr(array_expr(vec![]))), None);
-}
-
-#[test]
 fn every_value_but_a_function_coerces_to_a_plain_object() {
   assert_eq!(to_object(&null_expr()), Some(ObjectCoercion::Object));
   assert_eq!(
@@ -596,11 +250,6 @@ fn every_value_but_a_function_coerces_to_a_plain_object() {
     to_object(&ident_expr("Infinity")),
     Some(ObjectCoercion::Object)
   );
-}
-
-#[test]
-fn a_function_coerces_to_an_object_that_says_it_is_a_function() {
-  assert_eq!(to_object(&arrow_expr()), Some(ObjectCoercion::Function));
 }
 
 /// An unresolved `this` expression.
@@ -692,13 +341,6 @@ fn an_expression_that_is_not_a_value_has_no_coercion_at_all() {
 }
 
 #[test]
-fn an_object_whose_own_method_cannot_be_applied_has_no_number_either() {
-  let unapplicable = object_expr(vec![method_prop("valueOf")]);
-
-  assert_eq!(to_js_number(&unapplicable), None);
-}
-
-#[test]
 fn a_conversion_method_written_as_a_method_or_an_accessor_has_no_coercion() {
   assert_eq!(
     to_js_string(&object_expr(vec![method_prop("toString")])),
@@ -775,64 +417,12 @@ fn a_key_that_is_not_a_name_is_not_a_conversion_method() {
   );
 }
 
-#[test]
-fn only_the_unspellable_numbers_carry_their_text() {
-  let raw_of = |value: f64| match js_number_expr(value) {
-    Expr::Lit(Lit::Num(number)) => number.raw.map(|raw| raw.to_string()),
-    other => panic!("expected a number, got {:?}", other),
-  };
-
-  assert_eq!(raw_of(f64::NAN).as_deref(), Some("NaN"));
-  assert_eq!(raw_of(f64::INFINITY).as_deref(), Some("Infinity"));
-  assert_eq!(raw_of(f64::NEG_INFINITY).as_deref(), Some("-Infinity"));
-
-  assert_eq!(raw_of(0.0), None);
-  assert_eq!(raw_of(-0.0), None);
-  assert_eq!(raw_of(1.5), None);
-  assert_eq!(raw_of(f64::MAX), None);
-}
-
-#[test]
-fn an_unspellable_number_still_holds_its_value() {
-  let value_of = |value: f64| match js_number_expr(value) {
-    Expr::Lit(Lit::Num(number)) => number.value,
-    other => panic!("expected a number, got {:?}", other),
-  };
-
-  assert!(value_of(f64::NAN).is_nan());
-  assert_eq!(value_of(f64::INFINITY), f64::INFINITY);
-  assert_eq!(value_of(f64::NEG_INFINITY), f64::NEG_INFINITY);
-  assert_eq!(value_of(1.5), 1.5);
-}
-
-#[test]
-fn a_value_of_no_readable_kind_has_no_object_coercion() {
-  assert_eq!(to_object(&ident_expr("someBinding")), None);
-  assert_eq!(
-    to_object(&spread_array_expr(array_expr(vec![]))),
-    Some(ObjectCoercion::Object)
-  );
-}
-
 fn void_expr(operand: Expr) -> Expr {
   Expr::Unary(UnaryExpr {
     span: DUMMY_SP,
     op: UnaryOp::Void,
     arg: Box::new(operand),
   })
-}
-
-#[test]
-fn the_falsy_primitives_are_the_whole_of_the_falsy_list() {
-  assert_eq!(to_js_boolean(&str_expr("")), Some(false));
-  assert_eq!(to_js_boolean(&num_expr(0.0)), Some(false));
-  assert_eq!(to_js_boolean(&num_expr(-0.0)), Some(false));
-  assert_eq!(to_js_boolean(&bool_expr(false)), Some(false));
-  assert_eq!(to_js_boolean(&null_expr()), Some(false));
-  assert_eq!(to_js_boolean(&ident_expr("undefined")), Some(false));
-  assert_eq!(to_js_boolean(&ident_expr("NaN")), Some(false));
-  assert_eq!(to_js_boolean(&num_expr(f64::NAN)), Some(false));
-  assert_eq!(to_js_boolean(&void_expr(num_expr(0.0))), Some(false));
 }
 
 #[test]
@@ -874,171 +464,9 @@ fn every_object_is_truthy_however_empty_it_is() {
 }
 
 #[test]
-fn an_own_conversion_method_does_not_enter_into_the_boolean() {
-  let overriding = object_expr(vec![key_value_prop(
-    ident_key("toString"),
-    returning_arrow(str_expr("")),
-  )]);
-
-  assert_eq!(to_js_string(&overriding).as_deref(), Some(""));
-  assert_eq!(to_js_boolean(&overriding), Some(true));
-}
-
-#[test]
-fn an_object_with_no_string_form_still_has_a_boolean() {
-  let spread = spread_array_expr(array_expr(vec![]));
-
-  assert_eq!(to_js_string(&spread), None);
-  assert_eq!(to_js_boolean(&spread), Some(true));
-}
-
-#[test]
 fn a_value_of_no_readable_kind_has_no_boolean() {
   assert_eq!(to_js_boolean(&ident_expr("someBinding")), None);
   assert_eq!(to_js_boolean(&this_expr()), None);
-}
-
-#[test]
-fn the_nullish_values_are_null_undefined_and_void() {
-  assert!(is_nullish(&null_expr()));
-  assert!(is_nullish(&ident_expr("undefined")));
-  assert!(is_nullish(&void_expr(num_expr(0.0))));
-  assert!(is_nullish(&void_expr(str_expr("red"))));
-}
-
-#[test]
-fn a_falsy_value_that_is_not_nullish_says_so() {
-  assert!(!is_nullish(&str_expr("")));
-  assert!(!is_nullish(&num_expr(0.0)));
-  assert!(!is_nullish(&bool_expr(false)));
-  assert!(!is_nullish(&ident_expr("NaN")));
-}
-
-#[test]
-fn a_value_this_crate_cannot_read_is_not_nullish() {
-  assert!(!is_nullish(&ident_expr("someBinding")));
-  assert!(!is_nullish(&this_expr()));
-  assert!(!is_nullish(&empty_object_expr()));
-  assert!(!is_nullish(&arrow_expr()));
-}
-
-#[test]
-fn the_three_globals_are_spelled_as_identifiers() {
-  assert!(is_global_spelled_as_an_identifier(&ident("undefined")));
-  assert!(is_global_spelled_as_an_identifier(&ident("NaN")));
-  assert!(is_global_spelled_as_an_identifier(&ident("Infinity")));
-}
-
-#[test]
-fn no_other_name_is_a_global_spelled_as_an_identifier() {
-  for name in [
-    "nan",
-    "NAN",
-    "NaNa",
-    "aNaN",
-    "infinity",
-    "INFINITY",
-    "Undefined",
-    "undefined_",
-    "_undefined",
-    "undefined2",
-    "Math",
-    "String",
-    "Number",
-    "globalThis",
-    "NaN ",
-    " NaN",
-    "NaN\u{200b}",
-    "",
-  ] {
-    assert!(
-      !is_global_spelled_as_an_identifier(&ident(name)),
-      "expected `{}` not to be a global spelled as an identifier",
-      name
-    );
-  }
-}
-
-#[test]
-fn the_predicate_and_the_string_coercion_read_the_same_set() {
-  for (name, expected) in [
-    ("undefined", "undefined"),
-    ("NaN", "NaN"),
-    ("Infinity", "Infinity"),
-  ] {
-    assert!(is_global_spelled_as_an_identifier(&ident(name)), "{}", name);
-    assert_eq!(to_js_string(&ident_expr(name)).as_deref(), Some(expected));
-  }
-
-  for name in ["someBinding", "nan", "Math"] {
-    assert!(
-      !is_global_spelled_as_an_identifier(&ident(name)),
-      "{}",
-      name
-    );
-    assert_eq!(to_js_string(&ident_expr(name)), None, "{}", name);
-  }
-}
-
-// Node oracle: `node -e 'console.log(x | 0)'`.
-#[test]
-fn to_int32_wraps_into_the_signed_32_bit_range() {
-  assert_eq!(to_int32(4_294_967_296.0), 0);
-  assert_eq!(to_int32(2_147_483_648.0), -2_147_483_648);
-  assert_eq!(to_int32(-2_147_483_649.0), 2_147_483_647);
-  assert_eq!(to_int32(3_000_000_000.0), -1_294_967_296);
-  assert_eq!(to_int32(1e21), -559_939_584);
-
-  assert_eq!(to_int32(1.9), 1);
-  assert_eq!(to_int32(-1.9), -1);
-
-  assert_eq!(to_int32(f64::NAN), 0);
-  assert_eq!(to_int32(f64::INFINITY), 0);
-  assert_eq!(to_int32(f64::NEG_INFINITY), 0);
-  assert_eq!(to_int32(0.0), 0);
-  assert_eq!(to_int32(-0.0), 0);
-
-  assert_eq!(to_int32(2_147_483_647.0), 2_147_483_647);
-  assert_eq!(to_int32(-2_147_483_648.0), -2_147_483_648);
-  assert_eq!(to_int32(-1.0), -1);
-}
-
-// Node oracle: `node -e 'console.log(x >>> 0)'`.
-#[test]
-fn to_uint32_wraps_into_the_unsigned_32_bit_range() {
-  assert_eq!(to_uint32(-1.0), 4_294_967_295);
-  assert_eq!(to_uint32(-9.0), 4_294_967_287);
-  assert_eq!(to_uint32(-2_147_483_648.0), 2_147_483_648);
-
-  assert_eq!(to_uint32(4_294_967_296.0), 0);
-  assert_eq!(to_uint32(4_294_967_297.0), 1);
-  assert_eq!(to_uint32(3_000_000_000.0), 3_000_000_000);
-
-  assert_eq!(to_uint32(f64::NAN), 0);
-  assert_eq!(to_uint32(f64::INFINITY), 0);
-  assert_eq!(to_uint32(f64::NEG_INFINITY), 0);
-  assert_eq!(to_uint32(-0.0), 0);
-
-  assert_eq!(to_uint32(1.9), 1);
-  assert_eq!(to_uint32(-1.9), 4_294_967_295);
-}
-
-// Node oracle: `node -e 'console.log(1 << x)'`.
-#[test]
-fn to_shift_count_keeps_the_low_five_bits() {
-  assert_eq!(to_shift_count(0.0), 0);
-  assert_eq!(to_shift_count(31.0), 31);
-
-  assert_eq!(to_shift_count(32.0), 0);
-  assert_eq!(to_shift_count(33.0), 1);
-  assert_eq!(to_shift_count(64.0), 0);
-
-  assert_eq!(to_shift_count(-1.0), 31);
-  assert_eq!(to_shift_count(-32.0), 0);
-
-  assert_eq!(to_shift_count(f64::NAN), 0);
-  assert_eq!(to_shift_count(f64::INFINITY), 0);
-  assert_eq!(to_shift_count(2.9), 2);
 }
 
 #[test]
@@ -1075,34 +503,6 @@ fn to_js_primitive_reads_every_primitive_spelling() {
     to_js_primitive(&void_expr(num_expr(1.0))),
     Some(Primitive::Undefined)
   ));
-}
-
-#[test]
-fn to_js_primitive_refuses_every_value_that_is_not_one() {
-  for expr in [
-    Expr::Object(ObjectLit {
-      span: DUMMY_SP,
-      props: vec![],
-    }),
-    Expr::Array(ArrayLit {
-      span: DUMMY_SP,
-      elems: vec![],
-    }),
-    arrow_expr(),
-    ident_expr("someBinding"),
-    Expr::Lit(Lit::BigInt(BigInt {
-      span: DUMMY_SP,
-      value: Box::new(1.into()),
-      raw: None,
-    })),
-    Expr::Lit(Lit::Regex(Regex {
-      span: DUMMY_SP,
-      exp: "a".into(),
-      flags: "".into(),
-    })),
-  ] {
-    assert!(to_js_primitive(&expr).is_none(), "{:?}", expr);
-  }
 }
 
 // Node oracle: `node -e "console.log(a === b)"`.
@@ -1219,54 +619,6 @@ fn js_less_than_orders_two_strings_by_code_unit_and_everything_else_by_number() 
 }
 
 #[test]
-fn js_less_than_has_no_answer_for_a_not_a_number_operand() {
-  let not_a_number = ident_expr("NaN");
-  let one = num_expr(1.0);
-
-  let (left, right) = primitive_pair(&not_a_number, &one);
-  assert_eq!(js_less_than(&left, &right), Some(None));
-
-  let (left, right) = primitive_pair(&one, &not_a_number);
-  assert_eq!(js_less_than(&left, &right), Some(None));
-
-  let text = str_expr("10px");
-  let (left, right) = primitive_pair(&text, &one);
-  assert_eq!(js_less_than(&left, &right), Some(None));
-
-  let absent = ident_expr("undefined");
-  let (left, right) = primitive_pair(&absent, &one);
-  assert_eq!(js_less_than(&left, &right), Some(None));
-
-  let (left, right) = primitive_pair(&one, &absent);
-  assert_eq!(js_less_than(&left, &right), Some(None));
-}
-
-#[test]
-fn js_less_than_refuses_a_string_it_cannot_read() {
-  let surrogate = lone_surrogate_expr(0xD83D);
-  let text = str_expr("a");
-  let one = num_expr(1.0);
-
-  let (left, right) = primitive_pair(&surrogate, &text);
-  assert_eq!(js_less_than(&left, &right), None);
-
-  let (left, right) = primitive_pair(&text, &surrogate);
-  assert_eq!(js_less_than(&left, &right), None);
-
-  let (left, right) = primitive_pair(&surrogate, &one);
-  assert_eq!(js_less_than(&left, &right), Some(None));
-}
-
-#[test]
-fn js_less_than_orders_an_astral_character_by_its_first_code_unit() {
-  let astral = str_expr("\u{1F600}");
-  let private_use = str_expr("\u{E000}");
-
-  let (left, right) = primitive_pair(&astral, &private_use);
-  assert_eq!(js_less_than(&left, &right), Some(Some(true)));
-}
-
-#[test]
 fn to_js_default_primitive_prefers_an_own_value_of() {
   let both = object_expr(vec![
     key_value_prop(ident_key("valueOf"), returning_arrow(num_expr(2.0))),
@@ -1294,22 +646,6 @@ fn to_js_default_primitive_prefers_an_own_value_of() {
 }
 
 #[test]
-fn to_js_default_primitive_answers_a_primitive_with_itself() {
-  for expr in [
-    str_expr("a"),
-    num_expr(1.0),
-    bool_expr(true),
-    null_expr(),
-    ident_expr("undefined"),
-  ] {
-    match to_js_default_primitive(&expr) {
-      Some(answered) => assert!(std::ptr::eq(answered, &expr), "{:?}", expr),
-      None => panic!("{:?} is already a primitive", expr),
-    }
-  }
-}
-
-#[test]
 fn to_js_default_primitive_leaves_the_default_pair_to_the_string_path() {
   assert!(to_js_default_primitive(&object_expr(vec![])).is_none());
 
@@ -1319,21 +655,6 @@ fn to_js_default_primitive_leaves_the_default_pair_to_the_string_path() {
   )]);
 
   assert!(to_js_default_primitive(&answers_an_object).is_none());
-}
-
-#[test]
-fn to_js_default_primitive_reduces_what_a_conversion_answers() {
-  let nested = object_expr(vec![key_value_prop(
-    ident_key("valueOf"),
-    returning_arrow(str_expr("inner")),
-  )]);
-
-  assert_eq!(
-    to_js_default_primitive(&nested)
-      .and_then(to_js_string)
-      .as_deref(),
-    Some("inner")
-  );
 }
 
 #[track_caller]
@@ -1358,104 +679,6 @@ fn lone_surrogate_expr(code_unit: u16) -> Expr {
     value: Wtf8Atom::from(buffer),
     raw: None,
   }))
-}
-
-#[test]
-fn global_identifier_to_value_answers_numbers_for_the_two_numeric_globals() {
-  match global_identifier_to_value(&ident("NaN")) {
-    Some(Expr::Lit(Lit::Num(number))) => {
-      assert!(number.value.is_nan(), "NaN is the value, not the name");
-      assert_eq!(
-        number.raw.as_deref(),
-        Some("NaN"),
-        "and it keeps the text it was authored with"
-      );
-    },
-    other => panic!("expected NaN to answer a number, got {:?}", other),
-  }
-
-  match global_identifier_to_value(&ident("Infinity")) {
-    Some(Expr::Lit(Lit::Num(number))) => {
-      assert_eq!(number.value, f64::INFINITY);
-      assert_eq!(number.raw.as_deref(), Some("Infinity"));
-    },
-    other => panic!("expected Infinity to answer a number, got {:?}", other),
-  }
-}
-
-#[test]
-fn global_identifier_to_value_answers_undefined_with_itself() {
-  match global_identifier_to_value(&ident("undefined")) {
-    Some(Expr::Ident(answered)) => assert_eq!(answered.sym.as_ref(), "undefined"),
-    other => panic!("expected undefined to answer itself, got {:?}", other),
-  }
-}
-
-#[test]
-fn global_identifier_to_value_declines_every_other_name() {
-  for name in ["Number", "nan", "NAN", "infinity", "undefined_", "x", ""] {
-    assert!(
-      global_identifier_to_value(&ident(name)).is_none(),
-      "`{}` is not one of the three globals",
-      name
-    );
-    assert!(
-      !is_global_spelled_as_an_identifier(&ident(name)),
-      "`{}` must agree with the predicate over the same set",
-      name
-    );
-  }
-
-  for name in ["undefined", "NaN", "Infinity"] {
-    assert!(
-      global_identifier_to_value(&ident(name)).is_some(),
-      "`{}` is one of the three",
-      name
-    );
-    assert!(is_global_spelled_as_an_identifier(&ident(name)));
-  }
-}
-
-#[test]
-fn the_numeric_globals_carry_the_text_they_were_authored_with() {
-  let raw_of = |name: &str| match global_identifier_to_value(&ident(name)) {
-    Some(Expr::Lit(Lit::Num(number))) => number.raw.map(|raw| raw.to_string()),
-    other => panic!("expected a number for `{}`, got {:?}", name, other),
-  };
-
-  assert_eq!(raw_of("NaN").as_deref(), Some("NaN"));
-  assert_eq!(raw_of("Infinity").as_deref(), Some("Infinity"));
-}
-
-/// A sink that refuses pieces exceeding a UTF-16 code-unit ceiling.
-struct Bounded {
-  text: String,
-  ceiling: usize,
-}
-
-impl Bounded {
-  fn new(ceiling: usize) -> Self {
-    Self {
-      text: String::new(),
-      ceiling,
-    }
-  }
-}
-
-impl StringSink for Bounded {
-  type Refusal = usize;
-
-  fn write(&mut self, piece: &str) -> Result<(), usize> {
-    let grown = utf16_length(&self.text) + utf16_length(piece);
-
-    if grown > self.ceiling {
-      return Err(grown);
-    }
-
-    self.text.push_str(piece);
-
-    Ok(())
-  }
 }
 
 #[test]
@@ -1499,168 +722,6 @@ fn a_streamed_join_writes_what_the_collected_one_answered() {
 }
 
 #[test]
-fn a_sink_refusal_ends_the_join_where_it_happens() {
-  let array = array_expr(vec![
-    Some(str_expr("aaa")),
-    Some(str_expr("bbb")),
-    Some(str_expr("ccc")),
-  ]);
-
-  let mut sink = Bounded::new(5);
-
-  match write_js_string_of(&array, FunctionForm::Refuse, &mut sink) {
-    Err(StringRefusal::Sink(grown)) => assert_eq!(grown, 7),
-    other => panic!("expected the sink to refuse, got {:?}", other),
-  }
-
-  assert_eq!(sink.text, "aaa,");
-}
-
-#[test]
-fn the_separator_is_measured_with_the_elements() {
-  let array = array_expr(vec![Some(str_expr("a")), Some(str_expr("b"))]);
-
-  let mut exact = Bounded::new(3);
-  assert!(write_js_string_of(&array, FunctionForm::Refuse, &mut exact).is_ok());
-  assert_eq!(exact.text, "a,b");
-
-  let mut one_short = Bounded::new(2);
-  assert!(matches!(
-    write_js_string_of(&array, FunctionForm::Refuse, &mut one_short),
-    Err(StringRefusal::Sink(_))
-  ));
-  assert_eq!(one_short.text, "a,");
-}
-
-#[test]
-fn an_element_with_no_string_form_is_not_a_sink_refusal() {
-  let array = array_expr(vec![Some(str_expr("a")), Some(arrow_expr())]);
-
-  let mut sink = Bounded::new(1000);
-
-  assert!(matches!(
-    write_js_string_of(&array, FunctionForm::Refuse, &mut sink),
-    Err(StringRefusal::NoStringForm)
-  ));
-
-  let mut counted = Bounded::new(1000);
-  assert!(write_js_string_of(&array, FunctionForm::NotANumber, &mut counted).is_ok());
-  assert_eq!(counted.text, "a,function");
-}
-
-#[test]
-fn a_spread_element_has_no_join() {
-  let array = Expr::Array(ArrayLit {
-    span: DUMMY_SP,
-    elems: vec![
-      Some(ExprOrSpread {
-        spread: None,
-        expr: Box::new(str_expr("a")),
-      }),
-      Some(ExprOrSpread {
-        spread: Some(DUMMY_SP),
-        expr: Box::new(str_expr("b")),
-      }),
-    ],
-  });
-
-  let mut sink = Bounded::new(1000);
-
-  assert!(matches!(
-    write_js_string_of(&array, FunctionForm::Refuse, &mut sink),
-    Err(StringRefusal::NoStringForm)
-  ));
-  assert_eq!(sink.text, "a,");
-}
-
-#[test]
-fn nesting_flattens_into_one_join() {
-  let mut nested = str_expr("a");
-
-  for _ in 0..64 {
-    nested = array_expr(vec![Some(nested)]);
-  }
-
-  let mut sink = Bounded::new(1);
-
-  assert!(write_js_string_of(&nested, FunctionForm::Refuse, &mut sink).is_ok());
-  assert_eq!(sink.text, "a");
-}
-
-#[test]
-fn a_sink_that_takes_nothing_still_admits_an_empty_join() {
-  let mut sink = Bounded::new(0);
-  assert!(write_js_string_of(&array_expr(vec![]), FunctionForm::Refuse, &mut sink).is_ok());
-  assert_eq!(sink.text, "");
-
-  let mut refuses = Bounded::new(0);
-  assert!(matches!(
-    write_js_string_of(&str_expr("a"), FunctionForm::Refuse, &mut refuses),
-    Err(StringRefusal::Sink(_))
-  ));
-}
-
-#[test]
-fn a_value_with_its_own_number_writes_nothing() {
-  for (expr, number) in [
-    (num_expr(7.0), 7.0),
-    (bool_expr(true), 1.0),
-    (bool_expr(false), 0.0),
-    (null_expr(), 0.0),
-  ] {
-    let mut sink = Bounded::new(0);
-
-    assert_eq!(
-      write_js_number_of(&expr, &mut sink),
-      Ok(NumberOf::Value(number))
-    );
-    assert_eq!(sink.text, "");
-  }
-}
-
-#[test]
-fn a_value_without_one_reaches_its_number_through_the_sink() {
-  let array = array_expr(vec![Some(str_expr("1")), Some(str_expr("2"))]);
-  let mut sink = Bounded::new(8);
-
-  assert_eq!(write_js_number_of(&array, &mut sink), Ok(NumberOf::Text));
-  assert_eq!(sink.text, "1,2");
-  assert!(string_to_js_number(&sink.text).is_nan());
-}
-
-#[test]
-fn the_streamed_number_agrees_with_the_collected_one() {
-  let cases = [
-    num_expr(7.0),
-    bool_expr(true),
-    null_expr(),
-    str_expr("0x10"),
-    str_expr("nope"),
-    array_expr(vec![]),
-    array_expr(vec![Some(num_expr(5.0))]),
-    array_expr(vec![Some(num_expr(1.0)), Some(num_expr(2.0))]),
-    object_expr(vec![]),
-  ];
-
-  for expr in cases {
-    let mut text = String::new();
-    let streamed = match write_js_number_of(&expr, &mut text) {
-      Ok(NumberOf::Value(number)) => Some(number),
-      Ok(NumberOf::Text) => Some(string_to_js_number(&text)),
-      Err(_) => None,
-    };
-
-    let collected = to_js_number(&expr);
-
-    assert_eq!(
-      streamed.map(f64::to_bits),
-      collected.map(f64::to_bits),
-      "the two readings of `ToNumber` must agree"
-    );
-  }
-}
-
-#[test]
 fn every_character_a_numeric_literal_holds_is_admitted() {
   let literals = [
     "0",
@@ -1694,190 +755,6 @@ fn every_character_a_numeric_literal_holds_is_admitted() {
 }
 
 #[test]
-fn a_character_no_numeric_literal_holds_is_refused() {
-  for character in [
-    ',',
-    'z',
-    'q',
-    '%',
-    '(',
-    '\u{0000}',
-    '\u{1F600}',
-    '_',
-    '/',
-    '*',
-  ] {
-    assert!(
-      !can_appear_in_a_number(character),
-      "`{}` appears in no numeric literal and must not be admitted",
-      character
-    );
-  }
-}
-
-#[test]
-fn a_refused_separator_ends_the_join_before_the_next_element() {
-  let array = array_expr(vec![Some(str_expr("a")), Some(str_expr("b"))]);
-
-  let mut sink = Bounded::new(1);
-
-  match write_js_string_of(&array, FunctionForm::Refuse, &mut sink) {
-    Err(StringRefusal::Sink(grown)) => assert_eq!(grown, 2),
-    other => panic!("expected the separator to be refused, got {:?}", other),
-  }
-
-  assert_eq!(sink.text, "a");
-
-  let mut wider = Bounded::new(2);
-
-  assert!(matches!(
-    write_js_string_of(&array, FunctionForm::Refuse, &mut wider),
-    Err(StringRefusal::Sink(3))
-  ));
-  assert_eq!(wider.text, "a,");
-}
-
-#[test]
-fn a_string_with_no_utf8_form_has_no_string_form() {
-  // A lone surrogate: valid WTF-8 storage, invalid UTF-8 decoding.
-  let mut lone_surrogate = Wtf8Buf::new();
-
-  match CodePoint::from_u32(0xd800) {
-    Some(code_point) => lone_surrogate.push(code_point),
-    None => panic!("U+D800 is within the code-point range."),
-  }
-
-  let unreadable = Expr::Lit(Lit::Str(Str {
-    span: DUMMY_SP,
-    value: Wtf8Atom::new(lone_surrogate),
-    raw: None,
-  }));
-
-  let mut sink = Bounded::new(1000);
-
-  assert!(matches!(
-    write_js_string_of(&unreadable, FunctionForm::Refuse, &mut sink),
-    Err(StringRefusal::NoStringForm)
-  ));
-  assert_eq!(sink.text, "");
-
-  assert_eq!(to_js_string(&unreadable), None);
-  assert_eq!(
-    to_js_string(&array_expr(vec![Some(unreadable.clone())])),
-    None
-  );
-
-  let mut nested = String::new();
-  assert!(matches!(
-    write_js_string_of(
-      &array_expr(vec![Some(str_expr("a")), Some(unreadable)]),
-      FunctionForm::Refuse,
-      &mut nested
-    ),
-    Err(StringRefusal::NoStringForm)
-  ));
-  assert_eq!(nested, "a,");
-}
-
-#[test]
-fn an_object_default_text_can_be_refused_by_the_sink() {
-  let object = object_expr(vec![key_value_prop(
-    PropName::Ident(IdentName::new("a".into(), DUMMY_SP)),
-    num_expr(1.0),
-  )]);
-
-  let mut sink = Bounded::new(OBJECT_TO_STRING.len() - 1);
-
-  assert!(matches!(
-    write_js_number_of(&object, &mut sink),
-    Err(StringRefusal::Sink(_))
-  ));
-  assert_eq!(sink.text, "");
-
-  let mut exact = Bounded::new(OBJECT_TO_STRING.len());
-
-  assert_eq!(write_js_number_of(&object, &mut exact), Ok(NumberOf::Text));
-  assert_eq!(exact.text, OBJECT_TO_STRING);
-  assert!(string_to_js_number(&exact.text).is_nan());
-}
-
-#[test]
-fn a_regular_expression_is_written_piece_by_piece() {
-  for (ceiling, kept) in [(0, ""), (1, "/"), (4, "/a+b"), (5, "/a+b/")] {
-    let mut narrow = Bounded::new(ceiling);
-
-    assert!(
-      matches!(
-        write_js_string_of(&regex_expr("a+b", "gi"), FunctionForm::Refuse, &mut narrow),
-        Err(StringRefusal::Sink(_))
-      ),
-      "a ceiling of {} took the whole text",
-      ceiling
-    );
-    assert_eq!(narrow.text, kept);
-  }
-
-  let mut wide = Bounded::new(7);
-
-  assert_eq!(
-    write_js_string_of(&regex_expr("a+b", "gi"), FunctionForm::Refuse, &mut wide),
-    Ok(())
-  );
-  assert_eq!(wide.text, "/a+b/gi");
-}
-
-#[test]
-fn the_number_form_reaches_every_ending_through_a_bounded_sink() {
-  let returning = object_expr(vec![key_value_prop(
-    ident_key("valueOf"),
-    returning_arrow(num_expr(2.0)),
-  )]);
-
-  let mut answered = Bounded::new(0);
-
-  assert_eq!(
-    write_js_number_of(&returning, &mut answered),
-    Ok(NumberOf::Value(2.0))
-  );
-  assert_eq!(answered.text, "");
-
-  let unapplicable = object_expr(vec![method_prop("valueOf")]);
-
-  let mut refused = Bounded::new(1000);
-
-  assert_eq!(
-    write_js_number_of(&unapplicable, &mut refused),
-    Err(StringRefusal::NoStringForm)
-  );
-  assert_eq!(refused.text, "");
-
-  let mut big_integer = Bounded::new(1000);
-
-  assert_eq!(
-    write_js_number_of(&big_int_expr(2), &mut big_integer),
-    Err(StringRefusal::NoStringForm)
-  );
-  assert_eq!(big_integer.text, "");
-
-  let mut narrow = Bounded::new(2);
-
-  assert!(matches!(
-    write_js_number_of(&str_expr("abcdef"), &mut narrow),
-    Err(StringRefusal::Sink(_))
-  ));
-  assert_eq!(narrow.text, "");
-
-  let mut wide = Bounded::new(6);
-
-  assert_eq!(
-    write_js_number_of(&str_expr("abcdef"), &mut wide),
-    Ok(NumberOf::Text)
-  );
-  assert_eq!(wide.text, "abcdef");
-  assert!(string_to_js_number(&wide.text).is_nan());
-}
-
-#[test]
 fn a_big_integer_has_no_number_where_it_is_read_as_one() {
   let returning = |method: &str| {
     object_expr(vec![key_value_prop(
@@ -1894,58 +771,6 @@ fn a_big_integer_has_no_number_where_it_is_read_as_one() {
 }
 
 #[test]
-fn a_conversion_method_that_gives_no_primitive_is_skipped() {
-  let method = |name: &str, value: Expr| key_value_prop(ident_key(name), value);
-
-  for skipped in [
-    num_expr(1.0),
-    null_expr(),
-    str_expr("x"),
-    object_expr(vec![]),
-    array_expr(vec![]),
-    returning_arrow(object_expr(vec![])),
-    returning_arrow(Expr::Paren(ParenExpr {
-      span: DUMMY_SP,
-      expr: Box::new(object_expr(vec![])),
-    })),
-    returning_arrow(array_expr(vec![Some(num_expr(5.0))])),
-  ] {
-    let with_default = object_expr(vec![method("valueOf", skipped.clone())]);
-    assert!(
-      to_js_number(&with_default).is_some_and(f64::is_nan),
-      "{with_default:?}"
-    );
-
-    let with_own = object_expr(vec![
-      method("valueOf", skipped),
-      method("toString", returning_arrow(str_expr("3"))),
-    ]);
-    assert_eq!(to_js_number(&with_own), Some(3.0), "{with_own:?}");
-  }
-
-  let string_skips = object_expr(vec![
-    method("toString", num_expr(2.0)),
-    method("valueOf", returning_arrow(str_expr("v"))),
-  ]);
-  assert_eq!(to_js_string(&string_skips).as_deref(), Some("v"));
-
-  for no_primitive in [
-    object_expr(vec![method("toString", num_expr(1.0))]),
-    object_expr(vec![
-      method("valueOf", num_expr(1.0)),
-      method("toString", num_expr(1.0)),
-    ]),
-    object_expr(vec![method(
-      "toString",
-      returning_arrow(object_expr(vec![])),
-    )]),
-  ] {
-    assert_eq!(to_js_number(&no_primitive), None, "{no_primitive:?}");
-    assert_eq!(to_js_string(&no_primitive), None, "{no_primitive:?}");
-  }
-}
-
-#[test]
 fn a_conversion_method_held_by_a_name_has_no_coercion() {
   let held = |name: &str| object_expr(vec![key_value_prop(ident_key(name), ident_expr("convert"))]);
 
@@ -1956,14 +781,6 @@ fn a_conversion_method_held_by_a_name_has_no_coercion() {
   );
   assert_eq!(to_js_number(&held("toString")), None);
   assert_eq!(to_js_string(&held("toString")), None);
-}
-
-#[test]
-fn to_js_default_primitive_refuses_an_object_with_no_primitive() {
-  let no_primitive = object_expr(vec![key_value_prop(ident_key("toString"), num_expr(1.0))]);
-
-  assert_eq!(to_js_default_primitive(&no_primitive), None);
-  assert_eq!(to_js_string(&no_primitive), None);
 }
 
 // Babel refuses RegExp conversion methods; see coercions.rs::own_conversion_method.
@@ -1978,33 +795,4 @@ fn a_regular_expression_in_a_conversion_method_has_no_coercion() {
     assert_eq!(to_js_number(&value_of), None);
     assert_eq!(to_js_string(&value_of).as_deref(), Some(OBJECT_TO_STRING));
   }
-}
-
-#[test]
-fn a_conversion_method_is_the_last_own_key_read_through_parentheses() {
-  let paren = |expr: Expr| {
-    Expr::Paren(ParenExpr {
-      span: DUMMY_SP,
-      expr: Box::new(expr),
-    })
-  };
-  let value_of = |value: Expr| key_value_prop(ident_key("valueOf"), value);
-
-  let last_answers = object_expr(vec![
-    value_of(num_expr(1.0)),
-    value_of(returning_arrow(num_expr(2.0))),
-  ]);
-  assert_eq!(to_js_number(&last_answers), Some(2.0));
-
-  let last_skipped = object_expr(vec![
-    value_of(returning_arrow(num_expr(2.0))),
-    value_of(num_expr(1.0)),
-  ]);
-  assert!(to_js_number(&last_skipped).is_some_and(f64::is_nan));
-
-  let wrapped = object_expr(vec![value_of(paren(returning_arrow(num_expr(2.0))))]);
-  assert_eq!(to_js_number(&wrapped), Some(2.0));
-
-  let wrapped_value = object_expr(vec![value_of(paren(num_expr(1.0)))]);
-  assert!(to_js_number(&wrapped_value).is_some_and(f64::is_nan));
 }

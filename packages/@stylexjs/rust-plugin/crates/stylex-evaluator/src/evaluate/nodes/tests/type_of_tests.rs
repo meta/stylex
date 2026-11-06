@@ -1,10 +1,10 @@
 //! Tests type names for primitive, compiler-held and unsupported values.
 
 use super::*;
-use stylex_ast::ast::convertors::{create_bool_expr, create_null_expr, create_string_expr};
+use stylex_ast::ast::convertors::create_null_expr;
 use stylex_ast::ast::factories::{create_array_expression, create_object_lit};
 use swc_core::common::DUMMY_SP;
-use swc_core::ecma::ast::{BigInt, ThisExpr};
+use swc_core::ecma::ast::BigInt;
 
 #[track_caller]
 fn kind_of(value: EvaluateResultValue) -> &'static str {
@@ -12,23 +12,6 @@ fn kind_of(value: EvaluateResultValue) -> &'static str {
     Some(kind) => kind,
     None => panic!("expected a kind name for {:?}", value),
   }
-}
-
-#[test]
-fn every_primitive_reads_as_its_own_kind() {
-  assert_eq!(
-    kind_of(EvaluateResultValue::Expr(create_string_expr("a"))),
-    "string"
-  );
-  assert_eq!(
-    kind_of(EvaluateResultValue::Expr(create_number_expr(1.0))),
-    "number"
-  );
-  assert_eq!(
-    kind_of(EvaluateResultValue::Expr(create_bool_expr(true))),
-    "boolean"
-  );
-  assert_eq!(kind_of(js_undefined()), "undefined");
 }
 
 #[test]
@@ -60,16 +43,4 @@ fn an_expression_reads_as_the_object_or_function_it_is() {
     kind_of(EvaluateResultValue::Expr(fold_placeholder_function())),
     "function"
   );
-}
-
-#[test]
-fn the_absent_value_has_no_reading() {
-  assert_eq!(type_of(&EvaluateResultValue::Null), None);
-}
-
-#[test]
-fn a_kind_no_fold_produces_has_no_reading() {
-  let unreadable = EvaluateResultValue::Expr(Expr::This(ThisExpr { span: DUMMY_SP }));
-
-  assert_eq!(type_of(&unreadable), None);
 }

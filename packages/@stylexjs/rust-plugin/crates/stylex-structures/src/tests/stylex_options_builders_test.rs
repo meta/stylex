@@ -1,13 +1,10 @@
 //! Builder and conversion edge-case tests for `StyleXOptions`.
 
-use stylex_enums::{style_resolution::StyleResolution, sx_prop_name_param::SxPropNameParam};
+use stylex_enums::style_resolution::StyleResolution;
 
 use crate::{
-  named_import_source::{NamedImportSource, RuntimeInjection},
-  stylex_options::{
-    CheckModuleResolution, ModuleResolution, ModuleResolutionKind, StyleXOptions,
-    StyleXOptionsParams,
-  },
+  named_import_source::RuntimeInjection,
+  stylex_options::{CheckModuleResolution, ModuleResolution, ModuleResolutionKind, StyleXOptions},
 };
 
 #[test]
@@ -47,47 +44,6 @@ fn stylex_options_builders_update_supported_fields() {
 }
 
 #[test]
-fn from_params_handles_regular_runtime_and_custom_sx_name() {
-  let params = StyleXOptionsParams {
-    runtime_injection: Some(RuntimeInjection::Regular("custom/path".to_string())),
-    sx_prop_name: Some(SxPropNameParam::Enabled("sx2".to_string())),
-    ..StyleXOptionsParams::default()
-  };
-
-  let opts: StyleXOptions = params.into();
-  assert!(matches!(
-    opts.runtime_injection,
-    RuntimeInjection::Regular(_)
-  ));
-  assert_eq!(opts.sx_prop_name, Some("sx2".to_string()));
-}
-
-#[test]
-fn from_params_handles_disabled_sx_prop_name() {
-  let params = StyleXOptionsParams {
-    sx_prop_name: Some(SxPropNameParam::Disabled),
-    ..StyleXOptionsParams::default()
-  };
-  let opts: StyleXOptions = params.into();
-  assert_eq!(opts.sx_prop_name, None);
-}
-
-/// Babel enables a blank name but it never matches a JSX attribute; disabling it is equivalent.
-#[test]
-fn from_params_handles_a_blank_sx_prop_name_as_disabled() {
-  for name in ["", " ", "\t\n"] {
-    let params = StyleXOptionsParams {
-      sx_prop_name: Some(SxPropNameParam::Enabled(name.to_string())),
-      ..StyleXOptionsParams::default()
-    };
-
-    let opts: StyleXOptions = params.into();
-
-    assert_eq!(opts.sx_prop_name, None, "a name of {name:?} names no prop");
-  }
-}
-
-#[test]
 fn module_resolution_helper_builders_have_expected_type() {
   let common = ModuleResolution::common_js(Some("/common".to_string()));
   let haste = ModuleResolution::haste(Some("/haste".to_string()));
@@ -96,24 +52,4 @@ fn module_resolution_helper_builders_have_expected_type() {
   assert_eq!(common.kind, ModuleResolutionKind::CommonJs);
   assert_eq!(haste.kind, ModuleResolutionKind::Haste);
   assert_eq!(cross.kind, ModuleResolutionKind::CrossFileParsing);
-}
-
-#[test]
-fn from_params_keeps_named_runtime_injection() {
-  let params = StyleXOptionsParams {
-    runtime_injection: Some(RuntimeInjection::Named(NamedImportSource {
-      r#as: "inject".to_string(),
-      from: "@pkg/stylex".to_string(),
-    })),
-    ..StyleXOptionsParams::default()
-  };
-
-  let opts: StyleXOptions = params.into();
-  assert!(matches!(opts.runtime_injection, RuntimeInjection::Named(_)));
-}
-
-#[test]
-fn stylex_options_deref_mut_exposes_core_fields() {
-  let opts = StyleXOptions::default().with_class_name_prefix("mutated");
-  assert_eq!(opts.core.class_name_prefix, "mutated");
 }

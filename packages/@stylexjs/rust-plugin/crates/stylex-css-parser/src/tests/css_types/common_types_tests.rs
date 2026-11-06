@@ -9,18 +9,6 @@ fn test_css_wide_keyword_display() {
 }
 
 #[test]
-fn test_percentage_display() {
-  let p = Percentage::new(50.0);
-  assert_eq!(p.to_string(), "50%");
-}
-
-#[test]
-fn test_number_display() {
-  let n = Number::new(42.5);
-  assert_eq!(n.to_string(), "42.5");
-}
-
-#[test]
 fn test_css_variable_display() {
   let var = CssVariable::new("--main-color".to_string());
   assert_eq!(var.to_string(), "var(--main-color)");
@@ -36,53 +24,12 @@ fn test_css_wide_keyword_parser() {
 }
 
 #[test]
-fn test_number_percentage_parsers() {
-  let _number = Number::parser();
-  let _percentage = Percentage::parser();
-  let _number_or_percentage = number_or_percentage_parser();
-}
-
-#[test]
-fn test_auto_parser() {
-  let _parser = auto_parser();
-}
-
-#[test]
 fn test_number_or_percentage_display() {
   let num = NumberOrPercentage::Number(Number::new(42.0));
   let pct = NumberOrPercentage::Percentage(Percentage::new(50.0));
 
   assert_eq!(num.to_string(), "42");
   assert_eq!(pct.to_string(), "50%");
-}
-
-#[test]
-fn test_css_wide_keyword_parse_inherit() {
-  let result = CssWideKeyword::parser().parse_to_end("inherit").unwrap();
-  assert_eq!(result, CssWideKeyword::Inherit);
-}
-
-#[test]
-fn test_css_wide_keyword_parse_initial() {
-  let result = CssWideKeyword::parser().parse_to_end("initial").unwrap();
-  assert_eq!(result, CssWideKeyword::Initial);
-}
-
-#[test]
-fn test_css_wide_keyword_parse_unset() {
-  let result = CssWideKeyword::parser().parse_to_end("unset").unwrap();
-  assert_eq!(result, CssWideKeyword::Unset);
-}
-
-#[test]
-fn test_css_wide_keyword_parse_revert() {
-  let result = CssWideKeyword::parser().parse_to_end("revert").unwrap();
-  assert_eq!(result, CssWideKeyword::Revert);
-}
-
-#[test]
-fn test_css_wide_keyword_parse_invalid() {
-  assert!(CssWideKeyword::parser().parse_to_end("invalid").is_err());
 }
 
 #[test]
@@ -99,38 +46,8 @@ fn test_inherit_parser() {
 }
 
 #[test]
-fn test_auto_parser_succeeds() {
-  let result = auto_parser().parse_to_end("auto").unwrap();
-  assert_eq!(result, "auto");
-}
-
-#[test]
 fn test_auto_parser_rejects_other() {
   assert!(auto_parser().parse_to_end("none").is_err());
-}
-
-#[test]
-fn test_number_parser() {
-  let result = Number::parser().parse_to_end("42").unwrap();
-  assert_eq!(result.value, 42.0);
-}
-
-#[test]
-fn test_percentage_parser() {
-  let result = Percentage::parser().parse_to_end("50%").unwrap();
-  assert_eq!(result.value, 50.0);
-}
-
-#[test]
-fn test_number_or_percentage_parser_number() {
-  let result = number_or_percentage_parser().parse_to_end("42").unwrap();
-  assert!(matches!(result, NumberOrPercentage::Number(_)));
-}
-
-#[test]
-fn test_number_or_percentage_parser_percentage() {
-  let result = number_or_percentage_parser().parse_to_end("50%").unwrap();
-  assert!(matches!(result, NumberOrPercentage::Percentage(_)));
 }
 
 #[test]

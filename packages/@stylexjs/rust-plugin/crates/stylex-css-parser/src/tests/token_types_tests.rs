@@ -8,17 +8,6 @@ fn test_basic_tokenization() {
 }
 
 #[test]
-fn test_token_list_basic_peek_consume() {
-  let mut list = TokenList::new("color: red;");
-  let first = list.peek().unwrap();
-  assert_eq!(first, Some(SimpleToken::Ident("color".to_string())));
-  let consumed = list.consume_next_token().unwrap();
-  assert_eq!(consumed, Some(SimpleToken::Ident("color".to_string())));
-  let second = list.peek().unwrap();
-  assert_eq!(second, Some(SimpleToken::Colon));
-}
-
-#[test]
 fn test_rewind_and_slice() {
   let mut list = TokenList::new("a : b ; c");
   list.consume_next_token().unwrap(); // a

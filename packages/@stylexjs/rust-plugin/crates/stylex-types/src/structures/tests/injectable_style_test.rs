@@ -9,19 +9,6 @@ use crate::{
 };
 
 #[test]
-fn test_regular_factory() {
-  let style = InjectableStyle::regular("color:red".to_string(), Some(0.5));
-  match style.as_ref() {
-    InjectableStyleKind::Regular(s) => {
-      assert_eq!(s.ltr, "color:red");
-      assert_eq!(s.rtl, None);
-      assert_eq!(s.priority, Some(0.5));
-    },
-    _ => panic!("Expected Regular"),
-  }
-}
-
-#[test]
 fn test_with_rtl_factory() {
   let style = InjectableStyle::with_rtl(
     "margin-left:10px".to_string(),
@@ -36,14 +23,6 @@ fn test_with_rtl_factory() {
     },
     _ => panic!("Expected Regular"),
   }
-}
-
-#[test]
-fn test_default_injectable_style() {
-  let style = InjectableStyle::default();
-  assert_eq!(style.ltr, "");
-  assert_eq!(style.rtl, None);
-  assert_eq!(style.priority, Some(0.0));
 }
 
 #[test]

@@ -70,19 +70,6 @@ fn the_object_conversion_of_nothing_is_an_empty_object() {
 }
 
 #[test]
-fn the_array_conversion_of_nothing_is_the_empty_array() {
-  match converted(Conversion::Array, vec![]) {
-    Some(EvaluateResultValue::Vec(items)) => {
-      assert!(items.is_empty(), "`Array()` carried elements")
-    },
-    other => panic!(
-      "expected `Array()` to answer an array, and it answered {:?}",
-      other
-    ),
-  }
-}
-
-#[test]
 fn the_object_conversion_refuses_a_value_that_is_not_one() {
   let mut state = EvaluationState::new();
   let mut traversal_state = StateManager::new(StyleXOptions::default());

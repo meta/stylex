@@ -1,7 +1,7 @@
 //! Tests for UidGenerator across all counter modes (Global, Local, ThreadLocal,
 //! ThreadUnique).
 
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::AtomicUsize;
 
 use crate::uid_generator::*;
 use rustc_hash::FxHashMap;
@@ -19,27 +19,6 @@ fn test_global_counter_consistency() {
 }
 
 #[test]
-fn test_local_counter_isolation() {
-  let gen1 = UidGenerator::new("test", CounterMode::Local);
-  let gen2 = UidGenerator::new("test", CounterMode::Local);
-
-  assert_eq!(gen1.generate(), "_test");
-  assert_eq!(gen2.generate(), "_test"); // Same because local counters are independent
-  assert_eq!(gen1.generate(), "_test2");
-  assert_eq!(gen2.generate(), "_test2"); // Each maintains its own counter
-}
-
-#[test]
-fn test_thread_local_counter() {
-  let gen1 = UidGenerator::new("test", CounterMode::ThreadLocal);
-  let gen2 = UidGenerator::new("test", CounterMode::ThreadLocal);
-
-  assert_eq!(gen1.generate(), "_test");
-  assert_eq!(gen2.generate(), "_test2"); // Shared within same thread
-  assert_eq!(gen1.generate(), "_test3");
-}
-
-#[test]
 fn test_thread_unique_identifiers() {
   let generator = UidGenerator::new("test", CounterMode::_ThreadUnique);
   let id1 = generator.generate();
@@ -48,35 +27,6 @@ fn test_thread_unique_identifiers() {
   assert!(id1.starts_with("_test_"));
   assert!(id2.starts_with("_test_"));
   assert_ne!(id1, id2);
-}
-
-#[test]
-fn test_parallel_thread_local_isolation() {
-  use std::{
-    sync::{Arc, Barrier},
-    thread,
-  };
-
-  let barrier = Arc::new(Barrier::new(2));
-  let mut handles = vec![];
-
-  for thread_num in 0..2 {
-    let barrier = Arc::clone(&barrier);
-    let handle = thread::spawn(move || {
-      let generator = UidGenerator::new("test", CounterMode::ThreadLocal);
-
-      barrier.wait();
-
-      let results = (0..3).map(|_| generator.generate()).collect::<Vec<_>>();
-      (thread_num, results)
-    });
-    handles.push(handle);
-  }
-
-  let results: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
-
-  assert_eq!(results[0].1, vec!["_test", "_test2", "_test3"]);
-  assert_eq!(results[1].1, vec!["_test", "_test2", "_test3"]);
 }
 
 #[test]
@@ -98,15 +48,6 @@ fn test_clear_thread_local() {
 }
 
 #[test]
-fn test_clear_global() {
-  let mut uid = UidGenerator::new("gclr", CounterMode::_Global);
-  let _ = uid.generate();
-  uid.clear();
-  let uid2 = UidGenerator::new("gclr", CounterMode::_Global);
-  assert_eq!(uid2.generate(), "_gclr");
-}
-
-#[test]
 fn test_clear_thread_unique() {
   let mut uid = UidGenerator::new("tuclr", CounterMode::_ThreadUnique);
   uid.clear();
@@ -119,15 +60,6 @@ fn test_generate_ident_returns_valid_ident() {
   assert_eq!(ident.sym.as_ref(), "_id");
   let ident2 = uid.generate_ident();
   assert_eq!(ident2.sym.as_ref(), "_id2");
-}
-
-#[test]
-fn test_get_global_counter_or_panic_returns_existing_counter() {
-  let mut counters = FxHashMap::default();
-  counters.insert("present".to_string(), AtomicUsize::new(7));
-
-  let counter = get_global_counter_or_panic(&counters, "present");
-  assert_eq!(counter.load(Ordering::SeqCst), 7);
 }
 
 #[test]

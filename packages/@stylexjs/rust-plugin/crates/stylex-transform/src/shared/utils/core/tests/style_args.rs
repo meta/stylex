@@ -8,25 +8,16 @@ use stylex_state::{
   flat_compiled_styles_value::FlatCompiledStylesValue, types::FlatCompiledStyles,
 };
 use stylex_types::structures::injectable_style::InjectableStyle;
-use swc_core::ecma::ast::Expr;
 
 use crate::shared::enums::data_structures::fn_result::FnResult;
 use crate::shared::utils::core::parse_nullable_style::{ResolvedArg, StyleObject};
 
 /// Reads a result the way a case wants to name it.
 pub(crate) trait ResultReader {
-  fn as_class_name(&self) -> Option<&Expr>;
   fn as_values(&self) -> Option<&FlatCompiledStyles>;
 }
 
 impl ResultReader for FnResult {
-  fn as_class_name(&self) -> Option<&Expr> {
-    match self {
-      FnResult::ClassName(class_name) => Some(class_name),
-      FnResult::Values(_) => None,
-    }
-  }
-
   fn as_values(&self) -> Option<&FlatCompiledStyles> {
     match self {
       FnResult::Values(values) => Some(values),

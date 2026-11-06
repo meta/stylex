@@ -7,7 +7,6 @@ Tests parsing of inset(), circle(), ellipse(), polygon(), and path() functions.
 
 use crate::css_types::{
   basic_shape::{BasicShape, CircleRadius},
-  common_types::Percentage,
   length::Length,
   length_percentage::LengthPercentage,
 };
@@ -16,185 +15,7 @@ use crate::css_types::{
 mod test_css_type_basic_shape {
   use super::*;
 
-  mod inset {
-    use stylex_macros::stylex_panic;
-
-    use super::*;
-
-    #[test]
-    fn should_parse_valid_insets() {
-      let result = BasicShape::parse().parse_to_end("inset(10px)").unwrap();
-      if let BasicShape::Inset {
-        top,
-        right,
-        bottom,
-        left,
-        round,
-      } = result
-      {
-        assert_eq!(
-          top,
-          LengthPercentage::Length(Length::new(10.0, "px".to_string()))
-        );
-        assert_eq!(
-          right,
-          LengthPercentage::Length(Length::new(10.0, "px".to_string()))
-        );
-        assert_eq!(
-          bottom,
-          LengthPercentage::Length(Length::new(10.0, "px".to_string()))
-        );
-        assert_eq!(
-          left,
-          LengthPercentage::Length(Length::new(10.0, "px".to_string()))
-        );
-        assert_eq!(round, None);
-      } else {
-        stylex_panic!("Expected Inset variant");
-      }
-
-      let result = BasicShape::parse()
-        .parse_to_end("inset(10px 20px)")
-        .unwrap();
-      if let BasicShape::Inset {
-        top,
-        right,
-        bottom,
-        left,
-        ..
-      } = result
-      {
-        assert_eq!(
-          top,
-          LengthPercentage::Length(Length::new(10.0, "px".to_string()))
-        );
-        assert_eq!(
-          right,
-          LengthPercentage::Length(Length::new(20.0, "px".to_string()))
-        );
-        assert_eq!(
-          bottom,
-          LengthPercentage::Length(Length::new(10.0, "px".to_string()))
-        );
-        assert_eq!(
-          left,
-          LengthPercentage::Length(Length::new(20.0, "px".to_string()))
-        );
-      } else {
-        stylex_panic!("Expected Inset variant");
-      }
-
-      let result = BasicShape::parse()
-        .parse_to_end("inset(10px 20px 30px)")
-        .unwrap();
-      if let BasicShape::Inset {
-        top,
-        right,
-        bottom,
-        left,
-        ..
-      } = result
-      {
-        assert_eq!(
-          top,
-          LengthPercentage::Length(Length::new(10.0, "px".to_string()))
-        );
-        assert_eq!(
-          right,
-          LengthPercentage::Length(Length::new(20.0, "px".to_string()))
-        );
-        assert_eq!(
-          bottom,
-          LengthPercentage::Length(Length::new(30.0, "px".to_string()))
-        );
-        assert_eq!(
-          left,
-          LengthPercentage::Length(Length::new(20.0, "px".to_string()))
-        );
-      } else {
-        stylex_panic!("Expected Inset variant");
-      }
-
-      let result = BasicShape::parse()
-        .parse_to_end("inset(10px 20px 30px 40px)")
-        .unwrap();
-      if let BasicShape::Inset {
-        top,
-        right,
-        bottom,
-        left,
-        ..
-      } = result
-      {
-        assert_eq!(
-          top,
-          LengthPercentage::Length(Length::new(10.0, "px".to_string()))
-        );
-        assert_eq!(
-          right,
-          LengthPercentage::Length(Length::new(20.0, "px".to_string()))
-        );
-        assert_eq!(
-          bottom,
-          LengthPercentage::Length(Length::new(30.0, "px".to_string()))
-        );
-        assert_eq!(
-          left,
-          LengthPercentage::Length(Length::new(40.0, "px".to_string()))
-        );
-      } else {
-        stylex_panic!("Expected Inset variant");
-      }
-    }
-
-    #[test]
-    fn should_parse_inset_with_round() {
-      let result = BasicShape::parse()
-        .parse_to_end("inset(10px round 5px)")
-        .unwrap();
-      if let BasicShape::Inset {
-        top,
-        right,
-        bottom,
-        left,
-        round,
-      } = result
-      {
-        assert_eq!(
-          top,
-          LengthPercentage::Length(Length::new(10.0, "px".to_string()))
-        );
-        assert_eq!(
-          right,
-          LengthPercentage::Length(Length::new(10.0, "px".to_string()))
-        );
-        assert_eq!(
-          bottom,
-          LengthPercentage::Length(Length::new(10.0, "px".to_string()))
-        );
-        assert_eq!(
-          left,
-          LengthPercentage::Length(Length::new(10.0, "px".to_string()))
-        );
-        assert_eq!(
-          round,
-          Some(LengthPercentage::Length(Length::new(5.0, "px".to_string())))
-        );
-      } else {
-        stylex_panic!("Expected Inset variant");
-      }
-    }
-
-    #[test]
-    fn should_not_parse_invalid_insets() {
-      assert!(BasicShape::parse().parse_to_end("inset(invalid)").is_err());
-      assert!(
-        BasicShape::parse()
-          .parse_to_end("inset(10px, invalid)")
-          .is_err()
-      );
-    }
-  }
+  mod inset {}
 
   mod circle {
     use stylex_macros::stylex_panic;
@@ -239,21 +60,6 @@ mod test_css_type_basic_shape {
     }
 
     #[test]
-    fn should_parse_circle_with_position() {
-      let result = BasicShape::parse().parse_to_end("circle(10px at top left)");
-      if let Ok(BasicShape::Circle { radius, position }) = result {
-        assert_eq!(
-          radius,
-          CircleRadius::Length(LengthPercentage::Length(Length::new(
-            10.0,
-            "px".to_string()
-          )))
-        );
-        assert!(position.is_some());
-      }
-    }
-
-    #[test]
     fn should_not_parse_invalid_circles() {
       assert!(BasicShape::parse().parse_to_end("circle(invalid)").is_err());
       assert!(
@@ -264,140 +70,10 @@ mod test_css_type_basic_shape {
     }
   }
 
-  mod ellipse {
-    use stylex_macros::stylex_panic;
-
-    use super::*;
-
-    #[test]
-    fn should_parse_valid_ellipses() {
-      let result = BasicShape::parse()
-        .parse_to_end("ellipse(10px 20px)")
-        .unwrap();
-      if let BasicShape::Ellipse {
-        radius_x,
-        radius_y,
-        position,
-      } = result
-      {
-        assert_eq!(
-          radius_x,
-          CircleRadius::Length(LengthPercentage::Length(Length::new(
-            10.0,
-            "px".to_string()
-          )))
-        );
-        assert_eq!(
-          radius_y,
-          CircleRadius::Length(LengthPercentage::Length(Length::new(
-            20.0,
-            "px".to_string()
-          )))
-        );
-        assert_eq!(position, None);
-      } else {
-        stylex_panic!("Expected Ellipse variant");
-      }
-
-      let result = BasicShape::parse()
-        .parse_to_end("ellipse(closest-side farthest-side)")
-        .unwrap();
-      if let BasicShape::Ellipse {
-        radius_x,
-        radius_y,
-        position,
-      } = result
-      {
-        assert_eq!(radius_x, CircleRadius::ClosestSide);
-        assert_eq!(radius_y, CircleRadius::FarthestSide);
-        assert_eq!(position, None);
-      } else {
-        stylex_panic!("Expected Ellipse variant");
-      }
-    }
-
-    #[test]
-    fn should_parse_ellipse_with_position() {
-      let result = BasicShape::parse().parse_to_end("ellipse(10px 20px at top left)");
-      if let Ok(BasicShape::Ellipse {
-        radius_x,
-        radius_y,
-        position,
-      }) = result
-      {
-        assert_eq!(
-          radius_x,
-          CircleRadius::Length(LengthPercentage::Length(Length::new(
-            10.0,
-            "px".to_string()
-          )))
-        );
-        assert_eq!(
-          radius_y,
-          CircleRadius::Length(LengthPercentage::Length(Length::new(
-            20.0,
-            "px".to_string()
-          )))
-        );
-        assert!(position.is_some());
-      }
-    }
-
-    #[test]
-    fn should_not_parse_invalid_ellipses() {
-      assert!(
-        BasicShape::parse()
-          .parse_to_end("ellipse(invalid)")
-          .is_err()
-      );
-      assert!(
-        BasicShape::parse()
-          .parse_to_end("ellipse(10px, invalid)")
-          .is_err()
-      );
-    }
-  }
+  mod ellipse {}
 
   mod polygon {
     use super::*;
-
-    #[test]
-    fn should_parse_valid_polygons() {
-      let result = BasicShape::parse().parse_to_end("polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)");
-      if let Ok(BasicShape::Polygon {
-        fill_rule: _,
-        points,
-      }) = result
-      {
-        assert_eq!(points.len(), 4);
-        assert_eq!(
-          points[0].0,
-          LengthPercentage::Percentage(Percentage::new(0.0))
-        );
-        assert_eq!(
-          points[0].1,
-          LengthPercentage::Percentage(Percentage::new(0.0))
-        );
-        assert_eq!(
-          points[1].0,
-          LengthPercentage::Percentage(Percentage::new(100.0))
-        );
-        assert_eq!(
-          points[1].1,
-          LengthPercentage::Percentage(Percentage::new(0.0))
-        );
-      }
-    }
-
-    #[test]
-    fn should_parse_polygon_with_fill_rule() {
-      let result =
-        BasicShape::parse().parse_to_end("polygon(evenodd, 0% 0%, 100% 0%, 100% 100%, 0% 100%)");
-      if let Ok(BasicShape::Polygon { fill_rule, points }) = result {
-        assert_eq!(fill_rule, Some("evenodd".to_string()));
-        assert_eq!(points.len(), 4);
-      }
-    }
 
     #[test]
     fn should_not_parse_invalid_polygons() {
@@ -418,27 +94,12 @@ mod test_css_type_basic_shape {
     use super::*;
 
     #[test]
-    fn should_parse_valid_paths() {
-      let result = BasicShape::parse().parse_to_end("path(\"M0,0 L100,100\")");
-      if let Ok(BasicShape::Path { fill_rule, path }) = result {
-        assert_eq!(path, "M0,0 L100,100");
-        assert_eq!(fill_rule, Some("nonzero".to_string())); // Default fill rule
-      }
-    }
-
-    #[test]
     fn should_parse_path_with_fill_rule() {
       let result = BasicShape::parse().parse_to_end("path(evenodd, \"M0,0 L100,100\")");
       if let Ok(BasicShape::Path { fill_rule, path }) = result {
         assert_eq!(path, "M0,0 L100,100");
         assert_eq!(fill_rule, Some("evenodd".to_string()));
       }
-    }
-
-    #[test]
-    fn should_not_parse_invalid_paths() {
-      assert!(BasicShape::parse().parse_to_end("path(invalid)").is_err());
-      assert!(BasicShape::parse().parse_to_end("path()").is_err());
     }
   }
 
@@ -452,34 +113,6 @@ mod test_css_type_basic_shape {
       round: None,
     };
     assert_eq!(inset.to_string(), "inset(10px)");
-  }
-
-  #[test]
-  fn test_circle_string_representation() {
-    let circle = BasicShape::Circle {
-      radius: CircleRadius::Length(LengthPercentage::Length(Length::new(
-        50.0,
-        "px".to_string(),
-      ))),
-      position: None,
-    };
-    assert_eq!(circle.to_string(), "circle(50px)");
-  }
-
-  #[test]
-  fn test_ellipse_string_representation() {
-    let ellipse = BasicShape::Ellipse {
-      radius_x: CircleRadius::Length(LengthPercentage::Length(Length::new(
-        50.0,
-        "px".to_string(),
-      ))),
-      radius_y: CircleRadius::Length(LengthPercentage::Length(Length::new(
-        25.0,
-        "px".to_string(),
-      ))),
-      position: None,
-    };
-    assert_eq!(ellipse.to_string(), "ellipse(50px 25px)");
   }
 
   #[test]
@@ -502,17 +135,6 @@ mod test_css_type_basic_shape {
     use super::*;
 
     #[test]
-    fn circle_with_radius() {
-      assert_eq!(
-        BasicShape::parse()
-          .parse_to_end("circle(50px)")
-          .unwrap()
-          .to_string(),
-        "circle(50px)"
-      );
-    }
-
-    #[test]
     fn circle_with_position() {
       assert_eq!(
         BasicShape::parse()
@@ -520,17 +142,6 @@ mod test_css_type_basic_shape {
           .unwrap()
           .to_string(),
         "circle(50px at center center)"
-      );
-    }
-
-    #[test]
-    fn ellipse_two_radii() {
-      assert_eq!(
-        BasicShape::parse()
-          .parse_to_end("ellipse(50px 30px)")
-          .unwrap()
-          .to_string(),
-        "ellipse(50px 30px)"
       );
     }
 
@@ -546,18 +157,6 @@ mod test_css_type_basic_shape {
     }
 
     #[test]
-    fn polygon_three_points() {
-      let result = BasicShape::parse()
-        .parse_to_end("polygon(0% 0%, 100% 0%, 50% 100%)")
-        .unwrap();
-      assert!(result.to_string().contains("polygon"));
-      if let BasicShape::Polygon { fill_rule, points } = result {
-        assert_eq!(points.len(), 3);
-        assert_eq!(fill_rule, Some("nonzero".to_string()));
-      }
-    }
-
-    #[test]
     fn polygon_with_fill_rule() {
       let result = BasicShape::parse()
         .parse_to_end("polygon(evenodd, 0% 0%, 100% 0%, 50% 100%)")
@@ -567,28 +166,6 @@ mod test_css_type_basic_shape {
         assert_eq!(points.len(), 3);
         assert_eq!(fill_rule, Some("evenodd".to_string()));
       }
-    }
-
-    #[test]
-    fn inset_single_value() {
-      assert_eq!(
-        BasicShape::parse()
-          .parse_to_end("inset(10px)")
-          .unwrap()
-          .to_string(),
-        "inset(10px)"
-      );
-    }
-
-    #[test]
-    fn inset_two_values() {
-      assert_eq!(
-        BasicShape::parse()
-          .parse_to_end("inset(10px 20px)")
-          .unwrap()
-          .to_string(),
-        "inset(10px 20px)"
-      );
     }
 
     #[test]

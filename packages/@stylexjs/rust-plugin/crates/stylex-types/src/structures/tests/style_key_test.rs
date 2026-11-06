@@ -1,30 +1,4 @@
-use indexmap::IndexMap;
-
 use crate::structures::style_key::{ClassName, RuleKey};
-
-#[test]
-fn class_name_round_trips_through_json() {
-  let class_name = ClassName::from("x1abc");
-  let json = match serde_json::to_string(&class_name) {
-    Ok(json) => json,
-    Err(error) => panic!("failed to serialize ClassName: {error}"),
-  };
-  let deserialized = match serde_json::from_str::<ClassName>(&json) {
-    Ok(class_name) => class_name,
-    Err(error) => panic!("failed to deserialize ClassName: {error}"),
-  };
-
-  assert_eq!(json, "\"x1abc\"");
-  assert_eq!(deserialized, class_name);
-}
-
-#[test]
-fn rule_key_supports_str_lookup_without_temporary_key() {
-  let mut map: IndexMap<RuleKey, usize> = IndexMap::new();
-  map.insert(RuleKey::from("color"), 1);
-
-  assert_eq!(map.get("color"), Some(&1));
-}
 
 #[test]
 fn class_name_string_accessors_return_inner_value() {

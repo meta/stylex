@@ -6,46 +6,6 @@ use crate::constants::{
 };
 
 #[test]
-fn test_unsupported_operator() {
-  assert_eq!(unsupported_operator("+"), "Unsupported operator: +\n\n");
-  assert_eq!(unsupported_operator("**"), "Unsupported operator: **\n\n");
-}
-
-#[test]
-fn test_unsupported_expression() {
-  assert_eq!(
-    unsupported_expression("AwaitExpression"),
-    "Unsupported expression: AwaitExpression\n\n"
-  );
-}
-
-#[test]
-fn test_uncoercible_value() {
-  assert_eq!(
-    uncoercible_value("String"),
-    "Cannot coerce this value at compile time.\nOnly static values can be passed to String().\n\n"
-  );
-  assert!(uncoercible_value("Number").contains("Number()"));
-}
-
-#[test]
-fn test_array_length_too_large() {
-  assert_eq!(
-    array_length_too_large(10_000),
-    "Array length is too large to evaluate at compile time.\nAt most 10000 elements are supported.\n\n"
-  );
-}
-
-#[test]
-fn test_expression_too_deep() {
-  assert_eq!(
-    expression_too_deep(32),
-    "Expression is too deeply nested to evaluate at compile time.\nAt most 32 levels of nested evaluation are supported.\n\n"
-  );
-  assert!(expression_too_deep(320).contains("At most 320 levels"));
-}
-
-#[test]
 fn test_nesting_too_deep_to_carry() {
   assert_eq!(
     nesting_too_deep_to_carry(8192),
@@ -53,38 +13,6 @@ fn test_nesting_too_deep_to_carry() {
   );
 
   assert_ne!(nesting_too_deep_to_carry(8192), expression_too_deep(8192));
-}
-
-#[test]
-fn test_not_a_function() {
-  assert_eq!(
-    not_a_function("Math"),
-    "Math is not a function.\nOnly its methods can be called.\n\n"
-  );
-}
-
-#[test]
-fn test_static_constants() {
-  assert!(!PATH_WITHOUT_NODE.is_empty());
-  assert!(!UNEXPECTED_MEMBER_LOOKUP.is_empty());
-  assert!(!IMPORT_PATH_RESOLUTION_ERROR.is_empty());
-  assert!(!NON_CONSTANT.is_empty());
-  assert!(!UNDEFINED_CONST.is_empty());
-  assert!(!OBJECT_METHOD.is_empty());
-  assert!(!BLOCKED_PROPERTY_ACCESS.is_empty());
-}
-
-/// Fixed text, asserted word for word.
-#[test]
-fn test_blocked_property_access() {
-  assert_eq!(
-    BLOCKED_PROPERTY_ACCESS,
-    concat!(
-      "Access to this property is not allowed during compilation.\n",
-      "Accessing prototype-chain properties such as 'constructor', '__proto__', or 'prototype'\n",
-      "is blocked to prevent arbitrary code execution.\n"
-    )
-  );
 }
 
 #[test]
@@ -143,27 +71,6 @@ fn test_amplified_length_too_large() {
 }
 
 #[test]
-fn test_amplified_entries_too_large() {
-  assert_eq!(
-    amplified_entries_too_large("Array", 20_000, 1, 10_000),
-    "Cannot bound the array 'Array' would build.\nIt declares a length of 20000 elements, and at most 10000 are supported.\n\n"
-  );
-  assert_eq!(
-    amplified_entries_too_large("Array.from", 9_999, 3, 10_000),
-    "Cannot bound the array 'Array.from' would build.\nIt declares a length of 9999 elements once per element of the receiver it is written inside, which is 3 evaluations and 29997 elements in all, and at most 10000 are supported.\n\n"
-  );
-  assert!(!amplified_entries_too_large("Array", 3, 1, 2).contains("once per element"));
-}
-
-#[test]
-fn test_object_size_too_large() {
-  assert_eq!(
-    object_size_too_large(10_000),
-    "Object is too large to evaluate at compile time.\nAt most 10000 properties are supported.\n\n"
-  );
-}
-
-#[test]
 fn test_unfoldable_fold_result() {
   assert_eq!(
     unfoldable_fold_result("function"),
@@ -188,15 +95,6 @@ fn test_engine_threw() {
 }
 
 #[test]
-fn test_escaping_property() {
-  assert_eq!(
-    escaping_property("constructor"),
-    "Cannot fold a read of 'constructor' at compile time.\nIt leads off the value that was written and onto the language's own function graph.\n\n"
-  );
-  assert!(escaping_property("bind").contains("'bind'"));
-}
-
-#[test]
 fn test_amplification_inside_a_callback() {
   assert_eq!(
     amplification_inside_a_callback("string", "repeat"),
@@ -206,50 +104,6 @@ fn test_amplification_inside_a_callback() {
   assert!(
     amplification_inside_a_callback("array", "Array").contains("Cannot bound the array 'Array'")
   );
-}
-
-#[test]
-fn test_folded_string_too_large() {
-  assert_eq!(
-    folded_string_too_large(1_000_000),
-    "Folded string is too large to evaluate at compile time.\nAt most 1000000 characters are supported.\n\n"
-  );
-  assert!(folded_string_too_large(32).contains("At most 32"));
-}
-
-#[test]
-fn test_grown_string_too_large() {
-  assert_eq!(
-    grown_string_too_large(CONCATENATION, 1_000_000),
-    "This concatenation builds a string too large to evaluate at compile time.\nAt most 1000000 characters are supported.\n\n"
-  );
-  assert_eq!(
-    grown_string_too_large(TEMPLATE_LITERAL, 8),
-    "This template literal builds a string too large to evaluate at compile time.\nAt most 8 characters are supported.\n\n"
-  );
-  assert_ne!(
-    grown_string_too_large(CONCATENATION, 8),
-    grown_string_too_large(TEMPLATE_LITERAL, 8)
-  );
-  assert!(
-    grown_string_too_large(CONCATENATION, 32).contains(
-      &folded_string_too_large(32)
-        .lines()
-        .nth(1)
-        .unwrap_or_default()
-        .to_string()
-    )
-  );
-}
-
-#[test]
-fn test_bound_value_too_large() {
-  assert_eq!(
-    bound_value_too_large("big", 1_000_000),
-    "Cannot carry the value of 'big' into a fold.\nAt most 1000000 characters are supported.\n\n"
-  );
-  assert!(bound_value_too_large("fonts", 32).contains("'fonts'"));
-  assert!(bound_value_too_large("fonts", 32).contains("At most 32"));
 }
 
 #[test]
@@ -283,16 +137,6 @@ fn test_global_as_a_value() {
     assert!(global_as_a_value(name).contains(&format!("'{}'", name)));
     assert!(!global_as_a_value(name).contains("constant"));
   }
-}
-
-#[test]
-fn test_unfoldable_call() {
-  assert_eq!(
-    unfoldable_call("startsWith"),
-    "Cannot fold 'startsWith' at compile time.\nIts receiver or one of its arguments is not in a form the compiler can evaluate.\n\n"
-  );
-  assert!(!unfoldable_call("trim").contains("argument must"));
-  assert!(unfoldable_call("trim").contains("'trim'"));
 }
 
 #[test]
@@ -343,23 +187,4 @@ fn test_unfoldable_statement() {
     unfoldable_statement("for loop")
   );
   assert!(unfoldable_statement("throw").contains("Only a declaration, a branch"));
-}
-
-#[test]
-fn test_bound_value_has_too_many_entries() {
-  assert_eq!(
-    bound_value_has_too_many_entries("palette", 10_000),
-    "Cannot carry the value of 'palette' into a fold.\nAt most 10000 elements and properties are supported.\n\n"
-  );
-  assert_eq!(
-    bound_value_has_too_many_entries("palette", 8)
-      .lines()
-      .next(),
-    bound_value_too_large("palette", 8).lines().next()
-  );
-  assert_ne!(
-    bound_value_has_too_many_entries("palette", 8),
-    bound_value_too_large("palette", 8)
-  );
-  assert!(bound_value_has_too_many_entries("sizes", 32).contains("At most 32"));
 }

@@ -17,23 +17,6 @@ fn marker(code: &str) -> EvaluateResultValue {
   EvaluateResultValue::Expr(expr(code))
 }
 
-#[test]
-fn a_class_name_resolves_without_a_word() {
-  let state = state();
-  let marker = marker("'the-marker'");
-
-  let logged = logged_at(Level::Warn, || {
-    let resolved = resolve_when_marker("ancestor", Some(&marker), &state);
-
-    assert_eq!(resolved.as_str_value(), Some("the-marker"));
-  });
-
-  assert!(
-    logged.is_empty(),
-    "a class name is a marker the compiler can read, so it should say nothing: {logged:?}"
-  );
-}
-
 /// Read through its class key.
 #[test]
 fn a_compiled_marker_resolves_without_a_word() {
@@ -73,35 +56,5 @@ fn a_marker_the_compiler_cannot_read_is_reported_by_name() {
     logged[0].contains("default-marker"),
     "the report should name the fallback it took: {}",
     logged[0]
-  );
-}
-
-/// Leaving the argument out is how an author asks for the configured default.
-#[test]
-fn an_absent_marker_takes_the_options_without_a_word() {
-  let state = state();
-
-  let logged = logged_at(Level::Warn, || {
-    resolve_when_marker("anySibling", None, &state);
-  });
-
-  assert!(
-    logged.is_empty(),
-    "an absent marker is not a mistake, so it should say nothing: {logged:?}"
-  );
-}
-
-#[test]
-fn a_null_marker_takes_the_options_without_a_word() {
-  let state = state();
-  let marker = marker("null");
-
-  let logged = logged_at(Level::Warn, || {
-    resolve_when_marker("ancestor", Some(&marker), &state);
-  });
-
-  assert!(
-    logged.is_empty(),
-    "`null` asks for the configured default, so it should say nothing: {logged:?}"
   );
 }

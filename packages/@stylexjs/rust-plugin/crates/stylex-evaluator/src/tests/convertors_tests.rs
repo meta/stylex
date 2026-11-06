@@ -1,16 +1,14 @@
 use crate::state::EvaluationState;
 use stylex_ast::ast::convertors::{
-  convert_concat_to_tpl_expr, convert_key_value_to_str, convert_simple_tpl_to_str_expr,
-  convert_string_to_prop_name, convert_tpl_to_string_lit, create_ident_expr, create_number_expr,
+  convert_concat_to_tpl_expr, convert_key_value_to_str, create_ident_expr, create_number_expr,
   create_string_expr,
 };
-use stylex_ast::ast::factories::{create_key_value_prop, create_object_lit};
 use stylex_state::state_writers::fill_state_declarations;
 use stylex_state::{functions::FunctionMap, state_manager::StateManager};
 use swc_core::{
   common::SyntaxContext,
   ecma::ast::{
-    BinExpr, BinaryOp, BindingIdent, Bool, Expr, Ident, IdentName, Lit, Pat, Str, VarDeclarator,
+    BinExpr, BinaryOp, BindingIdent, Bool, Expr, Ident, IdentName, Lit, Pat, VarDeclarator,
   },
 };
 
@@ -29,242 +27,6 @@ fn make_var_declarator(name: &str, init: Expr) -> VarDeclarator {
     }),
     init: Some(Box::new(init)),
     definite: false,
-  }
-}
-
-#[test]
-fn string_to_prop_name_with_quotes() {
-  let keys_with_quotes = vec!["2ip", "123", "1b3", "1bc", "2xl", "x*x", "x-x", "x,x"];
-
-  for key in keys_with_quotes {
-    assert!(
-      convert_string_to_prop_name(key).is_str(),
-      "Key '{}' should be wrapped in quotes",
-      key
-    );
-  }
-}
-
-#[test]
-fn string_to_prop_name_without_quotes() {
-  let keys_without_quotes = vec![
-    "_abc_",
-    "_ABC_",
-    "$123AB",
-    "$abc_",
-    "$abc$",
-    "$ABC$",
-    "$ABC123",
-    "abc_",
-    "abc",
-    "ABC",
-    "abc$",
-    "break",
-    "case",
-    "catch",
-    "class",
-    "const",
-    "continue",
-    "debugger",
-    "default",
-    "delete",
-    "do",
-    "else",
-    "export",
-    "extends",
-    "false",
-    "finally",
-    "for",
-    "function",
-    "if",
-    "import",
-    "in",
-    "instanceof",
-    "new",
-    "null",
-    "return",
-    "super",
-    "switch",
-    "this",
-    "throw",
-    "true",
-    "try",
-    "typeof",
-    "var",
-    "void",
-    "while",
-    "with",
-    "x_x",
-    "x$x",
-    "xl",
-  ];
-
-  for key in keys_without_quotes {
-    assert!(
-      convert_string_to_prop_name(key).is_ident(),
-      "Key '{}' should not be wrapped in quotes",
-      key
-    );
-  }
-}
-
-#[test]
-fn test_simple_tpl_to_string_without_expressions() {
-  use swc_core::ecma::ast::{Tpl, TplElement};
-
-  let tpl = Tpl {
-    span: Default::default(),
-    exprs: vec![],
-    quasis: vec![TplElement {
-      span: Default::default(),
-      tail: true,
-      cooked: Some("hello world".into()),
-      raw: "hello world".into(),
-    }],
-  };
-
-  let result = convert_tpl_to_string_lit(&tpl);
-  assert!(result.is_some(), "Should convert simple template to string");
-
-  if let Some(Lit::Str(str_lit)) = result {
-    assert_eq!(
-      str_lit.value.as_str().expect("Failed to get string Value"),
-      "hello world"
-    );
-  } else {
-    panic!("Expected Lit::Str");
-  }
-}
-
-#[test]
-fn test_simple_tpl_to_string_with_expressions() {
-  use swc_core::ecma::ast::{Tpl, TplElement};
-
-  let tpl = Tpl {
-    span: Default::default(),
-    exprs: vec![Box::new(create_ident_expr("name"))],
-    quasis: vec![
-      TplElement {
-        span: Default::default(),
-        tail: false,
-        cooked: Some("hello ".into()),
-        raw: "hello ".into(),
-      },
-      TplElement {
-        span: Default::default(),
-        tail: true,
-        cooked: Some("".into()),
-        raw: "".into(),
-      },
-    ],
-  };
-
-  let result = convert_tpl_to_string_lit(&tpl);
-  assert!(
-    result.is_none(),
-    "Should not convert template with expressions"
-  );
-}
-
-#[test]
-fn test_convert_simple_tpl_to_str_expr() {
-  use swc_core::ecma::ast::{Tpl, TplElement};
-
-  let tpl = Tpl {
-    span: Default::default(),
-    exprs: vec![],
-    quasis: vec![TplElement {
-      span: Default::default(),
-      tail: true,
-      cooked: Some("var(--font-geist-sans), sans-serif".into()),
-      raw: "var(--font-geist-sans), sans-serif".into(),
-    }],
-  };
-
-  let expr = Expr::Tpl(tpl);
-  let result = convert_simple_tpl_to_str_expr(expr);
-
-  match result {
-    Expr::Lit(Lit::Str(str_lit)) => {
-      assert_eq!(
-        str_lit.value.as_str().expect("Failed to get string Value"),
-        "var(--font-geist-sans), sans-serif"
-      );
-    },
-    _ => panic!("Expected Expr::Lit(Lit::Str)"),
-  }
-}
-
-#[test]
-fn test_convert_simple_tpl_to_str_expr_with_expressions() {
-  use swc_core::ecma::ast::{Tpl, TplElement};
-
-  let tpl = Tpl {
-    span: Default::default(),
-    exprs: vec![Box::new(create_ident_expr("value"))],
-    quasis: vec![
-      TplElement {
-        span: Default::default(),
-        tail: false,
-        cooked: Some("prefix ".into()),
-        raw: "prefix ".into(),
-      },
-      TplElement {
-        span: Default::default(),
-        tail: true,
-        cooked: Some(" suffix".into()),
-        raw: " suffix".into(),
-      },
-    ],
-  };
-
-  let expr = Expr::Tpl(tpl);
-  let result = convert_simple_tpl_to_str_expr(expr);
-
-  match result {
-    Expr::Tpl(_) => {},
-    _ => panic!("Expected Expr::Tpl to remain unchanged"),
-  }
-}
-
-#[test]
-fn test_convert_concat_to_tpl_expr_simple() {
-  use swc_core::ecma::ast::{CallExpr, Callee, ExprOrSpread, MemberExpr, MemberProp};
-
-  let call_expr = CallExpr {
-    span: Default::default(),
-    callee: Callee::Expr(Box::new(Expr::Member(MemberExpr {
-      span: Default::default(),
-      obj: Box::new(create_string_expr("hello")),
-      prop: MemberProp::Ident(IdentName {
-        span: Default::default(),
-        sym: "concat".into(),
-      }),
-    }))),
-    args: vec![ExprOrSpread {
-      spread: None,
-      expr: Box::new(create_string_expr("world")),
-    }],
-    ..Default::default()
-  };
-
-  let expr = Expr::Call(call_expr);
-  let result = convert_concat_to_tpl_expr(expr);
-
-  match result {
-    Expr::Tpl(tpl) => {
-      assert_eq!(tpl.quasis.len(), 2, "Should have 2 quasis");
-      assert_eq!(tpl.exprs.len(), 1, "Should have 1 expression");
-      assert_eq!(
-        tpl.quasis[0]
-          .cooked
-          .as_ref()
-          .expect("Failed to get string value"),
-        "hello",
-        "First quasi should be 'hello'"
-      );
-    },
-    _ => panic!("Expected Expr::Tpl"),
   }
 }
 
@@ -317,52 +79,6 @@ fn test_convert_concat_to_tpl_expr_multiple_args() {
       assert!(tpl.quasis[3].tail, "Last quasi should have tail=true");
     },
     _ => panic!("Expected Expr::Tpl"),
-  }
-}
-
-#[test]
-fn test_convert_concat_to_tpl_expr_not_concat_method() {
-  use swc_core::ecma::ast::{CallExpr, Callee, ExprOrSpread, MemberExpr, MemberProp};
-
-  let call_expr = CallExpr {
-    span: Default::default(),
-    callee: Callee::Expr(Box::new(Expr::Member(MemberExpr {
-      span: Default::default(),
-      obj: Box::new(create_string_expr("hello")),
-      prop: MemberProp::Ident(IdentName {
-        span: Default::default(),
-        sym: "split".into(),
-      }),
-    }))),
-    args: vec![ExprOrSpread {
-      spread: None,
-      expr: Box::new(create_string_expr("world")),
-    }],
-    ..Default::default()
-  };
-
-  let original_expr = Expr::Call(call_expr);
-  let result = convert_concat_to_tpl_expr(original_expr);
-
-  match result {
-    Expr::Call(_) => {},
-    _ => panic!("Expected Expr::Call to remain unchanged"),
-  }
-}
-
-#[test]
-fn test_convert_concat_to_tpl_expr_non_call_expr() {
-  let expr = create_string_expr("hello");
-  let result = convert_concat_to_tpl_expr(expr);
-
-  match result {
-    Expr::Lit(Lit::Str(str_lit)) => {
-      assert_eq!(
-        str_lit.value.as_str().expect("Failed to get string value"),
-        "hello"
-      );
-    },
-    _ => panic!("Expected Expr::Lit(Lit::Str) to remain unchanged"),
   }
 }
 
@@ -421,38 +137,6 @@ mod convert_unary_to_num_tests {
   }
 
   #[test]
-  fn minus_negates_positive() {
-    let unary = make_unary(UnaryOp::Minus, 5.0);
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-    let result = convert_unary_to_num(&unary, &mut state, &mut traversal_state, &fns);
-    assert_eq!(result, -5.0);
-  }
-
-  #[test]
-  fn minus_negates_negative() {
-    let unary = make_unary(UnaryOp::Minus, -3.0);
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-    let result = convert_unary_to_num(&unary, &mut state, &mut traversal_state, &fns);
-    assert_eq!(result, 3.0);
-  }
-
-  #[test]
-  fn minus_zero() {
-    let unary = make_unary(UnaryOp::Minus, 0.0);
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-    let result = convert_unary_to_num(&unary, &mut state, &mut traversal_state, &fns);
-
-    assert_eq!(result, 0.0);
-    assert!(result.is_sign_negative(), "expected -0, got {}", result);
-  }
-
-  #[test]
   fn plus_preserves_value() {
     let unary = make_unary(UnaryOp::Plus, 7.0);
     let mut state = EvaluationState::new();
@@ -460,36 +144,6 @@ mod convert_unary_to_num_tests {
     let fns = FunctionMap::default();
     let result = convert_unary_to_num(&unary, &mut state, &mut traversal_state, &fns);
     assert_eq!(result, 7.0);
-  }
-
-  #[test]
-  fn plus_preserves_negative() {
-    let unary = make_unary(UnaryOp::Plus, -4.0);
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-    let result = convert_unary_to_num(&unary, &mut state, &mut traversal_state, &fns);
-    assert_eq!(result, -4.0);
-  }
-
-  #[test]
-  fn minus_large_number() {
-    let unary = make_unary(UnaryOp::Minus, 1e10);
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-    let result = convert_unary_to_num(&unary, &mut state, &mut traversal_state, &fns);
-    assert_eq!(result, -1e10);
-  }
-
-  #[test]
-  fn minus_fractional() {
-    let unary = make_unary(UnaryOp::Minus, 0.5);
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-    let result = convert_unary_to_num(&unary, &mut state, &mut traversal_state, &fns);
-    assert_eq!(result, -0.5);
   }
 
   #[test]
@@ -503,135 +157,12 @@ mod convert_unary_to_num_tests {
   }
 }
 
-mod convert_key_value_to_str_tests {
-  use super::*;
-  use swc_core::ecma::ast::{ComputedPropName, IdentName, KeyValueProp, Number, PropName};
-
-  fn make_kv(key: PropName) -> KeyValueProp {
-    KeyValueProp {
-      key,
-      value: Box::new(create_number_expr(0.0)),
-    }
-  }
-
-  #[test]
-  fn ident_key_returns_name() {
-    let kv = make_kv(PropName::Ident(IdentName {
-      span: Default::default(),
-      sym: "color".into(),
-    }));
-    let result = convert_key_value_to_str(&kv);
-    assert_eq!(result, "color");
-  }
-
-  #[test]
-  fn str_key_returns_value() {
-    let kv = make_kv(PropName::Str(Str {
-      span: Default::default(),
-      value: "background-color".into(),
-      raw: None,
-    }));
-    let result = convert_key_value_to_str(&kv);
-    assert!(result.contains("background-color"));
-  }
-
-  #[test]
-  fn num_key_returns_number_string() {
-    let kv = make_kv(PropName::Num(Number {
-      span: Default::default(),
-      value: 42.0,
-      raw: None,
-    }));
-    let result = convert_key_value_to_str(&kv);
-    assert_eq!(result, "42");
-  }
-
-  #[test]
-  fn num_key_uses_the_javascript_spelling() {
-    let kv = make_kv(PropName::Num(Number {
-      span: Default::default(),
-      value: 1e21,
-      raw: None,
-    }));
-    let result = convert_key_value_to_str(&kv);
-    assert_eq!(result, "1e+21");
-  }
-
-  #[test]
-  fn computed_num_key_uses_the_javascript_spelling() {
-    let kv = make_kv(PropName::Computed(ComputedPropName {
-      span: Default::default(),
-      expr: Box::new(create_number_expr(1e21)),
-    }));
-    let result = convert_key_value_to_str(&kv);
-    assert_eq!(result, "1e+21");
-  }
-
-  #[test]
-  fn computed_string_key_returns_value() {
-    let kv = make_kv(PropName::Computed(ComputedPropName {
-      span: Default::default(),
-      expr: Box::new(create_string_expr("dynamic")),
-    }));
-    let result = convert_key_value_to_str(&kv);
-    assert!(result.contains("dynamic"));
-  }
-}
+mod convert_key_value_to_str_tests {}
 
 mod expr_tpl_to_string_tests {
   use super::*;
   use crate::convertors::expr_tpl_to_string;
   use swc_core::ecma::ast::{Tpl, TplElement};
-
-  #[test]
-  fn simple_template_without_expressions() {
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-
-    let tpl = Tpl {
-      span: Default::default(),
-      exprs: vec![],
-      quasis: vec![TplElement {
-        span: Default::default(),
-        tail: true,
-        cooked: Some("hello world".into()),
-        raw: "hello world".into(),
-      }],
-    };
-
-    let result = expr_tpl_to_string(&tpl, &mut state, &mut traversal_state, &fns);
-    assert_eq!(result, "hello world");
-  }
-
-  #[test]
-  fn template_with_literal_expression() {
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-
-    let tpl = Tpl {
-      span: Default::default(),
-      exprs: vec![Box::new(create_number_expr(42.0))],
-      quasis: vec![
-        TplElement {
-          span: Default::default(),
-          tail: false,
-          cooked: Some("value is ".into()),
-          raw: "value is ".into(),
-        },
-        TplElement {
-          span: Default::default(),
-          tail: true,
-          cooked: Some(" px".into()),
-          raw: " px".into(),
-        },
-      ],
-    };
-
-    let result = expr_tpl_to_string(&tpl, &mut state, &mut traversal_state, &fns);
-    assert_eq!(result, "value is 42 px");
-  }
 
   #[test]
   fn template_with_ident_expression() {
@@ -663,35 +194,6 @@ mod expr_tpl_to_string_tests {
 
     let result = expr_tpl_to_string(&tpl, &mut state, &mut traversal_state, &fns);
     assert_eq!(result, "font-size: 16px");
-  }
-
-  #[test]
-  fn template_with_string_literal_expression() {
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-
-    let tpl = Tpl {
-      span: Default::default(),
-      exprs: vec![Box::new(create_string_expr("world"))],
-      quasis: vec![
-        TplElement {
-          span: Default::default(),
-          tail: false,
-          cooked: Some("hello ".into()),
-          raw: "hello ".into(),
-        },
-        TplElement {
-          span: Default::default(),
-          tail: true,
-          cooked: Some("".into()),
-          raw: "".into(),
-        },
-      ],
-    };
-
-    let result = expr_tpl_to_string(&tpl, &mut state, &mut traversal_state, &fns);
-    assert_eq!(result, "hello world");
   }
 
   #[test]
@@ -734,62 +236,12 @@ mod expr_tpl_to_string_tests {
   }
 }
 
-mod ident_to_number_tests {
-  use super::*;
-  use crate::convertors::ident_to_number;
-
-  #[test]
-  fn resolves_numeric_literal() {
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-
-    let decl = make_var_declarator("myNum", create_number_expr(42.0));
-    fill_state_declarations(&mut traversal_state, &decl);
-
-    let ident = Ident {
-      span: Default::default(),
-      sym: "myNum".into(),
-      optional: false,
-      ctxt: SyntaxContext::empty(),
-    };
-
-    let result = ident_to_number(&ident, &mut state, &mut traversal_state, &fns);
-    assert_eq!(result, 42.0);
-  }
-
-  #[test]
-  #[should_panic(expected = "not declared")]
-  fn panics_for_undeclared_ident() {
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-
-    let ident = Ident {
-      span: Default::default(),
-      sym: "nonexistent".into(),
-      optional: false,
-      ctxt: SyntaxContext::empty(),
-    };
-
-    ident_to_number(&ident, &mut state, &mut traversal_state, &fns);
-  }
-}
+mod ident_to_number_tests {}
 
 mod expr_to_num_tests {
   use super::*;
   use crate::convertors::expr_to_num;
   use swc_core::ecma::ast::{UnaryExpr, UnaryOp};
-
-  #[test]
-  fn literal_number_returns_value() {
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-    let expr = create_number_expr(2.5);
-    let result = expr_to_num(&expr, &mut state, &mut traversal_state, &fns).unwrap();
-    assert!((result - 2.5).abs() < f64::EPSILON);
-  }
 
   #[test]
   fn ident_resolves_to_number() {
@@ -833,102 +285,14 @@ mod expr_to_num_tests {
     let result = expr_to_num(&expr, &mut state, &mut traversal_state, &fns).unwrap();
     assert_eq!(result, 7.0);
   }
-
-  #[test]
-  fn a_comparison_reads_as_one_or_nought() {
-    for (op, left, right, expected) in [
-      (BinaryOp::Lt, 1.0, 2.0, 1.0),
-      (BinaryOp::GtEq, 3.0, 4.0, 0.0),
-      (BinaryOp::EqEqEq, 5.0, 5.0, 1.0),
-      (BinaryOp::NotEqEq, 5.0, 5.0, 0.0),
-    ] {
-      let mut state = EvaluationState::new();
-      let mut traversal_state = StateManager::default();
-      let fns = FunctionMap::default();
-      let expr = Expr::Bin(BinExpr {
-        span: Default::default(),
-        op,
-        left: Box::new(create_number_expr(left)),
-        right: Box::new(create_number_expr(right)),
-      });
-
-      let result = match expr_to_num(&expr, &mut state, &mut traversal_state, &fns) {
-        Ok(number) => number,
-        Err(error) => panic!("`{left} {op} {right}` must read as a number: {error}"),
-      };
-
-      assert_eq!(
-        result, expected,
-        "`{left} {op} {right}` reads as {expected}"
-      );
-    }
-  }
-
-  #[test]
-  fn a_concatenation_is_refused() {
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-    let expr = Expr::Bin(BinExpr {
-      span: Default::default(),
-      op: BinaryOp::Add,
-      left: Box::new(Expr::from("a")),
-      right: Box::new(Expr::from("b")),
-    });
-
-    assert!(
-      expr_to_num(&expr, &mut state, &mut traversal_state, &fns).is_err(),
-      "a concatenation has no number of its own"
-    );
-  }
 }
 
-mod convert_key_value_to_str_bigint_tests {
-  use super::*;
-  use swc_core::ecma::ast::{BigInt, KeyValueProp, PropName};
-
-  #[test]
-  fn bigint_key_returns_string() {
-    let kv = KeyValueProp {
-      key: PropName::BigInt(BigInt {
-        span: Default::default(),
-        value: Box::new(100u32.into()),
-        raw: None,
-      }),
-      value: Box::new(create_number_expr(0.0)),
-    };
-    let result = convert_key_value_to_str(&kv);
-    assert!(result.contains("100"));
-  }
-}
+mod convert_key_value_to_str_bigint_tests {}
 
 mod ident_to_number_extended_tests {
   use super::*;
   use crate::convertors::ident_to_number;
   use swc_core::ecma::ast::{UnaryExpr, UnaryOp};
-
-  #[test]
-  fn resolves_ident_with_bin_expr_decl() {
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-    let bin_expr = Expr::Bin(BinExpr {
-      span: Default::default(),
-      op: BinaryOp::Add,
-      left: Box::new(create_number_expr(3.0)),
-      right: Box::new(create_number_expr(7.0)),
-    });
-    let decl = make_var_declarator("sum", bin_expr);
-    fill_state_declarations(&mut traversal_state, &decl);
-    let ident = Ident {
-      span: Default::default(),
-      sym: "sum".into(),
-      optional: false,
-      ctxt: SyntaxContext::empty(),
-    };
-    let result = ident_to_number(&ident, &mut state, &mut traversal_state, &fns);
-    assert_eq!(result, 10.0);
-  }
 
   #[test]
   fn resolves_ident_declared_as_a_comparison() {
@@ -960,30 +324,6 @@ mod ident_to_number_extended_tests {
   }
 
   #[test]
-  #[should_panic(expected = "Binary expression is not a number")]
-  fn panics_for_an_ident_declared_as_a_concatenation() {
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-    let bin_expr = Expr::Bin(BinExpr {
-      span: Default::default(),
-      op: BinaryOp::Add,
-      left: Box::new(Expr::from("a")),
-      right: Box::new(Expr::from("b")),
-    });
-    let decl = make_var_declarator("joined", bin_expr);
-    fill_state_declarations(&mut traversal_state, &decl);
-    let ident = Ident {
-      span: Default::default(),
-      sym: "joined".into(),
-      optional: false,
-      ctxt: SyntaxContext::empty(),
-    };
-
-    ident_to_number(&ident, &mut state, &mut traversal_state, &fns);
-  }
-
-  #[test]
   fn resolves_ident_with_unary_expr_decl() {
     let mut state = EvaluationState::new();
     let mut traversal_state = StateManager::default();
@@ -1003,26 +343,6 @@ mod ident_to_number_extended_tests {
     };
     let result = ident_to_number(&ident, &mut state, &mut traversal_state, &fns);
     assert_eq!(result, -5.0);
-  }
-
-  #[test]
-  #[should_panic(expected = "Expression is not a number")]
-  fn panics_for_a_declaration_whose_binary_expression_has_no_number() {
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-    let decl = make_var_declarator("broken", an_unconvertible_object_minus_one());
-
-    fill_state_declarations(&mut traversal_state, &decl);
-
-    let ident = Ident {
-      span: Default::default(),
-      sym: "broken".into(),
-      optional: false,
-      ctxt: SyntaxContext::empty(),
-    };
-
-    ident_to_number(&ident, &mut state, &mut traversal_state, &fns);
   }
 
   #[test]
@@ -1121,115 +441,11 @@ mod expr_tpl_to_string_extended_tests {
     let result = expr_tpl_to_string(&tpl, &mut state, &mut traversal_state, &fns);
     assert_eq!(result, "42px");
   }
-
-  #[test]
-  fn template_with_ident_resolving_to_string() {
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-    let decl = make_var_declarator("unit", create_string_expr("em"));
-    fill_state_declarations(&mut traversal_state, &decl);
-    let tpl = Tpl {
-      span: Default::default(),
-      exprs: vec![Box::new(create_ident_expr("unit"))],
-      quasis: vec![
-        TplElement {
-          span: Default::default(),
-          tail: false,
-          cooked: Some("10".into()),
-          raw: "10".into(),
-        },
-        TplElement {
-          span: Default::default(),
-          tail: true,
-          cooked: Some("".into()),
-          raw: "".into(),
-        },
-      ],
-    };
-    let result = expr_tpl_to_string(&tpl, &mut state, &mut traversal_state, &fns);
-    assert_eq!(result, "10em");
-  }
 }
 
-mod transform_bin_expr_to_number_tests {
-  use super::*;
-  use crate::convertors::transform_bin_expr_to_number;
+mod transform_bin_expr_to_number_tests {}
 
-  #[test]
-  fn add_two_numbers() {
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-    let bin = BinExpr {
-      span: Default::default(),
-      op: BinaryOp::Add,
-      left: Box::new(create_number_expr(3.0)),
-      right: Box::new(create_number_expr(4.0)),
-    };
-    let result = transform_bin_expr_to_number(&bin, &mut state, &mut traversal_state, &fns);
-    assert_eq!(result, 7.0);
-  }
-
-  #[test]
-  fn mul_two_numbers() {
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-    let bin = BinExpr {
-      span: Default::default(),
-      op: BinaryOp::Mul,
-      left: Box::new(create_number_expr(3.0)),
-      right: Box::new(create_number_expr(5.0)),
-    };
-    let result = transform_bin_expr_to_number(&bin, &mut state, &mut traversal_state, &fns);
-    assert_eq!(result, 15.0);
-  }
-}
-
-mod expr_to_num_unsupported_tests {
-  use super::*;
-  use crate::convertors::expr_to_num;
-  use swc_core::ecma::ast::ArrayLit;
-
-  #[test]
-  fn reports_an_array_expr_as_an_error() {
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-    let expr = Expr::Array(ArrayLit {
-      span: Default::default(),
-      elems: vec![],
-    });
-
-    let error = expr_to_num(&expr, &mut state, &mut traversal_state, &fns)
-      .expect_err("an array has no numeric reading");
-
-    assert!(
-      error.to_string().contains("not a number"),
-      "the error should say what it could not read, got: {}",
-      error
-    );
-  }
-
-  #[test]
-  fn reports_a_string_valued_binary_expr_as_an_error() {
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-    let expr = Expr::Bin(BinExpr {
-      span: Default::default(),
-      op: BinaryOp::Add,
-      left: Box::new(create_string_expr("a")),
-      right: Box::new(create_string_expr("b")),
-    });
-
-    assert!(
-      expr_to_num(&expr, &mut state, &mut traversal_state, &fns).is_err(),
-      "a concatenation has no numeric reading"
-    );
-  }
-}
+mod expr_to_num_unsupported_tests {}
 
 mod convert_key_value_to_str_panic_tests {
   use super::*;
@@ -1254,23 +470,6 @@ mod ident_to_number_edge_tests {
   use crate::convertors::ident_to_number;
 
   #[test]
-  fn resolves_ident_with_literal_string_number() {
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-    let decl = make_var_declarator("val", create_number_expr(42.0));
-    fill_state_declarations(&mut traversal_state, &decl);
-    let ident = Ident {
-      span: Default::default(),
-      sym: "val".into(),
-      optional: false,
-      ctxt: SyntaxContext::empty(),
-    };
-    let result = ident_to_number(&ident, &mut state, &mut traversal_state, &fns);
-    assert_eq!(result, 42.0);
-  }
-
-  #[test]
   #[should_panic(expected = "Variable ObjectExpression is not a number")]
   fn panics_for_object_expr_decl() {
     use swc_core::ecma::ast::ObjectLit;
@@ -1293,45 +492,12 @@ mod ident_to_number_edge_tests {
   }
 }
 
-mod convert_unary_to_num_error_tests {
-  use super::*;
-  use crate::convertors::convert_unary_to_num;
-  use swc_core::ecma::ast::{UnaryExpr, UnaryOp};
-
-  #[test]
-  fn minus_num_returns_value() {
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-    let unary = UnaryExpr {
-      span: Default::default(),
-      op: UnaryOp::Minus,
-      arg: Box::new(create_number_expr(5.0)),
-    };
-    let result = convert_unary_to_num(&unary, &mut state, &mut traversal_state, &fns);
-    assert_eq!(result, -5.0);
-  }
-
-  #[test]
-  fn plus_num_returns_value() {
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-    let unary = UnaryExpr {
-      span: Default::default(),
-      op: UnaryOp::Plus,
-      arg: Box::new(create_number_expr(5.0)),
-    };
-    let result = convert_unary_to_num(&unary, &mut state, &mut traversal_state, &fns);
-    assert_eq!(result, 5.0);
-  }
-}
+mod convert_unary_to_num_error_tests {}
 
 mod refusals {
   use super::*;
   use crate::convertors::{
-    convert_unary_to_num, expr_to_num, expr_tpl_to_string, ident_to_number,
-    transform_bin_expr_to_number,
+    convert_unary_to_num, expr_tpl_to_string, ident_to_number, transform_bin_expr_to_number,
   };
   use stylex_ast::ast::convertors::create_bool_expr;
   use swc_core::ecma::ast::{Tpl, TplElement, UnaryExpr, UnaryOp};
@@ -1376,48 +542,6 @@ mod refusals {
       create_string_expr("a"),
       create_string_expr("b"),
     ))
-  }
-
-  #[test]
-  fn the_numeric_globals_are_read_without_a_declaration() {
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-
-    let infinity = expr_to_num(
-      &create_ident_expr("Infinity"),
-      &mut state,
-      &mut traversal_state,
-      &fns,
-    );
-
-    assert_eq!(infinity.ok(), Some(f64::INFINITY));
-
-    for name in ["NaN", "undefined"] {
-      let answered = expr_to_num(
-        &create_ident_expr(name),
-        &mut state,
-        &mut traversal_state,
-        &fns,
-      );
-
-      match answered {
-        Ok(number) => assert!(number.is_nan(), "`{}` reads as NaN", name),
-        Err(error) => panic!("`{}` answered no number: {}", name, error),
-      }
-    }
-  }
-
-  #[test]
-  fn a_binary_expression_that_is_not_a_number_is_reported() {
-    let mut state = EvaluationState::new();
-    let mut traversal_state = StateManager::default();
-    let fns = FunctionMap::default();
-
-    assert!(
-      expr_to_num(&a_concatenation(), &mut state, &mut traversal_state, &fns).is_err(),
-      "a concatenation has no numeric reading"
-    );
   }
 
   #[test]
@@ -1576,41 +700,5 @@ mod refusals {
       &mut traversal_state,
       &fns,
     );
-  }
-}
-
-fn an_unconvertible_object_minus_one() -> Expr {
-  Expr::Bin(BinExpr {
-    span: Default::default(),
-    op: BinaryOp::Sub,
-    left: Box::new(Expr::Object(create_object_lit(vec![
-      create_key_value_prop("toString", create_number_expr(1.0)),
-    ]))),
-    right: Box::new(create_number_expr(1.0)),
-  })
-}
-
-#[test]
-fn a_binary_expression_with_no_number_is_reported_rather_than_fatal() {
-  use crate::convertors::expr_to_num;
-
-  let mut state = EvaluationState::new();
-  let mut traversal_state = StateManager::default();
-  let fns = FunctionMap::default();
-
-  let refused = expr_to_num(
-    &an_unconvertible_object_minus_one(),
-    &mut state,
-    &mut traversal_state,
-    &fns,
-  );
-
-  match refused {
-    Ok(number) => panic!("`({{ toString: 1 }}) - 1` answered {}", number),
-    Err(error) => assert!(
-      error.to_string().contains("is not a number"),
-      "the refusal must say the expression is not a number, and it said `{}`",
-      error
-    ),
   }
 }

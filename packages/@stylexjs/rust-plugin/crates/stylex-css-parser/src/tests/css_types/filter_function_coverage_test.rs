@@ -13,32 +13,6 @@ fn make_token_list(tokens: Vec<SimpleToken>) -> TokenList {
 // ── BlurFilterFunction::parse — error + whitespace branches ──
 
 #[test]
-fn blur_parse_tokens_error_wrong_function_name() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("brightness".to_string()),
-    SimpleToken::RightParen,
-  ]);
-  let result = (BlurFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-  assert!(result.unwrap_err().to_string().contains("Expected blur"));
-}
-
-#[test]
-fn blur_parse_tokens_error_eof_at_start() {
-  let mut tl = make_token_list(vec![]);
-  let result = (BlurFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-  assert!(result.unwrap_err().to_string().contains("end of input"));
-}
-
-#[test]
-fn blur_parse_tokens_error_not_a_function_token() {
-  let mut tl = make_token_list(vec![SimpleToken::Ident("blur".to_string())]);
-  let result = (BlurFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-}
-
-#[test]
 fn blur_parse_tokens_whitespace_before_length() {
   let mut tl = make_token_list(vec![
     SimpleToken::Function("blur".to_string()),
@@ -102,69 +76,7 @@ fn blur_parse_tokens_error_eof_on_closing_paren() {
   assert!(result.unwrap_err().to_string().contains("end of input"));
 }
 
-#[test]
-fn blur_parse_tokens_error_bad_length_arg() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("blur".to_string()),
-    SimpleToken::Ident("five".to_string()), // not a valid Length token
-  ]);
-  let result = (BlurFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-}
-
-#[test]
-fn blur_parse_public_error_wrong_function() {
-  let result = BlurFilterFunction::parse().parse_to_end("brightness(5px)");
-  assert!(result.is_err());
-}
-
-#[test]
-fn blur_parse_public_error_eof() {
-  let result = BlurFilterFunction::parse().parse_to_end("");
-  assert!(result.is_err());
-}
-
-#[test]
-fn blur_parse_public_happy_path() {
-  let result = BlurFilterFunction::parse()
-    .parse_to_end("blur(5px)")
-    .unwrap();
-  assert_eq!(result.radius.value, 5.0_f64);
-  assert_eq!(format!("{}", result), "blur(5px)");
-}
-
 // ── BrightnessFilterFunction::parse ──
-
-#[test]
-fn brightness_parse_tokens_error_wrong_function_name() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("blur".to_string()),
-    SimpleToken::RightParen,
-  ]);
-  let result = (BrightnessFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-  assert!(
-    result
-      .unwrap_err()
-      .to_string()
-      .contains("Expected brightness")
-  );
-}
-
-#[test]
-fn brightness_parse_tokens_error_eof_at_start() {
-  let mut tl = make_token_list(vec![]);
-  let result = (BrightnessFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-  assert!(result.unwrap_err().to_string().contains("end of input"));
-}
-
-#[test]
-fn brightness_parse_tokens_error_not_a_function_token() {
-  let mut tl = make_token_list(vec![SimpleToken::Ident("brightness".to_string())]);
-  let result = (BrightnessFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-}
 
 #[test]
 fn brightness_parse_tokens_whitespace_before_value() {
@@ -176,29 +88,6 @@ fn brightness_parse_tokens_whitespace_before_value() {
   ]);
   let result = (BrightnessFilterFunction::parse().run)(&mut tl).unwrap();
   assert!((result.percentage - 1.5_f64).abs() < 1e-6);
-}
-
-#[test]
-fn brightness_parse_tokens_number_variant() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("brightness".to_string()),
-    SimpleToken::Number(0.75),
-    SimpleToken::RightParen,
-  ]);
-  let result = (BrightnessFilterFunction::parse().run)(&mut tl).unwrap();
-  assert!((result.percentage - 0.75_f64).abs() < 1e-5);
-}
-
-#[test]
-fn brightness_parse_tokens_percentage_variant() {
-  // The token carries the authored percent (150 means 150%); the filter divides by 100.
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("brightness".to_string()),
-    SimpleToken::Percentage(150.0),
-    SimpleToken::RightParen,
-  ]);
-  let result = (BrightnessFilterFunction::parse().run)(&mut tl).unwrap();
-  assert!((result.percentage - 1.5_f64).abs() < 1e-4);
 }
 
 #[test]
@@ -241,69 +130,7 @@ fn brightness_parse_tokens_error_eof_on_closing_paren() {
   assert!(result.unwrap_err().to_string().contains("end of input"));
 }
 
-#[test]
-fn brightness_parse_tokens_error_bad_value_arg() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("brightness".to_string()),
-    SimpleToken::Ident("bright".to_string()), // not a number or percentage
-  ]);
-  let result = (BrightnessFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-}
-
-#[test]
-fn brightness_parse_public_error_wrong_function() {
-  let result = BrightnessFilterFunction::parse().parse_to_end("blur(1.5)");
-  assert!(result.is_err());
-}
-
-#[test]
-fn brightness_parse_public_error_eof() {
-  let result = BrightnessFilterFunction::parse().parse_to_end("");
-  assert!(result.is_err());
-}
-
-#[test]
-fn brightness_parse_public_happy_path() {
-  let result = BrightnessFilterFunction::parse()
-    .parse_to_end("brightness(0.5)")
-    .unwrap();
-  assert!((result.percentage - 0.5_f64).abs() < 1e-6);
-  assert_eq!(format!("{}", result), "brightness(0.5)");
-}
-
 // ── ContrastFilterFunction::parse ──
-
-#[test]
-fn contrast_parse_tokens_error_wrong_function_name() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("blur".to_string()),
-    SimpleToken::RightParen,
-  ]);
-  let result = (ContrastFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-  assert!(
-    result
-      .unwrap_err()
-      .to_string()
-      .contains("Expected contrast")
-  );
-}
-
-#[test]
-fn contrast_parse_tokens_error_eof_at_start() {
-  let mut tl = make_token_list(vec![]);
-  let result = (ContrastFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-  assert!(result.unwrap_err().to_string().contains("end of input"));
-}
-
-#[test]
-fn contrast_parse_tokens_error_not_a_function_token() {
-  let mut tl = make_token_list(vec![SimpleToken::Ident("contrast".to_string())]);
-  let result = (ContrastFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-}
 
 #[test]
 fn contrast_parse_tokens_whitespace_before_value() {
@@ -315,29 +142,6 @@ fn contrast_parse_tokens_whitespace_before_value() {
   ]);
   let result = (ContrastFilterFunction::parse().run)(&mut tl).unwrap();
   assert!((result.amount - 2.0_f64).abs() < 1e-6);
-}
-
-#[test]
-fn contrast_parse_tokens_number_variant() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("contrast".to_string()),
-    SimpleToken::Number(1.5),
-    SimpleToken::RightParen,
-  ]);
-  let result = (ContrastFilterFunction::parse().run)(&mut tl).unwrap();
-  assert!((result.amount - 1.5_f64).abs() < 1e-5);
-}
-
-#[test]
-fn contrast_parse_tokens_percentage_variant() {
-  // `SimpleToken::Percentage` carries the authored percent, not a fraction.
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("contrast".to_string()),
-    SimpleToken::Percentage(200.0),
-    SimpleToken::RightParen,
-  ]);
-  let result = (ContrastFilterFunction::parse().run)(&mut tl).unwrap();
-  assert!((result.amount - 2.0_f64).abs() < 1e-4);
 }
 
 #[test]
@@ -380,69 +184,7 @@ fn contrast_parse_tokens_error_eof_on_closing_paren() {
   assert!(result.unwrap_err().to_string().contains("end of input"));
 }
 
-#[test]
-fn contrast_parse_tokens_error_bad_value_arg() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("contrast".to_string()),
-    SimpleToken::Ident("high".to_string()),
-  ]);
-  let result = (ContrastFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-}
-
-#[test]
-fn contrast_parse_public_error_wrong_function() {
-  let result = ContrastFilterFunction::parse().parse_to_end("blur(2)");
-  assert!(result.is_err());
-}
-
-#[test]
-fn contrast_parse_public_error_eof() {
-  let result = ContrastFilterFunction::parse().parse_to_end("");
-  assert!(result.is_err());
-}
-
-#[test]
-fn contrast_parse_public_happy_path() {
-  let result = ContrastFilterFunction::parse()
-    .parse_to_end("contrast(0.5)")
-    .unwrap();
-  assert!((result.amount - 0.5_f64).abs() < 1e-6);
-  assert_eq!(format!("{}", result), "contrast(0.5)");
-}
-
 // ── GrayscaleFilterFunction::parse ──
-
-#[test]
-fn grayscale_parse_tokens_error_wrong_function_name() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("blur".to_string()),
-    SimpleToken::RightParen,
-  ]);
-  let result = (GrayscaleFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-  assert!(
-    result
-      .unwrap_err()
-      .to_string()
-      .contains("Expected grayscale")
-  );
-}
-
-#[test]
-fn grayscale_parse_tokens_error_eof_at_start() {
-  let mut tl = make_token_list(vec![]);
-  let result = (GrayscaleFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-  assert!(result.unwrap_err().to_string().contains("end of input"));
-}
-
-#[test]
-fn grayscale_parse_tokens_error_not_a_function_token() {
-  let mut tl = make_token_list(vec![SimpleToken::Ident("grayscale".to_string())]);
-  let result = (GrayscaleFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-}
 
 #[test]
 fn grayscale_parse_tokens_whitespace_before_value() {
@@ -454,29 +196,6 @@ fn grayscale_parse_tokens_whitespace_before_value() {
   ]);
   let result = (GrayscaleFilterFunction::parse().run)(&mut tl).unwrap();
   assert!((result.amount - 0.5_f64).abs() < 1e-6);
-}
-
-#[test]
-fn grayscale_parse_tokens_number_variant() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("grayscale".to_string()),
-    SimpleToken::Number(0.75),
-    SimpleToken::RightParen,
-  ]);
-  let result = (GrayscaleFilterFunction::parse().run)(&mut tl).unwrap();
-  assert!((result.amount - 0.75_f64).abs() < 1e-5);
-}
-
-#[test]
-fn grayscale_parse_tokens_percentage_variant() {
-  // `SimpleToken::Percentage` carries the authored percent, not a fraction.
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("grayscale".to_string()),
-    SimpleToken::Percentage(50.0),
-    SimpleToken::RightParen,
-  ]);
-  let result = (GrayscaleFilterFunction::parse().run)(&mut tl).unwrap();
-  assert!((result.amount - 0.5_f64).abs() < 1e-4);
 }
 
 #[test]
@@ -519,69 +238,7 @@ fn grayscale_parse_tokens_error_eof_on_closing_paren() {
   assert!(result.unwrap_err().to_string().contains("end of input"));
 }
 
-#[test]
-fn grayscale_parse_tokens_error_bad_value_arg() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("grayscale".to_string()),
-    SimpleToken::Ident("gray".to_string()),
-  ]);
-  let result = (GrayscaleFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-}
-
-#[test]
-fn grayscale_parse_public_error_wrong_function() {
-  let result = GrayscaleFilterFunction::parse().parse_to_end("blur(0.5)");
-  assert!(result.is_err());
-}
-
-#[test]
-fn grayscale_parse_public_error_eof() {
-  let result = GrayscaleFilterFunction::parse().parse_to_end("");
-  assert!(result.is_err());
-}
-
-#[test]
-fn grayscale_parse_public_happy_path() {
-  let result = GrayscaleFilterFunction::parse()
-    .parse_to_end("grayscale(0.5)")
-    .unwrap();
-  assert!((result.amount - 0.5_f64).abs() < 1e-5);
-  assert_eq!(format!("{}", result), "grayscale(0.5)");
-}
-
 // ── HueRotateFilterFunction::parse ──
-
-#[test]
-fn hue_rotate_parse_tokens_error_wrong_function_name() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("blur".to_string()),
-    SimpleToken::RightParen,
-  ]);
-  let result = (HueRotateFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-  assert!(
-    result
-      .unwrap_err()
-      .to_string()
-      .contains("Expected hue-rotate")
-  );
-}
-
-#[test]
-fn hue_rotate_parse_tokens_error_eof_at_start() {
-  let mut tl = make_token_list(vec![]);
-  let result = (HueRotateFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-  assert!(result.unwrap_err().to_string().contains("end of input"));
-}
-
-#[test]
-fn hue_rotate_parse_tokens_error_not_a_function_token() {
-  let mut tl = make_token_list(vec![SimpleToken::Ident("hue-rotate".to_string())]);
-  let result = (HueRotateFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-}
 
 #[test]
 fn hue_rotate_parse_tokens_whitespace_before_angle() {
@@ -647,64 +304,7 @@ fn hue_rotate_parse_tokens_error_eof_on_closing_paren() {
   assert!(result.unwrap_err().to_string().contains("end of input"));
 }
 
-#[test]
-fn hue_rotate_parse_tokens_error_bad_angle_arg() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("hue-rotate".to_string()),
-    SimpleToken::Ident("ninety".to_string()), // not a valid Angle
-  ]);
-  let result = (HueRotateFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-}
-
-#[test]
-fn hue_rotate_parse_public_error_wrong_function() {
-  let result = HueRotateFilterFunction::parse().parse_to_end("blur(5px)");
-  assert!(result.is_err());
-}
-
-#[test]
-fn hue_rotate_parse_public_error_eof() {
-  let result = HueRotateFilterFunction::parse().parse_to_end("");
-  assert!(result.is_err());
-}
-
-#[test]
-fn hue_rotate_parse_public_happy_path() {
-  let result = HueRotateFilterFunction::parse()
-    .parse_to_end("hue-rotate(180deg)")
-    .unwrap();
-  assert_eq!(result.angle.value, 180.0_f64);
-  assert_eq!(format!("{}", result), "hue-rotate(180deg)");
-}
-
 // ── InvertFilterFunction::parse ──
-
-#[test]
-fn invert_parse_tokens_error_wrong_function_name() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("blur".to_string()),
-    SimpleToken::RightParen,
-  ]);
-  let result = (InvertFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-  assert!(result.unwrap_err().to_string().contains("Expected invert"));
-}
-
-#[test]
-fn invert_parse_tokens_error_eof_at_start() {
-  let mut tl = make_token_list(vec![]);
-  let result = (InvertFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-  assert!(result.unwrap_err().to_string().contains("end of input"));
-}
-
-#[test]
-fn invert_parse_tokens_error_not_a_function_token() {
-  let mut tl = make_token_list(vec![SimpleToken::Ident("invert".to_string())]);
-  let result = (InvertFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-}
 
 #[test]
 fn invert_parse_tokens_whitespace_before_value() {
@@ -716,29 +316,6 @@ fn invert_parse_tokens_whitespace_before_value() {
   ]);
   let result = (InvertFilterFunction::parse().run)(&mut tl).unwrap();
   assert!((result.amount - 1.0_f64).abs() < 1e-6);
-}
-
-#[test]
-fn invert_parse_tokens_number_variant() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("invert".to_string()),
-    SimpleToken::Number(0.5),
-    SimpleToken::RightParen,
-  ]);
-  let result = (InvertFilterFunction::parse().run)(&mut tl).unwrap();
-  assert!((result.amount - 0.5_f64).abs() < 1e-5);
-}
-
-#[test]
-fn invert_parse_tokens_percentage_variant() {
-  // `SimpleToken::Percentage` carries the authored percent, not a fraction.
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("invert".to_string()),
-    SimpleToken::Percentage(100.0),
-    SimpleToken::RightParen,
-  ]);
-  let result = (InvertFilterFunction::parse().run)(&mut tl).unwrap();
-  assert!((result.amount - 1.0_f64).abs() < 1e-4);
 }
 
 #[test]
@@ -781,64 +358,7 @@ fn invert_parse_tokens_error_eof_on_closing_paren() {
   assert!(result.unwrap_err().to_string().contains("end of input"));
 }
 
-#[test]
-fn invert_parse_tokens_error_bad_value_arg() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("invert".to_string()),
-    SimpleToken::Ident("all".to_string()),
-  ]);
-  let result = (InvertFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-}
-
-#[test]
-fn invert_parse_public_error_wrong_function() {
-  let result = InvertFilterFunction::parse().parse_to_end("blur(1)");
-  assert!(result.is_err());
-}
-
-#[test]
-fn invert_parse_public_error_eof() {
-  let result = InvertFilterFunction::parse().parse_to_end("");
-  assert!(result.is_err());
-}
-
-#[test]
-fn invert_parse_public_happy_path() {
-  let result = InvertFilterFunction::parse()
-    .parse_to_end("invert(0.75)")
-    .unwrap();
-  assert!((result.amount - 0.75_f64).abs() < 1e-5);
-  assert_eq!(format!("{}", result), "invert(0.75)");
-}
-
 // ── OpacityFilterFunction::parse ──
-
-#[test]
-fn opacity_parse_tokens_error_wrong_function_name() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("blur".to_string()),
-    SimpleToken::RightParen,
-  ]);
-  let result = (OpacityFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-  assert!(result.unwrap_err().to_string().contains("Expected opacity"));
-}
-
-#[test]
-fn opacity_parse_tokens_error_eof_at_start() {
-  let mut tl = make_token_list(vec![]);
-  let result = (OpacityFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-  assert!(result.unwrap_err().to_string().contains("end of input"));
-}
-
-#[test]
-fn opacity_parse_tokens_error_not_a_function_token() {
-  let mut tl = make_token_list(vec![SimpleToken::Ident("opacity".to_string())]);
-  let result = (OpacityFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-}
 
 #[test]
 fn opacity_parse_tokens_whitespace_before_value() {
@@ -850,29 +370,6 @@ fn opacity_parse_tokens_whitespace_before_value() {
   ]);
   let result = (OpacityFilterFunction::parse().run)(&mut tl).unwrap();
   assert!((result.amount - 0.5_f64).abs() < 1e-6);
-}
-
-#[test]
-fn opacity_parse_tokens_number_variant() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("opacity".to_string()),
-    SimpleToken::Number(0.25),
-    SimpleToken::RightParen,
-  ]);
-  let result = (OpacityFilterFunction::parse().run)(&mut tl).unwrap();
-  assert!((result.amount - 0.25_f64).abs() < 1e-5);
-}
-
-#[test]
-fn opacity_parse_tokens_percentage_variant() {
-  // `SimpleToken::Percentage` carries the authored percent, not a fraction.
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("opacity".to_string()),
-    SimpleToken::Percentage(75.0),
-    SimpleToken::RightParen,
-  ]);
-  let result = (OpacityFilterFunction::parse().run)(&mut tl).unwrap();
-  assert!((result.amount - 0.75_f64).abs() < 1e-4);
 }
 
 #[test]
@@ -915,69 +412,7 @@ fn opacity_parse_tokens_error_eof_on_closing_paren() {
   assert!(result.unwrap_err().to_string().contains("end of input"));
 }
 
-#[test]
-fn opacity_parse_tokens_error_bad_value_arg() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("opacity".to_string()),
-    SimpleToken::Ident("half".to_string()),
-  ]);
-  let result = (OpacityFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-}
-
-#[test]
-fn opacity_parse_public_error_wrong_function() {
-  let result = OpacityFilterFunction::parse().parse_to_end("blur(0.5)");
-  assert!(result.is_err());
-}
-
-#[test]
-fn opacity_parse_public_error_eof() {
-  let result = OpacityFilterFunction::parse().parse_to_end("");
-  assert!(result.is_err());
-}
-
-#[test]
-fn opacity_parse_public_happy_path() {
-  let result = OpacityFilterFunction::parse()
-    .parse_to_end("opacity(0.5)")
-    .unwrap();
-  assert!((result.amount - 0.5_f64).abs() < 1e-5);
-  assert_eq!(format!("{}", result), "opacity(0.5)");
-}
-
 // ── SaturateFilterFunction::parse ──
-
-#[test]
-fn saturate_parse_tokens_error_wrong_function_name() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("blur".to_string()),
-    SimpleToken::RightParen,
-  ]);
-  let result = (SaturateFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-  assert!(
-    result
-      .unwrap_err()
-      .to_string()
-      .contains("Expected saturate")
-  );
-}
-
-#[test]
-fn saturate_parse_tokens_error_eof_at_start() {
-  let mut tl = make_token_list(vec![]);
-  let result = (SaturateFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-  assert!(result.unwrap_err().to_string().contains("end of input"));
-}
-
-#[test]
-fn saturate_parse_tokens_error_not_a_function_token() {
-  let mut tl = make_token_list(vec![SimpleToken::Ident("saturate".to_string())]);
-  let result = (SaturateFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-}
 
 #[test]
 fn saturate_parse_tokens_whitespace_before_value() {
@@ -989,29 +424,6 @@ fn saturate_parse_tokens_whitespace_before_value() {
   ]);
   let result = (SaturateFilterFunction::parse().run)(&mut tl).unwrap();
   assert!((result.amount - 2.0_f64).abs() < 1e-6);
-}
-
-#[test]
-fn saturate_parse_tokens_number_variant() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("saturate".to_string()),
-    SimpleToken::Number(1.5),
-    SimpleToken::RightParen,
-  ]);
-  let result = (SaturateFilterFunction::parse().run)(&mut tl).unwrap();
-  assert!((result.amount - 1.5_f64).abs() < 1e-5);
-}
-
-#[test]
-fn saturate_parse_tokens_percentage_variant() {
-  // `SimpleToken::Percentage` carries the authored percent, not a fraction.
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("saturate".to_string()),
-    SimpleToken::Percentage(150.0),
-    SimpleToken::RightParen,
-  ]);
-  let result = (SaturateFilterFunction::parse().run)(&mut tl).unwrap();
-  assert!((result.amount - 1.5_f64).abs() < 1e-4);
 }
 
 #[test]
@@ -1054,64 +466,7 @@ fn saturate_parse_tokens_error_eof_on_closing_paren() {
   assert!(result.unwrap_err().to_string().contains("end of input"));
 }
 
-#[test]
-fn saturate_parse_tokens_error_bad_value_arg() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("saturate".to_string()),
-    SimpleToken::Ident("full".to_string()),
-  ]);
-  let result = (SaturateFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-}
-
-#[test]
-fn saturate_parse_public_error_wrong_function() {
-  let result = SaturateFilterFunction::parse().parse_to_end("blur(1.5)");
-  assert!(result.is_err());
-}
-
-#[test]
-fn saturate_parse_public_error_eof() {
-  let result = SaturateFilterFunction::parse().parse_to_end("");
-  assert!(result.is_err());
-}
-
-#[test]
-fn saturate_parse_public_happy_path() {
-  let result = SaturateFilterFunction::parse()
-    .parse_to_end("saturate(1.5)")
-    .unwrap();
-  assert!((result.amount - 1.5_f64).abs() < 1e-5);
-  assert_eq!(format!("{}", result), "saturate(1.5)");
-}
-
 // ── SepiaFilterFunction::parse ──
-
-#[test]
-fn sepia_parse_tokens_error_wrong_function_name() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("blur".to_string()),
-    SimpleToken::RightParen,
-  ]);
-  let result = (SepiaFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-  assert!(result.unwrap_err().to_string().contains("Expected sepia"));
-}
-
-#[test]
-fn sepia_parse_tokens_error_eof_at_start() {
-  let mut tl = make_token_list(vec![]);
-  let result = (SepiaFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-  assert!(result.unwrap_err().to_string().contains("end of input"));
-}
-
-#[test]
-fn sepia_parse_tokens_error_not_a_function_token() {
-  let mut tl = make_token_list(vec![SimpleToken::Ident("sepia".to_string())]);
-  let result = (SepiaFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-}
 
 #[test]
 fn sepia_parse_tokens_whitespace_before_value() {
@@ -1123,29 +478,6 @@ fn sepia_parse_tokens_whitespace_before_value() {
   ]);
   let result = (SepiaFilterFunction::parse().run)(&mut tl).unwrap();
   assert!((result.amount - 0.5_f64).abs() < 1e-6);
-}
-
-#[test]
-fn sepia_parse_tokens_number_variant() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("sepia".to_string()),
-    SimpleToken::Number(0.8),
-    SimpleToken::RightParen,
-  ]);
-  let result = (SepiaFilterFunction::parse().run)(&mut tl).unwrap();
-  assert!((result.amount - 0.8_f64).abs() < 1e-5);
-}
-
-#[test]
-fn sepia_parse_tokens_percentage_variant() {
-  // `SimpleToken::Percentage` carries the authored percent, not a fraction.
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("sepia".to_string()),
-    SimpleToken::Percentage(50.0),
-    SimpleToken::RightParen,
-  ]);
-  let result = (SepiaFilterFunction::parse().run)(&mut tl).unwrap();
-  assert!((result.amount - 0.5_f64).abs() < 1e-4);
 }
 
 #[test]
@@ -1188,119 +520,4 @@ fn sepia_parse_tokens_error_eof_on_closing_paren() {
   assert!(result.unwrap_err().to_string().contains("end of input"));
 }
 
-#[test]
-fn sepia_parse_tokens_error_wrong_function_token_in_body() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("sepia".to_string()),
-    SimpleToken::Ident("something".to_string()),
-  ]);
-  let result = (SepiaFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-}
-
-#[test]
-fn sepia_parse_tokens_error_bad_value_arg() {
-  let mut tl = make_token_list(vec![
-    SimpleToken::Function("sepia".to_string()),
-    SimpleToken::Ident("warm".to_string()),
-  ]);
-  let result = (SepiaFilterFunction::parse().run)(&mut tl);
-  assert!(result.is_err());
-}
-
-#[test]
-fn sepia_parse_public_error_wrong_function() {
-  let result = SepiaFilterFunction::parse().parse_to_end("blur(0.5)");
-  assert!(result.is_err());
-}
-
-#[test]
-fn sepia_parse_public_error_eof() {
-  let result = SepiaFilterFunction::parse().parse_to_end("");
-  assert!(result.is_err());
-}
-
-#[test]
-fn sepia_parse_public_happy_path() {
-  let result = SepiaFilterFunction::parse()
-    .parse_to_end("sepia(0.5)")
-    .unwrap();
-  assert!((result.amount - 0.5_f64).abs() < 1e-6);
-  assert_eq!(format!("{}", result), "sepia(0.5)");
-}
-
 // ── FilterFunction top-level parser ──
-
-#[test]
-fn filter_function_parser_selects_blur() {
-  let result = FilterFunction::parser().parse_to_end("blur(2px)").unwrap();
-  assert!(matches!(result, FilterFunction::Blur(_)));
-}
-
-#[test]
-fn filter_function_parser_selects_brightness() {
-  let result = FilterFunction::parser()
-    .parse_to_end("brightness(0.8)")
-    .unwrap();
-  assert!(matches!(result, FilterFunction::Brightness(_)));
-}
-
-#[test]
-fn filter_function_parser_selects_contrast() {
-  let result = FilterFunction::parser()
-    .parse_to_end("contrast(1.2)")
-    .unwrap();
-  assert!(matches!(result, FilterFunction::Contrast(_)));
-}
-
-#[test]
-fn filter_function_parser_selects_grayscale() {
-  let result = FilterFunction::parser()
-    .parse_to_end("grayscale(0.3)")
-    .unwrap();
-  assert!(matches!(result, FilterFunction::Grayscale(_)));
-}
-
-#[test]
-fn filter_function_parser_selects_hue_rotate() {
-  let result = FilterFunction::parser()
-    .parse_to_end("hue-rotate(270deg)")
-    .unwrap();
-  assert!(matches!(result, FilterFunction::HueRotate(_)));
-}
-
-#[test]
-fn filter_function_parser_selects_invert() {
-  let result = FilterFunction::parser()
-    .parse_to_end("invert(0.6)")
-    .unwrap();
-  assert!(matches!(result, FilterFunction::Invert(_)));
-}
-
-#[test]
-fn filter_function_parser_selects_opacity() {
-  let result = FilterFunction::parser()
-    .parse_to_end("opacity(0.9)")
-    .unwrap();
-  assert!(matches!(result, FilterFunction::Opacity(_)));
-}
-
-#[test]
-fn filter_function_parser_selects_saturate() {
-  let result = FilterFunction::parser()
-    .parse_to_end("saturate(3.0)")
-    .unwrap();
-  assert!(matches!(result, FilterFunction::Saturate(_)));
-}
-
-#[test]
-fn filter_function_parser_selects_sepia() {
-  let result = FilterFunction::parser().parse_to_end("sepia(0.4)").unwrap();
-  assert!(matches!(result, FilterFunction::Sepia(_)));
-}
-
-#[test]
-fn filter_function_parser_error_unknown() {
-  let result = FilterFunction::parser().parse_to_end("drop-shadow(2px 4px black)");
-  assert!(result.is_err());
-}

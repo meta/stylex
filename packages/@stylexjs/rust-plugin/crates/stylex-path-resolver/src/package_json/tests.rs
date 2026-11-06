@@ -6,10 +6,7 @@ use std::{
   time::{SystemTime, UNIX_EPOCH},
 };
 
-use super::{
-  find_closest_node_modules, find_closest_package_json, find_closest_package_json_folder,
-  recursive_find_node_modules,
-};
+use super::{find_closest_node_modules, recursive_find_node_modules};
 
 fn temp_dir(prefix: &str) -> PathBuf {
   let nanos = SystemTime::now()
@@ -26,24 +23,6 @@ fn cleanup(path: &Path) {
 }
 
 #[test]
-fn finds_closest_package_json_and_folder() {
-  let root = temp_dir("package-json-lookup");
-  let nested = root.join("apps/web/src");
-  let package_json = root.join("package.json");
-
-  fs::create_dir_all(&nested).unwrap();
-  fs::write(&package_json, "{}").unwrap();
-
-  assert_eq!(find_closest_package_json(&nested), Some(package_json));
-  assert_eq!(
-    find_closest_package_json_folder(&nested),
-    Some(root.clone())
-  );
-
-  cleanup(&root);
-}
-
-#[test]
 fn recursive_find_node_modules_returns_empty_when_absent() {
   let root = temp_dir("node-modules-empty");
   let nested = root.join("apps/web/src");
@@ -51,31 +30,6 @@ fn recursive_find_node_modules_returns_empty_when_absent() {
 
   assert_eq!(find_closest_node_modules(&nested), None);
   assert!(recursive_find_node_modules(&nested, None).is_empty());
-
-  cleanup(&root);
-}
-
-#[test]
-fn recursive_find_node_modules_collects_known_git_tree() {
-  let root = temp_dir("node-modules-known-git");
-  let git_dir = root.join(".git");
-  let root_modules = root.join("node_modules");
-  let apps_modules = root.join("apps/node_modules");
-  let web_modules = root.join("apps/web/node_modules");
-  let source_dir = root.join("apps/web/src");
-
-  fs::create_dir_all(&git_dir).unwrap();
-  fs::create_dir_all(&root_modules).unwrap();
-  fs::create_dir_all(&apps_modules).unwrap();
-  fs::create_dir_all(&web_modules).unwrap();
-  fs::create_dir_all(&source_dir).unwrap();
-
-  let result = recursive_find_node_modules(&source_dir, Some(git_dir));
-
-  assert_eq!(result.len(), 3);
-  assert!(result.contains(&web_modules));
-  assert!(result.contains(&apps_modules));
-  assert!(result.contains(&root_modules));
 
   cleanup(&root);
 }

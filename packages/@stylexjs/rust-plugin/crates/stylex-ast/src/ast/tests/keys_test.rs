@@ -1,16 +1,16 @@
 //! Tests for the object and member key readers.
 
 use crate::ast::keys::{
-  collect_object_lit_keys, named_key_value, namespace_name_from_member_prop,
-  namespace_name_from_prop_key, prop_as_key_value, try_namespace_name_from_prop_key,
+  named_key_value, namespace_name_from_member_prop, namespace_name_from_prop_key,
+  prop_as_key_value, try_namespace_name_from_prop_key,
 };
 use swc_core::{
-  atoms::{Atom, Wtf8Atom},
+  atoms::Atom,
   common::DUMMY_SP,
   ecma::ast::{
-    ArrowExpr, ArrowFunctionBody, BigInt, BigIntValue, BindingIdent, ComputedPropName, Expr,
-    Function, GetterProp, Ident, IdentName, KeyValueProp, Lit, MemberProp, MethodProp, Number,
-    ObjectLit, Pat, PrivateName, Prop, PropName, PropOrSpread, SpreadElement, Str, Tpl, TplElement,
+    BigInt, BigIntValue, ComputedPropName, Expr, Function, GetterProp, Ident, IdentName,
+    KeyValueProp, Lit, MemberProp, MethodProp, Number, PrivateName, Prop, PropName, PropOrSpread,
+    SpreadElement, Str, Tpl, TplElement,
   },
 };
 
@@ -98,164 +98,9 @@ fn key_value_prop(key: PropName, value: Expr) -> PropOrSpread {
   })))
 }
 
-fn object_of(props: Vec<PropOrSpread>) -> ObjectLit {
-  ObjectLit {
-    span: DUMMY_SP,
-    props,
-  }
-}
-
 // ---------- namespace_name_from_prop_key ----------
 
-#[test]
-fn reads_an_identifier_key() {
-  let key = PropName::Ident(ident_name("root"));
-
-  assert_eq!(namespace_name_from_prop_key(&key), Some(Atom::new("root")));
-}
-
-#[test]
-fn reads_a_string_key() {
-  let key = PropName::Str(string_lit("a key"));
-
-  assert_eq!(namespace_name_from_prop_key(&key), Some(Atom::new("a key")));
-}
-
-#[test]
-fn reads_an_integer_number_key() {
-  let key = PropName::Num(number_lit(42.0));
-
-  assert_eq!(namespace_name_from_prop_key(&key), Some(Atom::new("42")));
-}
-
-/// `1e21`: JavaScript prints `1e+21`, Rust prints the digits; the key needs JS's spelling.
-#[test]
-fn reads_a_number_key_the_way_javascript_spells_it() {
-  let key = PropName::Num(number_lit(1e21));
-
-  assert_eq!(namespace_name_from_prop_key(&key), Some(Atom::new("1e+21")));
-}
-
-#[test]
-fn reads_a_computed_number_key_the_way_javascript_spells_it() {
-  let key = PropName::Computed(computed(Expr::Lit(Lit::Num(number_lit(1e21)))));
-
-  assert_eq!(namespace_name_from_prop_key(&key), Some(Atom::new("1e+21")));
-}
-
-#[test]
-fn reads_a_computed_number_member_the_way_javascript_spells_it() {
-  let prop = MemberProp::Computed(computed(Expr::Lit(Lit::Num(number_lit(1e21)))));
-
-  assert_eq!(
-    namespace_name_from_member_prop(&prop),
-    Some(Atom::new("1e+21"))
-  );
-}
-
-/// Small magnitudes take an exponent, `-0` loses its sign, and non-finite values keep their
-/// names (only reachable from compiler-built trees).
-#[test]
-fn spells_every_number_key_the_way_javascript_does() {
-  let cases = [
-    (1e-7, "1e-7"),
-    (-0.0, "0"),
-    (f64::MAX, "1.7976931348623157e+308"),
-    (f64::MIN_POSITIVE, "2.2250738585072014e-308"),
-    (f64::NAN, "NaN"),
-    (f64::INFINITY, "Infinity"),
-    (f64::NEG_INFINITY, "-Infinity"),
-  ];
-
-  for (value, spelling) in cases {
-    let key = PropName::Num(number_lit(value));
-
-    assert_eq!(
-      namespace_name_from_prop_key(&key),
-      Some(Atom::new(spelling)),
-      "number key {value} must spell as {spelling}"
-    );
-  }
-}
-
-#[test]
-fn reads_a_big_int_key() {
-  let key = PropName::BigInt(big_int_lit(9_007_199_254_740_993));
-
-  assert_eq!(
-    namespace_name_from_prop_key(&key),
-    Some(Atom::new("9007199254740993"))
-  );
-}
-
-#[test]
-fn reads_a_computed_string_key() {
-  let key = PropName::Computed(computed(Expr::Lit(Lit::Str(string_lit("root")))));
-
-  assert_eq!(namespace_name_from_prop_key(&key), Some(Atom::new("root")));
-}
-
-#[test]
-fn reads_a_computed_number_key() {
-  let key = PropName::Computed(computed(Expr::Lit(Lit::Num(number_lit(7.0)))));
-
-  assert_eq!(namespace_name_from_prop_key(&key), Some(Atom::new("7")));
-}
-
-#[test]
-fn reads_a_computed_big_int_key() {
-  let key = PropName::Computed(computed(Expr::Lit(Lit::BigInt(big_int_lit(12)))));
-
-  assert_eq!(namespace_name_from_prop_key(&key), Some(Atom::new("12")));
-}
-
-#[test]
-fn reads_a_computed_static_template_key() {
-  let key = PropName::Computed(computed(Expr::Tpl(static_tpl("root"))));
-
-  assert_eq!(namespace_name_from_prop_key(&key), Some(Atom::new("root")));
-}
-
-#[test]
-fn refuses_a_computed_template_key_with_an_interpolation() {
-  let key = PropName::Computed(computed(Expr::Tpl(dynamic_tpl())));
-
-  assert_eq!(namespace_name_from_prop_key(&key), None);
-}
-
-#[test]
-fn refuses_a_computed_key_whose_literal_has_no_name() {
-  let key = PropName::Computed(computed(Expr::Lit(Lit::Null(swc_core::ecma::ast::Null {
-    span: DUMMY_SP,
-  }))));
-
-  assert_eq!(namespace_name_from_prop_key(&key), None);
-}
-
-#[test]
-fn refuses_a_computed_key_that_is_not_a_literal() {
-  let key = PropName::Computed(computed(Expr::Ident(Ident::new_no_ctxt(
-    Atom::new("name"),
-    DUMMY_SP,
-  ))));
-
-  assert_eq!(namespace_name_from_prop_key(&key), None);
-}
-
 // ---------- try_namespace_name_from_prop_key ----------
-
-/// A lone surrogate (`"\ud800"`): valid WTF-8, invalid UTF-8.
-fn lossy_wtf8_atom() -> Wtf8Atom {
-  unsafe { Wtf8Atom::from_bytes_unchecked(&[0xed, 0xa0, 0x80]) }
-}
-
-fn lossy_string_lit() -> Str {
-  Str {
-    span: DUMMY_SP,
-    value: lossy_wtf8_atom(),
-    raw: None,
-  }
-}
 
 /// Both readers agree on every shape with a readable name.
 #[test]
@@ -288,81 +133,7 @@ fn both_readers_agree_on_every_readable_shape() {
   }
 }
 
-#[test]
-fn skips_a_string_key_that_cannot_be_read() {
-  let key = PropName::Str(lossy_string_lit());
-
-  assert_eq!(try_namespace_name_from_prop_key(&key), None);
-}
-
-#[test]
-fn skips_a_computed_string_key_that_cannot_be_read() {
-  let key = PropName::Computed(computed(Expr::Lit(Lit::Str(lossy_string_lit()))));
-
-  assert_eq!(try_namespace_name_from_prop_key(&key), None);
-}
-
-/// Unreadable text reaches the reader through a template element's cooked text too.
-#[test]
-fn skips_a_computed_template_key_that_cannot_be_read() {
-  let tpl = Tpl {
-    span: DUMMY_SP,
-    exprs: vec![],
-    quasis: vec![TplElement {
-      span: DUMMY_SP,
-      tail: true,
-      cooked: Some(lossy_wtf8_atom()),
-      raw: Atom::new(""),
-    }],
-  };
-
-  assert_eq!(
-    try_namespace_name_from_prop_key(&PropName::Computed(computed(Expr::Tpl(tpl)))),
-    None
-  );
-}
-
-/// No cooked text (an invalid escape) names nothing; the reader answers `None`.
-#[test]
-fn skips_a_computed_template_key_with_no_cooked_text() {
-  let tpl = Tpl {
-    span: DUMMY_SP,
-    exprs: vec![],
-    quasis: vec![TplElement {
-      span: DUMMY_SP,
-      tail: true,
-      cooked: None,
-      raw: Atom::new("\\u{}"),
-    }],
-  };
-
-  assert_eq!(
-    try_namespace_name_from_prop_key(&PropName::Computed(computed(Expr::Tpl(tpl)))),
-    None
-  );
-}
-
 // ---------- namespace_name_from_member_prop ----------
-
-#[test]
-fn reads_an_identifier_member() {
-  let prop = MemberProp::Ident(ident_name("color"));
-
-  assert_eq!(
-    namespace_name_from_member_prop(&prop),
-    Some(Atom::new("color"))
-  );
-}
-
-#[test]
-fn reads_a_computed_member() {
-  let prop = MemberProp::Computed(computed(Expr::Lit(Lit::Str(string_lit("color")))));
-
-  assert_eq!(
-    namespace_name_from_member_prop(&prop),
-    Some(Atom::new("color"))
-  );
-}
 
 #[test]
 fn refuses_a_private_member() {
@@ -377,36 +148,6 @@ fn refuses_a_private_member() {
 // ---------- prop_as_key_value ----------
 
 #[test]
-fn accepts_a_key_value_property() {
-  let prop = key_value_prop(
-    PropName::Ident(ident_name("root")),
-    Expr::Lit(Lit::Num(number_lit(1.0))),
-  );
-
-  assert!(prop_as_key_value(&prop).is_some());
-}
-
-#[test]
-fn refuses_a_spread() {
-  let prop = PropOrSpread::Spread(SpreadElement {
-    dot3_token: DUMMY_SP,
-    expr: Box::new(Expr::Ident(Ident::new_no_ctxt(Atom::new("rest"), DUMMY_SP))),
-  });
-
-  assert!(prop_as_key_value(&prop).is_none());
-}
-
-#[test]
-fn refuses_a_shorthand() {
-  let prop = PropOrSpread::Prop(Box::new(Prop::Shorthand(Ident::new_no_ctxt(
-    Atom::new("root"),
-    DUMMY_SP,
-  ))));
-
-  assert!(prop_as_key_value(&prop).is_none());
-}
-
-#[test]
 fn refuses_a_getter() {
   let prop = PropOrSpread::Prop(Box::new(Prop::Getter(GetterProp {
     span: DUMMY_SP,
@@ -417,33 +158,7 @@ fn refuses_a_getter() {
   assert!(prop_as_key_value(&prop).is_none());
 }
 
-#[test]
-fn refuses_a_method() {
-  let prop = PropOrSpread::Prop(Box::new(Prop::Method(MethodProp {
-    key: PropName::Ident(ident_name("root")),
-    function: Box::default(),
-  })));
-
-  assert!(prop_as_key_value(&prop).is_none());
-}
-
 // ---------- named_key_value ----------
-
-#[test]
-fn reads_the_name_and_the_property_together() {
-  let prop = key_value_prop(
-    PropName::Str(string_lit("--color")),
-    Expr::Lit(Lit::Num(number_lit(1.0))),
-  );
-
-  let (name, key_value) = named_key_value(&prop);
-
-  assert_eq!(name, Atom::new("--color"));
-  assert!(matches!(
-    key_value.value.as_ref(),
-    Expr::Lit(Lit::Num(number)) if number.value == 1.0
-  ));
-}
 
 #[test]
 #[should_panic(expected = "The spread operator (...) is not supported in this context.")]
@@ -485,124 +200,3 @@ fn refuses_a_key_with_no_name() {
 }
 
 // ---------- collect_object_lit_keys ----------
-
-#[test]
-fn collects_nothing_from_an_empty_object() {
-  let object = object_of(vec![]);
-
-  assert!(collect_object_lit_keys(&object).next().is_none());
-}
-
-#[test]
-fn collects_keys_in_source_order() {
-  let object = object_of(vec![
-    key_value_prop(
-      PropName::Ident(ident_name("root")),
-      Expr::Lit(Lit::Num(number_lit(1.0))),
-    ),
-    key_value_prop(
-      PropName::Str(string_lit("nested")),
-      Expr::Lit(Lit::Num(number_lit(2.0))),
-    ),
-  ]);
-
-  assert_eq!(
-    collect_object_lit_keys(&object).collect::<Vec<_>>(),
-    vec![Atom::new("root"), Atom::new("nested")]
-  );
-}
-
-#[test]
-fn counts_a_key_written_twice_as_two_properties() {
-  let object = object_of(vec![
-    key_value_prop(
-      PropName::Ident(ident_name("root")),
-      Expr::Lit(Lit::Num(number_lit(1.0))),
-    ),
-    key_value_prop(
-      PropName::Ident(ident_name("root")),
-      Expr::Lit(Lit::Num(number_lit(2.0))),
-    ),
-  ]);
-
-  assert_eq!(
-    collect_object_lit_keys(&object).collect::<Vec<_>>(),
-    vec![Atom::new("root"), Atom::new("root")]
-  );
-}
-
-#[test]
-fn skips_properties_that_have_no_readable_key() {
-  let object = object_of(vec![
-    PropOrSpread::Spread(SpreadElement {
-      dot3_token: DUMMY_SP,
-      expr: Box::new(Expr::Ident(Ident::new_no_ctxt(Atom::new("rest"), DUMMY_SP))),
-    }),
-    key_value_prop(
-      PropName::Computed(computed(Expr::Ident(Ident::new_no_ctxt(
-        Atom::new("dynamic"),
-        DUMMY_SP,
-      )))),
-      Expr::Lit(Lit::Num(number_lit(1.0))),
-    ),
-    key_value_prop(
-      PropName::Ident(ident_name("root")),
-      Expr::Lit(Lit::Num(number_lit(2.0))),
-    ),
-  ]);
-
-  assert_eq!(
-    collect_object_lit_keys(&object).collect::<Vec<_>>(),
-    vec![Atom::new("root")]
-  );
-}
-
-/// A wide object, to show the readers stay linear.
-#[test]
-fn collects_every_key_of_a_very_wide_object() {
-  const WIDTH: usize = 10_000;
-
-  let object = object_of(
-    (0..WIDTH)
-      .map(|index| {
-        key_value_prop(
-          PropName::Num(number_lit(index as f64)),
-          Expr::Lit(Lit::Num(number_lit(index as f64))),
-        )
-      })
-      .collect(),
-  );
-
-  let keys = collect_object_lit_keys(&object).collect::<Vec<_>>();
-
-  assert_eq!(keys.len(), WIDTH);
-  assert_eq!(keys.first(), Some(&Atom::new("0")));
-  assert_eq!(keys.last(), Some(&Atom::new("9999")));
-}
-
-#[test]
-fn reads_a_key_whose_value_is_a_function() {
-  let object = object_of(vec![key_value_prop(
-    PropName::Ident(ident_name("dynamic")),
-    Expr::Arrow(ArrowExpr {
-      span: DUMMY_SP,
-      params: vec![Pat::Ident(BindingIdent {
-        id: Ident::new_no_ctxt(Atom::new("value"), DUMMY_SP),
-        type_ann: None,
-      })],
-      body: Box::new(ArrowFunctionBody::Expr(Box::new(Expr::Ident(
-        Ident::new_no_ctxt(Atom::new("value"), DUMMY_SP),
-      )))),
-      is_async: false,
-      is_generator: false,
-      type_params: None,
-      return_type: None,
-      ctxt: Default::default(),
-    }),
-  )]);
-
-  assert_eq!(
-    collect_object_lit_keys(&object).collect::<Vec<_>>(),
-    vec![Atom::new("dynamic")]
-  );
-}

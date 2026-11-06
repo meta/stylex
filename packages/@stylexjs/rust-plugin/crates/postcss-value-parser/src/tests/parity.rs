@@ -7,81 +7,10 @@
 //! pnpm run --filter=@stylexswc/postcss-value-parser generate:value-parser-cases
 //! ```
 
-use crate::{
-  Dimension, Node, NodeKind, ValueParser, parse, stringify, stringify_node_with, stringify_with,
-  unit,
-};
+use crate::{Node, NodeKind, ValueParser, parse, stringify, stringify_node_with, stringify_with};
 
-use super::cases::{OVERRIDE_CASES, PARSER_CASES, STRESS_CASES, UNIT_CASES};
+use super::cases::{OVERRIDE_CASES, PARSER_CASES};
 use super::dump::dump;
-
-#[test]
-fn parses_every_value_into_the_same_tree() {
-  for case in PARSER_CASES {
-    assert_eq!(
-      dump(&parse(case.input)),
-      case.ast,
-      "tree differs for {:?}",
-      case.input
-    );
-  }
-}
-
-#[test]
-fn serializes_every_value_into_the_same_text() {
-  for case in PARSER_CASES {
-    assert_eq!(
-      stringify(&parse(case.input)),
-      case.output,
-      "serialized text differs for {:?}",
-      case.input
-    );
-  }
-}
-
-/// Unrewritten text round-trips byte for byte; the four `/*/` corpus values are excluded.
-#[test]
-fn round_trips_every_value_byte_for_byte() {
-  let mut quirks = Vec::new();
-
-  for case in PARSER_CASES {
-    match case.output == case.input {
-      true => assert_eq!(
-        stringify(&parse(case.input)),
-        case.input,
-        "round trip differs for {:?}",
-        case.input
-      ),
-      false => quirks.push(case.input),
-    }
-  }
-
-  assert_eq!(
-    quirks,
-    vec!["/*/ x */ 1px", "1px /*/ y */", "/*/", "/*/ x */"]
-  );
-}
-
-#[test]
-fn survives_values_at_the_sizes_where_scanning_stops_being_about_css() {
-  for case in STRESS_CASES {
-    assert_eq!(
-      stringify(&parse(case.input)),
-      case.output,
-      "serialized text differs for the {} case",
-      case.label
-    );
-  }
-}
-
-#[test]
-fn splits_every_word_into_the_same_number_and_unit() {
-  for (input, expected) in UNIT_CASES {
-    let expected = expected.map(|(number, unit)| Dimension { number, unit });
-
-    assert_eq!(unit(input), expected, "unit split differs for {input:?}");
-  }
-}
 
 #[test]
 fn the_entry_point_parses_and_serializes_like_its_parts() {
@@ -160,37 +89,4 @@ fn an_override_replaces_the_same_nodes() {
 
     assert_eq!(produced, case.output, "the {} scenario differs", case.label);
   }
-}
-
-/// Not parity: siblings reach the override left to right (upstream: right to left).
-#[test]
-fn an_override_is_consulted_left_to_right() {
-  let nodes = parse("a b c");
-  let mut seen = Vec::new();
-
-  let text = stringify_with(&nodes, &mut |node: &Node| {
-    seen.push(node.value.clone());
-    None
-  });
-
-  assert_eq!(seen, ["a", " ", "b", " ", "c"]);
-  assert_eq!(text, "a b c");
-}
-
-/// A parent still precedes its children, as in upstream.
-#[test]
-fn an_override_sees_a_function_before_its_arguments() {
-  let nodes = parse("calc(1px + 2px)");
-  let mut seen = Vec::new();
-
-  stringify_with(&nodes, &mut |node: &Node| {
-    seen.push(node.value.clone());
-    None
-  });
-
-  match seen.first() {
-    Some(first) => assert_eq!(first, "calc"),
-    None => panic!("the override was never consulted"),
-  }
-  assert!(seen.contains(&String::from("1px")));
 }

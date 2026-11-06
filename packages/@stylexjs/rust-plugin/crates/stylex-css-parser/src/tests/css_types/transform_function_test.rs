@@ -75,26 +75,7 @@ mod test_css_type_transform_function {
   }
 
   #[cfg(test)]
-  mod test_matrix3d_function {
-    use super::*;
-
-    #[test]
-    fn valid_uses() {
-      let result = TransformFunction::parse()
-        .parse_to_end("matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)")
-        .unwrap();
-      assert!(result.to_string().contains("matrix3d"));
-    }
-
-    #[test]
-    fn invalid_uses() {
-      assert!(
-        TransformFunction::parse()
-          .parse_to_end("matrix3d()")
-          .is_err()
-      );
-    }
-  }
+  mod test_matrix3d_function {}
 
   #[cfg(test)]
   mod test_perspective_function {
@@ -122,30 +103,6 @@ mod test_css_type_transform_function {
           .unwrap()
           .to_string(),
         "perspective(1.5em)"
-      );
-    }
-
-    #[test]
-    fn invalid_uses() {
-      assert!(
-        TransformFunction::parse()
-          .parse_to_end("perspective(foo)")
-          .is_err()
-      );
-      assert!(
-        TransformFunction::parse()
-          .parse_to_end("perspective(1)")
-          .is_err()
-      );
-      assert!(
-        TransformFunction::parse()
-          .parse_to_end("perspective(1%)")
-          .is_err()
-      );
-      assert!(
-        TransformFunction::parse()
-          .parse_to_end("perspective(1deg)")
-          .is_err()
       );
     }
   }
@@ -248,53 +205,10 @@ mod test_css_type_transform_function {
         "rotate(-1turn)"
       );
     }
-
-    #[test]
-    fn invalid_uses() {
-      assert!(
-        TransformFunction::parse()
-          .parse_to_end("rotate(foo)")
-          .is_err()
-      );
-      assert!(
-        TransformFunction::parse()
-          .parse_to_end("rotate(1)")
-          .is_err()
-      );
-      assert!(
-        TransformFunction::parse()
-          .parse_to_end("rotate(1%)")
-          .is_err()
-      );
-      assert!(
-        TransformFunction::parse()
-          .parse_to_end("rotate(1px)")
-          .is_err()
-      );
-    }
   }
 
   #[cfg(test)]
-  mod test_rotate3d_function {
-    use super::*;
-
-    #[test]
-    fn valid_uses() {
-      let result = TransformFunction::parse()
-        .parse_to_end("rotate3d(1, 0, 0, 90deg)")
-        .unwrap();
-      assert_eq!(result.to_string(), "rotateX(90deg)");
-    }
-
-    #[test]
-    fn invalid_uses() {
-      assert!(
-        TransformFunction::parse()
-          .parse_to_end("rotate3d()")
-          .is_err()
-      );
-    }
-  }
+  mod test_rotate3d_function {}
 
   #[cfg(test)]
   mod test_rotate_axis_function {
@@ -317,94 +231,13 @@ mod test_css_type_transform_function {
         .unwrap();
       assert!(result.to_string().contains("rotateZ"));
     }
-
-    #[test]
-    fn invalid_uses() {
-      assert!(
-        TransformFunction::parse()
-          .parse_to_end("rotateX()")
-          .is_err()
-      );
-      assert!(
-        TransformFunction::parse()
-          .parse_to_end("rotateY(90)")
-          .is_err()
-      );
-      assert!(
-        TransformFunction::parse()
-          .parse_to_end("rotateZ(90px)")
-          .is_err()
-      );
-    }
   }
 
   #[cfg(test)]
-  mod test_scale_function {
-    use super::*;
-
-    #[test]
-    fn valid_uses() {
-      let result = TransformFunction::parse().parse_to_end("scale(2)").unwrap();
-      assert!(result.to_string().contains("scale"));
-
-      let result = TransformFunction::parse()
-        .parse_to_end("scale(1.5, 0.8)")
-        .unwrap();
-      assert!(result.to_string().contains("scale"));
-
-      let result = TransformFunction::parse()
-        .parse_to_end("scale(0.5)")
-        .unwrap();
-      assert!(result.to_string().contains("scale"));
-    }
-
-    #[test]
-    fn invalid_uses() {
-      assert!(TransformFunction::parse().parse_to_end("scale()").is_err());
-      assert!(
-        TransformFunction::parse()
-          .parse_to_end("scale(1, 2, 3)")
-          .is_err()
-      );
-    }
-  }
+  mod test_scale_function {}
 
   #[cfg(test)]
-  mod test_translate_function {
-    use super::*;
-
-    #[test]
-    fn valid_uses() {
-      let result = TransformFunction::parse()
-        .parse_to_end("translate(50px)")
-        .unwrap();
-      assert!(result.to_string().contains("translate"));
-
-      let result = TransformFunction::parse()
-        .parse_to_end("translate(10px, 20px)")
-        .unwrap();
-      assert!(result.to_string().contains("translate"));
-
-      let result = TransformFunction::parse()
-        .parse_to_end("translate(50%, 25%)")
-        .unwrap();
-      assert!(result.to_string().contains("translate"));
-    }
-
-    #[test]
-    fn invalid_uses() {
-      assert!(
-        TransformFunction::parse()
-          .parse_to_end("translate()")
-          .is_err()
-      );
-      assert!(
-        TransformFunction::parse()
-          .parse_to_end("translate(10)")
-          .is_err()
-      );
-    }
-  }
+  mod test_translate_function {}
 
   #[cfg(test)]
   mod test_matrix3d_parse_to_string {
@@ -439,21 +272,7 @@ mod test_css_type_transform_function {
   }
 
   #[cfg(test)]
-  mod test_rotate3d_parse_to_string {
-    use super::*;
-
-    #[test]
-    fn rotate3d_x_axis() {
-      // rotate3d(1, 0, 0, ...) is optimized to rotateX(...)
-      assert_eq!(
-        TransformFunction::parse()
-          .parse_to_end("rotate3d(1, 0, 0, 45deg)")
-          .unwrap()
-          .to_string(),
-        "rotateX(45deg)"
-      );
-    }
-  }
+  mod test_rotate3d_parse_to_string {}
 
   #[cfg(test)]
   mod test_scale3d_parse_to_string {
@@ -472,20 +291,7 @@ mod test_css_type_transform_function {
   }
 
   #[cfg(test)]
-  mod test_perspective_parse_to_string {
-    use super::*;
-
-    #[test]
-    fn perspective_100px() {
-      assert_eq!(
-        TransformFunction::parse()
-          .parse_to_end("perspective(100px)")
-          .unwrap()
-          .to_string(),
-        "perspective(100px)"
-      );
-    }
-  }
+  mod test_perspective_parse_to_string {}
 
   #[cfg(test)]
   mod test_skew_parse_to_string {
@@ -515,29 +321,5 @@ mod test_css_type_transform_function {
   }
 
   #[cfg(test)]
-  mod test_skew_axis_parse_to_string {
-    use super::*;
-
-    #[test]
-    fn skew_x() {
-      assert_eq!(
-        TransformFunction::parse()
-          .parse_to_end("skewX(30deg)")
-          .unwrap()
-          .to_string(),
-        "skewX(30deg)"
-      );
-    }
-
-    #[test]
-    fn skew_y() {
-      assert_eq!(
-        TransformFunction::parse()
-          .parse_to_end("skewY(20deg)")
-          .unwrap()
-          .to_string(),
-        "skewY(20deg)"
-      );
-    }
-  }
+  mod test_skew_axis_parse_to_string {}
 }

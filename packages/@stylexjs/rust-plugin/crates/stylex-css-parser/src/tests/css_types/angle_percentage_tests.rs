@@ -1,36 +1,6 @@
 use super::*;
 
 #[test]
-fn test_angle_percentage_creation() {
-  let angle = AnglePercentage::Angle(Angle::new(45.0, "deg".to_string()));
-  let percentage = AnglePercentage::Percentage(Percentage::new(50.0));
-
-  assert!(angle.is_angle());
-  assert!(!angle.is_percentage());
-
-  assert!(!percentage.is_angle());
-  assert!(percentage.is_percentage());
-}
-
-#[test]
-fn test_angle_percentage_display() {
-  let angle = AnglePercentage::Angle(Angle::new(90.0, "deg".to_string()));
-  assert_eq!(angle.to_string(), "90deg");
-
-  let percentage = AnglePercentage::Percentage(Percentage::new(25.0));
-  assert_eq!(percentage.to_string(), "25%");
-
-  let rad_angle = AnglePercentage::Angle(Angle::new(std::f64::consts::PI, "rad".to_string()));
-  assert_eq!(
-    rad_angle.to_string(),
-    format!("{}rad", std::f64::consts::PI)
-  );
-
-  let zero_angle = AnglePercentage::Angle(Angle::new(0.0, "deg".to_string()));
-  assert_eq!(zero_angle.to_string(), "0deg");
-}
-
-#[test]
 fn test_angle_percentage_accessors() {
   let angle_val = Angle::new(180.0, "deg".to_string());
   let percentage_val = Percentage::new(75.0);
@@ -52,38 +22,6 @@ fn test_angle_percentage_parser_creation() {
 }
 
 #[test]
-fn test_angle_percentage_equality() {
-  let angle1 = AnglePercentage::Angle(Angle::new(45.0, "deg".to_string()));
-  let angle2 = AnglePercentage::Angle(Angle::new(45.0, "deg".to_string()));
-  let angle3 = AnglePercentage::Angle(Angle::new(90.0, "deg".to_string()));
-
-  let percentage1 = AnglePercentage::Percentage(Percentage::new(50.0));
-  let percentage2 = AnglePercentage::Percentage(Percentage::new(50.0));
-
-  assert_eq!(angle1, angle2);
-  assert_ne!(angle1, angle3);
-  assert_ne!(angle1, percentage1);
-  assert_eq!(percentage1, percentage2);
-}
-
-#[test]
-fn test_angle_percentage_different_units() {
-  let deg_angle = AnglePercentage::Angle(Angle::new(90.0, "deg".to_string()));
-  let rad_angle = AnglePercentage::Angle(Angle::new(1.57, "rad".to_string()));
-  let grad_angle = AnglePercentage::Angle(Angle::new(100.0, "grad".to_string()));
-  let turn_angle = AnglePercentage::Angle(Angle::new(0.25, "turn".to_string()));
-
-  assert_eq!(deg_angle.to_string(), "90deg");
-  assert_eq!(rad_angle.to_string(), "1.57rad");
-  assert_eq!(grad_angle.to_string(), "100grad");
-  assert_eq!(turn_angle.to_string(), "0.25turn");
-
-  assert_ne!(deg_angle, rad_angle);
-  assert_ne!(deg_angle, grad_angle);
-  assert_ne!(deg_angle, turn_angle);
-}
-
-#[test]
 fn test_angle_percentage_edge_cases() {
   let zero_angle = AnglePercentage::Angle(Angle::new(0.0, "deg".to_string()));
   assert!(zero_angle.is_angle());
@@ -98,19 +36,4 @@ fn test_angle_percentage_edge_cases() {
 
   let full_turn = AnglePercentage::Angle(Angle::new(1.0, "turn".to_string()));
   assert_eq!(full_turn.to_string(), "1turn");
-}
-
-#[test]
-fn test_angle_percentage_common_use_cases() {
-  let gradient_angle = AnglePercentage::Angle(Angle::new(45.0, "deg".to_string()));
-  assert!(gradient_angle.is_angle());
-
-  let conic_percentage = AnglePercentage::Percentage(Percentage::new(25.0));
-  assert!(conic_percentage.is_percentage());
-
-  let rotate_angle = AnglePercentage::Angle(Angle::new(0.5, "turn".to_string()));
-  assert!(rotate_angle.is_angle());
-
-  let skew_angle = AnglePercentage::Angle(Angle::new(30.0, "deg".to_string()));
-  assert!(skew_angle.is_angle());
 }

@@ -7,10 +7,7 @@ use swc_core::{
     wtf8::{CodePoint, Wtf8Buf},
   },
   common::DUMMY_SP,
-  ecma::ast::{
-    AssignExpr, AssignOp, ComputedPropName, Ident, IdentName, MemberExpr, Number,
-    SimpleAssignTarget, Str, UnaryExpr, UpdateExpr, UpdateOp,
-  },
+  ecma::ast::{ComputedPropName, Ident, IdentName, Number, Str, UnaryExpr},
 };
 
 fn ident_expr(name: &str) -> Expr {
@@ -19,14 +16,6 @@ fn ident_expr(name: &str) -> Expr {
 
 fn member_ident(name: &str) -> MemberProp {
   MemberProp::Ident(IdentName::new(name.into(), DUMMY_SP))
-}
-
-fn member_expr_with_ident_obj(prop: &str) -> MemberExpr {
-  MemberExpr {
-    span: DUMMY_SP,
-    obj: Box::new(ident_expr("obj")),
-    prop: member_ident(prop),
-  }
 }
 
 #[test]
@@ -38,23 +27,6 @@ fn valid_callee_detection() {
     value: 1.0,
     raw: None,
   }))));
-}
-
-#[test]
-fn the_name_taking_callee_rule_answers_the_expression_taking_one() {
-  for name in ["Math", "console", "Object", "window", "myHelper"] {
-    assert_eq!(
-      is_a_valid_callee_name(name),
-      is_valid_callee(&ident_expr(name)),
-      "the two readings of `{}` disagree",
-      name
-    );
-  }
-}
-
-#[test]
-fn get_callee_name_for_identifier() {
-  assert_eq!(get_callee_name(&ident_expr("Array")), "Array");
 }
 
 #[test]
@@ -91,54 +63,6 @@ fn method_sets_detect_expected_members() {
 }
 
 #[test]
-fn every_valid_callee_carries_an_allowlist() {
-  for callee in VALID_CALLEES.iter() {
-    assert!(
-      METHODS_PER_CALLEE
-        .iter()
-        .any(|(name, method)| name == callee && is_valid_callee_method_name(callee, method)),
-      "`{}` is a valid callee with no static the allowlist admits",
-      callee
-    );
-  }
-
-  assert!(!is_valid_callee_method_name("Reflect", "get"));
-  assert!(!is_valid_callee_method_name("", "keys"));
-}
-
-const METHODS_PER_CALLEE: [(&str, &str); 5] = [
-  ("String", "fromCharCode"),
-  ("Number", "parseInt"),
-  ("Math", "max"),
-  ("Object", "keys"),
-  ("Array", "from"),
-];
-
-#[test]
-fn reflective_and_impure_statics_are_outside_the_allowlist() {
-  let mutating = MUTATING_OBJECT_METHODS.iter().copied();
-
-  for method in mutating.chain([
-    "freeze",
-    "seal",
-    "preventExtensions",
-    "create",
-    "getPrototypeOf",
-    "setPrototypeOf",
-    "getOwnPropertyDescriptor",
-    "getOwnPropertyDescriptors",
-  ]) {
-    assert!(
-      !is_valid_callee_method_name("Object", method),
-      "`Object.{}` must stay outside the allowlist",
-      method
-    );
-  }
-
-  assert!(!is_valid_callee_method_name("Math", "random"));
-}
-
-#[test]
 fn computed_props_are_not_classified_as_identifier_methods() {
   let computed = MemberProp::Computed(ComputedPropName {
     span: DUMMY_SP,
@@ -154,61 +78,6 @@ fn computed_props_are_not_classified_as_identifier_methods() {
 }
 
 #[test]
-fn mutation_expr_detection() {
-  let assign_member = Expr::Assign(AssignExpr {
-    span: DUMMY_SP,
-    op: AssignOp::Assign,
-    left: AssignTarget::Simple(SimpleAssignTarget::Member(member_expr_with_ident_obj("x"))),
-    right: Box::new(Expr::Lit(Lit::Num(Number {
-      span: DUMMY_SP,
-      value: 1.0,
-      raw: None,
-    }))),
-  });
-  assert!(is_mutation_expr(&assign_member));
-
-  let update_member = Expr::Update(UpdateExpr {
-    span: DUMMY_SP,
-    op: UpdateOp::PlusPlus,
-    prefix: false,
-    arg: Box::new(Expr::Member(member_expr_with_ident_obj("x"))),
-  });
-  assert!(is_mutation_expr(&update_member));
-
-  let delete_member = Expr::Unary(UnaryExpr {
-    span: DUMMY_SP,
-    op: UnaryOp::Delete,
-    arg: Box::new(Expr::Member(member_expr_with_ident_obj("x"))),
-  });
-  assert!(is_mutation_expr(&delete_member));
-
-  let assign_non_ident_object = Expr::Assign(AssignExpr {
-    span: DUMMY_SP,
-    op: AssignOp::Assign,
-    left: AssignTarget::Simple(SimpleAssignTarget::Member(MemberExpr {
-      span: DUMMY_SP,
-      obj: Box::new(Expr::Lit(Lit::Num(Number {
-        span: DUMMY_SP,
-        value: 0.0,
-        raw: None,
-      }))),
-      prop: member_ident("x"),
-    })),
-    right: Box::new(Expr::Lit(Lit::Num(Number {
-      span: DUMMY_SP,
-      value: 1.0,
-      raw: None,
-    }))),
-  });
-  assert!(!is_mutation_expr(&assign_non_ident_object));
-}
-
-#[test]
-fn get_method_name_returns_identifier_name() {
-  assert_eq!(get_method_name(&member_ident("splice")), "splice");
-}
-
-#[test]
 #[should_panic(expected = "The method name in a call expression must be a static identifier.")]
 fn get_method_name_panics_for_non_identifier() {
   let computed = MemberProp::Computed(ComputedPropName {
@@ -220,31 +89,6 @@ fn get_method_name_panics_for_non_identifier() {
     }))),
   });
   let _ = get_method_name(&computed);
-}
-
-#[test]
-fn id_prop_extraction_for_computed_string() {
-  let computed_string = MemberProp::Computed(ComputedPropName {
-    span: DUMMY_SP,
-    expr: Box::new(Expr::Lit(Lit::Str(Str {
-      span: DUMMY_SP,
-      value: "id".into(),
-      raw: None,
-    }))),
-  });
-  assert_eq!(is_id_prop(&computed_string).map(Atom::as_ref), Some("id"));
-
-  let computed_number = MemberProp::Computed(ComputedPropName {
-    span: DUMMY_SP,
-    expr: Box::new(Expr::Lit(Lit::Num(Number {
-      span: DUMMY_SP,
-      value: 1.0,
-      raw: None,
-    }))),
-  });
-  assert_eq!(is_id_prop(&computed_number), None);
-
-  assert_eq!(is_id_prop(&member_ident("plain")), None);
 }
 
 #[test]

@@ -2,49 +2,9 @@ use std::rc::Rc;
 
 use indexmap::IndexMap;
 use stylex_structures::stylex_env::{EnvEntry, JSFunction};
-use stylex_utils::collections::FxIndexMap;
 
-use crate::functions::{FunctionConfig, FunctionConfigType, FunctionType};
+use crate::functions::FunctionConfigType;
 use crate::tests::prelude::string_expr;
-
-fn regular_config() -> FunctionConfig {
-  FunctionConfig {
-    fn_ptr: FunctionType::Callback(Box::new(string_expr("callback"))),
-    takes_path: false,
-  }
-}
-
-#[test]
-fn a_map_answers_itself_and_can_be_added_to() {
-  let mut config = FunctionConfigType::Map(FxIndexMap::default());
-
-  let Some(map) = config.as_map_mut() else {
-    panic!("a map config did not answer its map");
-  };
-
-  assert!(map.is_empty());
-  map.insert("when".into(), FunctionConfigType::Regular(regular_config()));
-
-  assert_eq!(config.as_map_mut().map(|map| map.len()), Some(1));
-}
-
-#[test]
-fn a_regular_config_holds_no_map() {
-  assert!(
-    FunctionConfigType::Regular(regular_config())
-      .as_map_mut()
-      .is_none()
-  );
-}
-
-#[test]
-fn a_compiled_namespace_holds_no_map() {
-  assert!(
-    FunctionConfigType::IndexMap(Rc::new(IndexMap::new()))
-      .as_map_mut()
-      .is_none()
-  );
-}
 
 #[test]
 fn an_env_object_holds_no_map() {

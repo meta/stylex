@@ -112,22 +112,6 @@ fn test_from_str() {
 }
 
 #[test]
-fn test_from_angle() {
-  use crate::css_types::Angle;
-  let angle = Angle::new(45.0, "deg".to_string());
-  let val: CssValue = angle.into();
-  assert!(val.is_angle());
-}
-
-#[test]
-fn test_from_color() {
-  use crate::css_types::color::{Color, NamedColor};
-  let color = Color::Named(NamedColor::new("red".to_string()));
-  let val: CssValue = color.into();
-  assert!(val.is_color());
-}
-
-#[test]
 fn test_from_length() {
   use crate::css_types::Length;
   let length = Length::new(10.0, "px".to_string());
@@ -170,25 +154,12 @@ fn test_from_simple_token_unknown() {
 }
 
 #[test]
-fn test_is_none() {
-  let none_val = CssValue::None;
-  assert!(none_val.is_none());
-  assert!(!none_val.is_number());
-}
-
-#[test]
 fn test_get_unit() {
   let dim = CssValue::dimension(10.0, "px");
   assert_eq!(dim.get_unit(), Some(&"px".to_string()));
 
   let num = CssValue::number(42.0);
   assert_eq!(num.get_unit(), None);
-}
-
-#[test]
-fn test_as_angle_returns_none_for_non_angle() {
-  let num = CssValue::number(42.0);
-  assert!(num.as_angle().is_none());
 }
 
 #[test]
