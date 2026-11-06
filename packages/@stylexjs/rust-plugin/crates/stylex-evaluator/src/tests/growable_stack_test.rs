@@ -253,7 +253,10 @@ fn brackets_inside_a_string_nest_nothing() {
 #[test]
 fn a_tree_past_the_largest_claim_is_counted_no_further() {
   let answered = on_a_thread_of(LARGE_THREAD, || {
-    nesting_of(&parse_expr(&nested_literal(MAX_EVALUATION_DEPTH_LIMIT * 2)))
+    let levels = MAX_EVALUATION_DEPTH_LIMIT * 2;
+    // This deliberately out-of-public-parser-range fixture only tests the
+    // bounded nesting counter. Size its parse/walk/drop from its known depth.
+    super::scaffolding::on_a_stack_for(levels, || nesting_of(&parse_expr(&nested_literal(levels))))
   });
 
   assert_eq!(answered, MAX_EVALUATION_DEPTH_LIMIT + 1);
