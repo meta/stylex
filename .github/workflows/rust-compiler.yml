@@ -31,12 +31,20 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         node: ['22.x', '24.x']
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
     defaults:
       run:
         shell: bash
     env:
       CARGO_BUILD_JOBS: '2'
     steps:
+      # Keep sources byte-identical to the repository (rustfmt checks Unix
+      # newlines) and allow the deepest vendored paths.
+      - name: Configure Git for Windows checkouts
+        if: runner.os == 'Windows'
+        run: |
+          git config --global core.autocrlf false
+          git config --system core.longpaths true
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
@@ -50,15 +58,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: packages/@stylexjs/rust-plugin
-      - run: corepack prepare yarn@1.22.22 --activate
-      - run: yarn install --frozen-lockfile --ignore-scripts
-      - name: Build the JavaScript packages the suites import
-        run:
-          npm run build --workspace=style-value-parser
-          --workspace=@stylexjs/shared --workspace=@stylexjs/stylex
-          --workspace=@stylexjs/babel-plugin --workspace=@stylexjs/unplugin
-      - name: Build native compiler
-        run: npm run build:native --workspace=@stylexjs/rust-plugin
+      # Formatting and lint fail fast, before the release build.
       - name: Rust formatting
         run:
           cargo fmt --manifest-path packages/@stylexjs/rust-plugin/Cargo.toml --
@@ -67,6 +67,17 @@ jobs:
         run: |
           cargo clippy --locked --manifest-path packages/@stylexjs/rust-plugin/Cargo.toml --all-targets -- -D warnings
           cargo clippy --locked --manifest-path packages/@stylexjs/rust-plugin/Cargo.toml --features node --lib -- -D warnings
+      - run: corepack prepare yarn@1.22.22 --activate
+      - run: yarn install --frozen-lockfile --ignore-scripts
+      - name: Build the JavaScript packages the suites import
+        run:
+          npm run build --workspace=style-value-parser
+          --workspace=@stylexjs/shared --workspace=@stylexjs/stylex
+          --workspace=@stylexjs/babel-plugin --workspace=@stylexjs/unplugin
+      - name: Build native compiler
+        env:
+          STYLEX_NATIVE_TEST_HOOKS: '1'
+        run: npm run build:native --workspace=@stylexjs/rust-plugin
       # The unchanged JS suite hardcodes POSIX paths in snapshots and mocks, so
       # it does not pass on Windows even with the JS compiler; there the native
       # run is compared test for test against the JS compiler instead.
@@ -83,6 +94,7 @@ jobs:
 
   node18:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -104,6 +116,8 @@ jobs:
           --workspace=@stylexjs/shared --workspace=@stylexjs/stylex
           --workspace=@stylexjs/babel-plugin --workspace=@stylexjs/unplugin
       - run: npm run build:native --workspace=@stylexjs/rust-plugin
+        env:
+          STYLEX_NATIVE_TEST_HOOKS: '1'
       - name:
           Native API, Babel adapter, and bundler plugin on the oldest supported
           Node
@@ -111,4 +125,13 @@ jobs:
           node --test
           packages/@stylexjs/rust-plugin/tests/babel_facade_current.cjs
           packages/@stylexjs/rust-plugin/tests/native_api_current.cjs
+          packages/@stylexjs/rust-plugin/tests/host_boundary_current.cjs
+          packages/@stylexjs/rust-plugin/tests/babel_validation_current.cjs
+          packages/@stylexjs/rust-plugin/tests/creation_data_boundary_current.cjs
+          packages/@stylexjs/rust-plugin/tests/compiled_consumer_current.cjs
+          packages/@stylexjs/rust-plugin/tests/named_env_callee_site_current.cjs
+          packages/@stylexjs/rust-plugin/tests/host_memo_current.cjs
+          packages/@stylexjs/rust-plugin/tests/creation_callback_effects_current.cjs
+          packages/@stylexjs/rust-plugin/tests/theme_projection_current.cjs
+          packages/@stylexjs/rust-plugin/tests/count_refusal_current.cjs
           packages/@stylexjs/rust-plugin/tests/unplugin_current.cjs

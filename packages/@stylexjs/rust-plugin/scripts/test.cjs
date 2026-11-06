@@ -18,6 +18,7 @@ const steps = [
       'test',
       '--locked',
       '--no-fail-fast',
+      '--workspace',
       '--manifest-path',
       path.join(root, 'Cargo.toml'),
     ],
@@ -29,6 +30,42 @@ const steps = [
   [
     process.execPath,
     ['--test', path.join(root, 'tests/native_api_current.cjs')],
+  ],
+  [
+    process.execPath,
+    ['--test', path.join(root, 'tests/host_boundary_current.cjs')],
+  ],
+  [
+    process.execPath,
+    ['--test', path.join(root, 'tests/babel_validation_current.cjs')],
+  ],
+  [
+    process.execPath,
+    ['--test', path.join(root, 'tests/creation_data_boundary_current.cjs')],
+  ],
+  [
+    process.execPath,
+    ['--test', path.join(root, 'tests/compiled_consumer_current.cjs')],
+  ],
+  [
+    process.execPath,
+    ['--test', path.join(root, 'tests/named_env_callee_site_current.cjs')],
+  ],
+  [
+    process.execPath,
+    ['--test', path.join(root, 'tests/host_memo_current.cjs')],
+  ],
+  [
+    process.execPath,
+    ['--test', path.join(root, 'tests/creation_callback_effects_current.cjs')],
+  ],
+  [
+    process.execPath,
+    ['--test', path.join(root, 'tests/theme_projection_current.cjs')],
+  ],
+  [
+    process.execPath,
+    ['--test', path.join(root, 'tests/count_refusal_current.cjs')],
   ],
   [process.execPath, ['--test', path.join(root, 'tests/unplugin_current.cjs')]],
   [
@@ -51,7 +88,10 @@ let failed = 0;
 for (const [command, args] of steps) {
   const result = spawnSync(command, args, {
     cwd: root,
-    env: process.env,
+    // The vendored crates' deep-nesting unit tests expect the 8 MiB thread
+    // their upstream test runner gives each test; cargo test's default test
+    // threads have 2 MiB.
+    env: { RUST_MIN_STACK: String(16 * 1024 * 1024), ...process.env },
     stdio: 'inherit',
   });
   if (result.status !== 0) {

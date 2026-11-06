@@ -20,7 +20,8 @@ const result = spawnSync(
     '--manifest-path',
     path.join(root, 'Cargo.toml'),
     '--features',
-    'node',
+    // Test-only diagnostics, for CI's test builds; never in npm builds.
+    process.env.STYLEX_NATIVE_TEST_HOOKS === '1' ? 'node,test-hooks' : 'node',
     '--release',
     '--message-format=json',
   ],
