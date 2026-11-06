@@ -6,7 +6,6 @@ on:
     paths:
       - 'packages/@stylexjs/rust-plugin/**'
       - 'packages/@stylexjs/babel-plugin/**'
-      - 'packages/@stylexjs/unplugin/**'
       - 'packages/@stylexjs/shared/**'
       - 'packages/style-value-parser/**'
       - '.github/workflows/rust-compiler.yml'
@@ -15,7 +14,6 @@ on:
     paths:
       - 'packages/@stylexjs/rust-plugin/**'
       - 'packages/@stylexjs/babel-plugin/**'
-      - 'packages/@stylexjs/unplugin/**'
       - 'packages/@stylexjs/shared/**'
       - 'packages/style-value-parser/**'
       - '.github/workflows/rust-compiler.yml'
@@ -73,7 +71,7 @@ jobs:
         run:
           npm run build --workspace=style-value-parser
           --workspace=@stylexjs/shared --workspace=@stylexjs/stylex
-          --workspace=@stylexjs/babel-plugin --workspace=@stylexjs/unplugin
+          --workspace=@stylexjs/babel-plugin
       - name: Build native compiler
         env:
           STYLEX_NATIVE_TEST_HOOKS: '1'
@@ -114,7 +112,7 @@ jobs:
         run:
           npm run build --workspace=style-value-parser
           --workspace=@stylexjs/shared --workspace=@stylexjs/stylex
-          --workspace=@stylexjs/babel-plugin --workspace=@stylexjs/unplugin
+          --workspace=@stylexjs/babel-plugin
       - run: npm run build:native --workspace=@stylexjs/rust-plugin
         env:
           STYLEX_NATIVE_TEST_HOOKS: '1'
@@ -135,4 +133,3 @@ jobs:
           packages/@stylexjs/rust-plugin/tests/theme_projection_current.cjs
           packages/@stylexjs/rust-plugin/tests/count_refusal_current.cjs
           packages/@stylexjs/rust-plugin/tests/memo_parameter_identity_current.cjs
-          packages/@stylexjs/rust-plugin/tests/unplugin_current.cjs

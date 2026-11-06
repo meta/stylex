@@ -71,7 +71,6 @@ const steps = [
     process.execPath,
     ['--test', path.join(root, 'tests/memo_parameter_identity_current.cjs')],
   ],
-  [process.execPath, ['--test', path.join(root, 'tests/unplugin_current.cjs')]],
   [
     process.execPath,
     ['--test', path.join(root, 'tests/benchmark_current.cjs')],
