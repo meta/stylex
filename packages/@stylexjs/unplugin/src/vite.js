@@ -8,6 +8,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { createVitePlugin } from 'unplugin';
 
 import { devInjectMiddleware } from './dev-inject-middleware';
@@ -24,6 +25,21 @@ import {
   unpluginFactory,
 } from './core';
 
+// Vite lists the CSS files a chunk links to in `viteMetadata`: `importedCss`
+// for the stylesheets of the chunk itself and `importedAssets` for files such
+// as `./app.css?url`.
+function chunkReferencesCss(chunk) {
+  const metadata = chunk?.viteMetadata;
+  if (!metadata) return false;
+  for (const files of [metadata.importedCss, metadata.importedAssets]) {
+    if (!files) continue;
+    for (const file of files) {
+      if (typeof file === 'string' && file.endsWith('.css')) return true;
+    }
+  }
+  return false;
+}
+
 function attachViteHooks(plugin) {
   const cssInjectionTarget = plugin.__stylexCssInjectionTarget;
   const devMode = plugin.__stylexDevMode;
@@ -32,6 +48,7 @@ function attachViteHooks(plugin) {
   let viteServer = null;
   let viteOutDir = null;
   let cssInjectedInGenerateBundle = false;
+  let cssHashForOutput = null;
 
   return {
     ...plugin,
@@ -156,6 +173,24 @@ function attachViteHooks(plugin) {
           event: 'stylex:css-update',
         });
       } catch {}
+    },
+    renderStart() {
+      cssHashForOutput = null;
+    },
+    // `generateBundle` gives the CSS asset that receives the StyleX rules a new
+    // hashed name and rewrites the old name inside every chunk. Chunk names are
+    // final by then, so a chunk whose only change is that CSS file name would
+    // keep its old name with new content. Adding the StyleX CSS to the hash of
+    // every chunk that links to a CSS file renames those chunks instead.
+    augmentChunkHash(chunk) {
+      if (!chunkReferencesCss(chunk)) return;
+      if (cssHashForOutput == null) {
+        const css = plugin.__stylexCollectCss?.() || '';
+        cssHashForOutput = css
+          ? createHash('sha256').update(css).digest('hex')
+          : '';
+      }
+      return cssHashForOutput || undefined;
     },
     generateBundle(_opts, bundle) {
       const css = plugin.__stylexCollectCss?.();

@@ -86,6 +86,10 @@
     "browserslist": "^4.24.0",
     "lightningcss": "^1.29.1"
   },
+  "devDependencies": {
+    "@babel/register": "^7.27.1",
+    "vite": "^8.0.0"
+  },
   "files": [
     "lib/*"
   ]
