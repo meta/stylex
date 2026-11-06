@@ -517,10 +517,15 @@ fn common_js_writes_the_name_it_resolved_an_import_to() {
     state.import_path_resolver("./vars.stylex.js", &mut FxHashMap::default())
   });
 
+  // Compared as a path, so the platform's own separator is read as one.
   assert!(
     messages.iter().any(|message| {
-      message.starts_with("Resolved import path: ")
-        && message.ends_with("package_json_with_name/vars.stylex.js")
+      message
+        .strip_prefix("Resolved import path: ")
+        .is_some_and(|path| {
+          std::path::Path::new(path)
+            .ends_with(std::path::Path::new("package_json_with_name").join("vars.stylex.js"))
+        })
     }),
     "the path that was resolved must be written, got {messages:?}"
   );
