@@ -94,21 +94,23 @@ fn assert_object_refuses(object: &str, reason: &str) {
   assert_refused_with(&evaluated_against_a_function_fold(&source), &source, reason);
 }
 
-/// The one property `source` folds to, as the expression it carries.
+/// The one property `source` folds to, as the evaluated value it carries.
+///
+/// Read off the evaluated object itself: a function under a key is carried as
+/// the typed callback the evaluator made of it, and the data form of an object
+/// deliberately has none for a function -- so there is no expression to read.
 #[track_caller]
-fn function_value_of(source: &str) -> swc_core::ecma::ast::Expr {
+fn function_value_of(source: &str) -> stylex_state::evaluate_result_value::EvaluateResultValue {
   let value = assert_folds_to_a_value(source);
 
-  match value.as_expr().and_then(|expr| expr.as_object()) {
-    Some(object) => match object.props.first().and_then(|prop| prop.as_prop()) {
-      Some(prop) => match prop.as_key_value() {
-        Some(key_value) => *key_value.value.clone(),
-        None => panic!("expected `{}` to fold to one key and a value", source),
-      },
-      None => panic!("expected `{}` to fold to one property", source),
+  match &value {
+    stylex_state::evaluate_result_value::EvaluateResultValue::Object(object)
+      if object.entries.len() == 1 =>
+    {
+      object.entries.values().next().cloned().unwrap()
     },
-    None => panic!(
-      "expected `{}` to fold to an object, got {:?}",
+    _ => panic!(
+      "expected `{}` to fold to an object of one property, got {:?}",
       source, value
     ),
   }
@@ -152,14 +154,17 @@ fn a_computed_key_that_names_no_string_refuses() {
   assert_object_refuses("{ [own]: 'c' }", KEY_HAS_NO_NAME);
 }
 
-/// A value that resolves to nothing refuses, and the sentence names the key it
-/// was written under -- which is the half of the object an author has to find.
+/// A value that resolves to nothing refuses with the value's own sentence.
+///
+/// The reference implementation's object arm passes the value's reason through
+/// unchanged -- `deopt(value.deopt, state, value.reason ?? 'unknown error')`
+/// (`lib/index.js:6722-6725`) -- and answers
+/// `Referenced constant is not defined.` (executed). The `a > ` key-path prefix
+/// was added outside `evaluate` by a create-argument helper that this base no
+/// longer has, so the evaluator's own answer carries no key.
 #[test]
-fn a_value_that_resolves_to_nothing_names_the_key_it_sits_under() {
-  assert_object_refuses(
-    "{ a: unknownName }",
-    "a > Referenced constant is not defined.",
-  );
+fn a_value_that_resolves_to_nothing_refuses_with_its_own_sentence() {
+  assert_object_refuses("{ a: unknownName }", UNDEFINED_CONST);
 }
 
 /// An array value holding something with no compile-time form refuses, and
@@ -217,11 +222,16 @@ fn an_array_value_holding_a_shape_with_no_element_form_refuses() {
   assert_object_refuses("{ a: [() => 1] }", ILLEGAL_PROP_ARRAY_VALUE);
 }
 
-/// A dynamic style's function is kept as the arrow it was written as, and the
-/// parentheses an author may put around it are not part of it: the reference
-/// implementation's tree has no node for them, so both spellings have to fold
-/// to the same value. Reading the bare node refused the parenthesized one,
-/// where the same function written without parentheses folded.
+/// A dynamic style's function is kept as the function it was written as, and
+/// the parentheses an author may put around it are not part of it: the
+/// reference implementation's tree has no node for them, so every spelling has
+/// to fold to the same value -- a typed callback under the key. Reading the bare
+/// node refused the parenthesized one, where the same function written without
+/// parentheses folded.
+///
+/// Asserted on the evaluated carrier rather than on a rebuilt arrow: a function
+/// keeps its identity as a callback, and the data form of an object has no
+/// spelling for one.
 #[test]
 fn parentheses_around_a_function_value_are_not_part_of_it() {
   for source in [
@@ -232,9 +242,9 @@ fn parentheses_around_a_function_value_are_not_part_of_it() {
     assert!(
       matches!(
         function_value_of(source),
-        swc_core::ecma::ast::Expr::Arrow(_)
+        stylex_state::evaluate_result_value::EvaluateResultValue::Callback(_)
       ),
-      "expected `{}` to keep its arrow",
+      "expected `{}` to keep its function as a callback",
       source
     );
   }
@@ -250,12 +260,26 @@ fn a_spread_of_an_array_with_a_hole_refuses() {
   assert_object_refuses("{ ...[, 1] }", PATH_WITHOUT_NODE);
 }
 
-/// A string spreads as its characters, one key per UTF-16 code unit. A string
-/// holding a lone surrogate has a unit no Rust string can carry, so the spread
-/// refuses rather than writing a replacement character the source never had.
+/// A string spreads as its characters, one key per UTF-16 code unit -- a lone
+/// surrogate included, carried as the exact code unit it is (approved native
+/// extension: lossless UTF-16, never U+FFFD). `node` and the reference
+/// implementation both answer `1` key for `{ ...'\uD800' }` (executed); the
+/// refusal was the optional engine's, which could not carry the unit.
 #[test]
-fn a_spread_of_a_string_the_evaluator_cannot_carry_refuses() {
-  assert_object_refuses(r"{ ...'\uD800' }", SPREAD_PROPERTIES_UNREADABLE);
+fn a_spread_of_a_lone_surrogate_contributes_its_code_unit() {
+  let source = r"Object.keys(sx.missing ?? ({ ...'\uD800' })).length";
+
+  assert_eq!(
+    folded_value_of(evaluated_against_a_function_fold(source), source)
+      .as_expr()
+      .and_then(|expr| expr.as_lit())
+      .and_then(|lit| match lit {
+        swc_core::ecma::ast::Lit::Num(number) => Some(number.value),
+        _ => None,
+      }),
+    Some(1.0),
+    "wrong key count for `{source}`"
+  );
 }
 
 /// A `defineVars` group has no keys this compiler can name -- its members live
@@ -288,13 +312,28 @@ fn a_group_written_as_a_style_value_refuses() {
   );
 }
 
-/// A dynamic style's function is kept only where the value *is* the arrow. One
-/// reached through anything else -- a conditional choosing between two of them
-/// -- folds to a function this compiler cannot write back down, so the property
-/// refuses rather than compiling a value the source does not describe.
+/// A function reached through another expression -- a conditional choosing
+/// between two of them -- is the function the conditional chose, carried as a
+/// typed callback like one written directly, so the object has the one own key
+/// the source wrote. `node` answers a length of 1 for this source (executed);
+/// `Object.keys` reads genuine own keys without asking the function for any
+/// text. The arm that used to refuse a callback not written as a bare arrow had
+/// become unreachable behind the typed-callback branch and is removed.
 #[test]
 fn a_function_reached_through_another_expression_is_not_kept() {
-  assert_object_refuses("{ a: true ? () => 1 : () => 2 }", ILLEGAL_PROP_VALUE);
+  let source = "Object.keys(sx.missing ?? ({ a: true ? () => 1 : () => 2 })).length";
+
+  assert_eq!(
+    folded_value_of(evaluated_against_a_function_fold(source), source)
+      .as_expr()
+      .and_then(|expr| expr.as_lit())
+      .and_then(|lit| match lit {
+        swc_core::ecma::ast::Lit::Num(number) => Some(number.value),
+        _ => None,
+      }),
+    Some(1.0),
+    "wrong key count for `{source}`"
+  );
 }
 
 /// The fold's own namespace and a group under one map, for the two cases that
@@ -323,16 +362,22 @@ fn a_fold_and_a_group() -> FunctionMap {
 /// The memo is what produces such a value, by the route the computed-key case
 /// in `member_lookup_tests` describes.
 #[test]
-fn a_property_value_that_answered_nothing_names_its_key_and_shape() {
+fn a_property_value_the_memo_refused_replays_its_reason() {
   let result = evaluated_after(UNRESOLVED_MEMO_WARM, "({ k: (() => 1) + 1 })");
 
   assert_refused(&result, "a value the memo answers nothing for");
 
   let reason = result.reason.unwrap_or_default();
 
+  // The memo now replays the reason the value was refused for (eb1efe6,
+  // "preserve deopt reasons"), so the stand-in sentence naming the key and the
+  // shape is no longer reached; the replayed reason is the `+` over an arrow.
+  // The reference implementation is no oracle for the value: it folds the
+  // arrow to the source text of its own wrapper closure (`lib/index.js:6440-6457`,
+  // `+` at `:6806-6807`; executed).
   assert!(
-    reason.contains("Value of key 'k' has no compile-time value"),
-    "expected the key and the shape to be named, got {:?}",
+    reason.contains("Unsupported expression: BinaryExpression"),
+    "expected the replayed reason, got {:?}",
     reason
   );
 }

@@ -107,6 +107,7 @@ fn reads_an_array_of_objects_as_one_style() {
       EvaluateResultValue::Expr(expr("{ color: 'xa' }")),
       EvaluateResultValue::Expr(expr("{ margin: 'xb' }")),
     ]),
+    &StateManager::default(),
   );
 
   match result {
@@ -131,6 +132,7 @@ fn reads_a_nested_array_as_part_of_the_same_style() {
     &EvaluateResultValue::Vec(vec![EvaluateResultValue::Vec(vec![
       EvaluateResultValue::Expr(expr("{ color: 'xa' }")),
     ])]),
+    &StateManager::default(),
   );
 
   match result {
@@ -150,6 +152,7 @@ fn passes_over_an_absent_element_of_an_array() {
       EvaluateResultValue::Null,
       EvaluateResultValue::Expr(expr("{ color: 'xa' }")),
     ]),
+    &StateManager::default(),
   );
 
   match result {
@@ -163,7 +166,11 @@ fn passes_over_an_absent_element_of_an_array() {
 #[test]
 fn hands_an_array_that_declares_nothing_to_the_runtime() {
   assert_eq!(
-    parse_compiled_styles(&mut styles(), &EvaluateResultValue::Vec(vec![])),
+    parse_compiled_styles(
+      &mut styles(),
+      &EvaluateResultValue::Vec(vec![]),
+      &StateManager::default()
+    ),
     Some(StyleObject::Other)
   );
 }
@@ -178,7 +185,7 @@ fn hands_a_theme_reference_to_the_runtime() {
   ));
 
   assert_eq!(
-    parse_compiled_styles(&mut styles(), &theme_ref),
+    parse_compiled_styles(&mut styles(), &theme_ref, &StateManager::default()),
     Some(StyleObject::Other)
   );
 }
@@ -188,7 +195,11 @@ fn hands_a_theme_reference_to_the_runtime() {
 #[test]
 fn says_nothing_about_a_folded_value_that_is_not_an_object() {
   assert_eq!(
-    parse_compiled_styles(&mut styles(), &EvaluateResultValue::Expr(expr("1"))),
+    parse_compiled_styles(
+      &mut styles(),
+      &EvaluateResultValue::Expr(expr("1")),
+      &StateManager::default()
+    ),
     None
   );
 }
@@ -494,13 +505,18 @@ fn refuses_an_array_element_that_is_not_a_style() {
   parse_compiled_styles(
     &mut styles(),
     &EvaluateResultValue::Vec(vec![EvaluateResultValue::Map(IndexMap::new())]),
+    &StateManager::default(),
   );
 }
 
 #[test]
 #[should_panic(expected = "Encountered a style argument the compiler cannot read.")]
 fn refuses_a_folded_value_that_is_not_a_style() {
-  parse_compiled_styles(&mut styles(), &EvaluateResultValue::Map(IndexMap::new()));
+  parse_compiled_styles(
+    &mut styles(),
+    &EvaluateResultValue::Map(IndexMap::new()),
+    &StateManager::default(),
+  );
 }
 
 /// A style the module declared is shared with the state, not copied.

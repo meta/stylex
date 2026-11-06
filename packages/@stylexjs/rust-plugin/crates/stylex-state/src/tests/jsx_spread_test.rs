@@ -2,9 +2,9 @@
 //!
 //! The spread is met twice: once while the module is walked, which records the
 //! expression, and once while it is rewritten, which records the attributes it
-//! became. The two meetings are joined by the expression's shape rather than by
-//! its position, so the record has to confirm the shape and never answer on a
-//! matching hash alone.
+//! became. The record confirms both actual source-site identity and expression
+//! shape; only generated DUMMY sites share a structural record. A matching hash
+//! alone can never turn an ordinary props call into a JSX replacement.
 
 use swc_core::{
   common::{BytePos, DUMMY_SP, Span},
@@ -114,20 +114,43 @@ fn attributes_for_a_spread_that_was_never_seeded_are_refused() {
   assert_eq!(state.jsx_spread_replacement(&Expr::Call(call)), None);
 }
 
-/// The position the spread was written at is not part of what identifies it:
-/// the same call met at a different span is the same spread.
+/// A real ordinary call cannot reuse a generated sx spread's record merely
+/// because the two expressions have the same structure.
 #[test]
-fn a_spread_is_recognised_wherever_it_was_written() {
+fn a_real_call_does_not_match_a_generated_spread() {
   let mut state = state();
   let seeded = props_call(vec![string_arg("styles")]);
-  let mut rewritten = seeded.clone();
-
-  rewritten.span = Span::new(BytePos(100), BytePos(200));
-
+  let mut ordinary = seeded.clone();
+  ordinary.span = Span::new(BytePos(100), BytePos(200));
   state.seed_jsx_spread_expr(&Expr::Call(seeded));
+  assert!(!state.has_jsx_spread_call(&ordinary));
+  assert!(!state.set_jsx_spread_replacement(&ordinary, class_name_attr("x1e2nbdu")));
+  assert_eq!(state.jsx_spread_replacement(&Expr::Call(ordinary)), None);
+}
 
-  assert!(state.has_jsx_spread_call(&rewritten));
-  assert!(state.set_jsx_spread_replacement(&rewritten, class_name_attr("x1e2nbdu")));
+#[test]
+fn equal_authored_spreads_at_different_sites_keep_distinct_replacements() {
+  let mut state = state();
+  let mut first = props_call(vec![string_arg("styles")]);
+  first.span = Span::new(BytePos(10), BytePos(20));
+  let mut second = first.clone();
+  second.span = Span::new(BytePos(30), BytePos(40));
+  state.seed_jsx_spread_expr(&Expr::Call(first.clone()));
+  state.seed_jsx_spread_expr(&Expr::Call(second.clone()));
+  assert!(state.set_jsx_spread_replacement(&first, class_name_attr("first-site")));
+  assert!(state.set_jsx_spread_replacement(&second, class_name_attr("second-site")));
+  assert_eq!(
+    state
+      .jsx_spread_replacement(&Expr::Call(first))
+      .map(class_names),
+    Some(vec!["first-site"])
+  );
+  assert_eq!(
+    state
+      .jsx_spread_replacement(&Expr::Call(second))
+      .map(class_names),
+    Some(vec!["second-site"])
+  );
 }
 
 /// Two spreads that differ in their arguments are two spreads, and each keeps

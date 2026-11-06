@@ -104,22 +104,44 @@ fn every_link_of_a_chain_is_matched_for_its_own_shape() {
 
 // ==================== the shapes that are none of the three ====================
 
-/// A computed key is a lookup nothing here resolves, and reading it as a literal
-/// would be the guard resolving a name it has no binding for. Both spellings
-/// refuse, including the one a reader would call obviously static.
+/// A computed key written as a string literal names the method as plainly as a
+/// dot does, and the call answers what the language answers: `node` and the
+/// reference implementation both fold `'AB'['toLowerCase']()` to `"ab"` (the
+/// latter reads a string-literal property off the evaluated receiver,
+/// `lib/index.js:6906-6921`; executed).
+///
+/// A key that is itself an expression is a lookup the reference implementation
+/// does not resolve -- it leaves `func` undefined and refuses with
+/// `Unsupported expression: CallExpression` (`lib/index.js:6942`; executed) --
+/// so that spelling still refuses here.
 #[test]
-fn a_computed_method_name_is_not_a_method_this_module_reads() {
-  assert_deopts("'AB'['toLowerCase']()");
+fn a_literal_computed_method_name_folds_and_an_expression_key_refuses() {
+  assert_folds_to_string("'AB'['toLowerCase']()", "ab");
   assert_deopts("'AB'[['toLowerCase'][0]]()");
 }
 
-/// A callee that is neither a global, a name, nor a member reaches no arm at
-/// all, and a call that reaches no arm is handed back rather than folded.
+/// An arrow written and applied in place is a callee the evaluator resolves to
+/// the author's own function, so the call answers what the language answers.
+///
+/// The reference implementation leaves `func` undefined for a callee that is
+/// neither an identifier nor a member and refuses; folding the applied arrow is
+/// a deliberate improvement on that, and `'a'` is `node`'s own answer.
+#[test]
+fn an_arrow_applied_in_place_answers_its_body() {
+  assert_folds_to_string("(() => 'a')()", "a");
+}
+
+/// A callee that is neither a global, a name, a member, nor an arrow this
+/// evaluator resolved reaches no arm at all, and a call that reaches no arm is
+/// handed back rather than folded.
+///
+/// A global's *name* is among them: `String` written as a value resolves to
+/// nothing, here as upstream, so a call through one is not a call this module
+/// reads.
 #[test]
 fn a_callee_of_no_shape_reaches_no_arm() {
   for source in [
     "(function () { return 'a'; })()",
-    "(() => 'a')()",
     "(0, String)(1)",
     "(true ? String : Number)(1)",
   ] {
@@ -144,9 +166,12 @@ fn a_very_long_chain_reads_every_link_without_losing_a_rule() {
   assert_folds_to_string_with_ceiling(&folding, "ab", ceiling);
 
   // The one refusing link is buried under sixty-four that fold, and is still
-  // what the whole chain answers for -- so no link is skipped for depth.
+  // what the whole chain answers for -- so no link is skipped for depth. The
+  // refusal is this compiler's locale rule (the reference implementation folds
+  // a locale-dependent `"AB"`; executed); its method-naming sentence was the
+  // optional engine's, so the refusal is asserted without it.
   let refusing = format!("'ab'.toLocaleUpperCase(){}", ".trim()".repeat(64));
-  assert_deopt_reason_contains_with_ceiling(&refusing, "toLocaleUpperCase", ceiling);
+  assert_deopts_with_ceiling(&refusing, ceiling);
 }
 
 /// The same chain past the shipped ceiling answers for its depth rather than
@@ -180,24 +205,37 @@ fn deeply_nested_parentheses_still_resolve_to_one_shape() {
 /// resolution, these would report an unresolved binding for a call whose real
 /// fault is the method, and an author would go looking at the wrong half of the
 /// line.
+///
+/// Which sentence answers is reporting, not the guard: the reference
+/// implementation evaluates the receiver under a state of its own and reports
+/// the outer call (`Unsupported expression: CallExpression`; executed), while
+/// this compiler shares one state and reports the receiver's own refusal. Both
+/// refuse; the method-naming sentence was the optional engine's. The third row
+/// is the locale rule itself: the reference implementation folds a
+/// locale-dependent `"2A"` (executed), and this compiler refuses it.
 #[test]
 fn a_rule_that_reads_only_the_text_answers_before_a_name_is_resolved() {
   // Nothing here binds `unknownName`, so resolution has nothing to answer with.
-  assert_deopt_reason_contains("unknownName.toLocaleUpperCase()", "toLocaleUpperCase");
-  assert_deopt_reason_contains("unknownName.toLocaleLowerCase()", "toLocaleLowerCase");
+  assert_deopts("unknownName.toLocaleUpperCase()");
+  assert_deopts("unknownName.toLocaleLowerCase()");
 
   // A receiver that is an expression rather than a name reaches the same rule.
-  assert_deopt_reason_contains("(1 + 1 + 'a').toLocaleUpperCase()", "toLocaleUpperCase");
+  assert_deopts("(1 + 1 + 'a').toLocaleUpperCase()");
 }
 
-/// A number written into the source is refused for being one, whatever the
-/// method is -- the other rule of the same phase, and the only one that reads
-/// the receiver's shape rather than the method's name.
+/// A number written into the source is a receiver like any other: it answers
+/// the methods the language gives a number, and refuses a method it has none
+/// of. The receiver's shape no longer decides the call before the method is
+/// read, so the rule that used to refuse every written number is stated here as
+/// what replaced it.
 #[test]
-fn a_receiver_written_as_a_number_is_refused_before_it_is_evaluated() {
-  for source in ["(5).toString()", "(5.5).toFixed(2)", "(0).toLowerCase()"] {
-    assert_deopts(source);
-  }
+fn a_receiver_written_as_a_number_answers_its_own_methods() {
+  assert_folds_to_string("(5).toString()", "5");
+  assert_folds_to_string("(5.5).toFixed(2)", "5.50");
+
+  // A method a number does not carry is still not answered -- the dispatch
+  // reads the method, so a string's method on a number reaches nothing.
+  assert_deopts("(0).toLowerCase()");
 
   // The same value reached through anything but a written number is not this
   // rule's business, so the phase cannot be refusing on the answer.

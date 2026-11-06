@@ -85,7 +85,7 @@ fn test_common_media_queries() {
     ("@media (min-width: 768px)", "@media (min-width: 768px)"),
     (
       "@media screen and (min-width: 768px)",
-      "@media (screen) and (min-width: 768px)",
+      "@media screen and (min-width: 768px)",
     ),
     (
       "@media (min-width: 768px) and (max-width: 1024px)",

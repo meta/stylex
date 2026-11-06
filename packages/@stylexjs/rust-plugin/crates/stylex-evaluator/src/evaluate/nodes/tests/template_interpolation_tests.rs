@@ -59,6 +59,18 @@ fn a_function_interpolated_into_a_template_refuses() {
   );
 }
 
+/// An arrow the author wrote is refused too, under the conversion's own
+/// sentence: `node` writes its source text (`a() => 1b`) and the reference
+/// implementation writes the source of its own wrapper closure (executed),
+/// neither a value this compiler derives from a function.
+#[test]
+fn an_arrow_interpolated_into_a_template_refuses() {
+  assert_deopt_reason_contains(
+    "`a${() => 1}b`",
+    "Cannot convert a function to a compile-time primitive.",
+  );
+}
+
 /// The namespace is an object rather than a function, so it writes the object
 /// default instead of refusing -- the same parting the coercions make.
 #[test]

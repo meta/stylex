@@ -25,11 +25,9 @@ use indexmap::IndexMap;
 use super::source_evaluation::*;
 use crate::evaluate::evaluate;
 use stylex_constants::constants::evaluation_errors::{
-  NON_CONSTANT, SPREAD_ELEMENT, unsupported_expression,
+  NON_CONSTANT, UNDEFINED_CONST, unsupported_expression,
 };
-use stylex_constants::constants::messages::{
-  ARGUMENT_NOT_EXPRESSION, PROPERTY_NOT_FOUND, VALUE_MUST_BE_LITERAL,
-};
+use stylex_constants::constants::messages::{ARGUMENT_NOT_EXPRESSION, VALUE_MUST_BE_LITERAL};
 use stylex_enums::value_with_default::ValueWithDefault;
 use stylex_state::state_manager::StateManager;
 use stylex_state::{
@@ -438,8 +436,16 @@ fn a_marker_member_answers_a_when_function_for_the_marker_it_names() {
 }
 
 /// A method on an object the author wrote is the arrow under that key, applied
-/// where the call is. A key the object does not carry names no method, and the
-/// refusal says which property was looked for.
+/// where the call is. A key the object does not carry names no method.
+///
+/// In the language's order the missing key reads as `undefined`, the argument
+/// is evaluated next, and only then is the callee found not callable -- so an
+/// argument nothing binds refuses first, as `node` throws its `ReferenceError`
+/// for `unknownName` (executed; parent decision: JS call order). With an
+/// argument that folds, the call refuses at the callable check. The reference
+/// implementation checks for a function before the arguments
+/// (`Unsupported expression: CallExpression`, `lib/index.js:6942`); the
+/// property-not-found sentence was the optional engine's.
 #[test]
 fn a_method_on_an_object_is_the_arrow_under_that_key() {
   let fns = FunctionMap::default();
@@ -449,12 +455,17 @@ fn a_method_on_an_object_is_the_arrow_under_that_key() {
     "red"
   );
 
-  // The argument is a name nothing binds, so the engine declines the call and
-  // the dispatch below is what answers -- which is the only way to reach this
-  // refusal, since a call the engine folds throws there instead.
   let source = "({ join: (a) => a }).missing(unknownName)";
 
-  assert_refused_with(&evaluated_against(&fns, source), source, PROPERTY_NOT_FOUND);
+  assert_refused_with(&evaluated_against(&fns, source), source, UNDEFINED_CONST);
+
+  let source = "({ join: (a) => a }).missing('red')";
+
+  assert_refused_with(
+    &evaluated_against(&fns, source),
+    source,
+    &unsupported_expression("CallExpression"),
+  );
 }
 
 /// A mutating method is refused before the receiver is even read, because no
@@ -580,12 +591,17 @@ fn every_kind_refuses_an_argument_with_no_expression_form() {
   }
 }
 
-/// Every kind that takes evaluated arguments refuses a spread, and each reads
-/// the same sentence: the argument evaluation is shared, so a spread is refused
-/// there rather than once per kind. One element standing for however many the
-/// spread value holds is a count no walk here can make.
+/// Every kind that takes evaluated arguments reads a spread the evaluator can
+/// iterate as the arguments it contributes, and each reads it the same way:
+/// the argument evaluation is shared, so the spread is resolved there rather
+/// than once per kind.
+///
+/// `node` applies `make(...['a'])` as `make('a')`, which is what each kind
+/// below then answers for. The count a spread contributes is the operand's
+/// own, so nothing is guessed -- which is what the old refusal was protecting
+/// against when no operand could be iterated.
 #[test]
-fn every_kind_refuses_a_spread_argument() {
+fn every_kind_reads_a_spread_argument_it_can_iterate() {
   for entry in [
     folded_entry(FunctionType::ArrayArgs(|args, _, _| joined(args)), false),
     folded_entry(FunctionType::EnvFunction(JSFunction::new(joined)), false),
@@ -605,8 +621,33 @@ fn every_kind_refuses_a_spread_argument() {
   ] {
     let fns = map_holding(entry);
     let source = format!("{CALLED}(...['a'])");
+    let result = evaluated_against(&fns, &source);
 
-    assert_refused_with(&evaluated_against(&fns, &source), &source, SPREAD_ELEMENT);
+    assert!(
+      result.confident,
+      "`{}` must read the spread's own element: {:?}",
+      source, result.reason
+    );
+  }
+}
+
+/// A spread whose operand the evaluator cannot iterate still refuses, under
+/// the sentence it always read.
+///
+/// The guard the case above used to carry, kept: a number is not iterable in
+/// the language either, and an unresolved name is an operand no iteration here
+/// can read. One element standing for however many such an operand holds is a
+/// count no walk can make.
+#[test]
+fn every_kind_refuses_a_spread_argument_it_cannot_iterate() {
+  for operand in ["...1", "...unknownThing"] {
+    let fns = map_holding(folded_entry(
+      FunctionType::ArrayArgs(|args, _, _| joined(args)),
+      false,
+    ));
+    let source = format!("{CALLED}({operand})");
+
+    assert_refused(&evaluated_against(&fns, &source), &source);
   }
 }
 

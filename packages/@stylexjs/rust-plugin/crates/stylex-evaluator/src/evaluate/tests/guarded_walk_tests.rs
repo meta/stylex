@@ -11,18 +11,30 @@
 //! it is about and writes the smallest shape that crosses it -- with a plain
 //! callback beside it at the same ceiling, which is what says the *pattern* or
 //! the *block* is what crossed rather than the expression around it.
+//!
+//! **A block body and a patterned parameter are refused before any of that is
+//! reached.** Both compilers fold an arrow only where the body is an expression
+//! and every parameter is a plain name -- `evaluate-path.js:499` on the
+//! reference side, `evaluate::nodes::arrow_function` here -- and an arrow
+//! failing either half falls to the terminal
+//! `Unsupported expression: ArrowFunctionExpression`, which the two write from
+//! character-identical builders. So the cases below that are *about* a block or
+//! a pattern say that it is refused, and the ceiling cases keep their shapes
+//! while asserting only the refusal: which of the two rules answers first at a
+//! given ceiling is an ordering this suite is not in a position to pin, and
+//! claiming one would be claiming it on no evidence. The whole-expression
+//! wording is left unasserted for the reason `callback_parameter_tests` spells
+//! out -- the two compilers report the same refusal against different nodes.
 
 use super::source_evaluation::*;
 use std::rc::Rc;
 use stylex_constants::constants::evaluation_errors::{
-  expression_too_deep, global_as_a_value, unbounded_amplified_length, unfoldable_function,
-  unfoldable_static,
+  UNDEFINED_CONST, unsupported_expression,
 };
 use stylex_state::{
   functions::{FunctionConfig, FunctionConfigType, FunctionMap, FunctionType},
   theme_ref::ThemeRef,
 };
-use stylex_structures::fold_ceilings::DEFAULT_MAX_FOLDED_CHARACTERS;
 
 /// The ceiling every boundary case below is written against.
 ///
@@ -51,69 +63,91 @@ fn a_module_importing_a_group() -> FunctionMap {
   fns
 }
 
+/// Asserts the arrow refuses, in the exact sentence both compilers write for an
+/// expression kind they fold nothing of.
+///
+/// Asked of the arrow alone, which is the expression the rule is about and the
+/// one place the two are known to agree on the wording.
 #[track_caller]
-fn assert_refuses_at_the_ceiling(source: &str, ceiling: usize) {
-  assert_deopt_reason_contains_with_ceiling(source, &expression_too_deep(ceiling), ceiling);
+fn assert_arrow_refuses(arrow: &str) {
+  assert_deopt_reason_contains(arrow, &unsupported_expression("ArrowFunctionExpression"));
+}
+
+/// Asserts a source whose callback has a block body or a patterned parameter
+/// refuses, under the ceiling it is written for.
+///
+/// The refusal and not its wording: a block and a depth are two rules that can
+/// both answer here, and which one gets there first at a given ceiling is not
+/// something this suite can read off the source.
+#[track_caller]
+fn assert_refuses_under_ceiling(source: &str, ceiling: usize) {
+  assert_deopts_with_ceiling(source, ceiling);
 }
 
 // ==================== the statements of a callback body ====================
 
-/// Every statement the walk admits, each folding to the value it computes.
+/// A block body is refused, whichever statements it holds.
 ///
-/// The set is what a callback is for -- compute a value and hand it back -- and
-/// each member of it is a separate arm, so a suite that only wrote `return`
-/// would be reading one arm and claiming five.
+/// Five bodies, because each used to be a separate arm of a statement walk and
+/// each is still a distinct shape an author writes. None of them reaches a
+/// statement walk now: the body is not an expression, so both compilers refuse
+/// the arrow itself and never read what is inside it.
+///
+/// `node`'s own answers for the five mappings are `"a"`, `"a"`, `"a"`, `"a"`
+/// and `""` -- what a compiler that folded a block body would have to produce,
+/// written down so the refusal is measured against something.
 #[test]
-fn a_callback_body_folds_through_every_statement_the_walk_admits() {
-  assert_folds_to_string(
-    "[\"a\"].map(x => { const y = x; return y; }).join(\"\")",
-    "a",
-  );
-  assert_folds_to_string("[\"a\"].map(x => { let y; return x; }).join(\"\")", "a");
-  assert_folds_to_string("[\"a\"].map(x => { { return x; } }).join(\"\")", "a");
-  assert_folds_to_string("[\"a\"].map(x => { ; return x; }).join(\"\")", "a");
-  assert_folds_to_string("[\"a\"].map(x => { return; }).join(\"\")", "");
+fn a_block_body_is_refused_whichever_statements_it_holds() {
+  for body in [
+    "x => { const y = x; return y; }",
+    "x => { let y; return x; }",
+    "x => { { return x; } }",
+    "x => { ; return x; }",
+    "x => { return; }",
+  ] {
+    assert_arrow_refuses(body);
+    assert_deopts(&format!("[\"a\"].map({}).join(\"\")", body));
+  }
 }
 
-/// Both arms of an `if`, and the `if` with no alternative.
+/// An `if` inside a block body is refused with the block around it, on either
+/// arm and with or without an alternative.
 ///
-/// Written as three folds with three different answers rather than as three
-/// refusals: the arm the engine runs is the whole of what an `if` is for, so a
-/// case that only proved the shape was admitted would pass on a walk that
-/// admitted it and an engine that ran the wrong branch.
+/// Kept as three shapes rather than folded into one, because the three used to
+/// answer three different values -- `node` gives `"y"`, `"n"` and `"n"` -- and
+/// a branch is the shape most likely to be mistaken for something a fold could
+/// still read. It cannot: the refusal is the body's, raised before any arm is
+/// looked at.
 #[test]
-fn both_arms_of_an_if_inside_a_callback_body_fold() {
-  assert_folds_to_string(
-    "[\"a\"].map(x => { if (x) { return \"y\"; } return \"n\"; }).join(\"\")",
-    "y",
-  );
-  assert_folds_to_string(
-    "[\"\"].map(x => { if (x) { return \"y\"; } return \"n\"; }).join(\"\")",
-    "n",
-  );
-  assert_folds_to_string(
-    "[\"\"].map(x => { if (x) { return \"y\"; } else { return \"n\"; } }).join(\"\")",
-    "n",
-  );
+fn an_if_inside_a_block_body_is_refused_with_the_body() {
+  for (receiver, body) in [
+    ("[\"a\"]", "x => { if (x) { return \"y\"; } return \"n\"; }"),
+    ("[\"\"]", "x => { if (x) { return \"y\"; } return \"n\"; }"),
+    ("[\"\"]", "x => { if (x) { return \"y\"; } else { return \"n\"; } }"),
+  ] {
+    assert_arrow_refuses(body);
+    assert_deopts(&format!("{}.map({}).join(\"\")", receiver, body));
+  }
 }
 
-/// A name a block declares is the block's, and holds whatever the body built --
-/// which is nothing the call around it measured.
+/// A name a block declares is never reached, because the block is refused
+/// first.
 ///
-/// So a length written on it cannot be bounded, where the same length written on
-/// the parameter beside it can. That is the difference the two halves pin, and
-/// it is the reason a block binds its names at all.
+/// Both halves are kept. They used to part company -- a length written on the
+/// parameter could be bounded ahead of the fold and one written on a
+/// block-declared name could not -- and that distinction was a property of the
+/// guard that measured an expression before printing it. Neither half reaches a
+/// measurement now, and both refuse for the body they are written in. `node`
+/// answers `"abab"` for each.
 #[test]
-fn a_name_a_block_declares_carries_no_bound_the_parameter_beside_it_carries() {
-  assert_folds_to_string(
-    "[\"ab\"].map(x => { return x.repeat(2); }).join(\"\")",
-    "abab",
-  );
-
-  assert_deopt_reason_contains(
-    "[\"ab\"].map(x => { const y = \"ab\"; return y.repeat(2); }).join(\"\")",
-    &unbounded_amplified_length("repeat", DEFAULT_MAX_FOLDED_CHARACTERS as u64),
-  );
+fn a_name_a_block_declares_is_refused_with_the_block() {
+  for body in [
+    "x => { return x.repeat(2); }",
+    "x => { const y = \"ab\"; return y.repeat(2); }",
+  ] {
+    assert_arrow_refuses(body);
+    assert_deopts(&format!("[\"ab\"].map({}).join(\"\")", body));
+  }
 }
 
 // ==================== the values a walk reads on the way ====================
@@ -127,11 +161,26 @@ fn a_spread_written_into_a_receiver_is_walked_and_kept() {
 
 /// A value the walk cannot read stops the walk wherever it is written -- as a
 /// computed key, as a property's value, or as a parameter's default.
+///
+/// A property's value and a parameter's default stop it before anything runs,
+/// so both refuse; the reference implementation refuses both with
+/// `Unsupported expression: CallExpression` (executed). A computed key inside a
+/// callback body is met after the callback has run, so it throws -- the case
+/// below.
 #[test]
 fn a_value_the_walk_cannot_read_stops_it_wherever_it_stands() {
-  assert_deopts("[\"a\"].map(x => x[unbound]).join(\"\")");
   assert_deopts("({ a: unbound }).hasOwnProperty(\"a\")");
   assert_deopts("[1].map((x, y = unbound) => x).join(\"\")");
+}
+
+/// The computed key inside a callback body: the reference implementation's
+/// closure throws `Referenced constant is not defined.` out of
+/// `lib/index.js:6451` (executed), and this compiler throws the same sentence
+/// at the invocation boundary.
+#[test]
+#[should_panic(expected = "Referenced constant is not defined.")]
+fn a_computed_key_the_walk_cannot_read_inside_a_callback_throws() {
+  evaluate_source("[\"a\"].map(x => x[unbound]).join(\"\")");
 }
 
 /// The same, written into a statement of a callback body: an initialiser, a
@@ -153,45 +202,52 @@ fn a_value_the_walk_cannot_read_stops_a_statement_wherever_it_stands() {
 ///
 /// The rule is asked of the name rather than of the expression, so what makes
 /// the two spellings answer alike is the walk: it unwraps a parenthesis before
-/// it dispatches on a name at all.
+/// it dispatches on a name at all. The sentence is the reference
+/// implementation's: `String` is a callee it applies but not a value it reads,
+/// so the bare name resolves to nothing and refuses with
+/// `Referenced constant is not defined.` (`lib/index.js:6633-6635`, built
+/// `@stylexjs/babel-plugin` 0.19.1; executed). The global-as-a-value sentence
+/// was the optional engine's.
 #[test]
 fn a_globals_name_written_as_a_value_is_refused_through_its_parentheses() {
   for source in [
     "[\"a\"].concat(String).join(\"\")",
     "[\"a\"].concat(((String))).join(\"\")",
   ] {
-    assert_deopt_reason_contains(source, &global_as_a_value("String"));
+    assert_deopt_reason_contains(source, UNDEFINED_CONST);
   }
 }
 
-/// A callback whose receiver nothing counted repeats an unknown number of
-/// times, and a callback *inside* it repeats no better-known number.
+/// A defaulted parameter is refused, and the callback written inside its body
+/// never runs.
 ///
-/// A defaulted parameter is what makes the outer one unmeasured: the call may
-/// hand it something else entirely, so neither the width nor the count travels.
+/// The shape is kept whole. It used to say something about measurement -- a
+/// defaulted parameter left the outer callback unmeasured, so a length inside
+/// it could not be bounded either -- and what refuses it now is the parameter
+/// itself, one rule earlier. `node` answers `"bb"`.
 #[test]
-fn a_callback_inside_an_unmeasured_callback_is_unmeasured_too() {
-  assert_deopt_reason_contains(
-    "[\"a\"].map((x, y = 1) => [\"b\"].map(z => z.repeat(2)).join(\"\")).join(\"\")",
-    "inside a callback",
-  );
+fn a_defaulted_parameter_is_refused_and_its_body_never_runs() {
+  let outer = "(x, y = 1) => [\"b\"].map(z => z.repeat(2)).join(\"\")";
+
+  assert_arrow_refuses(outer);
+  assert_deopts(&format!("[\"a\"].map({}).join(\"\")", outer));
 }
 
 // ==================== a function reached through a name ====================
 
-/// A name the module declared a function under, whose declaration the transport
-/// cannot take, is refused rather than handed back.
+/// A block-bodied function reached through a name is refused, as it is written
+/// out.
 ///
-/// The evaluator answered a function, so the fold is the only thing that could
-/// have carried it. A block body is such a declaration: the evaluator answers no
-/// callback for one, and the walk finds the arrow behind the name all the same.
+/// The name changes nothing: the declaration is evaluated where the reference
+/// to it is read, so the arrow behind the name meets the same rule the arrow in
+/// an argument position meets. `node` answers `"a"`.
 #[test]
-fn a_named_function_the_transport_cannot_take_is_refused_under_its_name() {
-  assert_refused_in_a_module_binding(
-    "f",
-    "(a) => { return a; }",
-    "[\"a\"].map(f).join(\"\")",
-    &unfoldable_function("f"),
+fn a_block_bodied_function_reached_through_a_name_is_refused() {
+  assert_arrow_refuses("(a) => { return a; }");
+
+  assert_refused(
+    &evaluated_in_a_module_binding("f", "(a) => { return a; }", "[\"a\"].map(f).join(\"\")"),
+    "[\"a\"].map(f).join(\"\")` against `const f = (a) => { return a; }",
   );
 }
 
@@ -204,36 +260,30 @@ fn a_named_function_called_twice_crosses_once() {
   );
 }
 
-/// A declaration the walk cannot admit refuses, wherever the name it is reached
+/// A declaration the walk cannot admit fails, wherever the name it is reached
 /// through was written.
 ///
 /// The declaration is walked like any other expression, so a name it reads that
 /// the module cannot resolve stops it -- and so does an argument beside the
 /// call, which is the other half of what a named call walks.
+///
+/// The named function has run when its body or argument meets the unbound name,
+/// so the failure arrives as a throw (the recorded transport for a failing
+/// callback body). The reference implementation folds `f` into a closure,
+/// `.map` calls it, and the closure throws `Referenced constant is not
+/// defined.` out of `lib/index.js:6451` for both rows (executed). One case per
+/// row, because each is a throw.
 #[test]
+#[should_panic(expected = "Referenced constant is not defined.")]
 fn a_named_function_is_refused_for_what_its_declaration_and_its_arguments_read() {
-  for (init, source) in [
-    ("(a) => a + unbound", "[\"a\"].map(f).join(\"\")"),
-    ("(a) => a", "[\"a\"].map(x => f(unbound)).join(\"\")"),
-  ] {
-    let described = format!("{source}` against `const f = {init}");
-    let result = evaluated_in_a_module_binding("f", init, source);
+  evaluated_in_a_module_binding("f", "(a) => a + unbound", "[\"a\"].map(f).join(\"\")");
+}
 
-    assert_refused(&result, &described);
-
-    // The refusal names the call the walk declined rather than the name inside
-    // the declaration that stopped it. The author's `map` is what is not
-    // folded; which name the walk tripped on is a `debug!` line.
-    assert!(
-      result
-        .reason
-        .as_deref()
-        .is_some_and(|reason| reason.contains("Cannot fold 'map' at compile time.")),
-      "expected the refusal for `{}` to name the call, got {:?}",
-      described,
-      result.reason
-    );
-  }
+/// The same throw through an argument beside the named call.
+#[test]
+#[should_panic(expected = "Referenced constant is not defined.")]
+fn a_named_function_is_refused_for_what_its_arguments_read() {
+  evaluated_in_a_module_binding("f", "(a) => a", "[\"a\"].map(x => f(unbound)).join(\"\")");
 }
 
 // ==================== the paths a dotted read names ====================
@@ -295,60 +345,87 @@ fn a_chain_whose_base_is_no_group_folds_as_a_plain_read() {
 
 // ==================== where each walk stops ====================
 
-/// A parameter nested one level past the ceiling refuses, whichever kind of
-/// pattern nests it.
+/// A nested parameter pattern refuses, whichever kind of pattern nests it.
 ///
-/// Each of the five is a separate step of the pattern walk, and a plain callback
-/// folds at the same ceiling -- so what crossed is the pattern and not the
-/// expression it was written in.
+/// All five shapes are kept, and the plain callback beside them still folds at
+/// the same ceiling -- which is what says the five are refused for what they
+/// are rather than for the expression around them.
+///
+/// Only the refusal is asserted. These were written when the pattern walk spent
+/// a level of the depth budget per level of nesting, so the refusal they earned
+/// was the ceiling's; a pattern is refused outright now, and which of the two
+/// rules answers first at this ceiling is an ordering the source does not
+/// settle. Each pattern is asserted exactly, on its own, beside the shape.
 #[test]
-fn a_parameter_pattern_nested_past_the_ceiling_refuses_whatever_nests_it() {
+fn a_parameter_pattern_nested_in_anything_refuses() {
   let ceiling = A_CEILING_A_PLAIN_CALLBACK_CLEARS;
 
   assert_folds_with_ceiling("[\"a\"].map(x => x).join(\"\")", ceiling);
 
-  for source in [
-    "[[\"a\"]].map(([[[b]]]) => b).join(\"\")",
-    "[{ a: 1 }].map(({ a: { b: { c: { d } } } }) => d).join(\"\")",
-    "[{ a: 1 }].map(({ a: { b: { ...r } } }) => r).join(\"\")",
-    "[[\"a\"]].map(([...[[b]]]) => b).join(\"\")",
-    "[[\"a\"]].map(([[b]] = []) => b).join(\"\")",
+  for (arrow, source) in [
+    (
+      "([[[b]]]) => b",
+      "[[\"a\"]].map(([[[b]]]) => b).join(\"\")",
+    ),
+    (
+      "({ a: { b: { c: { d } } } }) => d",
+      "[{ a: 1 }].map(({ a: { b: { c: { d } } } }) => d).join(\"\")",
+    ),
+    (
+      "({ a: { b: { ...r } } }) => r",
+      "[{ a: 1 }].map(({ a: { b: { ...r } } }) => r).join(\"\")",
+    ),
+    (
+      "([...[[b]]]) => b",
+      "[[\"a\"]].map(([...[[b]]]) => b).join(\"\")",
+    ),
+    (
+      "([[b]] = []) => b",
+      "[[\"a\"]].map(([[b]] = []) => b).join(\"\")",
+    ),
   ] {
-    assert_refuses_at_the_ceiling(source, ceiling);
+    assert_arrow_refuses(arrow);
+    assert_refuses_under_ceiling(source, ceiling);
   }
 }
 
-/// A name a block declares is bound through the same pattern walk, and stops at
-/// the same ceiling.
+/// A pattern written inside a callback body is refused with the body it is
+/// written in.
+///
+/// Both rows are kept, and the first is no longer the control it was: a block
+/// body refuses too, so the pair now says that the nested pattern adds nothing
+/// to a refusal the body already earned.
 #[test]
-fn a_declaration_inside_a_callback_body_stops_at_the_same_ceiling() {
+fn a_declaration_inside_a_callback_body_is_refused_with_the_body() {
   let ceiling = A_CEILING_A_PLAIN_CALLBACK_CLEARS;
 
-  assert_folds_with_ceiling("[\"a\"].map(x => { return x; }).join(\"\")", ceiling);
+  assert_arrow_refuses("x => { return x; }");
+  assert_arrow_refuses("x => { const [[[b]]] = [1]; return x; }");
 
-  assert_refuses_at_the_ceiling(
+  assert_refuses_under_ceiling("[\"a\"].map(x => { return x; }).join(\"\")", ceiling);
+  assert_refuses_under_ceiling(
     "[\"a\"].map(x => { const [[[b]]] = [1]; return x; }).join(\"\")",
     ceiling,
   );
 }
 
-/// A block costs a level of the walk's budget and so does each statement in it,
-/// so a body nested in blocks refuses where the same body written flat folds.
+/// Nested blocks refuse at every depth, including the one a block is written
+/// at.
 ///
-/// The first row has no flat body beside it, because at that ceiling there is
-/// none to write: the plainest body needs five. What it pins is which of the two
-/// levels a block spends runs out first -- the block's own, asked before a
-/// statement of it is read.
+/// The three shapes and the three ceilings are kept. They were written when a
+/// block cost a level of the walk's budget and the question was which level ran
+/// out first; a block body is refused outright now, so what the rows say is
+/// that no amount of nesting makes one foldable and none of them is reached by
+/// a budget at all. `node` answers `"a"` for all three.
 #[test]
-fn blocks_nested_past_the_ceiling_refuse() {
-  assert_refuses_at_the_ceiling("[\"a\"].map(x => { { return x; } }).join(\"\")", 4);
-
-  for (source, ceiling) in [
-    ("[\"a\"].map(x => { { { return x; } } }).join(\"\")", 8),
-    ("[\"a\"].map(x => { { { { return x; } } } }).join(\"\")", 9),
+fn blocks_nested_at_any_depth_refuse() {
+  for (body, ceiling) in [
+    ("x => { { return x; } }", 4),
+    ("x => { { { return x; } } }", 8),
+    ("x => { { { { return x; } } } }", 9),
   ] {
-    assert_folds_with_ceiling("[\"a\"].map(x => { return x; }).join(\"\")", ceiling);
-    assert_refuses_at_the_ceiling(source, ceiling);
+    assert_arrow_refuses(body);
+    assert_refuses_under_ceiling(&format!("[\"a\"].map({}).join(\"\")", body), ceiling);
   }
 }
 
@@ -377,28 +454,42 @@ fn a_conditional_over_a_value_with_no_truthiness_is_not_claimed() {
 /// reads a body's statements like any other value. So the defect is closed one
 /// step earlier, and the case pins the rule that closes it. The throw itself is
 /// asked of the marker reader directly, in `var_group_tests`.
+///
+/// The callback has run when its body meets the reflective static, so the
+/// refusal arrives as a throw rather than a deopt (the recorded transport for a
+/// failing callback body). The reference implementation throws the same
+/// sentence: `Object.create` is not on its callee list (`lib/index.js:6233`),
+/// the arrow's closure throws `Unsupported expression: CallExpression` out of
+/// `lib/index.js:6451`, and `.map` lets it escape -- for every tail (executed).
+/// One case per tail, because each is a throw. The refusal is never an empty
+/// object.
 #[test]
+#[should_panic(expected = "Unsupported expression: CallExpression")]
 fn a_marker_read_that_throws_refuses_rather_than_folding_an_empty_object() {
-  let fns = a_module_importing_a_group();
-  let built = format!(
-    "[{GROUP}.primary].map(() => Object.create(Object.create(null, {{ __IS_PROXY: {{ get: () => null.x }} }})))"
+  evaluated_against(&a_module_importing_a_group(), &a_marker_shape("at(0)"));
+}
+
+/// The same throw through `find`.
+#[test]
+#[should_panic(expected = "Unsupported expression: CallExpression")]
+fn a_marker_read_through_find_throws_rather_than_folding_an_empty_object() {
+  evaluated_against(
+    &a_module_importing_a_group(),
+    &a_marker_shape("find(() => true)"),
   );
+}
 
-  for tail in ["at(0)", "find(() => true)", "pop()"] {
-    let source = format!("{built}.{tail}");
-    let result = evaluated_against(&fns, &source);
+/// The same throw through `pop`.
+#[test]
+#[should_panic(expected = "Unsupported expression: CallExpression")]
+fn a_marker_read_through_pop_throws_rather_than_folding_an_empty_object() {
+  evaluated_against(&a_module_importing_a_group(), &a_marker_shape("pop()"));
+}
 
-    assert!(
-      !result.confident,
-      "`{}` must refuse rather than fold: {:?}",
-      source, result.value
-    );
+/// The shape that would hide a throwing marker on the answer's prototype,
+/// followed by the read that takes its element out.
+fn a_marker_shape(tail: &str) -> String {
+  let built = "Object.create(Object.create(null, { __IS_PROXY: { get: () => null.x } }))";
 
-    assert_eq!(
-      result.reason.as_deref(),
-      Some(unfoldable_static("Object", "create").as_str()),
-      "the refusal for `{}`",
-      source
-    );
-  }
+  format!("[{GROUP}.primary].map(() => {built}).{tail}")
 }

@@ -554,6 +554,10 @@ mod file_syntax {
     match syntax_for_file(Path::new(file)) {
       Syntax::Typescript(syntax) => syntax.tsx,
       Syntax::Es(_) => panic!("{file} is parsed as plain ECMAScript"),
+      // The variant exists when the workspace enables the parser's `flow`
+      // feature; this crate never selects it.
+      #[allow(unreachable_patterns)]
+      _ => panic!("{file} is parsed with another grammar"),
     }
   }
 

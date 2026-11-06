@@ -180,34 +180,41 @@ fn refuses_a_condition_holding_a_value_that_is_not_a_style_value() {
 #[test]
 #[should_panic(expected = "Can only override variables theme created with defineVars().")]
 fn refuses_a_theme_target_that_is_not_a_variable_group() {
-  validate_theme_variables(&folded("1"));
+  validate_theme_variables(&folded("1"), &StateManager::default());
 }
 
 #[test]
 #[should_panic(expected = "Can only override variables theme created with defineVars().")]
 fn refuses_a_theme_target_that_carries_no_group_hash() {
-  validate_theme_variables(&folded("{ color: 'red' }"));
+  validate_theme_variables(&folded("{ color: 'red' }"), &StateManager::default());
 }
 
 /// A group hash that spells no text names no group.
 #[test]
 #[should_panic(expected = "Can only override variables theme created with defineVars().")]
 fn refuses_a_group_hash_that_is_empty() {
-  validate_theme_variables(&folded("{ __varGroupHash__: '' }"));
+  validate_theme_variables(
+    &folded("{ __varGroupHash__: '' }"),
+    &StateManager::default(),
+  );
 }
 
 /// A group hash the compiler could not fold names no group either.
 #[test]
 #[should_panic(expected = "Can only override variables theme created with defineVars().")]
 fn refuses_a_group_hash_that_did_not_fold() {
-  validate_theme_variables(&folded("{ __varGroupHash__: name }"));
+  validate_theme_variables(
+    &folded("{ __varGroupHash__: name }"),
+    &StateManager::default(),
+  );
 }
 
 #[test]
 fn reads_the_group_hash_a_theme_target_carries() {
-  let (group_name, theme_vars) = validate_theme_variables(&folded(
-    "{ __varGroupHash__: 'x568ih9', color: 'var(--xcolour)' }",
-  ));
+  let (group_name, theme_vars) = validate_theme_variables(
+    &folded("{ __varGroupHash__: 'x568ih9', color: 'var(--xcolour)' }"),
+    &StateManager::default(),
+  );
 
   assert_eq!(group_name, "x568ih9");
 

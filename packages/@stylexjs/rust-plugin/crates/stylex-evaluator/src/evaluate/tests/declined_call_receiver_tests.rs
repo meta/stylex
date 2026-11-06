@@ -13,8 +13,8 @@
 use super::source_evaluation::*;
 use std::rc::Rc;
 use stylex_ast::ast::convertors::create_string_expr;
-use stylex_constants::constants::evaluation_errors::unsupported_expression;
-use stylex_constants::constants::messages::{OBJECT_KEY_MUST_BE_IDENT, PROPERTY_NOT_FOUND};
+use stylex_constants::constants::evaluation_errors::{UNDEFINED_CONST, unsupported_expression};
+use stylex_constants::constants::messages::OBJECT_KEY_MUST_BE_IDENT;
 use stylex_state::functions::{FunctionConfigType, FunctionMap, FunctionType};
 use stylex_state::types::FunctionConfigMap;
 
@@ -72,53 +72,59 @@ fn a_name_bound_to_one_of_the_compilers_functions_is_applied_where_it_is_named()
   assert_eq!(folded_text_of(result, source), "red");
 }
 
-/// A receiver the memo answers nothing for is named by the method that was
-/// called on it.
+/// A receiver the memo already refused refuses again with the reason it was
+/// refused for.
 ///
-/// The memo is the one route to a value that is absent while the walk is still
-/// confident, and the warm has to be written with the parentheses the receiver
-/// carries: the memo is keyed by the subtree as written, and a parenthesised
-/// expression is a node in this tree.
+/// The memo used to remember a refused subtree without its reason, and these
+/// cases pinned the sentence that stood in for it. The memo now replays the
+/// recorded reason (eb1efe6, "preserve deopt reasons"), so a second read of
+/// `(() => 1) + 1` answers what the first did: an arrow has no primitive this
+/// compiler will spell, and the `+` refuses as
+/// `Unsupported expression: BinaryExpression`. The reference implementation is
+/// no oracle for the value -- it folds the arrow to the source text of its own
+/// wrapper closure (`lib/index.js:6440-6457`, `+` at `:6806-6807`; executed) --
+/// so the refusal is this compiler's, and the warm is kept so the memo is what
+/// answers.
 #[test]
-fn a_receiver_the_memo_answers_nothing_for_is_named_by_its_method() {
+fn a_receiver_the_memo_refused_replays_its_reason() {
   let source = "((() => 1) + 1).foo(unknownName)";
 
   assert_refused_with(
     &evaluated_after("((() => 1) + 1) + 2", source),
     source,
-    "The receiver of '.foo()' has no compile-time value.",
+    &unsupported_expression("BinaryExpression"),
   );
 }
 
-/// The same receiver reached through a computed key, which is a reading of its
-/// own and names the key it asked for.
+/// The same receiver reached through a computed key replays the same reason.
 #[test]
-fn a_computed_call_over_such_a_receiver_names_the_key_it_asked_for() {
+fn a_computed_call_over_such_a_receiver_replays_its_reason() {
   let source = "((() => 1) + 1)['foo'](unknownName)";
 
   assert_refused_with(
     &evaluated_after("((() => 1) + 1) + 2", source),
     source,
-    "The receiver of the computed call '[foo]()' has no compile-time value.",
+    &unsupported_expression("BinaryExpression"),
   );
 }
 
-/// A receiver whose kind carries no method this evaluator folds is named by
-/// that kind. `null` and `undefined` are the two such values the evaluator
-/// answers with, and the sentence is the same for both because neither has a
-/// prototype here.
+/// A receiver whose kind carries no method refuses the call before its
+/// argument is read. `null` and `undefined` are the two such values, and
+/// neither has a method to find, so the call has no function and refuses with
+/// the terminal `Unsupported expression: CallExpression` -- the reference
+/// implementation's sentence for a call it found no function for
+/// (`lib/index.js:6942`). The reference implementation itself throws reading
+/// `null.foo` (`TypeError`; executed), which this compiler turns into the
+/// refusal; the node-kind sentences were the optional engine's.
 #[test]
-fn a_receiver_whose_kind_carries_no_methods_names_its_kind() {
+fn a_receiver_whose_kind_carries_no_methods_refuses_the_call() {
   let fns = FunctionMap::default();
 
-  for (source, kind) in [
-    ("null.foo(unknownName)", "NullLiteral"),
-    ("undefined.foo(unknownName)", "Identifier"),
-  ] {
+  for source in ["null.foo(unknownName)", "undefined.foo(unknownName)"] {
     assert_refused_with(
       &evaluated_against(&fns, source),
       source,
-      &unsupported_expression(kind),
+      &unsupported_expression("CallExpression"),
     );
   }
 }
@@ -172,13 +178,15 @@ fn a_key_the_receiver_spells_with_quotes_does_not_hide_the_keys_beside_it() {
     "red"
   );
 
+  // The call follows the language's order -- read the callee, evaluate every
+  // argument, then ask whether the callee is callable -- so the receiver's
+  // missing key is read as `undefined` and the argument nothing binds refuses
+  // first, as `node` throws its `ReferenceError` for `unknownName` (executed;
+  // parent decision: JS call order). The property-not-found sentence was the
+  // optional engine's.
   let source = format!("({{ ...{FOLD_NAMESPACE} }}).missing(unknownName)");
 
-  assert_refused_with(
-    &evaluated_against(&fns, &source),
-    &source,
-    PROPERTY_NOT_FOUND,
-  );
+  assert_refused_with(&evaluated_against(&fns, &source), &source, UNDEFINED_CONST);
 }
 
 /// A type function reads its entries off the object it was handed, and a key

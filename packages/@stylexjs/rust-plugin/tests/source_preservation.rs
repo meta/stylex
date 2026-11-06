@@ -4,6 +4,10 @@ pub(crate) mod diagnostics;
 pub(crate) mod parser;
 mod utils {
     pub(crate) use crate::{diagnostics, parser};
+    pub(crate) use stylex_swc_plugin::transform_source;
+}
+mod shared {
+    pub(crate) use stylex_swc_plugin::StyleXTransformOptions;
 }
 #[path = "../src/utils/source_edits.rs"]
 mod source_engine;
@@ -12,8 +16,8 @@ mod source_edits {
         apply_source_edits, emit_source_preserving_with_syntax, source_range, AuthoredModuleItem,
         SourcePreservingOutput, TextEdit,
     };
-    use swc_common::{comments::SingleThreadedComments, SourceFile};
-    use swc_ecma_ast::Module;
+    use swc_core::common::{comments::SingleThreadedComments, SourceFile};
+    use swc_core::ecma::ast::Module;
     pub fn emit_source_preserving(
         file: &SourceFile,
         original: &Module,
@@ -53,12 +57,12 @@ mod source_edits {
 
 use parser::{parse_expr, parse_module, syntax_for_file, ParsedModule};
 use source_edits::{apply_source_edits, emit_source_preserving, source_range, TextEdit};
-use swc_common::{
+use swc_core::common::{
     comments::SingleThreadedComments, sync::Lrc, FileName, SourceMap, Spanned, DUMMY_SP,
 };
-use swc_ecma_ast::*;
+use swc_core::ecma::ast::*;
+use swc_core::ecma::visit::{VisitMut, VisitMutWith};
 use swc_ecma_parser::with_file_parser;
-use swc_ecma_visit::{VisitMut, VisitMutWith};
 
 struct CompileCalls;
 impl VisitMut for CompileCalls {
@@ -899,7 +903,7 @@ fn captured_native_corpus_source_edits_reproduce_every_parseable_target_ast() {
     let data: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     struct Rewrite<'a> {
-        file: &'a swc_common::SourceFile,
+        file: &'a swc_core::common::SourceFile,
         names: std::collections::HashSet<String>,
         edits: Vec<TextEdit>,
     }
@@ -1315,14 +1319,239 @@ fn generated_double_quote_jsx_literals_keep_valid_single_quote_native_output() {
 }
 
 #[test]
+fn orphan_optimizer_annotations_do_not_delete_unrelated_side_effects() {
+    use std::process::Command;
+    let variants = [
+        "/*#__PURE__*/",
+        "/* @__PURE__ */",
+        "/*#__NO_SIDE_EFFECTS__*/",
+        "/* license text @__PURE__ ordinary note */",
+    ];
+    let mut compiled = Vec::new();
+    for annotation in variants {
+        let source = format!("/* license */\nimport * as stylex from '@stylexjs/stylex';\nconst styles = {annotation} stylex.create({{root:{{color:'red'}}}});\ninitSideEffects();\nexport const p = stylex.props(styles.root);\n/* eof */");
+        let output = stylex_swc_plugin::transform_source(
+            &source,
+            "pure.js",
+            &stylex_swc_plugin::StyleXTransformOptions::default(),
+        )
+        .unwrap();
+        assert!(output.code.contains("/* license */"));
+        assert!(output.code.contains("/* eof */"));
+        if annotation.contains("ordinary note") {
+            assert!(output.code.contains("ordinary note"));
+        }
+        compiled.push(serde_json::json!({"source": source, "code": output.code}));
+    }
+    let input =
+        std::env::temp_dir().join(format!("stylex-pure-target-{}.json", std::process::id()));
+    std::fs::write(&input, serde_json::to_vec(&compiled).unwrap()).unwrap();
+    let script = r#"
+const fs = require('node:fs');
+const vm = require('node:vm');
+const esbuild = require('esbuild');
+const terser = require('terser');
+const babel = require('@babel/core');
+const plugin = require('@stylexjs/babel-plugin');
+const inputs = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
+function effects(code) {
+  const converted = esbuild.transformSync(code, {format: 'cjs'}).code;
+  const observed = [];
+  vm.runInNewContext(converted, {
+    module: {exports: {}}, exports: {},
+    require: () => ({}),
+    initSideEffects() { observed.push('side-effect'); },
+  });
+  return observed;
+}
+(async () => {
+ const results=[];
+ for (const input of inputs) {
+  const oracle=babel.transformSync(input.source,{babelrc:false,configFile:false,plugins:[[plugin,{}]]}).code;
+  for (const [name,code] of [['native',input.code],['babel',oracle]]) {
+   const es=esbuild.transformSync(code,{format:'esm',minify:true,treeShaking:true}).code;
+   const te=(await terser.minify(code,{module:true,compress:true,mangle:false})).code;
+   results.push({name,esbuild:effects(es),terser:effects(te)});
+  }
+ }
+ process.stdout.write(JSON.stringify(results));
+})().catch(error=>{console.error(error);process.exit(1)});
+"#;
+    let result = Command::new(std::env::var_os("NODE").unwrap_or_else(|| "node".into()))
+        .arg("-e")
+        .arg(script)
+        .arg(&input)
+        .current_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.."))
+        .output()
+        .unwrap();
+    std::fs::remove_file(input).unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let results: Vec<serde_json::Value> = serde_json::from_slice(&result.stdout).unwrap();
+    for result in results {
+        assert_eq!(
+            result["esbuild"],
+            serde_json::json!(["side-effect"]),
+            "{result}"
+        );
+        assert_eq!(
+            result["terser"],
+            serde_json::json!(["side-effect"]),
+            "{result}"
+        );
+    }
+}
+
+#[test]
+fn retained_annotation_targets_and_annotation_text_in_strings_are_unchanged() {
+    let source = "/* license */\nconst value=/*#__PURE__*/init();\nconst text='/*#__PURE__*/';\nconst f=/*#__NO_SIDE_EFFECTS__*/()=>compute();\nconst styles=stylex.create({root:{color:'red'}});";
+    let output = compile(source, "annotations.js");
+    assert!(output.code.contains("const value=/*#__PURE__*/init();"));
+    assert!(output.code.contains("const text='/*#__PURE__*/';"));
+    assert!(output
+        .code
+        .contains("const f=/*#__NO_SIDE_EFFECTS__*/()=>compute();"));
+}
+
+#[test]
+fn optimizer_annotations_inside_replaced_or_removed_subtrees_cannot_retarget_calls() {
+    for source in [
+        "const styles=stylex.create({root:{value:/*#__PURE__*/old()}}); next();",
+        "const styles=/*#__PURE__*/stylex.create({root:{color:'red'}}); next();",
+        "const styles=stylex.create({root:{color:'red'},/*#__PURE__*/}); next();",
+    ] {
+        let parsed = parse_module(source, "orphan.js").unwrap();
+        let mut transformed = parsed.module.clone();
+        if source.contains("/*#__PURE__*/old()") {
+            transformed.visit_mut_with(&mut CompileCalls);
+        } else {
+            transformed.body.remove(0);
+        }
+        let output =
+            emit_source_preserving(&parsed.file, &parsed.module, &transformed, &parsed.comments)
+                .unwrap();
+        assert!(output.code.contains("next();"));
+        assert!(!output.code.contains("__PURE__"), "{}", output.code);
+    }
+}
+
+#[test]
+fn direct_emitter_maps_raw_line_separators_using_real_consumer_generated_positions() {
+    use std::process::Command;
+    let source = "/* header 😀\u{2028} middle\u{2029} tail */ const marker = 1;\r\nconst styles=stylex.create({root:{color:'red'}});\n";
+    let output = compile(source, "separators.js");
+    let path = std::env::temp_dir().join(format!("stylex-direct-map-{}.json", std::process::id()));
+    std::fs::write(
+        &path,
+        serde_json::to_vec(
+            &serde_json::json!({"source":source,"code":output.code,"map":output.map}),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let script = r#"
+const fs=require('node:fs'),parser=require('@babel/parser');
+const {TraceMap,originalPositionFor}=require('@jridgewell/trace-mapping');
+const {SourceMapConsumer}=require('source-map');
+const input=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));
+const body=parser.parse(input.source,{sourceType:'module',plugins:['jsx']}).program.body;
+const marker=body.find(statement=>statement.type==='VariableDeclaration'&&statement.declarations[0].id.name==='marker').declarations[0].id;
+const index=input.code.indexOf('marker'); const prefix=input.code.slice(0,index);
+const position={line:prefix.split('\n').length,column:prefix.slice(prefix.lastIndexOf('\n')+1).length};
+const expected={line:marker.loc.start.line,column:marker.loc.start.column};
+const trace=originalPositionFor(new TraceMap(input.map),position);
+const consumer=new SourceMapConsumer(input.map),classic=consumer.originalPositionFor(position);
+if(consumer.destroy)consumer.destroy();
+process.stdout.write(JSON.stringify({expected,trace,classic,generated:position}));
+"#;
+    let result = Command::new(std::env::var_os("NODE").unwrap_or_else(|| "node".into()))
+        .arg("-e")
+        .arg(script)
+        .arg(&path)
+        .current_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.."))
+        .output()
+        .unwrap();
+    std::fs::remove_file(path).unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let trace: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+    for name in ["trace", "classic"] {
+        assert_eq!(trace[name]["line"], trace["expected"]["line"], "{trace}");
+        assert_eq!(
+            trace[name]["column"], trace["expected"]["column"],
+            "{trace}"
+        );
+    }
+    assert_eq!(trace["generated"]["line"], 1);
+}
+
+#[test]
+fn jsx_comments_keep_their_order_when_a_style_spread_is_flattened() {
+    let source = "import * as stylex from '@stylexjs/stylex';\nconst styles=stylex.create({root:{color:'red'}});\nexport const view=<Box /* before */ {...stylex.props(styles.root)} /* after */ title='unchanged'>{/* child */}</Box>;";
+    let output = stylex_swc_plugin::transform_source(
+        source,
+        "jsx-comments.jsx",
+        &stylex_swc_plugin::StyleXTransformOptions::default(),
+    )
+    .unwrap();
+    for comment in ["/* before */", "/* after */", "/* child */"] {
+        assert!(output.code.contains(comment), "{}", output.code);
+    }
+    assert!(output.code.find("/* before */").unwrap() < output.code.find("/* after */").unwrap());
+    assert!(output.code.find("/* after */").unwrap() < output.code.find("/* child */").unwrap());
+    assert!(output.code.contains("title='unchanged'"));
+    assert!(parse_module(&output.code, "jsx-comments.jsx").is_ok());
+}
+
+#[test]
+fn script_html_comments_remain_ordinary_comments_around_source_edits() {
+    let source = "<!-- license heading\nvar value=010;\nconst styles=stylex.create({root:{color:'red'}});\n--> retained trailing html\nnext();";
+    let parsed = parser::parse_module_with_options(
+        source,
+        "html.js",
+        syntax_for_file("html.js"),
+        parser::SourceType::Script,
+    )
+    .unwrap();
+    let mut transformed = parsed.module.clone();
+    transformed.visit_mut_with(&mut CompileCalls);
+    let output = source_engine::emit_source_preserving_with_syntax(
+        &parsed.file,
+        &parsed.module,
+        &transformed,
+        &parsed.comments,
+        &[],
+        &[],
+        parser::parser_modes::ParseOptions {
+            syntax: parsed.syntax,
+            source_type: parsed.source_type,
+        },
+    )
+    .unwrap();
+    assert!(output
+        .code
+        .starts_with("<!-- license heading\nvar value=010;\n"));
+    assert!(output.code.contains("--> retained trailing html\nnext();"));
+}
+
+#[test]
 fn validates_edit_overlap_and_utf8_boundaries() {
     let parsed = parse_module("const value='😀';", "bounds.js").unwrap();
     let ModuleItem::Stmt(Stmt::Decl(Decl::Var(var))) = &parsed.module.body[0] else {
         panic!("expected variable");
     };
     assert_eq!(
-        source_engine::original_expr_text(&parsed.file, var.decls[0].init.as_ref().unwrap())
-            .unwrap(),
+        &parsed.file.src[source_engine::source_range(
+            &parsed.file,
+            var.decls[0].init.as_ref().unwrap().span()
+        )
+        .unwrap()],
         "'😀'"
     );
     let emoji = parsed.file.src.find('😀').unwrap();

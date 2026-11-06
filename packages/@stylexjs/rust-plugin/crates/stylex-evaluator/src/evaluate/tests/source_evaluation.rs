@@ -61,7 +61,11 @@ fn evaluate_source_under_ceiling(
   source: &str,
   max_evaluation_depth: Option<usize>,
 ) -> Box<EvaluateResult> {
-  evaluate_parsed(&parse_expr(source), max_evaluation_depth)
+  let expression = parse_expr(source);
+  let result = evaluate_parsed(&expression, max_evaluation_depth);
+  // Recursive AST Drop is setup teardown, not another evaluator descent.
+  crate::growable_stack::grown_per_level(|| drop(expression));
+  result
 }
 
 /// Evaluates an expression that was parsed out of something larger, so a suite
@@ -328,6 +332,24 @@ fn assert_folds_to_a_value_result(result: EvaluateResult, source: &str) -> Evalu
 pub(crate) fn folds_to_a_list(source: &str) -> Vec<EvaluateResultValue> {
   match assert_folds_to_a_value(source) {
     EvaluateResultValue::Vec(items) => items,
+    EvaluateResultValue::SharedArray(items) => items.iter().cloned().collect(),
+    EvaluateResultValue::NativeArray(items) => items
+      .iter()
+      .cloned()
+      .map(|value| {
+        super::native_call::native_result(value)
+          .unwrap_or_else(|| panic!("unreadable native array element in {source}"))
+      })
+      .collect(),
+    EvaluateResultValue::Expr(Expr::Array(items)) => items
+      .elems
+      .into_iter()
+      .map(|item| match item {
+        Some(item) if item.spread.is_none() => EvaluateResultValue::Expr(*item.expr),
+        None => super::js_undefined(),
+        _ => panic!("unexpanded array spread"),
+      })
+      .collect(),
     other => panic!("expected `{}` to fold to a list, got {:?}", source, other),
   }
 }
@@ -350,11 +372,10 @@ fn assert_folds_result(result: EvaluateResult, source: &str) -> Expr {
   );
 
   match result.value {
-    Some(EvaluateResultValue::Expr(expr)) => expr,
-    other => panic!(
-      "expected `{}` to fold to an expression, got {:?}",
-      source, other
-    ),
+    Some(value) => super::evaluate_result_as_expr(&value).unwrap_or_else(|| {
+      panic!("expected `{source}` to have a data expression form, got {value:?}")
+    }),
+    None => panic!("expected `{source}` to fold to an expression, got none"),
   }
 }
 
@@ -422,22 +443,14 @@ pub(crate) fn assert_folds_to_null(source: &str) {
 /// one.
 #[track_caller]
 pub(crate) fn assert_folds_to_strings(source: &str, expected: &[&str]) {
-  match assert_folds_to_a_value(source) {
-    EvaluateResultValue::Vec(items) => {
-      let folded = items
-        .iter()
-        .map(|item| match item {
-          EvaluateResultValue::Expr(Expr::Lit(Lit::Str(strng))) => {
-            convert_atom_to_string(&strng.value)
-          },
-          other => panic!("expected `{}` to hold strings, got {:?}", source, other),
-        })
-        .collect::<Vec<String>>();
-
-      assert_eq!(folded, expected, "wrong folded array for `{}`", source);
-    },
-    other => panic!("expected `{}` to fold to an array, got {:?}", source, other),
-  }
+  let folded = folds_to_a_list(source)
+    .iter()
+    .map(|value| match value {
+      EvaluateResultValue::Expr(Expr::Lit(Lit::Str(text))) => convert_atom_to_string(&text.value),
+      value => panic!("expected string element in {source}, got {value:?}"),
+    })
+    .collect::<Vec<_>>();
+  assert_eq!(folded, expected, "wrong folded array for `{source}`");
 }
 
 /// Asserts the source folds to a boolean.

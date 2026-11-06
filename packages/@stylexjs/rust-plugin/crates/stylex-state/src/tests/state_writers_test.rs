@@ -1064,3 +1064,73 @@ mod top_level_declarator_lists_agree_tests {
     assert_both_lists_answer("export default defineMarker();");
   }
 }
+
+/// Object literals no recorded-expression lookup can match are not recorded as
+/// top-level expressions; their declarators still are. The lookups match a
+/// call, or a style variable's compiled initializer -- an object whose every
+/// property is a namespace holding `$$css`, or a function -- or an empty object.
+mod unmatchable_object_literals {
+  use super::*;
+  use stylex_ast::ast::factories::{create_key_value_prop, create_object_expression};
+  use swc_core::ecma::ast::{ArrowExpr, ArrowFunctionBody};
+
+  fn module_of(init: Expr) -> Module {
+    Module {
+      span: DUMMY_SP,
+      body: vec![ModuleItem::Stmt(Stmt::Decl(Decl::Var(Box::new(VarDecl {
+        span: DUMMY_SP,
+        kind: VarDeclKind::Const,
+        declare: false,
+        decls: vec![make_var_declarator("styles", init)],
+        ctxt: SyntaxContext::empty(),
+      }))))],
+      shebang: None,
+    }
+  }
+
+  fn recorded(init: Expr) -> (usize, usize) {
+    let mut state = StateManager::default();
+    fill_top_level_expressions(&module_of(init), &mut state);
+    (state.top_level_expressions.len(), state.declarations.len())
+  }
+
+  fn namespace(with_marker: bool) -> Expr {
+    let mut props = vec![create_key_value_prop("kWkggS", create_string_expr("x1e2nbdu"))];
+    if with_marker {
+      props.push(create_key_value_prop("$$css", Expr::Lit(true.into())));
+    }
+    create_object_expression(props)
+  }
+
+  fn arrow() -> Expr {
+    Expr::Arrow(ArrowExpr {
+      body: Box::new(ArrowFunctionBody::Expr(Box::new(create_number_expr(1.0)))),
+      ..Default::default()
+    })
+  }
+
+  #[test]
+  fn a_constant_object_is_not_recorded_but_its_declarator_is() {
+    let palette = create_object_expression(vec![
+      create_key_value_prop("red", create_string_expr("#f00")),
+      create_key_value_prop("nested", namespace(false)),
+    ]);
+    assert_eq!(recorded(palette), (0, 1));
+  }
+
+  #[test]
+  fn an_object_that_could_be_compiled_styles_is_recorded() {
+    assert_eq!(recorded(create_object_expression(vec![])), (1, 1));
+    assert_eq!(
+      recorded(create_object_expression(vec![create_key_value_prop("root", namespace(true))])),
+      (1, 1)
+    );
+    assert_eq!(
+      recorded(create_object_expression(vec![
+        create_key_value_prop("red", create_string_expr("#f00")),
+        create_key_value_prop("dynamic", arrow()),
+      ])),
+      (1, 1)
+    );
+  }
+}

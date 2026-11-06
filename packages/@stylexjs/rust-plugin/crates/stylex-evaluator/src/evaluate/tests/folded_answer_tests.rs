@@ -21,7 +21,7 @@ use super::source_evaluation::*;
 use crate::evaluate_result::EvaluateResult;
 use stylex_ast::ast::convertors::convert_atom_to_string;
 use stylex_constants::constants::evaluation_errors::{
-  folded_string_too_large, object_size_too_large, unfoldable_fold_result, unfoldable_static,
+  folded_string_too_large, object_size_too_large, unsupported_expression,
 };
 use stylex_state::{evaluate_result_value::EvaluateResultValue, functions::FunctionMap};
 use swc_core::ecma::ast::{Expr, Lit, Prop, PropOrSpread};
@@ -42,16 +42,24 @@ fn at_an_entry_ceiling(limit: usize, source: &str) -> Box<EvaluateResult> {
 /// The strings an array answer holds, in order.
 #[track_caller]
 fn strings_of(value: EvaluateResultValue, source: &str) -> Vec<String> {
+  let value = stylex_evaluator_data(&value, source);
   match value {
-    EvaluateResultValue::Vec(items) => items
+    Expr::Array(items) => items
+      .elems
       .iter()
       .map(|item| match item {
-        EvaluateResultValue::Expr(expr) => string_of(expr, source),
-        other => panic!("expected `{}` to hold strings, got {:?}", source, other),
+        Some(item) if item.spread.is_none() => string_of(&item.expr, source),
+        _ => panic!("expected `{}` to hold a dense list of strings", source),
       })
       .collect(),
     other => panic!("expected `{}` to fold to an array, got {:?}", source, other),
   }
+}
+
+fn stylex_evaluator_data(value: &EvaluateResultValue, source: &str) -> Expr {
+  crate::evaluate::materialize_result(value, &stylex_state::state_manager::StateManager::default())
+    .expect("the test's evaluated data must materialize without a host error")
+    .unwrap_or_else(|| panic!("expected `{source}` to carry materializable data, got {value:?}"))
 }
 
 /// The own keys of an object answer, in order.
@@ -78,8 +86,8 @@ fn entries_of(value: EvaluateResultValue, source: &str) -> Vec<(String, String)>
 
 #[track_caller]
 fn properties_of(value: EvaluateResultValue, source: &str) -> Vec<(String, Expr)> {
-  let object = match value {
-    EvaluateResultValue::Expr(Expr::Object(object)) => object,
+  let object = match stylex_evaluator_data(&value, source) {
+    Expr::Object(object) => object,
     other => panic!(
       "expected `{}` to fold to an object, got {:?}",
       source, other
@@ -102,7 +110,7 @@ fn properties_of(value: EvaluateResultValue, source: &str) -> Vec<(String, Expr)
       },
       PropOrSpread::Spread(_) => {
         panic!("expected `{}` to fold to an object with no spread", source)
-      },
+      }
     })
     .collect()
 }
@@ -231,11 +239,17 @@ fn an_object_past_the_entry_ceiling_refuses_by_its_property_count() {
   );
 }
 
-/// A reflective static refuses before the engine is reached.
+/// A reflective static refuses.
 ///
 /// `Object.create` and the rest of them hand back an object from the prototype
-/// chain, which is a step from a plain object to `Function`. The allowlist does
-/// not hold them, so they read the one sentence every refused static reads.
+/// chain, which is a step from a plain object to `Function`. Neither compiler's
+/// allowlist holds them: the reference implementation's `Object` statics are
+/// `entries`, `fromEntries`, `getOwnPropertyNames`, `getOwnPropertySymbols`,
+/// `groupBy`, `hasOwn`, `is`, `isExtensible`, `isFrozen`, `isSealed`, `keys`
+/// and `values` (`lib/index.js:6233`), so it finds no function for these five
+/// and refuses each with its terminal `Unsupported expression: CallExpression`
+/// (`lib/index.js:6942`; executed). This compiler answers the same sentence;
+/// the static-naming one was the optional engine's.
 ///
 /// The read-back throw this case once reached is now asked of the walk out
 /// directly, in `built_answer_tests`: no source builds a getter any more.
@@ -243,7 +257,7 @@ fn an_object_past_the_entry_ceiling_refuses_by_its_property_count() {
 /// Every one of them takes an object first and reads a key second, so one call
 /// shape reaches them all.
 #[test]
-fn a_reflective_static_refuses_before_the_engine() {
+fn a_reflective_static_refuses() {
   for method in [
     "create",
     "getPrototypeOf",
@@ -257,22 +271,25 @@ fn a_reflective_static_refuses_before_the_engine() {
     assert_refused(&result, &source);
     assert_eq!(
       result.reason.as_deref(),
-      Some(unfoldable_static("Object", method).as_str()),
+      Some(unsupported_expression("CallExpression").as_str()),
       "the refusal for `{}`",
       source
     );
   }
 }
 
-/// A function under a key has no expression this side writes, so the whole
-/// answer refuses and names the kind the language answered with.
+/// A function under a key is carried as the function it is, so the object folds
+/// with the key the source wrote and a function under it -- `node` and the
+/// reference implementation both answer `{ a: [Function] }` (executed). The
+/// refusal was the optional engine's, which could not carry a function back.
+///
+/// Read through the key list and `typeof`, which say the same thing without
+/// asking a function for an expression form it has no reason to have.
 #[test]
-fn a_function_under_a_key_refuses_by_the_kind_it_is() {
+fn a_function_under_a_key_is_carried_as_a_function() {
   let source = "Object.fromEntries([['a', () => 1]])";
 
-  assert_refused_with(
-    &evaluate_source(source),
-    source,
-    &unfoldable_fold_result("function"),
-  );
+  assert_folds_to_a_value(source);
+  assert_folds_to_string(&format!("Object.keys({source}).join(',')"), "a");
+  assert_folds_to_string(&format!("typeof {source}.a"), "function");
 }

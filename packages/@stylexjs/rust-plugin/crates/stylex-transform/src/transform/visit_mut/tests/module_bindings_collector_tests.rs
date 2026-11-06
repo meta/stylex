@@ -11,6 +11,36 @@ use swc_core::{
 };
 
 use super::ModuleBindingsCollector;
+
+#[test]
+fn current_uid_inventory_excludes_nested_labels_but_keeps_real_identifiers() {
+  GLOBALS.set(&Globals::default(), || {
+    let module = resolved_module("rootLabel:for(;;){break rootLabel;}function g(_temp){_temp3:for(;;){break _temp3;}read(globalRef);}");
+    let mut collector = ModuleBindingsCollector::for_sx();
+    module.visit_with(&mut collector);
+    assert!(collector.bound_names.contains("rootLabel"));
+    assert!(collector.bound_names.contains("_temp"));
+    assert!(collector.bound_names.contains("globalRef"));
+    assert!(!collector.bound_names.contains("_temp3"));
+  });
+}
+
+#[test]
+fn current_module_root_bindings_keep_types_but_exclude_nested_type_parameters() {
+  GLOBALS.set(&Globals::default(),||{
+    let module=resolved_ts_module("import type {Imported} from './types';type T=number;interface RootInterface{};const root=1;function f<T>(value:T){type Local=T;const local=value;return local;}");
+    let roots=super::module_root_bindings(&module);
+    for name in ["Imported","T","RootInterface","root","f"] {
+      assert!(roots.iter().any(|id|id.0.as_ref()==name),"missing root {name}");
+    }
+    let function=module.body.iter().find_map(|item|match item {ModuleItem::Stmt(Stmt::Decl(Decl::Fn(function)))=>Some(function),_=>None}).unwrap();
+    let parameter=&function.function.type_params.as_ref().unwrap().params[0].name;
+    assert!(!roots.contains(&parameter.to_id()));
+    let Pat::Ident(value)=&function.function.params[0].pat else{panic!("parameter")};
+    assert!(!roots.contains(&value.id.to_id()));
+    assert!(!roots.iter().any(|id|matches!(id.0.as_ref(),"local"|"Local"|"value")));
+  });
+}
 use crate::transform::tests::prelude::{resolved_module, resolved_ts_module};
 
 /// Names of the bindings the collector recorded as written under any kind,
@@ -112,6 +142,93 @@ fn assert_names(actual: FxHashSet<String>, expected: &[&str], code: &str) {
   let expected: FxHashSet<String> = expected.iter().map(|name| name.to_string()).collect();
 
   assert_eq!(actual, expected, "for source: {}", code);
+}
+
+#[test]
+fn opaque_pattern_faults_keep_declaration_spans_and_exclude_default_reads() {
+  GLOBALS.set(&Globals::default(), || {
+    let module = resolved_module("const source={nested:{red:'red'}};const {nested:{red},blue:b=missing,...rest}=source;const [item,...items]=[];");
+    let mut collector = ModuleBindingsCollector::writes_only();
+    module.visit_with(&mut collector);
+    let declarations = module.body.iter().filter_map(|item| match item {
+      ModuleItem::Stmt(Stmt::Decl(Decl::Var(variables))) => Some(variables.decls.as_slice()),
+      _ => None,
+    }).flatten().collect::<Vec<_>>();
+    let faults = &collector.opaque_declaration_faults;
+    assert_eq!(faults.len(), 5);
+    assert_eq!(faults.keys().map(|id| id.0.to_string()).collect::<FxHashSet<_>>(),
+      ["red", "b", "rest", "item", "items"].into_iter().map(str::to_owned).collect());
+    for (id, fault) in faults {
+      assert_eq!(fault.kind, super::OpaqueDeclarationKind::VariableDeclarator);
+      let declaration = if matches!(id.0.as_ref(), "red" | "b" | "rest") {
+        declarations[1]
+      } else {
+        declarations[2]
+      };
+      assert_eq!(fault.span, declaration.span);
+    }
+  });
+}
+
+#[test]
+fn opaque_parameter_faults_distinguish_shadowed_binding_ids() {
+  GLOBALS.set(&Globals::default(), || {
+    let module = resolved_module("const {value}={value:1};function make(value){return value;}const fn=value=>value;");
+    let mut collector = ModuleBindingsCollector::writes_only();
+    module.visit_with(&mut collector);
+    let ModuleItem::Stmt(Stmt::Decl(Decl::Fn(function))) = &module.body[1] else { panic!("function") };
+    let Pat::Ident(function_parameter) = &function.function.params[0].pat else { panic!("parameter") };
+    let ModuleItem::Stmt(Stmt::Decl(Decl::Var(variables))) = &module.body[2] else { panic!("arrow declaration") };
+    let Expr::Arrow(arrow) = variables.decls[0].init.as_deref().unwrap() else { panic!("arrow") };
+    let Pat::Ident(arrow_parameter) = &arrow.params[0] else { panic!("parameter") };
+    let faults = &collector.opaque_declaration_faults;
+    assert_eq!(faults.len(), 3);
+    assert_ne!(function_parameter.id.to_id(), arrow_parameter.id.to_id());
+    for parameter in [&function_parameter.id, &arrow_parameter.id] {
+      let fault = faults.get(&parameter.to_id()).expect("parameter fault");
+      assert_eq!(fault.kind, super::OpaqueDeclarationKind::Identifier);
+      assert_eq!(fault.span, parameter.span);
+    }
+    assert!(faults.values().any(|fault| fault.kind == super::OpaqueDeclarationKind::VariableDeclarator));
+    assert!(!faults.contains_key(&function.ident.to_id()));
+  });
+}
+
+#[test]
+fn opaque_fn_expr_parameters_keep_shadowed_ids_and_identifier_spans() {
+  GLOBALS.set(&Globals::default(), || {
+    let module = resolved_module("const {value}={value:1};const anonymous=function(value){return value;};const named=function recur(value){return value;};");
+    let mut collector = ModuleBindingsCollector::writes_only();
+    module.visit_with(&mut collector);
+    let functions = module.body.iter().skip(1).map(|item| {
+      let ModuleItem::Stmt(Stmt::Decl(Decl::Var(variables))) = item else {
+        panic!("function expression declaration")
+      };
+      let Expr::Fn(function) = variables.decls[0].init.as_deref().unwrap() else {
+        panic!("function expression")
+      };
+      function
+    }).collect::<Vec<_>>();
+    let parameters = functions.iter().map(|function| {
+      let Pat::Ident(parameter) = &function.function.params[0].pat else {
+        panic!("simple function-expression parameter")
+      };
+      &parameter.id
+    }).collect::<Vec<_>>();
+    let faults = &collector.opaque_declaration_faults;
+    assert_eq!(faults.len(), 3);
+    assert_ne!(parameters[0].to_id(), parameters[1].to_id());
+    for parameter in parameters {
+      let fault = faults.get(&parameter.to_id()).expect("function-expression parameter fault");
+      assert_eq!(fault.kind, super::OpaqueDeclarationKind::Identifier);
+      assert_eq!(fault.span, parameter.span);
+    }
+    let named_function = functions[1].ident.as_ref().expect("named function expression");
+    assert!(!faults.contains_key(&named_function.to_id()));
+    assert_eq!(faults.values().filter(|fault| {
+      fault.kind == super::OpaqueDeclarationKind::VariableDeclarator
+    }).count(), 1);
+  });
 }
 
 #[test]

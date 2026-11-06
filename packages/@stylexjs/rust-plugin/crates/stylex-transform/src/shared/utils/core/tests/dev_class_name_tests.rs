@@ -305,7 +305,31 @@ mod test_styles {
     convert_theme_to_dev_styles(&None, &FlatCompiledStyles::new(), "Theme.ts");
   }
 
-  /// A test theme is the development theme with the compiled marker at the end.
+  /// Babel's test branch replaces the overrides with a debug label and marker.
+  /// Source: unchanged 2d42d72, visitors/stylex-create-theme.js:185-192.
+  #[test]
+  fn a_theme_test_style_replaces_real_theme_classes_and_overrides() {
+    let overrides = styles_of(&[
+      ("xgroup", "xreal xgroup"),
+      ("Theme__t", "not the label"),
+      (COMPILED_KEY, "not a marker"),
+    ]);
+    let result = convert_theme_to_test_styles(&Some("t".to_owned()), &overrides, "src/Theme.ts");
+    assert_eq!(
+      result.keys().cloned().collect::<Vec<_>>(),
+      ["Theme__t", COMPILED_KEY]
+    );
+    assert_eq!(
+      result["Theme__t"].as_ref(),
+      &FlatCompiledStylesValue::String("Theme__t".to_owned())
+    );
+    assert_eq!(
+      result[COMPILED_KEY].as_ref(),
+      &FlatCompiledStylesValue::Bool(true)
+    );
+  }
+
+  /// A test theme replaces real overrides with its label and compiled marker.
   #[test]
   fn a_theme_test_style_adds_the_compiled_marker_last() {
     let overrides = styles_of(&[("--color", "red")]);
@@ -314,7 +338,7 @@ mod test_styles {
 
     assert_eq!(
       result.keys().cloned().collect::<Vec<_>>(),
-      ["Theme__t", "--color", COMPILED_KEY]
+      ["Theme__t", COMPILED_KEY]
     );
     assert_eq!(
       result[COMPILED_KEY].as_ref(),
@@ -322,8 +346,7 @@ mod test_styles {
     );
   }
 
-  /// The marker is one key. An override already holding it is replaced, and the
-  /// key keeps the place the override gave it.
+  /// Test-mode overrides cannot alter the marker or its label-first order.
   #[test]
   fn a_theme_test_style_holds_one_compiled_marker() {
     let overrides = styles_of(&[(COMPILED_KEY, "not a marker"), ("--color", "red")]);
@@ -332,7 +355,7 @@ mod test_styles {
 
     assert_eq!(
       result.keys().cloned().collect::<Vec<_>>(),
-      ["Theme__t", COMPILED_KEY, "--color"]
+      ["Theme__t", COMPILED_KEY]
     );
     assert_eq!(
       result[COMPILED_KEY].as_ref(),

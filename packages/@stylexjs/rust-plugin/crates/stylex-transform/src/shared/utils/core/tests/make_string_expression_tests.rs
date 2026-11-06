@@ -52,7 +52,7 @@ fn answer_of(prop: &PropOrSpread) -> (String, String) {
   };
 
   let key = match &key_value.key {
-    PropName::Ident(ident) => ident.sym.to_string(),
+    PropName::Num(number) => number.value.to_string(),
     other => panic!("the answer is filed under no number: {other:?}"),
   };
 
@@ -201,8 +201,8 @@ fn files_every_answer_as_a_key_value_under_a_name() {
     match prop {
       PropOrSpread::Prop(prop) => match prop.as_key_value() {
         Some(key_value) => assert!(
-          matches!(key_value.key, PropName::Ident(_)),
-          "an answer is filed under a plain name, not {:?}",
+          matches!(key_value.key, PropName::Num(_)),
+          "an answer is filed under a numeric key, not {:?}",
           key_value.key
         ),
         None => panic!("an answer is a key-value prop, not {prop:?}"),

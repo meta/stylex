@@ -1,20 +1,15 @@
-//! Differential pure-core contracts against the current built Babel compiler.
-//! No frozen old-port snapshots, fallback compiler, or output normalization.
-#![allow(dead_code)]
-#[path = "../src/core/mod.rs"]
-mod core;
-#[path = "../src/shared/nested_utils.rs"]
-mod shared;
-
-use core::properties::shorthand_cancellations;
-use core::values::{get_number_suffix, is_length_property};
-use core::*;
-use indexmap::IndexMap;
-use serde_json::{json, Value};
+//! Whole-transform differential contracts against current-main Babel.
+//! The vendored engine is the only compiler under test. Ordered output fields,
+//! rule tuples, CSS strings and diagnostics are compared without rewriting.
+use serde_json::{Value, json};
 use std::{
     io::Write,
     path::PathBuf,
     process::{Command, Stdio},
+};
+use stylex_swc_plugin::{
+    ProcessStylexRulesConfig, RuleEntry, RuleFields, StyleXTransformOptions,
+    process_stylex_rules_checked, transform_source,
 };
 
 const ORACLE: &str = r#"
@@ -39,11 +34,36 @@ function sourceExports(name) {
   m._compile(code, file); return m.exports;
 }
 function loadSource(name) { return sourceExports(name).default; }
-function literal(node) {
-  if (node.type === 'NullLiteral') return null;
-  if (node.type.endsWith('Literal')) return node.value;
-  if (node.type === 'ObjectExpression') return node.properties.map(p => [p.key.name ?? p.key.value, literal(p.value)]);
-  throw new Error('unexpected generated AST: ' + node.type);
+function generatedValue(ast) {
+  const body = ast.program.body;
+  const declaration = body.find(n => n.type === 'ExportNamedDeclaration' && n.declaration?.declarations?.some(d => d.id.name === 'output'));
+  if (!declaration) throw new Error('generated output export missing');
+  const bindings = new Map();
+  for (const stmt of body) for (const decl of (stmt.declaration ?? stmt).declarations ?? []) {
+    if (decl.id.type === 'Identifier') bindings.set(decl.id.name, decl.init);
+  }
+  const resolving = new Set();
+  const structural = node => {
+    if (Array.isArray(node)) return node.map(structural);
+    if (node === null || typeof node !== 'object') return node;
+    return Object.fromEntries(Object.entries(node).filter(([key]) => !['start','end','loc','extra','leadingComments','trailingComments','innerComments'].includes(key)).map(([key,value]) => [key,structural(value)]));
+  };
+  function literal(node) {
+    if (node.type === 'NullLiteral') return null;
+    if (['StringLiteral','NumericLiteral','BooleanLiteral'].includes(node.type)) return node.value;
+    if (node.type === 'UnaryExpression' && node.operator === '-') return -literal(node.argument);
+    if (node.type === 'ArrayExpression') return node.elements.map(literal);
+    if (node.type === 'ObjectExpression') return node.properties.map(p => {
+      if (p.type !== 'ObjectProperty') throw new Error('generated property is not a data entry');
+      return [p.key.name ?? p.key.value, literal(p.value)];
+    });
+    if (node.type === 'Identifier' && bindings.has(node.name) && !resolving.has(node.name)) {
+      resolving.add(node.name); const value = literal(bindings.get(node.name)); resolving.delete(node.name); return value;
+    }
+    if (node.type === 'ArrowFunctionExpression') return {functionAST: structural(node)};
+    throw new Error('unexpected generated AST: ' + node.type);
+  }
+  return literal(declaration.declaration.declarations.find(d => d.id.name === 'output').init);
 }
 const requests = JSON.parse(fs.readFileSync(0, 'utf8'));
 const output = requests.map(req => {
@@ -51,30 +71,27 @@ const output = requests.map(req => {
   try {
     if (req.op === 'process') return { value: plugin.processStylexRules(req.rules, req.options) };
     if (req.op === 'hash') return { value: loadSource('shared/hash.js')(req.value) };
-    if (req.op === 'classPaths') {
-      const create = loadSource('shared/stylex-create.js');
-      const options = { ...sourceExports('shared/utils/default-options.js').defaultOptions, ...req.options };
-      const paths = create(req.value, options)[2];
-      return { value: Object.entries(paths).map(([name, paths]) => [name, Object.entries(paths)]) };
-    }
     if (req.op === 'expansions') {
       const table = loadSource('shared/preprocess-rules/' + req.resolution + '.js');
       return { value: Object.fromEntries(Object.entries(table).map(([key, fn]) => {
         try { return [key, fn('__VALUE__')]; } catch (e) { return [key, { error: e.message }]; }
       })) };
     }
+    if (req.op === 'readGenerated') {
+      const ast = babel.parseSync(req.code, {babelrc:false,configFile:false,filename:req.filename,parserOpts:{plugins:['jsx','flow']}});
+      return {value:generatedValue(ast)};
+    }
     const argument = JSON.stringify(req.value);
     const expression = req.op === 'create' ? 'stylex.create(' + argument + ')'
       : req.op === 'createTheme' ? 'stylex.createTheme(' + JSON.stringify(req.base) + ',' + argument + ')'
       : 'stylex.' + req.op + '(' + argument + ')';
-    const source = 'import * as stylex from "@stylexjs/stylex"; export const output = ' + expression + ';';
+    const source = req.source ?? ('import * as stylex from "@stylexjs/stylex"; export const output = ' + expression + ';');
     const result = babel.transformSync(source, {
       babelrc: false, configFile: false, ast: true,
       filename: req.filename ?? '/tmp/stylex-core-oracle/tokens.stylex.js',
       plugins: [[plugin, { unstable_moduleResolution: { type: 'haste' }, enableDebugDataProp: false, enableDevClassNames: false, ...req.options }]],
     });
-    const exported = result.ast.program.body.find(n => n.type === 'ExportNamedDeclaration');
-    const value = { value: literal(exported.declaration.declarations[0].init), rules: result.metadata.stylex };
+    const value = {value:generatedValue(babel.parseSync(result.code, {babelrc:false,configFile:false,filename:req.filename ?? '/tmp/stylex-core-oracle/tokens.stylex.js',parserOpts:{plugins:['jsx','flow']}})), rules:result.metadata.stylex};
     if (warnings.length) value.warnings = warnings;
     return value;
   } catch (e) { return { error: e.message.split('\n')[0].replace(/^.*?: /, ''), name: e.name }; }
@@ -113,84 +130,6 @@ fn oracle(requests: &[Value]) -> Vec<Value> {
     );
     serde_json::from_slice(&output.stdout).expect("oracle JSON")
 }
-fn value(value: &Value) -> StyleValue {
-    match value {
-        Value::Null => StyleValue::Null,
-        Value::String(v) => StyleValue::String(v.clone()),
-        Value::Number(v) => StyleValue::Number(v.as_f64().unwrap()),
-        Value::Array(v) => StyleValue::Array(v.iter().map(self::value).collect()),
-        Value::Object(v) => {
-            StyleValue::Object(v.iter().map(|(k, v)| (k.clone(), self::value(v))).collect())
-        }
-        _ => panic!("non-style value"),
-    }
-}
-fn object(value: &Value) -> IndexMap<String, StyleValue> {
-    let StyleValue::Object(value) = self::value(value) else {
-        panic!("object required")
-    };
-    value
-}
-fn options(value: &Value) -> CreateOptions {
-    let mut options = CreateOptions::default();
-    if let Some(v) = value.get("classNamePrefix").and_then(Value::as_str) {
-        options.class_name_prefix = v.to_owned();
-    }
-    if let Some(v) = value.get("styleResolution").and_then(Value::as_str) {
-        options.style_resolution = v.to_owned();
-    }
-    if let Some(v) = value.get("propertyValidationMode").and_then(Value::as_str) {
-        options.property_validation_mode = v.to_owned();
-    }
-    options.debug = value
-        .get("debug")
-        .and_then(Value::as_bool)
-        .unwrap_or_else(|| value.get("dev").and_then(Value::as_bool).unwrap_or(false));
-    for (key, field) in [
-        ("enableMinifiedKeys", &mut options.enable_minified_keys),
-        (
-            "enableFontSizePxToRem",
-            &mut options.enable_font_size_px_to_rem,
-        ),
-        (
-            "enableMediaQueryOrder",
-            &mut options.enable_media_query_order,
-        ),
-        (
-            "enableLogicalStylesPolyfill",
-            &mut options.enable_logical_styles_polyfill,
-        ),
-        (
-            "enableLegacyValueFlipping",
-            &mut options.enable_legacy_value_flipping,
-        ),
-    ] {
-        if let Some(value) = value.get(key).and_then(Value::as_bool) {
-            *field = value;
-        }
-    }
-    options
-}
-fn compiled_json(result: CompiledCreateResult) -> Value {
-    let namespaces = result
-        .namespaces
-        .iter()
-        .map(|ns| {
-            let mut fields: Vec<Value> = ns
-                .properties
-                .iter()
-                .map(|p| json!([p.name, p.value]))
-                .collect();
-            fields.push(json!(["$$css", true]));
-            json!([ns.name, fields])
-        })
-        .collect::<Vec<_>>();
-    let mut value = json!({"value":namespaces,"rules":result.rules});
-    if !result.warnings.is_empty() {
-        value["warnings"] = json!(result.warnings);
-    }
-    value
-}
 fn js_json_equal(a: &Value, b: &Value) -> bool {
     match (a, b) {
         // JavaScript/Jest has one IEEE754 Number type; JSON's integer versus
@@ -207,85 +146,236 @@ fn js_json_equal(a: &Value, b: &Value) -> bool {
         _ => a == b,
     }
 }
-fn compare_create(cases: Vec<(Value, Value)>) {
-    let requests = cases
-        .iter()
-        .map(|(value, options)| json!({"op":"create","value":value,"options":options}))
-        .collect::<Vec<_>>();
-    for ((styles, opts), expected) in cases.into_iter().zip(oracle(&requests)) {
-        let actual = compile_stylex_create(&object(&styles), Some(&options(&opts)));
-        if let Some(error) = expected.get("error") {
-            assert_eq!(
-                actual.unwrap_err(),
-                error.as_str().unwrap(),
-                "{styles} {opts}"
-            );
+fn compare_requests(requests: Vec<Value>) {
+    let expected = oracle(&requests);
+    let mut outputs = Vec::with_capacity(requests.len());
+    let mut readers = Vec::with_capacity(requests.len());
+    for request in &requests {
+        let filename = request["filename"]
+            .as_str()
+            .unwrap_or("/tmp/stylex-core-oracle/tokens.stylex.js");
+        let opts = request["options"].as_object().cloned().unwrap_or_default();
+        let mut defaults = serde_json::Map::from_iter([
+            (
+                "unstable_moduleResolution".to_owned(),
+                json!({"type":"haste"}),
+            ),
+            ("enableDebugDataProp".to_owned(), json!(false)),
+            ("enableDevClassNames".to_owned(), json!(false)),
+        ]);
+        defaults.extend(opts);
+        let options: StyleXTransformOptions =
+            serde_json::from_value(Value::Object(defaults)).unwrap();
+        let source = if let Some(source) = request["source"].as_str() {
+            source.to_owned()
         } else {
-            let actual = compiled_json(actual.unwrap());
-            assert!(
-                js_json_equal(&actual, &expected),
-                "style input: {styles}\noptions: {opts}\nactual: {actual}\nexpected: {expected}"
-            );
+            let expression = if request["op"] == "createTheme" {
+                format!(
+                    "stylex.createTheme({},{})",
+                    request["base"], request["value"]
+                )
+            } else {
+                format!(
+                    "stylex.{}({})",
+                    request["op"].as_str().unwrap(),
+                    request["value"]
+                )
+            };
+            format!(
+                "import * as stylex from \"@stylexjs/stylex\"; export const output = {expression};"
+            )
+        };
+        let result = transform_source(&source, filename, &options);
+        readers.push(match &result {
+            Ok(output)=>json!({"op":"readGenerated","code":output.code,"filename":filename}),
+            Err(_)=>json!({"op":"readGenerated","code":"export const output = null;","filename":filename}),
+        });
+        outputs.push(result);
+    }
+    let read = oracle(&readers);
+    for (((request, expected), output), read) in
+        requests.into_iter().zip(expected).zip(outputs).zip(read)
+    {
+        match (expected.get("error"), output) {
+            (Some(expected), Err(error)) => {
+                let first = error.to_string();
+                let first = first.lines().next().unwrap_or("");
+                let actual = first
+                    .strip_prefix(&format!(
+                        "{}: ",
+                        request["filename"]
+                            .as_str()
+                            .unwrap_or("/tmp/stylex-core-oracle/tokens.stylex.js")
+                    ))
+                    .unwrap_or(first);
+                assert_eq!(actual, expected.as_str().unwrap(), "request: {request}");
+            }
+            (None, Ok(output)) => {
+                assert!(
+                    read.get("error").is_none(),
+                    "native output could not be read: {read}\n{}",
+                    output.code
+                );
+                let mut actual = json!({"value":read["value"],"rules":output.metadata_stylex});
+                if !output.warnings.is_empty() {
+                    actual["warnings"] = json!(output.warnings);
+                }
+                assert!(
+                    js_json_equal(&actual, &expected),
+                    "request: {request}\nactual: {actual}\nexpected: {expected}\ncode: {}",
+                    output.code
+                );
+            }
+            (expected, actual) => panic!(
+                "accept/reject mismatch request={request} expected={expected:?} actual={actual:?}"
+            ),
         }
     }
 }
+fn compare_create(cases: Vec<(Value, Value)>) {
+    compare_requests(
+        cases
+            .into_iter()
+            .map(|(value, options)| json!({"op":"create","value":value,"options":options}))
+            .collect(),
+    );
+}
 
 #[test]
-fn original_class_paths_are_exported_without_reconstruction() {
-    let styles = json!({"main":{"color":{"default":"red",":hover":"blue"},"paddingBlockStart":{"default":2,"@media (min-width: 600px)":4}},"pseudo":{":hover":{"marginStart":4},"@supports (color: red)":{"marginBlockEnd":6}}});
-    let opts = json!({"enableMediaQueryOrder":false});
-    let expected = oracle(&[json!({"op":"classPaths","value":styles,"options":opts})]).remove(0);
-    let result = compile_stylex_create(&object(&styles), Some(&options(&opts))).unwrap();
-    let paths = result
-        .namespaces
-        .into_iter()
-        .map(|ns| {
-            json!([
-                ns.name,
-                ns.class_paths
-                    .into_iter()
-                    .map(|(class, path)| json!([class, path]))
-                    .collect::<Vec<_>>()
-            ])
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(json!({"value":paths}), expected);
-    assert_eq!(get_number_suffix("opacity"), "");
-    assert_eq!(get_number_suffix("animationDuration"), "ms");
-    assert!(is_length_property("width"));
-    assert_eq!(dynamic_number_suffix("width"), "px");
-    assert_eq!(dynamic_number_suffix("unknownProperty"), "");
-    assert_eq!(dynamic_number_suffix("tabSize"), "");
-    let expanded = preprocess_property(
-        "padding",
-        &StyleValue::String("p0".to_owned()),
-        &CreateOptions {
-            style_resolution: "legacy-expand-shorthands".to_owned(),
-            ..Default::default()
-        },
-    )
-    .unwrap();
+fn process_rules_matches_reference_behavior_for_constants_and_layers() {
+    // Retained from the old core module's automatically included smoke test;
+    // exercise only the surviving public batch processor and live Babel oracle.
+    let rules: Vec<RuleEntry> = serde_json::from_value(json!([
+        ["constColor",{"ltr":"","rtl":null,"constKey":"constColor","constVal":"var(--brand-color)"},0],
+        ["brand-color",{"ltr":"","rtl":null,"constKey":"brand-color","constVal":"#123456"},0],
+        ["alpha",{"ltr":".alpha{color:var(--constColor)}","rtl":"@media print{.alpha{color:var(--constColor)}}"},3000],
+    ])).unwrap();
+    let options = json!({"useLayers":{"before":["reset"],"after":["utilities"],"prefix":"stylex"},"enableLTRRTLComments":true});
+    let expected = oracle(&[json!({"op":"process","rules":rules,"options":options})]).remove(0);
+    let options = serde_json::from_value(options).unwrap();
     assert_eq!(
-        expanded
-            .iter()
-            .map(|(key, _)| key.as_str())
-            .collect::<Vec<_>>(),
-        vec![
-            "paddingTop",
-            "paddingInlineEnd",
-            "paddingBottom",
-            "paddingInlineStart"
-        ]
+        process_stylex_rules_checked(&rules, Some(&options)).unwrap(),
+        expected["value"].as_str().unwrap()
     );
-    let frames = object(&json!({"0%":{"opacity":0}}));
-    let (_name, _rule, warnings) = compile_keyframes_with_diagnostics(&frames, None).unwrap();
-    assert!(warnings.is_empty());
-    let position = object(&json!({"top":2}));
-    let (_name, _rule, warnings) = compile_position_try_with_diagnostics(&position, None).unwrap();
-    assert!(warnings.is_empty());
-    let view = object(&json!({"old":{"opacity":0}}));
-    let (_result, warnings) = compile_view_transition_class_with_diagnostics(&view, None).unwrap();
-    assert!(warnings.is_empty());
+}
+
+#[test]
+fn dynamic_class_paths_and_units_are_preserved_by_whole_transform() {
+    let styles = json!({"main":{"color":{"default":"red",":hover":"blue"},"paddingBlockStart":{"default":2,"@media (min-width: 600px)":4}},"pseudo":{":hover":{"marginStart":4},"@supports (color: red)":{"marginBlockEnd":6}}});
+    compare_create(vec![(styles, json!({"enableMediaQueryOrder":false}))]);
+    let source = r#"import * as stylex from '@stylexjs/stylex';
+      export const output=stylex.create({dynamic:(v)=>({opacity:v,animationDuration:v,width:v,unknownProperty:v,tabSize:v,
+        color:{default:v,':hover':v},paddingBlockStart:{default:v,'@media (min-width: 600px)':v}})});"#;
+    compare_requests(vec![
+        json!({"op":"create","source":source,"options":{"enableMediaQueryOrder":false}}),
+    ]);
+    compare_create(vec![(
+        json!({"main":{"padding":"p0"}}),
+        json!({"styleResolution":"legacy-expand-shorthands"}),
+    )]);
+    compare_animation("keyframes", vec![(json!({"0%":{"opacity":0}}), json!({}))]);
+    compare_animation("positionTry", vec![(json!({"top":2}), json!({}))]);
+    compare_animation(
+        "viewTransitionClass",
+        vec![(json!({"old":{"opacity":0}}), json!({}))],
+    );
+}
+
+#[test]
+fn legacy_rtl_color_function_dividers_are_serialized_once() {
+    // Regression source: round-5 seed 0x5a17c3, CSS fuzz cases 289/308/518/
+    // 571/679/799/872/892/909/1082/1097/1208/1238. All had identical hashes,
+    // LTR CSS and priorities; nested RGB slash spacing differed only in RTL.
+    let cases = [
+        (
+            json!({"a":{"boxShadow":{"default":"rgb(20 40 60 / 0.5)",":focus-visible":["red","blue"],"@container (width > 30rem)":1e21},"padding":0.25}}),
+            "property-specificity",
+        ),
+        (
+            json!({"a":{"boxShadow":{"default":["var(--x)","red"],"@container (width > 30rem)":"rgb(20 40 60 / 0.5)","@media (prefers-color-scheme: dark)":"\"\\ud800\""},"padding":1e21}}),
+            "property-specificity",
+        ),
+        (
+            json!({"a":{"padding":"url(\"a,b\\\\c\")","textShadow":"rgb(20 40 60 / 0.5)"}}),
+            "property-specificity",
+        ),
+        (
+            json!({"a":{"textShadow":{"default":["red","blue"],":focus-visible":"rgb(20 40 60 / 0.5)"}}}),
+            "property-specificity",
+        ),
+        (
+            json!({"a":{"boxShadow":"rgb(20 40 60 / 0.5)","width":"inset 1px 2px/3px red"}}),
+            "application-order",
+        ),
+        (
+            json!({"a":{"textShadow":{"default":"rgb(20 40 60 / 0.5)",":hover":"1px,2px","@media (width >= 400px)":"é😀"},"height":"rgb(20 40 60 / 0.5)"}}),
+            "application-order",
+        ),
+        (
+            json!({"a":{"boxShadow":"rgb(20 40 60 / 0.5)","borderInlineStartColor":"rgb(20 40 60 / 0.5)"}}),
+            "application-order",
+        ),
+        (
+            json!({"a":{"boxShadow":"rgb(20 40 60 / 0.5)","lineHeight":"inset 1px 2px/3px red"}}),
+            "application-order",
+        ),
+        (
+            json!({"a":{"textShadow":{"default":"rgb(20 40 60 / 0.5)","@media (prefers-color-scheme: dark)":-1,":hover":["red","blue"]},"boxShadow":-1}}),
+            "application-order",
+        ),
+        (
+            json!({"a":{"boxShadow":"rgb(20 40 60 / 0.5)","--token":"calc(100%/3)"}}),
+            "property-specificity",
+        ),
+        (
+            json!({"a":{"fontSize":1e-7,"textShadow":"rgb(20 40 60 / 0.5)"}}),
+            "property-specificity",
+        ),
+        (
+            json!({"a":{"boxShadow":{"default":"url(\"a,b\\\\c\")","@media (prefers-color-scheme: dark)":"rgb(20 40 60 / 0.5)"},"--token":-1}}),
+            "application-order",
+        ),
+        (
+            json!({"a":{"boxShadow":{"default":"inset 1px 2px/3px red",":focus-visible":[1,2],"@container (width > 30rem)":"rgb(20 40 60 / 0.5)"},"fontSize":"inset 1px 2px/3px red"}}),
+            "application-order",
+        ),
+    ];
+    compare_create(
+        cases
+            .into_iter()
+            .map(|(style, resolution)| {
+                (
+                    style,
+                    json!({"styleResolution":resolution,"enableLegacyValueFlipping":true}),
+                )
+            })
+            .collect(),
+    );
+}
+
+#[test]
+fn shadow_reserialization_keeps_nested_dividers_calc_strings_and_urls() {
+    let values = [
+        "rgb(20 40 60 / 0.5)",
+        "rgb(20 40 60/0.5)",
+        "rgb(20 40 60 /0.5)",
+        "rgb(20 40 60/ 0.5)",
+        "rgb(20 40 60 / .5) 1px 2px",
+        "1px 2px rgb(20 40 60 / .5)",
+        "1px 2px hsl(20 40% 60% / .5), inset -3px 4px rgb(20 40 60 / .5)",
+        "1px 2px rgb(20, 40, 60)",
+        "1px 2px fn(a: b / c)",
+        "1px 2px calc(100%/3)",
+        "1px 2px fn(calc(100%/3) / 2)",
+        "1px 2px ' / : , ' url(\"a,b / c:d\\\\e\")",
+    ];
+    compare_create(values.into_iter().flat_map(|value| {
+        ["boxShadow", "textShadow"].into_iter().flat_map(move |key| {
+            ["property-specificity", "application-order", "legacy-expand-shorthands"].into_iter().map(move |resolution| {
+                (json!({"a":{key:value}}), json!({"styleResolution":resolution,"enableLegacyValueFlipping":true,"enableLogicalStylesPolyfill":true}))
+            })
+        })
+    }).collect());
 }
 
 #[test]
@@ -426,10 +516,10 @@ fn legacy_resolution_uses_complete_source_table() {
 
 #[test]
 fn current_defaults_hashes_and_key_order() {
-    assert_eq!(
-        CreateOptions::default().style_resolution,
-        "property-specificity"
-    );
+    compare_create(vec![(
+        json!({"main":{"padding":8,"paddingLeft":2}}),
+        json!({}),
+    )]);
     let texts = [
         "",
         "ASCII",
@@ -442,17 +532,21 @@ fn current_defaults_hashes_and_key_order() {
         "--é.😀",
         "ééééé",
     ];
-    let requests = texts
-        .iter()
-        .map(|value| json!({"op":"hash","value":value}))
-        .collect::<Vec<_>>();
-    for (input, expected) in texts.iter().zip(oracle(&requests)) {
-        assert_eq!(
-            hash_public(input),
-            expected["value"].as_str().unwrap(),
-            "{input:?}"
-        );
-    }
+    // Each original UTF-16 hash input now crosses the real compiler rather than
+    // an unexported hash helper. Preserve empty content and Unicode value/key
+    // hashing, including astral characters and low-byte collision witnesses.
+    compare_create(
+        texts
+            .iter()
+            .map(|input| (json!({"main":{"content":input}}), json!({})))
+            .collect(),
+    );
+    compare_requests(
+        texts
+            .iter()
+            .map(|input| json!({"op":"defineConsts","value":{*input:"literal"},"options":{}}))
+            .collect(),
+    );
     compare_create(vec![
         (
             json!({"01":{"opacity":1},"2":{"opacity":0.5},"4294967295":{"opacity":0.25},"0":{"opacity":0},"one":{"color":"red"}}),
@@ -471,22 +565,15 @@ fn current_defaults_hashes_and_key_order() {
 
 #[test]
 fn full_application_cancellation_and_alias_table() {
-    let table = oracle(&[json!({"op":"expansions","resolution":"application-order"})]).remove(0)
-        ["value"]
-        .clone();
+    let table =
+        oracle(&[json!({"op":"expansions","resolution":"application-order"})]).remove(0)["value"]
+            .clone();
     let mut cases = Vec::new();
     for (key, pairs) in table.as_object().unwrap() {
         if let Some(pairs) = pairs.as_array() {
-            let slots = pairs
-                .iter()
-                .skip(1)
-                .map(|p| p[0].as_str().unwrap())
-                .collect::<Vec<_>>();
-            assert_eq!(shorthand_cancellations(key), slots, "{key}");
-            assert_eq!(
-                canonical_property_name(key),
-                pairs[0][0].as_str().unwrap(),
-                "{key}"
+            assert!(
+                !pairs.is_empty(),
+                "source expansion must have a value slot: {key}"
             );
         }
         cases.push((
@@ -758,40 +845,12 @@ fn responsive_cancellation_uses_input_order_and_media_types() {
 }
 
 fn compare_animation(op: &str, cases: Vec<(Value, Value)>) {
-    let requests = cases
-        .iter()
-        .map(|(value, options)| json!({"op":op,"value":value,"options":options}))
-        .collect::<Vec<_>>();
-    for ((value, opts), expected) in cases.into_iter().zip(oracle(&requests)) {
-        let options = options(&opts);
-        let (value_out, rules, warnings) = match op {
-            "keyframes" => {
-                let (name, rule, warnings) =
-                    compile_keyframes_with_diagnostics(&object(&value), Some(&options)).unwrap();
-                (name, vec![rule], warnings)
-            }
-            "positionTry" => {
-                let (name, rule, warnings) =
-                    compile_position_try_with_diagnostics(&object(&value), Some(&options)).unwrap();
-                (name, vec![rule], warnings)
-            }
-            "viewTransitionClass" => {
-                let (result, warnings) =
-                    compile_view_transition_class_with_diagnostics(&object(&value), Some(&options))
-                        .unwrap();
-                (result.value, result.rules, warnings)
-            }
-            _ => unreachable!(),
-        };
-        let mut actual = json!({"value":value_out,"rules":rules});
-        if !warnings.is_empty() {
-            actual["warnings"] = json!(warnings);
-        }
-        assert!(
-            js_json_equal(&actual, &expected),
-            "{op} {value} {opts}\nactual: {actual}\nexpected: {expected}"
-        );
-    }
+    compare_requests(
+        cases
+            .into_iter()
+            .map(|(value, options)| json!({"op":op,"value":value,"options":options}))
+            .collect(),
+    );
 }
 #[test]
 fn animations_and_position_try_share_current_value_contracts() {
@@ -936,60 +995,21 @@ fn constant_cycles_return_errors_not_success() {
 #[test]
 fn canonical_constant_ids_collisions_and_theme_ordering() {
     let constants = json!({"aĀ":1,"aȀ":2,"--Case":3,"é😀":"literal"});
-    let opts = json!({"debug":true});
-    let expected =
-        oracle(&[json!({"op":"defineConsts","value":constants,"options":opts})]).remove(0);
-    let result = compile_define_consts_with_export_id(
-        &object(&constants),
-        "tokens.stylex.js//output",
-        Some(&options(&opts)),
-    )
-    .unwrap();
-    let fields = result
-        .values
-        .into_iter()
-        .map(|(k, v)| json!([k, v]))
-        .collect::<Vec<_>>();
-    let actual = json!({"value":fields,"rules":result.rules});
-    assert!(
-        js_json_equal(&actual, &expected),
-        "actual: {actual}\nexpected: {expected}"
-    );
     let base = json!({"a😀":"var(--x1)","a\u{e000}":"var(--x2)","__varGroupHash__":"xbase"});
     let overrides =
         json!({"a\u{e000}":"second","a😀":{"default":"first","@media (min-width: 500px)":"wide"}});
-    let expected =
-        oracle(&[json!({"op":"createTheme","base":base,"value":overrides,"options":{}})]).remove(0);
-    let result = compile_create_theme(&object(&base), &object(&overrides), None).unwrap();
-    let fields = result
-        .value
-        .into_iter()
-        .map(|(k, v)| json!([k, v]))
-        .collect::<Vec<_>>();
-    let actual = json!({"value":fields,"rules":result.rules});
-    assert!(
-        js_json_equal(&actual, &expected),
-        "actual: {actual}\nexpected: {expected}"
-    );
+    compare_requests(vec![
+        json!({"op":"defineConsts","value":constants,"options":{"debug":true}}),
+        json!({"op":"createTheme","base":base,"value":overrides,"options":{}}),
+    ]);
 }
 
 #[test]
 fn variable_numbers_remain_verbatim_not_style_normalized() {
     let vars = json!({"amount":0.123456789,"negative":-0.123456789,"raw":" 0px 500ms ","--Custom":1.23456789});
-    let expected =
-        oracle(&[json!({"op":"defineVars","value":vars,"options":{"debug":true}})]).remove(0);
-    let result = compile_define_vars(
-        &object(&vars),
-        "tokens.stylex.js//output",
-        Some(&options(&json!({"debug":true}))),
-    )
-    .unwrap();
-    let fields = result
-        .values
-        .into_iter()
-        .map(|(k, v)| json!([k, v]))
-        .collect::<Vec<_>>();
-    assert_eq!(json!({"value":fields,"rules":result.rules}), expected);
+    compare_requests(vec![
+        json!({"op":"defineVars","value":vars,"options":{"debug":true}}),
+    ]);
 }
 
 #[test]

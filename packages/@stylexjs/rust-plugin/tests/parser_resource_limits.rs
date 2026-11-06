@@ -5,10 +5,10 @@ use parser_limits::{
     syntax_for_filename, with_bounded_file_parser, MAX_RECURSIVE_DEPTH, MAX_STATEMENT_DEPTH,
     MAX_SYNTAX_COMPLEXITY,
 };
-use swc_common::{FileName, Globals, Mark, SourceMap, GLOBALS};
-use swc_ecma_ast::{EsVersion, Module, ModuleItem, Program};
+use swc_core::common::{FileName, Globals, Mark, SourceMap, GLOBALS};
+use swc_core::ecma::ast::{EsVersion, Module, ModuleItem, Program};
+use swc_core::ecma::visit::{Visit, VisitWith};
 use swc_ecma_parser::with_file_parser;
-use swc_ecma_visit::{Visit, VisitWith};
 
 const DRIVER_STACK: usize = 512 * 1024 * 1024;
 
@@ -91,9 +91,12 @@ fn assert_accepted_and_walked(source: &str, filename: &str) {
     );
     let mut program = Program::Module(actual.clone());
     GLOBALS.set(&Globals::new(), || {
-        let mut resolver =
-            swc_ecma_transforms_base::resolver(Mark::new(), Mark::new(), filename.ends_with(".ts"));
-        swc_ecma_ast::Pass::process(&mut resolver, &mut program);
+        let mut resolver = swc_core::ecma::transforms::base::resolver(
+            Mark::new(),
+            Mark::new(),
+            filename.ends_with(".ts"),
+        );
+        swc_core::ecma::ast::Pass::process(&mut resolver, &mut program);
     });
     struct Walk;
     impl Visit for Walk {}

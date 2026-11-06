@@ -188,26 +188,21 @@ fn a_live_operand_deeper_than_the_ceiling_still_refuses() {
   );
 }
 
-/// A dead operand nested past what a stack can be claimed for at all.
-///
-/// The claim is sized from the text, so text that would outgrow the largest
-/// claim the compiler will make is the one case measuring cannot answer. It
-/// refuses, in a sentence about nested expressions rather than the depth
-/// ceiling's one about levels of evaluation — the two count different things and
-/// this is the one the author can act on. The reference implementation aborts
-/// with `Maximum call stack size exceeded` on the same input, and a diagnostic is
-/// the better of the two answers.
-///
-/// On a thread large enough to parse and to drop a tree that deep, since both
-/// happen before the fold is asked anything and neither is what this measures.
+/// This defensive root bound keeps whole-tree memo hashing/cloning within the
+/// stack sized by folded_once. The public parser rejects this depth first
+/// (MAX_RECURSIVE_DEPTH is 1024), so the case only reaches the core test harness.
+/// Node with a 16 MiB parsing stack returns a-false, but that does not waive this
+/// core safety bound. The public-parser and live-depth controls stay separate.
 #[test]
-fn a_dead_operand_past_the_largest_claim_refuses() {
+fn a_dead_operand_past_the_root_nesting_bound_refuses() {
   on_a_thread_of(LARGE_THREAD, || {
     let deep = nested_literal(DEEPEST_CARRIED + 1);
-
-    assert_deopt_reason_contains(
-      &format!("['a', false && {}].join('-')", deep),
-      "nested too deeply",
+    let result = evaluate_source(&format!("['a', false && {}].join('-')", deep));
+    assert!(!result.confident);
+    assert!(result.value.is_none());
+    assert_eq!(
+      result.reason.as_deref(),
+      Some("Static evaluation exceeded its resource limit.")
     );
   });
 }
@@ -242,17 +237,25 @@ fn a_guard_the_walk_cannot_read_still_walks_both_sides() {
 /// answer for that spelling would be a different binding entirely. Both sides
 /// are walked, and the refusal on the arm a module read would have dropped
 /// stands.
+///
+/// The callback has run when its body refuses, so the refusal arrives as a
+/// throw rather than a deopt: the reference implementation folds the arrow into
+/// a closure, `.map` calls it, the live side reads the blocked `constructor`
+/// (BLOCKED_PROPERTY_ACCESS, `lib/index.js:6209` and `:6579-6581`), and the
+/// closure throws that sentence out of `lib/index.js:6451` (executed for both
+/// rows). This compiler reproduces the throw at the invocation boundary
+/// (`native_call.rs`). One case per row, because each is a throw.
 #[test]
+#[should_panic(expected = "Access to this property is not allowed during compilation.")]
 fn a_short_circuit_inside_a_callback_walks_both_sides() {
-  assert_deopt_reason_contains(
-    "[1, 2].map(x => x && 'x'.constructor).join('')",
-    "constructor",
-  );
+  evaluate_source("[1, 2].map(x => x && 'x'.constructor).join('')");
+}
 
-  assert_deopt_reason_contains(
-    "[1, 2].map(x => (x ? 'x'.constructor : 'b')).join('')",
-    "constructor",
-  );
+/// The same throw through a conditional's live arm.
+#[test]
+#[should_panic(expected = "Access to this property is not allowed during compilation.")]
+fn a_conditional_inside_a_callback_walks_both_sides() {
+  evaluate_source("[1, 2].map(x => (x ? 'x'.constructor : 'b')).join('')");
 }
 
 /// And the values a callback's own short circuit produces are the language's,

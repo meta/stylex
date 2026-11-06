@@ -91,13 +91,96 @@ fn a_trailing_comma_is_not_a_hole() {
   assert_folds_to_slots("[\"a\", \"b\", \"c\",]", 3);
 }
 
-/// A spread is refused ahead of the operand it spreads, so an array carrying
-/// both a spread and a hole reads whichever comes first -- the refusals are
-/// ordered by position, not ranked.
+/// A hole is what stops an array, wherever a resolved spread sits beside it.
+///
+/// A spread the evaluator resolves contributes its operand's own elements and
+/// refuses nothing -- a string spreads by code point, an array by element --
+/// so the hole is the only refusal left in each of these, whichever side of it
+/// the spread was written on. `node` gives `["a","b",null]` for the second row
+/// and `[null,"a","b"]` for the first, the `null`s being how JSON renders a
+/// hole; this compiler refuses the hole rather than answering one, which is
+/// the guard `array_hole_tests` exists for and is unchanged.
+///
+/// Both strings were `SPREAD_ELEMENT` when no spread resolved. The sentence
+/// moves to the hole's because the hole is now what the walk trips on; the
+/// refusal itself does not move.
 #[test]
-fn a_spread_and_a_hole_are_refused_in_the_order_they_are_written() {
-  assert_deopt_reason_is("[, ...[1]]", PATH_WITHOUT_NODE);
-  assert_deopt_reason_is("[...[1], ,]", SPREAD_ELEMENT);
+fn a_hole_refuses_an_array_whatever_spread_sits_beside_it() {
+  assert_deopt_reason_is("[, ...\"ab\"]", PATH_WITHOUT_NODE);
+  assert_deopt_reason_is("[...\"ab\", ,]", PATH_WITHOUT_NODE);
+  assert_deopt_reason_is("[...[1], ,]", PATH_WITHOUT_NODE);
+}
+
+/// And the operand a spread still cannot resolve is still refused as a spread,
+/// which is what keeps the sentence above a statement about the hole.
+#[test]
+fn a_spread_the_evaluator_cannot_resolve_still_refuses_as_a_spread() {
+  assert_deopt_reason_is("[...1]", SPREAD_ELEMENT);
+  assert_deopt_reason_is("[...{ a: 1 }]", SPREAD_ELEMENT);
+}
+
+// ============ a hole after a spread the evaluator does resolve ============
+
+/// **What a literal hole is in the language, written down so the refusals
+/// below are measured against it.**
+///
+/// A hole is not `undefined`. The two part company at four of the six reads
+/// `node` answers for `[..."ab", ,]`, and a compiler that modelled a hole as
+/// `undefined` would be wrong at each of them:
+///
+/// | read | `node` | an `undefined` in the slot |
+/// |---|---|---|
+/// | `.length` | `3` | `3` -- agrees |
+/// | `2 in it` | `false` | `true` |
+/// | `Object.keys` | `["0", "1"]` | `["0", "1", "2"]` |
+/// | `.map` callback runs | twice | three times |
+/// | `[2]` | `undefined` | `undefined` -- agrees |
+/// | `.join("-")` | `"a-b-"` | `"a-b-"` -- agrees |
+///
+/// The two reads that agree are what make this dangerous: an index read and a
+/// join both answer correctly for the wrong model, so a compiler can look
+/// right at the places most often tested and be wrong at `in`, at the own
+/// keys, and at how many times a callback ran.
+///
+/// This evaluator does not model a literal hole. The constructed-array carrier
+/// does, which is a different shape reached a different way. So every read
+/// below must **fail closed** -- refuse, and answer no value -- rather than
+/// fold whichever of the six happens to be easy. The cases after this one
+/// assert exactly that, and they are negative guards: each fails if a partial
+/// or wrong value is ever accepted in place of the refusal.
+#[test]
+fn a_hole_after_a_resolved_spread_is_refused_rather_than_modelled() {
+  // The array itself, in the sentence the hole's own refusal carries.
+  assert_deopt_reason_is("[...\"ab\", ,]", PATH_WITHOUT_NODE);
+
+  // And every read off it. Asserted as refusals rather than by sentence: more
+  // than one rule can answer first here -- the hole's, and the spread's where
+  // the count is read off the source -- and which one gets there is not what
+  // these rows are about. What they are about is that none of them answers a
+  // value.
+  for source in [
+    "[...\"ab\", ,].length",
+    "[...\"ab\", ,][0]",
+    "[...\"ab\", ,][2]",
+    "[...\"ab\", ,].join(\"-\")",
+    "[...\"ab\", ,].map((each) => each).join(\"-\")",
+    "Object.keys([...\"ab\", ,]).join(\"-\")",
+  ] {
+    assert_deopts(source);
+  }
+}
+
+/// The control the refusals above are measured against: the same spread with
+/// no hole in it folds, and folds to what the language iterates.
+///
+/// Without this row the case above would pass on an evaluator that refused
+/// every spread, which is the behaviour the extension replaced. `node`:
+/// `[..."ab"]` is `["a", "b"]`, length two, own keys `["0", "1"]`.
+#[test]
+fn the_same_spread_without_a_hole_folds_to_what_the_language_iterates() {
+  assert_folds_to_strings("[...\"ab\"]", &["a", "b"]);
+  assert_folds_to_number("[...\"ab\"].length", 2.0);
+  assert_folds_to_string("[...\"ab\"].join(\"-\")", "a-b");
 }
 
 // ==================== `length` still counts the slots ====================

@@ -307,7 +307,7 @@ mod style_value_parser_at_queries {
 
         assert_eq!(
           with_condition.to_string(),
-          "@media not screen and (min-width: 100px)"
+          "@media print and (min-width: 100px)"
         );
       }
 
@@ -338,35 +338,17 @@ mod style_value_parser_at_queries {
           .parse_to_end("@media not all and (monochrome)")
           .unwrap();
 
+        // Current-main #1888 resolves an impossible media type to NEVER.
         match &parsed.queries {
-          crate::at_queries::media_query::MediaQueryRule::And(and_rules) => {
-            assert_eq!(and_rules.r#type, "and");
-            assert_eq!(and_rules.rules.len(), 2);
-
-            // First rule should be the keyword
-            match &and_rules.rules[0] {
-              crate::at_queries::media_query::MediaQueryRule::MediaKeyword(keyword) => {
-                assert_eq!(keyword.r#type, "media-keyword");
-                assert_eq!(keyword.key, "all");
-                assert!(keyword.not);
-                assert!(!keyword.only);
-              },
-              _ => stylex_panic!("Expected MediaKeyword rule for not all"),
-            }
-
-            // Second rule should be the word rule
-            match &and_rules.rules[1] {
-              crate::at_queries::media_query::MediaQueryRule::WordRule(word_rule) => {
-                assert_eq!(word_rule.r#type, "word-rule");
-                assert_eq!(word_rule.key_value, "monochrome");
-              },
-              _ => stylex_panic!("Expected WordRule for monochrome"),
-            }
+          crate::at_queries::media_query::MediaQueryRule::MediaKeyword(keyword) => {
+            assert_eq!(keyword.key, "all");
+            assert!(keyword.not);
+            assert!(!keyword.only);
           },
-          _ => stylex_panic!("Expected And rule"),
+          other => panic!("Expected NEVER media keyword, got {other:?}"),
         }
 
-        assert_eq!(parsed.to_string(), "@media not all and (monochrome)");
+        assert_eq!(parsed.to_string(), "@media not all");
       }
     }
 
@@ -1410,33 +1392,17 @@ mod style_value_parser_at_queries {
         let input = "@media not all and (monochrome)";
         let parsed = MediaQuery::parser().parse_to_end(input).unwrap();
 
+        // Current-main #1888 resolves an impossible media type to NEVER.
         match &parsed.queries {
-          crate::at_queries::media_query::MediaQueryRule::And(and_rules) => {
-            assert_eq!(and_rules.r#type, "and");
-            assert_eq!(and_rules.rules.len(), 2);
-
-            match &and_rules.rules[0] {
-              crate::at_queries::media_query::MediaQueryRule::MediaKeyword(keyword) => {
-                assert_eq!(keyword.r#type, "media-keyword");
-                assert_eq!(keyword.key, "all");
-                assert!(keyword.not);
-                assert!(!keyword.only);
-              },
-              _ => stylex_panic!("Expected MediaKeyword rule for not all"),
-            }
-
-            match &and_rules.rules[1] {
-              crate::at_queries::media_query::MediaQueryRule::WordRule(word_rule) => {
-                assert_eq!(word_rule.r#type, "word-rule");
-                assert_eq!(word_rule.key_value, "monochrome");
-              },
-              _ => stylex_panic!("Expected WordRule for monochrome"),
-            }
+          crate::at_queries::media_query::MediaQueryRule::MediaKeyword(keyword) => {
+            assert_eq!(keyword.key, "all");
+            assert!(keyword.not);
+            assert!(!keyword.only);
           },
-          _ => stylex_panic!("Expected And rule"),
+          other => panic!("Expected NEVER media keyword, got {other:?}"),
         }
 
-        assert_eq!(parsed.to_string(), "@media not all and (monochrome)");
+        assert_eq!(parsed.to_string(), "@media not all");
       }
 
       #[test]
@@ -1477,7 +1443,7 @@ mod style_value_parser_at_queries {
           _ => stylex_panic!("Expected And rule"),
         }
 
-        assert_eq!(parsed.to_string(), "@media (screen) and (min-width: 400px)");
+        assert_eq!(parsed.to_string(), "@media screen and (min-width: 400px)");
       }
 
       #[test]
@@ -1568,7 +1534,7 @@ mod style_value_parser_at_queries {
 
         assert_eq!(
           parsed.to_string(),
-          "@media (screen) and (device-aspect-ratio: 16 / 9)"
+          "@media screen and (device-aspect-ratio: 16 / 9)"
         );
       }
 
@@ -2074,7 +2040,7 @@ mod style_value_parser_at_queries {
 
         assert_eq!(
           parsed.to_string(),
-          "@media (screen) and (device-aspect-ratio: 16 / 9)"
+          "@media screen and (device-aspect-ratio: 16 / 9)"
         );
       }
 
@@ -2647,7 +2613,7 @@ mod style_value_parser_at_queries {
 
         assert_eq!(
           parsed.to_string(),
-          "@media (color) and (min-width: 400px), (screen) and (max-width: 700px)"
+          "@media (color) and (min-width: 400px), screen and (max-width: 700px)"
         );
       }
     }
@@ -2710,50 +2676,19 @@ mod style_value_parser_at_queries {
         let input = "@media not all and (monochrome) and (min-width: 600px)";
         let parsed = MediaQuery::parser().parse_to_end(input).unwrap();
 
+        // Current-main #1888 resolves an impossible media type to NEVER.
         match &parsed.queries {
-          crate::at_queries::media_query::MediaQueryRule::And(and_rules) => {
-            assert_eq!(and_rules.r#type, "and");
-            assert_eq!(and_rules.rules.len(), 3);
-
-            match &and_rules.rules[0] {
-              crate::at_queries::media_query::MediaQueryRule::MediaKeyword(keyword) => {
-                assert_eq!(keyword.r#type, "media-keyword");
-                assert_eq!(keyword.key, "all");
-                assert!(keyword.not);
-                assert!(!keyword.only);
-              },
-              _ => stylex_panic!("Expected MediaKeyword rule"),
-            }
-
-            match &and_rules.rules[1] {
-              crate::at_queries::media_query::MediaQueryRule::WordRule(word_rule) => {
-                assert_eq!(word_rule.r#type, "word-rule");
-                assert_eq!(word_rule.key_value, "monochrome");
-              },
-              _ => stylex_panic!("Expected WordRule for monochrome"),
-            }
-
-            match &and_rules.rules[2] {
-              crate::at_queries::media_query::MediaQueryRule::Pair(pair) => {
-                assert_eq!(pair.r#type, "pair");
-                assert_eq!(pair.key, "min-width");
-                match &pair.value {
-                  crate::at_queries::media_query::MediaRuleValue::Length(length) => {
-                    assert_eq!(length.value, 600.0);
-                    assert_eq!(length.unit, "px");
-                  },
-                  _ => stylex_panic!("Expected Length value"),
-                }
-              },
-              _ => stylex_panic!("Expected Pair rule"),
-            }
+          crate::at_queries::media_query::MediaQueryRule::MediaKeyword(keyword) => {
+            assert_eq!(keyword.key, "all");
+            assert!(keyword.not);
+            assert!(!keyword.only);
           },
-          _ => stylex_panic!("Expected And rule"),
+          other => panic!("Expected NEVER media keyword, got {other:?}"),
         }
 
         assert_eq!(
           parsed.to_string(),
-          "@media not all and (monochrome) and (min-width: 600px)"
+          "@media not all"
         );
       }
 
@@ -4392,7 +4327,7 @@ mod style_value_parser_at_queries {
 
         assert_eq!(
           parsed.to_string(),
-          "@media (screen) and (min-width: 500px) and (max-width: 800px) and (color)"
+          "@media screen and (min-width: 500px) and (max-width: 800px) and (color)"
         );
       }
     }
@@ -5233,7 +5168,7 @@ mod style_value_parser_at_queries {
         _ => stylex_panic!("Expected And rule"),
       }
 
-      assert_eq!(parsed.to_string(), "@media (screen) and (min-width: 768px)");
+      assert_eq!(parsed.to_string(), "@media screen and (min-width: 768px)");
     }
   }
 
@@ -5383,7 +5318,7 @@ mod style_value_parser_at_queries {
         _ => stylex_panic!("Expected Or rule"),
       }
 
-      assert_eq!(parsed.to_string(), "@media (screen), (print)");
+      assert_eq!(parsed.to_string(), "@media screen, print");
     }
 
     #[test]
@@ -5438,7 +5373,7 @@ mod style_value_parser_at_queries {
 
       assert_eq!(
         parsed.to_string(),
-        "@media (screen) and (min-width: 768px) and (max-width: 1024px)"
+        "@media screen and (min-width: 768px) and (max-width: 1024px)"
       );
     }
   }

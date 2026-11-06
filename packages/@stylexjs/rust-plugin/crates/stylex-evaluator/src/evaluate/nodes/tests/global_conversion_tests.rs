@@ -17,8 +17,7 @@ use stylex_ast::ast::convertors::{
   convert_atom_to_string, convert_key_value_to_str, create_number_expr,
 };
 use stylex_constants::constants::evaluation_errors::{
-  NUMERIC_CONVERSION, SPREAD_ELEMENT, STRING_CONVERSION, unbounded_declared_length,
-  uncoercible_value,
+  NUMERIC_CONVERSION, SPREAD_ELEMENT, STRING_CONVERSION, uncoercible_value,
 };
 use stylex_state::evaluate_result_value::EvaluateResultValue;
 use swc_core::ecma::ast::Expr;
@@ -142,30 +141,48 @@ fn a_global_that_names_no_conversion_is_not_converted() {
   );
 }
 
-/// `Array` of a lone number is a declared length rather than an element, and
-/// this compiler refuses it: the number reaching here was never measured
-/// against the fold's own ceiling, so building the array would allocate on a
-/// count nothing bounded. The usual spelling is folded by the engine, which
-/// applies that ceiling; one reaches here only when the rest of the call
-/// declined.
+/// The accepted native runtime-count extension bounds the evaluated length,
+/// including a count derived from this compiler's namespace value. Node reads
+/// String({}) as "[object Object]", length 15; no static-shape refusal is needed.
 #[test]
-fn the_array_conversion_refuses_a_length_it_cannot_bound() {
+fn the_array_conversion_bounds_an_evaluated_namespace_length() {
   let source = "Array(String(sx).length)";
+  let result = evaluated_against_a_function_fold(source);
+  assert!(result.confident, "{:?}", result.reason);
+  let value = result.value.expect("bounded array value");
+  let data = crate::evaluate::materialize_result(
+    &value,
+    &stylex_state::state_manager::StateManager::default(),
+  )
+    .expect("pure data boundary")
+    .expect("materializable array");
+  let Expr::Array(array) = data else {
+    panic!("expected array data")
+  };
+  assert_eq!(array.elems.len(), 15);
+  assert!(
+    array.elems.iter().all(Option::is_none),
+    "constructor slots stay sparse"
+  );
+  assert!(!evaluated_against_a_function_fold("Array(10001)").confident);
+  assert!(!evaluated_against_a_function_fold("Array(unknownLength)").confident);
+}
+
+/// The numeric conversion refuses a value with no number at all. `{ toString: 1
+/// }` is such a value: neither conversion method is callable, so the language
+/// throws where a number was wanted rather than answering one -- and the
+/// refusal is the language's own sentence. `node` throws `TypeError: Cannot
+/// convert object to primitive value` for `Number({ toString: 1 })`, and the
+/// unchanged reference plugin throws the same message (oracle runs of both).
+#[test]
+fn the_number_conversion_refuses_a_value_with_no_numeric_form() {
+  let source = "Number({ toString: 1 }, own)";
 
   assert_refused_with(
     &evaluated_against_a_function_fold(source),
     source,
-    &unbounded_declared_length("Array"),
+    "Cannot convert object to primitive value",
   );
-}
-
-/// The numeric conversion refuses a value with no number at all, and names the
-/// global the author wrote. `{ toString: 1 }` is such a value: neither
-/// conversion method is callable, so the language throws where a number was
-/// wanted rather than answering one.
-#[test]
-fn the_number_conversion_refuses_a_value_with_no_numeric_form() {
-  assert_refuses_naming("Number({ toString: 1 }, own)", "Number");
 }
 
 /// The string conversion grows its answer against the character ceiling, so an

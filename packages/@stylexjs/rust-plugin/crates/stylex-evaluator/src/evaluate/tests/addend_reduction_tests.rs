@@ -62,10 +62,14 @@ fn an_object_whose_conversion_answers_an_object_writes_the_default_text() {
 }
 
 /// The reduction belongs to `+` alone. `===` compares the two values as they
-/// stand, so an object it cannot compare by reference has no answer here and
-/// the walk deopts -- rather than being handed the `true` a reduced side would
-/// have produced, which is not what the language answers.
+/// stand, so an object is never strictly equal to a number and `valueOf` is
+/// never asked -- the answer is the `false` the types alone give, not the
+/// `true` a reduced side would have produced.
+///
+/// `node` answers `'blue'`, and so does the reference implementation, whose
+/// `===` arm is the language's own operator over the two evaluated sides
+/// (`lib/index.js:6802-6838`, built `@stylexjs/babel-plugin` 0.19.1).
 #[test]
 fn strict_equality_does_not_reduce_its_sides() {
-  assert_deopts("(({ valueOf: () => 1 }) === 1) ? 'red' : 'blue'");
+  assert_folds_to_string("(({ valueOf: () => 1 }) === 1) ? 'red' : 'blue'", "blue");
 }

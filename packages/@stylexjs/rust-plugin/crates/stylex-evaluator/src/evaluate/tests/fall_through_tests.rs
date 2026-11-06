@@ -48,16 +48,21 @@ fn a_claimed_receiver_inside_the_ceiling_still_folds() {
   assert_folds_to_string("'7'.padStart(3, '0')", "007");
 }
 
-/// The two syntax-only refusals answer in front of everything, so a call the
-/// fold would never claim still pays no resolution for them.
+/// The two shapes the optional engine refused on syntax alone.
+///
+/// A locale-dependent method over a name nothing binds still refuses; which
+/// sentence answers is reporting rather than the rule -- the reference
+/// implementation evaluates the receiver under a state of its own and reports
+/// the outer call (`Unsupported expression: CallExpression`; executed), while
+/// this compiler reports the receiver's own refusal.
+///
+/// A method on a written number is an approved native extension: `node`
+/// answers `"1.5"` for `(1.5).toFixed(1)`. The reference implementation calls
+/// `Number.prototype.toFixed` with no receiver bound and throws a `TypeError`
+/// (`lib/index.js:6896-6904`; executed), so the engine-era refusal named a
+/// limitation of neither.
 #[test]
-fn the_syntax_only_refusals_answer_first() {
-  assert_deopt_reason_contains(
-    "nope.toLocaleUpperCase()",
-    "Cannot fold 'toLocaleUpperCase' at compile time.",
-  );
-  assert_deopt_reason_contains(
-    "(1.5).toFixed(1)",
-    "Cannot call 'toFixed' on a number literal.",
-  );
+fn the_engines_syntax_only_shapes_answer_as_the_language_does() {
+  assert_deopts("nope.toLocaleUpperCase()");
+  assert_folds_to_string("(1.5).toFixed(1)", "1.5");
 }

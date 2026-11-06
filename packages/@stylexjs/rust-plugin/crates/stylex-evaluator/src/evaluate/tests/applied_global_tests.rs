@@ -76,7 +76,7 @@ fn a_number_conversion_that_answers_not_a_number_folds() {
         // Spelled, because `NaN` has no numeric literal and the emitter would
         // otherwise write `0 / 0`.
         assert_eq!(number.raw.as_deref(), Some("NaN"), "wrong spelling");
-      },
+      }
       other => panic!("expected `{}` to fold to a number, got {:?}", source, other),
     }
   }
@@ -101,18 +101,15 @@ fn the_array_conversion_folds() {
 /// check is what refuses it.
 #[test]
 fn a_counted_array_folds_to_holes() {
-  match assert_folds_to_a_value("Array(2)") {
-    EvaluateResultValue::Vec(items) => {
-      assert_eq!(items.len(), 2);
-
-      for item in &items {
-        match item {
-          EvaluateResultValue::Expr(Expr::Ident(ident)) => assert_eq!(&*ident.sym, "undefined"),
-          other => panic!("expected a hole to be `undefined`, got {:?}", other),
-        }
-      }
-    },
-    other => panic!("expected `Array(2)` to fold to a list, got {:?}", other),
+  let items = folds_to_a_list("Array(2)");
+  assert_eq!(items.len(), 2);
+  // The shared test reader performs Get/iteration: holes read as undefined.
+  // Sparse materialization itself is pinned separately, without filling slots.
+  for item in &items {
+    match item {
+      EvaluateResultValue::Expr(Expr::Ident(ident)) => assert_eq!(&*ident.sym, "undefined"),
+      other => panic!("expected a hole to be `undefined`, got {:?}", other),
+    }
   }
 }
 
@@ -189,17 +186,36 @@ fn an_argument_the_bridge_cannot_carry_reads_its_own_reason() {
   );
 }
 
-/// A spread reads the sentence every other position gives it: the argument list
-/// is unknowable without the operand's length.
+/// A spread of an array the evaluator folded contributes that array's own
+/// elements, which is what the language does with an argument list (approved
+/// native extension: JavaScript-correct spread). `node` answers `"a"` and
+/// `[1, 2]`; the reference implementation refuses every spread
+/// (`Unsupported expression: SpreadElement`, `lib/index.js:6670-6684`), which
+/// is the one place this compiler deliberately answers more.
+///
+/// The guards beside it stay: a spread of something that is not iterable is a
+/// `TypeError` in the language, and a spread of a name nothing binds has no
+/// elements to contribute, so both refuse.
 #[test]
-fn a_spread_argument_refuses() {
-  assert_deopt_reason_contains("String(...[\"a\"])", "SpreadElement");
-  assert_deopt_reason_contains("Array(...[1, 2])", "SpreadElement");
+fn a_spread_argument_contributes_the_elements_it_spreads() {
+  assert_folds_to_string("String(...[\"a\"])", "a");
+  assert_folds_to_a_value("Array(...[1, 2])");
+  assert_folds_to_string("Array(...[1, 2]).join(\"-\")", "1-2");
+
+  assert_deopts("String(...1)");
+  assert_deopts("String(...unknownThing)");
 }
 
 /// A function's only string form is its source text, and the engine the fold
 /// runs in is built without one — so every conversion that would read one
 /// refuses, and a function that is merely *called* is untouched.
+///
+/// The refusal is the contract and is kept; its sentence was the optional
+/// engine's. `node` answers the arrow's source text (and `NaN` for `Number`),
+/// and the reference implementation answers the source of its own internal
+/// wrapper closure (`lib/index.js:6440-6457`; and `NaN`; executed), none of
+/// which is a value this compiler derives from a function -- so this asserts
+/// the refusal without pinning either compiler's wording.
 #[test]
 fn a_function_has_no_source_text() {
   for source in [
@@ -208,7 +224,7 @@ fn a_function_has_no_source_text() {
     "Number(() => 1)",
     "[() => 1].join(\"-\")",
   ] {
-    assert_deopt_reason_contains(source, "A function has no source text at compile time.");
+    assert_deopts(source);
   }
 
   // Called rather than spelled, which is what an own conversion method is.
@@ -251,18 +267,28 @@ fn a_count_that_is_not_an_array_length_refuses() {
 
 /// A conversion the language itself refuses is reported in the language's own
 /// words, which say more than any sentence this compiler could substitute.
+///
+/// The words are `node`'s: both rows throw `TypeError: Cannot convert object to
+/// primitive value`, and the reference implementation throws the same
+/// `TypeError` out of its `String` call (executed). The lower-case spelling was
+/// the optional engine's.
 #[test]
 fn an_object_with_no_primitive_refuses_in_the_languages_words() {
   for source in [
     "String({ toString: \"notfn\" })",
     "String({ toString: () => ({}) })",
   ] {
-    assert_deopt_reason_contains(source, "cannot convert object to primitive value");
+    assert_deopt_reason_contains(source, "Cannot convert object to primitive value");
   }
 }
 
-/// A primitive boxed by `Object(x)` is not a plain object, so it has no form the
-/// bridge carries back.
+/// A primitive boxed by `Object(x)` is not a plain object, so it is not a value
+/// a style can carry, and the fold refuses it.
+///
+/// The refusal is kept; its sentence was the optional engine's bridge. `node`
+/// and the reference implementation both build the boxed `String`/`Number`/
+/// `Boolean` object (executed), a value the style validators downstream reject,
+/// so neither has a refusal sentence to pin here.
 #[test]
 fn a_boxed_primitive_cannot_cross_back() {
   for source in [
@@ -271,13 +297,15 @@ fn a_boxed_primitive_cannot_cross_back() {
     "Object(true)",
     "Object(NaN)",
   ] {
-    assert_deopt_reason_contains(source, "Cannot carry a folded object back from the engine.");
+    assert_deopts(source);
   }
 
-  assert_deopt_reason_contains(
-    "Object(() => 1)",
-    "Cannot carry a folded function back from the engine.",
-  );
+  // A function is already an object, so `Object` hands the same function back:
+  // `node` and the reference implementation both answer `"function"` for its
+  // `typeof` (executed). The native path carries the function, so this folds;
+  // the engine's "cannot carry a folded function back" refusal is gone with the
+  // engine.
+  assert_folds_to_string("typeof Object(() => 1)", "function");
 }
 
 // ==================== the two conversions, checked against each other ========
@@ -395,8 +423,11 @@ fn the_two_conversions_part_company_only_on_a_function() {
     "the hand-written number conversion must still answer NaN for a function"
   );
 
-  assert_deopt_reason_contains("String(() => 1)", "A function has no source text");
-  assert_deopt_reason_contains("Number(() => 1)", "A function has no source text");
+  // Refused, as `a_function_has_no_source_text` says; the sentence was the
+  // optional engine's and neither the reference implementation nor `node` has
+  // one to pin (both fold a source text, and `NaN` for `Number`).
+  assert_deopts("String(() => 1)");
+  assert_deopts("Number(() => 1)");
 }
 
 // ==================== the extremes ====================
@@ -412,10 +443,7 @@ fn the_two_conversions_part_company_only_on_a_function() {
 /// this long raises `maxFoldedEntries`, which is why the number is an option.
 #[test]
 fn a_count_at_the_bound_folds_and_one_past_it_refuses() {
-  match assert_folds_to_a_value("Array(10000)") {
-    EvaluateResultValue::Vec(items) => assert_eq!(items.len(), 10_000),
-    other => panic!("expected a list of ten thousand, got {:?}", other),
-  }
+  assert_eq!(folds_to_a_list("Array(10000)").len(), 10_000);
 
   for source in ["Array(10001)", "String(Array(10001))"] {
     assert_deopt_reason_contains(
@@ -490,13 +518,33 @@ fn a_conversion_inside_a_callback_folds() {
 ///
 /// `Array([1])` really is one element, so this costs a fold. What it buys is that
 /// no shape of it costs a build, and `[x, x]` above is the spelling that folds.
+///
+/// The static pre-measurement that refused these ran ahead of the optional
+/// engine; the native path bounds what a callback builds at run time instead,
+/// so the two small rows fold to what `node` and the reference implementation
+/// answer (`"1-1"` and `"ab-cd"`; executed). The two rows that motivated the
+/// guard must still refuse, now under the runtime bound -- they are kept beside
+/// this case as the guard's own.
 #[test]
-fn an_unreadable_length_inside_a_callback_refuses() {
-  for source in [
-    "[[1], [2]].map(x => Array(x).length).join(\"-\")",
+fn a_length_inside_a_callback_folds_under_the_runtime_bound() {
+  assert_folds_to_string("[[1], [2]].map(x => Array(x).length).join(\"-\")", "1-1");
+  assert_folds_to_string(
     "[\"ab\", \"cd\"].map(x => Array.from(x).join(\"\")).join(\"-\")",
+    "ab-cd",
+  );
+}
+
+/// The two rows that motivated the engine's static guard still refuse, now
+/// under the runtime bound. Neither has an oracle: `node` and the reference
+/// implementation both build the hundred-million-element array (the oracle run
+/// exhausts a 512 MB heap), which is exactly what the bound exists to stop.
+#[test]
+fn a_length_inside_a_callback_past_the_runtime_bound_refuses() {
+  for source in [
+    "[100000000].map(x => Array(x).fill(0)).length",
+    "[{ length: 100000000 }].map(x => Array.from(x).length).join(\"-\")",
   ] {
-    assert_deopt_reason_contains(source, "would build inside a callback");
+    assert_deopts(source);
   }
 }
 

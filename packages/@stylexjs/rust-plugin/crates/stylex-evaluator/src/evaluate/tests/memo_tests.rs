@@ -51,9 +51,12 @@ fn a_remembered_refusal_refuses_the_second_read() {
 #[test]
 fn a_depth_refusal_leaves_the_subtree_free_to_fold_shallowly() {
   let ceiling = 4;
-  let deep = "[[[['a']]]]";
+  // Primitive leaves cost zero AST levels: four containers are the exact
+  // boundary and the fifth container must still refuse.
+  let deep = "[[[[['a']]]]]";
 
   assert_deopts_with_ceiling(deep, ceiling);
+  assert!(evaluate_source_with_ceiling("[[[['a']]]]", ceiling).confident);
 
   // The same subtree, read from a level the ceiling allows. A refusal recorded
   // against it would refuse this too.

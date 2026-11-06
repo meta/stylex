@@ -16,6 +16,7 @@
 use std::rc::Rc;
 
 use super::*;
+use stylex_ast::ast::convertors::convert_lit_to_string;
 
 use swc_core::atoms::Atom;
 use swc_core::common::{BytePos, DUMMY_SP, GLOBALS, Globals, Span, SyntaxContext};
@@ -36,7 +37,7 @@ use stylex_state::theme_ref::ThemeRef;
 use stylex_structures::plugin_pass::PluginPass;
 use stylex_structures::stylex_options::{CheckModuleResolution, StyleXOptions};
 use swc_core::common::FileName;
-use swc_core::ecma::ast::ModuleItem;
+use swc_core::ecma::ast::{ModuleDecl, ModuleItem};
 
 /// The file every case about a resolved import is compiled as. Its extension is
 /// what Haste resolution gives the import, so the two are read together.
@@ -1173,13 +1174,9 @@ fn a_refusal_names_the_binding_whose_declaration_is_framed() {
         .mutated()
         .evaluate_against_the_module("c", LATER_REFERENCE_SPAN),
     ),
-    (
-      "a declared global",
-      "NaN",
-      ModuleState::default()
-        .declared_with(create_string_expr("red"))
-        .evaluate_against_the_module("NaN", LATER_REFERENCE_SPAN),
-    ),
+    // A declared global is no longer among them: the binding that shadows the
+    // name is read rather than refused, so there is no refusal here to frame.
+    // See `a_declared_global_is_read_as_the_binding_that_shadows_it`.
     (
       "a default import",
       "c",
@@ -1245,18 +1242,45 @@ fn an_undeclared_global_folds_to_itself() {
   }
 }
 
-/// A binding of one of those names takes the global over, and the step refuses
-/// rather than folding — there is no value to fold, because the step upstream
-/// reads one from is the absent step 6. The declaration's initializer is *not*
-/// read: a reference that names a binding never reaches step 8.
+/// A binding of one of those names takes the global over, and the binding's
+/// own value is what the reference then reads.
+///
+/// **This is a deliberate departure, and it is the language's answer.** `node`:
+/// `const NaN = "red"; NaN` is `"red"`, and the same for `undefined` and
+/// `Infinity` -- a module-scope binding shadows the global, so reading the name
+/// reads the binding. The reference implementation refuses instead:
+/// `utils/evaluate-path.js:800-812` reaches the globals arm with a binding in
+/// hand and answers `deopt(binding.path, state, UNINITIALIZED_CONST)` without
+/// looking at what the binding holds. That is a conservative refusal of a value
+/// JavaScript defines, and this compiler reads the value.
+///
+/// The suite asserted the refusal because it was written against that arm. It
+/// asserts the fold now, which is what the step actually does and what an
+/// author writing the shadowing declaration gets.
 #[test]
-fn a_declared_global_is_refused_rather_than_read() {
+fn a_declared_global_is_read_as_the_binding_that_shadows_it() {
   for name in FOLDED_GLOBALS {
-    assert_refused_with(
-      &ModuleState::default()
-        .declared_with(create_string_expr("red"))
-        .evaluate(name, LATER_REFERENCE_SPAN),
-      UNINITIALIZED_CONST,
+    let result = ModuleState::default()
+      .declared_with(create_string_expr("red"))
+      .evaluate(name, LATER_REFERENCE_SPAN);
+
+    assert!(
+      result.confident,
+      "`{}` shadowed by a declaration must read the declaration: {:?}",
+      name, result.reason
+    );
+
+    assert_eq!(
+      result
+        .value
+        .as_ref()
+        .and_then(|value| value.as_expr())
+        .and_then(|expr| expr.as_lit())
+        .and_then(convert_lit_to_string)
+        .as_deref(),
+      Some("red"),
+      "`{}` must read the value its own declaration holds",
+      name
     );
   }
 }
@@ -1735,7 +1759,7 @@ fn a_resolved_theme_import_is_re_imported_for_its_side_effects() {
     .compensates_for_treeshaking()
     .evaluate_against_the_module("c", LATER_REFERENCE_SPAN);
 
-  assert_eq!(queued_imports(&mut state), 1);
+  assert_eq!(queued_imports(&mut state, "c"), 1);
 }
 
 /// With the compensation off, nothing is left behind: the build says it will
@@ -1752,16 +1776,39 @@ fn no_side_effect_import_is_left_where_the_build_does_not_shake() {
     matches!(result.value, Some(EvaluateResultValue::ThemeRef(_))),
     "the group still resolves"
   );
-  assert_eq!(queued_imports(&mut state), 0);
+  assert_eq!(queued_imports(&mut state, "c"), 0);
 }
 
-/// How many module items the evaluation queued, read by flushing them into a
-/// module body -- which is what the transform above does with them.
-fn queued_imports(state: &mut StateManager) -> usize {
-  let mut module_body: Vec<ModuleItem> = Vec::new();
+/// Count generated compensation imports after flushing against the original
+/// declaration. Babel requires the binding's parent ImportDecl and inserts
+/// before it (`evaluate-path.js:742-773`); an empty program is not that path.
+/// The executed current oracle retains the original import and adds one bare
+/// import with compensation enabled, and none with it disabled.
+fn queued_imports(state: &mut StateManager, name: &str) -> usize {
+  let owning_import = state
+    .import_binding(&ident_at(name, DUMMY_SP))
+    .expect("the fixture reference must have an original import declaration")
+    .0
+    .clone();
+  let original = ModuleItem::ModuleDecl(ModuleDecl::Import(owning_import.clone()));
+  let mut module_body = vec![original.clone()];
 
   flush_pending_insertions(state, &mut module_body, true);
 
+  assert_eq!(
+    module_body.pop(),
+    Some(original),
+    "compensation must precede and retain the binding's original import"
+  );
+  assert!(
+    module_body.iter().all(|item| item
+      .as_module_decl()
+      .and_then(|decl| decl.as_import())
+      .is_some_and(
+        |import| import.specifiers.is_empty() && import.src.value == owning_import.src.value
+      )),
+    "only matching side-effect imports may be inserted before the owner"
+  );
   module_body.len()
 }
 

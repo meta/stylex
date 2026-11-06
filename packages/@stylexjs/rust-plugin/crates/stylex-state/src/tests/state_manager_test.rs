@@ -74,10 +74,10 @@ mod state_manager {
           Some(binding) => format!("var:{}", binding.id.sym),
           None => "var:pattern".to_string(),
         }
-      },
+      }
       ModuleItem::ModuleDecl(ModuleDecl::Import(import)) => {
         format!("import:{}", import.src.value.as_str().unwrap_or(""))
-      },
+      }
       _ => "other".to_string(),
     }
   }
@@ -152,6 +152,7 @@ mod state_manager {
       item_labels(&body),
       vec![
         "use strict",
+        "import:theme",
         "import:existing",
         "after_imports",
         "var:styles",

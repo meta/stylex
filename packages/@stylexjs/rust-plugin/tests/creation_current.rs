@@ -1,18 +1,27 @@
 //! Executed differential creation tests against the unchanged current Babel
 //! compiler. Function fixtures below are trusted test callbacks, never strings
 //! from the corpus/options evaluated as JavaScript source.
-#![allow(dead_code, unused_imports)]
-#[path = "../src/core/mod.rs"]
-mod core;
-#[path = "../src/shared/mod.rs"]
-mod shared;
-#[path = "../src/utils/mod.rs"]
-mod utils;
-#[path = "../src/visitors/mod.rs"]
-mod visitors;
+#[path = "creation/host_fixture.rs"]
+mod host_fixture;
 
+// Test adapters only re-export the single public compiler and its diagnostics.
+// Old source/core/evaluator modules are deliberately not compiled here.
+mod shared {
+    pub use stylex_swc_plugin::TransformOutput;
+}
+mod utils {
+    pub use crate::host_fixture::transform_source;
+    pub use stylex_swc_plugin::process_metadata_to_css;
+    pub mod diagnostics {
+        pub use stylex_swc_plugin::diagnostic_from_error as from_error;
+    }
+    pub mod host {
+        pub use crate::host_fixture::call_closure;
+    }
+}
+
+use host_fixture::{with_callback, HostValue};
 use serde_json::{json, Value};
-pub use shared::StyleXTransformOptions;
 use std::{
     cell::RefCell,
     io::Write,
@@ -20,8 +29,8 @@ use std::{
     process::{Command, Stdio},
     rc::Rc,
 };
-use utils::host::{with_callback, HostValue};
-pub use utils::transform_source;
+pub use stylex_swc_plugin::transform_source;
+pub use stylex_swc_plugin::StyleXTransformOptions;
 
 const ORACLE: &str = r#"
 const fs = require('node:fs');
@@ -384,6 +393,45 @@ fn creation_current_static_objects_metadata_order_and_duplicates() {
     ] { differential(source, "/tmp/creation-current/app.js", json!({})); }
 }
 #[test]
+fn creation_current_prototype_namespace_does_not_drop_nested_rules_or_callback_effects() {
+    let filename = "/tmp/creation-current/prototype.js";
+    for key in ["__proto__", "['__proto__']"] {
+        let source=format!("import * as stylex from '@stylexjs/stylex';export const styles=stylex.create({{{key}:{{animationName:stylex.keyframes({{from:{{opacity:0}},to:{{opacity:1}}}})}},root:{{color:'blue'}}}});");
+        let actual = differential(&source, filename, json!({}));
+        assert_eq!(
+            actual.metadata_stylex.len(),
+            2,
+            "nested keyframes survives namespace omission"
+        );
+    }
+    let source="import * as stylex from '@stylexjs/stylex';export const styles=stylex.create({__proto__:stylex.env.styleObject([4,false],{on:true},3),root:{color:stylex.env.zero()}});";
+    let settings = json!({"env":{"styleObject":{"__stylexCallback":"styleObject"},"zero":{"__stylexCallback":"zero"}},"debug":false,"dev":false,"enableDebugDataProp":false,"enableDevClassNames":false});
+    let calls = Rc::new(RefCell::new(Vec::<String>::new()));
+    let observed = calls.clone();
+    let actual = with_callback(
+        Rc::new(move |id, args| {
+            if id == "styleObject" || id == "zero" {
+                observed.borrow_mut().push(id.to_owned());
+            }
+            fixture_host(id, args)
+        }),
+        || utils::transform_source(source, filename, &options(settings.clone())),
+    )
+    .unwrap();
+    assert_eq!(
+        *calls.borrow(),
+        ["styleObject", "zero"],
+        "omission must not skip or reorder evaluation"
+    );
+    let expected = oracle(&[
+        json!({"source":source,"filename":filename,"options":settings,"nativeMetadata":actual.metadata_stylex}),
+        json!({"source":actual.code,"filename":filename,"onlyParse":true}),
+    ]);
+    assert_eq!(expected[0]["nativeMetadata"], expected[0]["metadata"]);
+    assert_eq!(expected[1]["ast"], expected[0]["ast"]);
+}
+
+#[test]
 fn creation_current_dynamic_null_undefined_and_parameter_identity() {
     for source in [
         "import * as stylex from '@stylexjs/stylex'; const width=7; export const styles=stylex.create({root:(width)=>({width})});",
@@ -503,13 +551,25 @@ fn creation_current_dynamic_hoists_preserve_local_runtime_and_type_bindings() {
 #[test]
 fn creation_current_review_diagnostics_match_babel_message_and_exact_range() {
     let import = "import * as stylex from '@stylexjs/stylex';\n";
+    // Native optional member reads are an intentional JS-correct extension.
+    // Executed unchanged Babel (2d42d72 evaluate-path) throws SyntaxError:
+    // "Unsupported expression: OptionalMemberExpression" for this same input.
+    // Compare native to the ordinary-read canonical value, not false parity.
+    let optional=format!("{import}const obj={{color:'red'}}; export const styles=stylex.create({{root:{{color:obj?.color}}}});");
+    let canonical=format!("{import}const obj={{color:'red'}}; export const styles=stylex.create({{root:{{color:obj.color}}}});");
+    let optional=with_callback(Rc::new(fixture_host),||utils::transform_source(&optional,"/tmp/creation-current/optional.js",&options(json!({})))).unwrap_or_else(|error|panic!("{error:#}"));
+    let canonical=with_callback(Rc::new(fixture_host),||utils::transform_source(&canonical,"/tmp/creation-current/optional.js",&options(json!({})))).unwrap_or_else(|error|panic!("{error:#}"));
+    assert_eq!(optional.metadata_stylex,canonical.metadata_stylex,"optional read must retain the canonical value");
+
     let cases = [
         "let color='red'; color='blue'; export const styles=stylex.create({root:{color}});",
         "export const styles=stylex.create({root:{color}}); const color='red';",
         "const obj={color:'red'}; obj.color='blue'; export const styles=stylex.create({root:{color:obj.color}});",
         "export const styles=stylex.create({root:{color:this.color}});",
-        "const obj={color:'red'}; export const styles=stylex.create({root:{color:obj?.color}});",
         "export const styles=stylex.create({root:{color:({}).constructor}});",
+        // The blocked names framed on the property, dot and computed.
+        "export const styles=stylex.create({root:{color:({}).__proto__}});",
+        "export const styles=stylex.create({root:{color:({})['prototype']}});",
         "export const styles=stylex.create({root:{width:1n}});",
         "export const styles=stylex.create({root:()=>{return {color:'red'};}});",
         "export const styles=stylex.create({[missing]:{color:'red'}});",
@@ -845,6 +905,9 @@ fn creation_current_generated_unicode_literals_use_babel_escaping() {
         }
     }
 }
+
+#[path = "creation/stored_function_tests.rs"]
+mod stored_function_tests;
 
 #[test]
 fn creation_current_flat_same_group_functions_typed_values_and_dependency_errors() {

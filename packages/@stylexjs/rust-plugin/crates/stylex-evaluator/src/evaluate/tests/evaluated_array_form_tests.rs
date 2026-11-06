@@ -60,12 +60,23 @@ fn every_written_array_carries_one_present_element_per_slot() {
     }
   }
 
-  // The two shapes that would write a hole or a spread never become a value at
-  // all, which is the other half of the invariant: it holds because the walk
-  // refuses them, not because the writer skips them. Read through the deopt
-  // rather than through the writer, which is never handed either.
-  assert_deopts("[...['a']]");
+  // A hole never becomes a value at all, which is the other half of the
+  // invariant: it holds because the walk refuses one, not because the writer
+  // skips it. A spread whose operand cannot be iterated is refused the same
+  // way, so neither shape is ever handed to the writer.
   assert_deopts("[, 'a']");
+  assert_deopts("[...1]");
+
+  // A spread the evaluator *can* iterate is gone by the time the writer sees
+  // the list -- the operand's own elements took its slot -- so the array
+  // written from one carries a present element per slot like any other. A
+  // string is such an operand: `node` iterates `[...'ab']` to `["a", "b"]`.
+  for spread in ["[...['a'], 'b']", "[...'ab']"] {
+    match evaluate_result_vec_to_array_expr(&folds_to_a_list(spread)) {
+      Some(form) => assert_written_form(&form, spread),
+      None => panic!("expected `{}` to have an array literal form", spread),
+    }
+  }
 }
 
 /// A value the evaluator holds and writes no expression for has no element
@@ -147,6 +158,16 @@ fn a_style_value_and_a_spread_refuse_a_nested_callback() {
 fn a_style_value_and_a_spread_keep_a_nested_list_of_values() {
   assert_folds_to_object_keys("({ a: [[1]], b: [[2], [3]] })", &["a", "b"]);
   assert_folds_to_object_keys("({ ...[[1], [2]] })", &["0", "1"]);
+}
+
+/// A callback that *is* the spread entry, rather than one nested a list down, is
+/// kept as the typed callback the value arm keeps for `{ a: () => 1 }`: `node`
+/// and the reference implementation answer the key `"0"` holding a function
+/// (executed), and the refusal above is only for the list around one.
+#[test]
+fn a_spread_keeps_a_callback_that_is_the_entry_itself() {
+  assert_folds_to_string("Object.keys({ ...[() => 1] }).join(',')", "0");
+  assert_folds_to_string("typeof ({ ...[() => 1] })[0]", "function");
 }
 
 // ==================== helpers ====================

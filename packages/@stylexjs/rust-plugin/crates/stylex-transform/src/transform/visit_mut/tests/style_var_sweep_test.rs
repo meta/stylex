@@ -31,6 +31,25 @@ use stylex_state::state_manager::DeclId;
 use stylex_structures::style_vars_to_keep::StyleVarsToKeep;
 
 use super::retain_style_props;
+
+#[test]
+fn null_reset_pruning_reads_debug_string_and_numeric_property_keys() {
+  use swc_core::{
+    common::DUMMY_SP,
+    ecma::ast::{KeyValueProp, Number, PropName},
+  };
+  GLOBALS.set(&Globals::default(), || {
+    let mut object=object_of(vec![
+      PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {key:PropName::Str(swc_core::ecma::ast::Str {span:DUMMY_SP,value:"paddingTop-kLKAdn".into(),raw:None}),value:Box::new(create_null_expr())}))),
+      PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {key:PropName::Str(swc_core::ecma::ast::Str {span:DUMMY_SP,value:"paddingBottom-kGO01o".into(),raw:None}),value:Box::new(create_null_expr())}))),
+      create_key_value_prop("color",create_null_expr()),
+    ]);
+    object.props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp { key:PropName::Num(Number {span:DUMMY_SP,value:7.0,raw:None}),value:Box::new(create_null_expr()) }))));
+    retain_style_props(&mut object,&[Atom::from("paddingTop-kLKAdn"),Atom::from("7")]);
+    assert_eq!(object.props.len(),2,"debug and numeric reset keys must be pruned by their string value");
+    assert!(matches!(&object.props[0],PropOrSpread::Prop(prop) if matches!(&**prop,Prop::KeyValue(kv) if kv.key.as_str().is_some_and(|key| key.value.as_str()==Some("paddingTop-kLKAdn")))));
+  });
+}
 use crate::transform::tests::prelude::{TestComments, test_transform};
 
 /// The object `props` make up.
@@ -348,8 +367,7 @@ fn the_null_sweep_drops_only_the_nulls_nothing_reads() {
       create_key_value_prop("margin", create_null_expr()),
       create_key_value_prop("padding", Expr::Ident(create_ident("className"))),
       create_string_key_value_prop("$$css", "true"),
-      // A name that has to be quoted is a string key, which the sweep reads as
-      // no declaration of its own -- a minified key is written this way.
+      // Debug keys are quoted but use the same recorded null-reset policy.
       create_key_value_prop("color-kMwMTN", create_null_expr()),
       // A bare name carries that name as its value, so it is no declaration
       // of `null` however the sweep reads it.
@@ -370,8 +388,8 @@ fn the_null_sweep_drops_only_the_nulls_nothing_reads() {
     );
     assert_eq!(
       style_object.props.len(),
-      6,
-      "the string-keyed null, the bare name and the spread stayed too"
+      5,
+      "the unread string-keyed null also goes; the bare name and spread stay"
     );
   });
 }

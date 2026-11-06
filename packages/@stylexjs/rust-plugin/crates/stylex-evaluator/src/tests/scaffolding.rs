@@ -95,13 +95,19 @@ fn parse_expr_under(source: &str, syntax: Syntax) -> Expr {
   let file = anonymous_file(source);
   let mut recovered_errors = Vec::new();
 
-  let expr = match parse_file_as_expr(
-    &file,
-    syntax,
-    Default::default(),
-    None,
-    &mut recovered_errors,
-  ) {
+  // Parsing is fixture setup, not the evaluator under test. Use the same
+  // bounded stack guard as the source frontend while leaving the actual fold
+  // on the explicitly small worker stack.
+  let parsed = crate::growable_stack::grown_per_level(|| {
+    parse_file_as_expr(
+      &file,
+      syntax,
+      Default::default(),
+      None,
+      &mut recovered_errors,
+    )
+  });
+  let expr = match parsed {
     Ok(expr) => *expr,
     Err(error) => panic!("failed to parse `{}`: {:?}", source, error),
   };

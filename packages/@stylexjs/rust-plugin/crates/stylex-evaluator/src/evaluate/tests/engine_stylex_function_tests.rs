@@ -17,9 +17,10 @@
 //! as the value the reference implementation writes.
 
 use super::source_evaluation::*;
-use stylex_constants::constants::evaluation_errors::{UNDEFINED_CONST, uncoercible_value};
+use crate::stylex_first_that_works::stylex_first_that_works;
+use stylex_constants::constants::evaluation_errors::UNDEFINED_CONST;
 use stylex_state::{
-  functions::FunctionMap,
+  functions::{FunctionMap, FunctionType},
   state_manager::{ImportKind, StateManager},
 };
 use stylex_structures::named_import_source::ImportSources;
@@ -37,11 +38,53 @@ fn importing_both(state: &mut StateManager) {
   state.insert_stylex_import(ImportSources::Regular(NAMESPACE.to_string()));
 }
 
+/// The function map a `create` call evaluates its argument against, holding
+/// `firstThatWorks` under both spellings the imports above bind.
+///
+/// The optional engine found the function through the imports alone; without
+/// it, the function reaches the evaluator the way it reaches the reference
+/// implementation -- through the functions map the `create` visitor passes in,
+/// as `identifiers.firstThatWorks` and `memberExpressions[ns].firstThatWorks`
+/// (`lib/index.js:7215-7245`, built `@stylexjs/babel-plugin` 0.19.1). This is the
+/// entry the transform registers (`runtime_function_map.rs`,
+/// `FunctionType::ArrayArgs(stylex_first_that_works)`), written out here
+/// because the evaluator cannot reach the transform crate.
+fn the_create_function_map() -> FunctionMap {
+  let entry = folded_entry(FunctionType::ArrayArgs(stylex_first_that_works), false);
+  let mut fns = FunctionMap::default();
+
+  fns
+    .identifiers
+    .insert(IMPORTED.into(), Box::new(entry.clone()));
+  fns
+    .member_expressions
+    .entry(ImportSources::Regular(NAMESPACE.to_string()))
+    .or_default()
+    .insert(IMPORTED.into(), Box::new(entry));
+
+  fns
+}
+
+/// The create map with the compiler's own fold beside it, for the cases whose
+/// argument is one of the compiler's functions.
+fn the_create_function_map_with_a_fold() -> FunctionMap {
+  let mut fns = a_function_fold();
+  let create = the_create_function_map();
+
+  fns.identifiers.extend(create.identifiers);
+  fns.member_expressions.extend(create.member_expressions);
+
+  fns
+}
+
 /// What `source` folds to, as text.
+///
+/// Each expected string is the reference implementation's own for the same
+/// source under the same functions map (executed).
 #[track_caller]
 fn folded(source: &str) -> String {
   folded_text_of(
-    evaluated_in_a_state(importing_both, &FunctionMap::default(), source),
+    evaluated_in_a_state(importing_both, &the_create_function_map(), source),
     source,
   )
 }
@@ -135,18 +178,27 @@ fn a_computed_property_of_the_namespace_names_no_callable() {
   );
 }
 
-/// An argument with no compile-time value refuses inside a callback, and the
-/// sentence names the function the author wrote rather than the array method
-/// that was running it: nothing below the fold can answer there, because the
-/// method that would have run the body is the engine's.
+/// An argument with no compile-time value, inside a callback, fails the
+/// callback.
+///
+/// The callback has run when its body fails, so the failure arrives as a throw
+/// rather than a deopt. The reference implementation throws here too: under the
+/// same functions map, its `firstThatWorks` is handed the compiler function's
+/// config object and throws `TypeError: varName.startsWith is not a function`
+/// out of the closure `.map` called (`lib/index.js:6451`, built
+/// `@stylexjs/babel-plugin` 0.19.1; executed). This compiler throws at the
+/// invocation boundary with its own sentence for an argument that is not a
+/// static expression. The refusal sentence this case named was the optional
+/// engine's.
 #[test]
+#[should_panic(expected = "Function argument must be a static expression.")]
 fn an_argument_with_no_value_refuses_by_the_functions_own_name() {
   let source = format!("['var(--a)'].map((name) => {IMPORTED}(name, {FOLD_FUNCTION})).join('')");
 
-  assert_refused_with(
-    &evaluated_in_a_state(importing_both, &a_function_fold(), &source),
+  evaluated_in_a_state(
+    importing_both,
+    &the_create_function_map_with_a_fold(),
     &source,
-    &uncoercible_value(IMPORTED),
   );
 }
 
@@ -170,28 +222,22 @@ fn an_argument_with_no_value_outside_a_callback_is_handed_back() {
 /// A name a callback binds is the callback's, whatever the module imported
 /// under the same spelling.
 ///
-/// So the engine runs what the parameter holds rather than this function, and
-/// a string is not callable -- which is what the refusal says. Without the rule
-/// the guard would carry the compiler's own function under a name the engine
-/// had already bound to something else.
+/// So the callback calls what the parameter holds rather than this function,
+/// and a string is not callable. The callback has run when its body fails, so
+/// the failure arrives as a throw rather than a deopt. The reference
+/// implementation throws here too: the arrow's own identifiers shadow the
+/// functions map, its call finds the string `'var(--a)'` as the callee, and
+/// `func.apply` throws `TypeError: func.apply is not a function` out of the
+/// closure `.map` called (`lib/index.js:6440-6451`, callee read at `:6862-6863`, applied at `:6937`, built
+/// `@stylexjs/babel-plugin` 0.19.1; executed). This compiler throws at the
+/// invocation boundary with its own sentence for a callee that is not a
+/// function. The "not a callable function" wording was the optional engine's.
 #[test]
+#[should_panic(expected = "Referenced value is not a constant.")]
 fn a_callback_parameter_shadowing_the_name_is_the_engines_own_binding() {
   let source = format!("['var(--a)'].map(({IMPORTED}) => {IMPORTED}('x', 'y')).join('')");
 
-  let refused = evaluated_in_a_state(importing_both, &FunctionMap::default(), &source);
-
-  assert_refused(&refused, &source);
-
-  match refused.reason {
-    Some(reason) => assert!(
-      reason.contains("not a callable function"),
-      "expected `{}` to read the engine's own throw over the string the \
-       parameter holds, got {:?}",
-      source,
-      reason
-    ),
-    None => panic!("expected `{}` to record a deopt reason", source),
-  }
+  evaluated_in_a_state(importing_both, &the_create_function_map(), &source);
 }
 
 /// One StyleX function crosses once, however often the expression calls it. The

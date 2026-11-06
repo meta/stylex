@@ -298,12 +298,10 @@ fn format_queries_or_with_and_nested_is_top_level_uses_comma() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn format_queries_keyword_without_prefix_not_at_top_level_gets_parens() {
-  // MediaKeyword("screen", not=false, only=false) at non-top-level gets parenthesized
-  // This is exercised when screen appears inside AND: "screen and ..."
+fn format_queries_keyword_without_prefix_stays_bare_in_and() {
+  // Current-main #1888: media types are never parenthesized boolean features.
   let result = parsed("@media screen and (min-width: 400px)");
-  // The screen keyword should be parenthesized in the output
-  assert!(result.to_string().contains("(screen)"));
+  assert_eq!(result.to_string(), "@media screen and (min-width: 400px)");
 }
 
 // ---------------------------------------------------------------------------
@@ -770,15 +768,16 @@ fn or_combinator_with_or_keyword_succeeds() {
 }
 
 #[test]
-fn or_combinator_three_rules_with_commas() {
-  // @media screen, print, all → three-way OR
+fn or_combinator_with_all_resolves_to_always() {
   let q = parsed("@media screen, print, all");
   match &q.queries {
-    MediaQueryRule::Or(or_rules) => {
-      assert_eq!(or_rules.rules.len(), 3);
+    MediaQueryRule::MediaKeyword(keyword) => {
+      assert_eq!(keyword.key, "all");
+      assert!(!keyword.not);
     },
-    other => panic!("Expected Or, got {:?}", other),
+    other => panic!("Expected ALWAYS, got {:?}", other),
   }
+  assert_eq!(q.to_string(), "@media all");
 }
 
 // ---------------------------------------------------------------------------
@@ -1093,7 +1092,7 @@ fn format_queries_not_wrapping_or_gets_parenthesized() {
   let not_rule = MediaQueryRule::Not(MediaNotRule::new(or_rule));
   let mq = MediaQuery::new(not_rule);
   let s = mq.to_string();
-  assert!(s.contains("not") && s.contains("("));
+  assert_eq!(s, "@media not all");
 }
 
 // ---------------------------------------------------------------------------
@@ -1793,7 +1792,7 @@ fn format_queries_or_member_that_is_or_not_top_level() {
   let not_rule = MediaQueryRule::Not(MediaNotRule::new(outer_or));
   let mq = MediaQuery::new(not_rule);
   let s = mq.to_string();
-  assert!(s.contains("not") && s.contains("("));
+  assert_eq!(s, "@media not all");
 }
 
 // ---------------------------------------------------------------------------
@@ -2789,7 +2788,7 @@ fn exceeding_the_bound_is_not_a_parse_failure() {
 #[test]
 fn a_negated_media_type_after_an_and_is_not_a_bare_negation() {
   let query = parsed("@media (min-width: 1px) and not screen");
-  assert_eq!(query.to_string(), "@media (min-width: 1px) and not screen");
+  assert_eq!(query.to_string(), "@media print and (min-width: 1px)");
 }
 
 /// An overflowed bound is kept rather than dropped, as the reference

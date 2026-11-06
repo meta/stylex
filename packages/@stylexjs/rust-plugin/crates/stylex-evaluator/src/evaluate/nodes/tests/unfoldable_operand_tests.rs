@@ -44,7 +44,6 @@ fn every_unfoldable_shape_survives_every_logical_operand_position() {
   const UNFOLDABLE: &[&str] = &[
     "\"documentation\".startsWith(q)",
     "[\"a\", \"b\"].reduce(f)",
-    "(5).toFixed(2)",
     // A locale-sensitive method, which the engine has no locale data for; a
     // length the engine is not allowed to build; and a result that has no
     // literal form. The three boundaries around the folded prototype surface.
@@ -75,6 +74,16 @@ fn every_unfoldable_shape_survives_every_logical_operand_position() {
     assert_deopts(&format!("\"\" || {}", shape));
     assert_deopts(&format!("null ?? {}", shape));
   }
+
+  // The same sweep for a shape that *does* fold now. `(5).toFixed(2)` sat in
+  // the list above until a written number started answering its own methods,
+  // and the half of the seam it was covering is the other direction: the fork
+  // has to carry a folded value back out of that position as surely as it has
+  // to carry a refusal.
+  assert_folds_to_string("(5).toFixed(2)", "5.00");
+  assert_folds_to_string("1 > 0 && (5).toFixed(2)", "5.00");
+  assert_folds_to_string("\"\" || (5).toFixed(2)", "5.00");
+  assert_folds_to_string("null ?? (5).toFixed(2)", "5.00");
 }
 
 /// A left operand that decides the fold on its own is not made unconfident by

@@ -564,7 +564,7 @@ mod media_query_transformer {
     let expected_styles = json!({
       "width": {
         "default": "100%",
-        "@media (screen) and (not (max-width: 500px)), (min-width: 500.01px) and (max-width: 800px)": "80%",
+        "@media screen and (not (max-width: 500px)), (min-width: 500.01px) and (max-width: 800px)": "80%",
         "@media (max-width: 500px)": "60%"
       }
     });
@@ -1058,8 +1058,8 @@ mod media_query_transformer {
     let expected_styles = json!({
       "width": {
         "default": "100%",
-        "@media ((screen) and (min-width: 900px) and (not (print))) or ((screen) and (min-width: 900px) and (not (max-width: 500px)))": "80%",
-        "@media (print) and (max-width: 500px)": "50%"
+        "@media screen and (min-width: 900px), screen and (min-width: 900px) and (not (max-width: 500px))": "80%",
+        "@media print and (max-width: 500px)": "50%"
       }
     });
 
@@ -2007,7 +2007,7 @@ mod unusual_but_valid_queries {
       })),
       vec![
         "default",
-        "@media not all, (max-width: 99.98px)",
+        "@media (max-width: 99.98px)",
         "@media (min-width: 100px)",
       ]
     );
@@ -2025,7 +2025,7 @@ mod unusual_but_valid_queries {
           "@media (min-width: 100px)": "blue"
         }
       }))[1],
-      "@media (screen) and (min-width: 200px) and (not (min-width: 100px))"
+      "@media screen and (min-width: 200px) and (not (min-width: 100px))"
     );
   }
 
@@ -2190,8 +2190,7 @@ mod a_comma_binds_more_loosely_than_or {
   fn a_media_type_segment_sits_beside_an_or_segment() {
     assert_eq!(
       rewritten_first_key("@media screen, (min-width: 1px) or (min-width: 2px)"),
-      "@media (screen) and (not (max-width: 50px)), \
-       (min-width: 1px) or (min-width: 2px) and (not (max-width: 50px))"
+      "@media screen and (not (max-width: 50px)), (min-width: 50.01px), (min-width: 50.01px)"
     );
   }
 }

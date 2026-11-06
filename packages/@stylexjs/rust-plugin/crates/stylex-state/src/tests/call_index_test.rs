@@ -133,6 +133,74 @@ fn a_callee_is_recognised_wherever_the_call_was_written() {
   assert!(state.is_member_call_callee(&member("stylex", "create")));
 }
 
+/// A real callee site cannot classify a separate member value read as a call.
+#[test]
+fn callee_sites_distinguish_an_earlier_value_read_from_a_later_call() {
+  use swc_core::common::{BytePos, Span};
+  let mut state = state();
+  let mut value_read = member("env", "double");
+  value_read.span = Span::new(BytePos(10), BytePos(20));
+  let mut callee = value_read.clone();
+  callee.span = Span::new(BytePos(30), BytePos(40));
+  let mut call = call_of(
+    Callee::Expr(Box::new(Expr::Member(callee.clone()))),
+    vec![number_arg(3.0)],
+  );
+  call.span = Span::new(BytePos(30), BytePos(43));
+  state.add_call_expression(&call);
+  assert!(
+    !state.is_member_call_callee(&value_read),
+    "a stored callback value is not this later callee"
+  );
+  assert!(state.is_member_call_callee(&callee));
+  assert!(
+    !state.is_member_call_callee(&member("env", "double")),
+    "generated DUMMY must not alias an authored site"
+  );
+}
+
+#[test]
+fn callee_sites_equal_calls_at_distinct_spans_release_only_their_own_site() {
+  use swc_core::common::{BytePos, Span};
+  let mut state = state();
+  let mut first_member = member("env", "double");
+  first_member.span = Span::new(BytePos(10), BytePos(20));
+  let mut second_member = first_member.clone();
+  second_member.span = Span::new(BytePos(30), BytePos(40));
+  let mut first = call_of(
+    Callee::Expr(Box::new(Expr::Member(first_member.clone()))),
+    vec![number_arg(3.0)],
+  );
+  first.span = Span::new(BytePos(10), BytePos(23));
+  let mut second = call_of(
+    Callee::Expr(Box::new(Expr::Member(second_member.clone()))),
+    vec![number_arg(3.0)],
+  );
+  second.span = Span::new(BytePos(30), BytePos(43));
+  state.add_call_expression(&first);
+  state.add_call_expression(&second);
+  assert!(state.is_member_call_callee(&first_member));
+  assert!(state.is_member_call_callee(&second_member));
+  replace(&mut state, &first, &object_expr());
+  assert!(!state.is_member_call_callee(&first_member));
+  assert!(state.is_member_call_callee(&second_member));
+  replace(&mut state, &second, &object_expr());
+  assert!(!state.is_member_call_callee(&second_member));
+}
+
+#[test]
+fn callee_sites_unrecorded_equal_call_cannot_release_a_recorded_site() {
+  use swc_core::common::{BytePos, Span};
+  let mut state = state();
+  let mut recorded = member_call("env", "double", vec![number_arg(3.0)]);
+  recorded.span = Span::new(BytePos(10), BytePos(23));
+  state.add_call_expression(&recorded);
+  let mut unrecorded = recorded.clone();
+  unrecorded.span = Span::new(BytePos(30), BytePos(43));
+  replace(&mut state, &unrecorded, &object_expr());
+  assert!(state.is_member_call_callee(&member("env", "double")));
+}
+
 /// A callee shared by two calls survives the first of them being replaced, and
 /// is forgotten only when the last one goes.
 #[test]

@@ -5,6 +5,43 @@ use swc_core::ecma::ast::{Expr, IdentName, KeyValueProp, Lit, PropName, Str};
 use swc_sourcemap::SourceMapBuilder;
 
 use super::original_position_from_input_source_map;
+
+#[test]
+fn current_unnamed_source_short_filename_uses_cwd_package_context() {
+  let directory = std::env::temp_dir().join(format!(
+    "stylex-unnamed-{}-{}",
+    std::process::id(),
+    std::time::SystemTime::now()
+      .duration_since(std::time::UNIX_EPOCH)
+      .unwrap()
+      .as_nanos()
+  ));
+  std::fs::create_dir(&directory).unwrap();
+  struct Fixture(std::path::PathBuf);
+  impl Drop for Fixture {
+    fn drop(&mut self) {
+      let _ = std::fs::remove_dir_all(&self.0);
+    }
+  }
+  let fixture = Fixture(directory);
+  std::fs::write(
+    fixture.0.join("package.json"),
+    "{\"name\":\"outer-package\"}",
+  )
+  .unwrap();
+  let child = fixture.0.join("inner");
+  std::fs::create_dir(&child).unwrap();
+  std::fs::write(child.join("package.json"), "{\"name\":\"inner-package\"}").unwrap();
+  let mut state = stylex_state::state_manager::StateManager::new(Default::default());
+  state.set_plugin_pass(stylex_structures::plugin_pass::PluginPass {
+    cwd: Some(child),
+    filename: swc_core::common::FileName::Custom(String::new()),
+  });
+  assert_eq!(
+    super::create_short_filename("", &state, &mut rustc_hash::FxHashMap::default()),
+    "inner-package:"
+  );
+}
 use stylex_state::state_manager::StateManager;
 
 const INPUT_CODE: &str = "\
@@ -387,6 +424,174 @@ mod short_filenames {
     create_short_filename, get_package_prefix, get_short_path, insert_compiled_entry, to_posix_path,
   };
 
+  #[test]
+  fn current_debug_file_namer_receives_original_filename_per_namespace() {
+    #[derive(Debug)]
+    struct Namer(std::rc::Rc<std::cell::RefCell<Vec<String>>>);
+    impl stylex_structures::import_resolver::DebugFileNamer for Namer {
+      fn debug_file_name(&self, path: &str) -> Result<String, String> {
+        self.0.borrow_mut().push(path.to_owned());
+        Ok(format!("custom:label{}",self.0.borrow().len()))
+      }
+    }
+    let calls = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let mut state = StateManager::default();
+    state.options.core.debug_file_namer = Some(std::rc::Rc::new(Namer(calls.clone())));
+    let mut values = IndexMap::new();
+    let mut seen = FxHashMap::default();
+    for line in [2, 4] {
+      insert_compiled_entry(
+        &mut values,
+        "/absolute/package/Foo.tsx",
+        line,
+        &mut state,
+        &mut seen,
+        &stylex_state::functions::FunctionMap::default(),
+      );
+    }
+    assert_eq!(&*calls.borrow(), &["/absolute/package/Foo.tsx","/absolute/package/Foo.tsx"]);
+    assert!(
+      matches!(values[COMPILED_KEY].as_ref(),FlatCompiledStylesValue::String(name) if name=="custom:label2:4")
+    );
+  }
+
+  #[test]
+  fn current_debug_file_namer_empty_names_do_not_fabricate_labels() {
+    #[derive(Debug)]
+    struct Namer;
+    impl stylex_structures::import_resolver::DebugFileNamer for Namer {
+      fn debug_file_name(&self, _: &str) -> Result<String, String> {
+        Ok(String::new())
+      }
+    }
+    let mut state = StateManager::default();
+    state.options.core.debug_file_namer = Some(std::rc::Rc::new(Namer));
+    let mut values = IndexMap::new();
+    insert_compiled_entry(
+      &mut values,
+      "/absolute/Foo.tsx",
+      2,
+      &mut state,
+      &mut FxHashMap::default(),
+      &stylex_state::functions::FunctionMap::default(),
+    );
+    assert!(matches!(
+      values[COMPILED_KEY].as_ref(),
+      FlatCompiledStylesValue::Bool(true)
+    ));
+  }
+
+  /// A namer that fails aborts at its first call, as Babel's `debugFilePath`
+  /// exception does: the failure is not turned into a missing label.
+  #[test]
+  fn current_debug_file_namer_failure_refuses_at_the_first_call() {
+    #[derive(Debug)]
+    struct Namer(std::rc::Rc<std::cell::Cell<usize>>);
+    impl stylex_structures::import_resolver::DebugFileNamer for Namer {
+      fn debug_file_name(&self, _: &str) -> Result<String, String> {
+        self.0.set(self.0.get() + 1);
+        Err("host callback failed".to_owned())
+      }
+    }
+    let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+    let mut state = StateManager::default();
+    state.options.core.debug_file_namer = Some(std::rc::Rc::new(Namer(calls.clone())));
+    let mut values = IndexMap::new();
+    let mut seen = FxHashMap::default();
+    let _quiet = stylex_macros::stylex_error::SuppressPanicStderr::new();
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+      // Two annotated namespaces, named in order.
+      for line in [2, 4] {
+        insert_compiled_entry(
+          &mut values,
+          "/absolute/Foo.tsx",
+          line,
+          &mut state,
+          &mut seen,
+          &stylex_state::functions::FunctionMap::default(),
+        );
+      }
+    }));
+    let Err(panic) = outcome else {
+      panic!("a failing debug file namer must abort the transform");
+    };
+    assert_eq!(calls.get(), 1);
+    assert!(
+      stylex_macros::stylex_error::format_panic_message(&panic).contains("host callback failed")
+    );
+    assert!(!values.contains_key(COMPILED_KEY));
+  }
+
+  /// The whole transform of a two-namespace module stops at the first failing
+  /// call, and the panic carries the callback's own error for the host latch.
+  /// (b51's regression test from the 16e3 private worktree.)
+  #[test]
+  fn current_debug_file_namer_throw_aborts_before_the_next_namespace() {
+    #[derive(Debug)]
+    struct ThrowingNamer(std::rc::Rc<std::cell::Cell<usize>>);
+    impl stylex_structures::import_resolver::DebugFileNamer for ThrowingNamer {
+      fn debug_file_name(&self, path: &str) -> Result<String, String> {
+        assert_eq!(path, "/absolute/Foo.tsx");
+        self.0.set(self.0.get() + 1);
+        Err("original debug callback error".to_owned())
+      }
+    }
+    swc_core::common::GLOBALS.set(&swc_core::common::Globals::default(), || {
+      use swc_core::common::{FileName, Mark, SourceMap, input::StringInput};
+      use swc_core::ecma::{
+        ast::{Pass, Program},
+        parser::{EsSyntax, Parser, Syntax, lexer::Lexer},
+        transforms::base::resolver,
+      };
+      let source_map = SourceMap::default();
+      let filename = FileName::Real("/absolute/Foo.tsx".into());
+      let file = source_map.new_source_file(
+        std::sync::Arc::new(filename.clone()),
+        "import * as stylex from '@stylexjs/stylex';const styles=stylex.create({a:{color:'red'},b:{color:'blue'}});use(styles);"
+          .to_owned(),
+      );
+      let lexer = Lexer::new(
+        Syntax::Es(EsSyntax::default()),
+        Default::default(),
+        StringInput::from(&*file),
+        None,
+      );
+      let mut module = Parser::new_from(lexer)
+        .parse_module()
+        .expect("valid two-namespace fixture");
+      let mut program = Program::Module(module);
+      resolver(Mark::new(), Mark::new(), true).process(&mut program);
+      module = match program {
+        Program::Module(module) => module,
+        _ => unreachable!(),
+      };
+      let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+      let comments = swc_core::common::comments::SingleThreadedComments::default();
+      let mut options = stylex_structures::stylex_options::StyleXOptionsParams {
+        dev: Some(true),
+        ..Default::default()
+      };
+      let pass = stylex_structures::plugin_pass::PluginPass::default().with_filename(filename);
+      let mut transform = crate::StyleXTransform::new(&comments, pass, &mut options);
+      transform.state.set_input_source_file(file);
+      transform.state.options.core.debug_file_namer =
+        Some(std::rc::Rc::new(ThrowingNamer(calls.clone())));
+      let _quiet = stylex_macros::stylex_error::SuppressPanicStderr::new();
+      let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        swc_core::ecma::visit::VisitMutWith::visit_mut_with(&mut module, &mut transform);
+      }));
+      assert!(outcome.is_err(), "a throwing debug callback must abort the transform");
+      assert_eq!(calls.get(), 1, "the second namespace must never invoke the callback");
+      let error = outcome.unwrap_err();
+      let message = error
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| error.downcast_ref::<&str>().copied())
+        .unwrap_or("");
+      assert!(message.contains("original debug callback error"), "{message}");
+    });
+  }
+
   fn short_filename_of(path: &str, state: &StateManager) -> String {
     create_short_filename(path, state, &mut FxHashMap::default())
   }
@@ -540,25 +745,24 @@ mod short_filenames {
     );
   }
 
-  /// A file of the package the compiler is running in needs no package name in
-  /// front of it, because every path it writes is in that package.
+  /// An absent filename is resolved in the same package context as Babel.
+  /// Explicit cwd inside the package keeps dirname(cwd) in that package.
   #[test]
   fn names_no_package_for_a_file_of_the_package_it_runs_in() {
-    let state = StateManager::default();
-
-    let here = match std::env::current_dir() {
-      Ok(here) => here,
-      Err(error) => panic!("the working directory could not be read: {error}"),
-    };
-
+    let root = package_at("stylex_same_package_context", Some("fixture"));
+    let mut state = StateManager::default();
+    state.set_plugin_pass(stylex_structures::plugin_pass::PluginPass {
+      cwd: Some(PathBuf::from(&root).join("src")),
+      filename: swc_core::common::FileName::Custom(String::new()),
+    });
     assert_eq!(
-      short_filename_of(&format!("{}/src/Card.tsx", here.display()), &state),
+      short_filename_of(&format!("{root}/src/Card.tsx"), &state),
       "src/Card.tsx"
     );
   }
 
   /// A directory holding a `package.json`, named or not.
-  fn package_at(name: &str, package_name: Option<&str>) -> String {
+  pub(super) fn package_at(name: &str, package_name: Option<&str>) -> String {
     let root = std::env::temp_dir().join(format!("{name}_{}", std::process::id()));
 
     let manifest = match package_name {
@@ -569,7 +773,7 @@ mod short_filenames {
     match std::fs::create_dir_all(root.join("src"))
       .and_then(|()| std::fs::write(root.join("package.json"), manifest))
     {
-      Ok(()) => {},
+      Ok(()) => {}
       Err(error) => panic!("the fixture package could not be written: {error}"),
     }
 
@@ -983,6 +1187,11 @@ mod over_the_authored_text {
   #[test]
   fn names_the_file_and_line_the_map_points_at() {
     let (call, mut state) = call_and_state();
+    let root = super::short_filenames::package_at("stylex_map_origin_context", Some("fixture"));
+    state.set_plugin_pass(stylex_structures::plugin_pass::PluginPass {
+      cwd: Some(std::path::PathBuf::from(root).join("src")),
+      filename: FileName::Custom("Card.tsx".to_owned()),
+    });
 
     // `root` stands on line index 1 of the input. The map says that line came
     // from line index 41 of the file the author wrote.
@@ -993,7 +1202,7 @@ mod over_the_authored_text {
 
     assert_eq!(
       annotate(&mut state, &call),
-      FlatCompiledStylesValue::String("Original.tsx:42".to_owned())
+      FlatCompiledStylesValue::String("src/Original.tsx:42".to_owned())
     );
   }
 

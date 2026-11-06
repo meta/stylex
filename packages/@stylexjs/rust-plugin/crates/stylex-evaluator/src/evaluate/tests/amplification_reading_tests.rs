@@ -7,6 +7,15 @@
 //! width and a magnitude before it can multiply anything, and each of the
 //! shapes below is a different way of seeing one.
 //!
+//! **The static pre-measurement this suite was written for is gone.** The guard
+//! read a bound off an expression *before* any source crossed into the engine,
+//! and refused what it could not bound; the native path has runtime budgets
+//! instead, so a call either folds under them or is refused by whatever reads
+//! it. The readings below are therefore asserted as what they now are -- the
+//! value `node` gives, or the exact refusal both compilers raise -- with every
+//! input row kept, because each is still a distinct shape an author writes and
+//! a shape that changes answer has to fail here.
+//!
 //! Two of those shapes cannot be written down directly, which is why they have
 //! a suite of their own:
 //!
@@ -22,16 +31,15 @@
 use super::source_evaluation::*;
 use stylex_constants::constants::evaluation_errors::unsupported_expression;
 
-/// The first line every unbounded string refusal shares. The limit follows it
-/// and is the project's own option, so the line the author reads is what a case
-/// pins.
-const UNBOUNDED_STRING: &str = "Cannot bound the string 'repeat' would build.";
-
-/// The same question failed inside a callback, which is a different sentence:
-/// the bound that was read there bounds one evaluation rather than the call, so
-/// the advice is about the receiver rather than about the count.
-const UNBOUNDED_IN_A_CALLBACK: &str =
-  "Cannot bound the string 'repeat' would build inside a callback.";
+/// The refusal a call the evaluator reads nothing foldable out of now carries.
+///
+/// It replaces the two pre-measurement sentences this suite was written with --
+/// `Cannot bound the string 'repeat' would build.` and its in-a-callback
+/// variant -- which named a bound computed before the call ran. Nothing
+/// computes one now. Where the reference implementation reaches the same input
+/// it reports this same sentence from its own terminal arm
+/// (`utils/evaluate-path.js:1201`), built from a character-identical template.
+const UNSUPPORTED_CALL: &str = "Unsupported expression: CallExpression";
 
 /// A written array is counted by its length and measured by its widest element,
 /// exactly as the evaluator's own list is -- so a callback over one folds.
@@ -86,17 +94,16 @@ fn a_string_source_is_counted_by_its_code_units() {
 }
 
 /// A source that is neither an array, a string, nor a length-declaring object
-/// leaves the mapper unmeasured -- so a body that amplifies inside it refuses
-/// rather than folding on a count nothing bounded.
+/// iterates nothing, so the mapper never runs and the answer is the empty
+/// array.
 ///
-/// The refusal names the callback rather than the count, because the count was
-/// read: what could not be read is how many times the body runs.
+/// `node`: `Array.from(({ a: 1 }).a, () => 'ab'.repeat(3))` is `[]` -- `1` has
+/// no iterator and no `length`, so `Array.from` reads a length of zero. The
+/// suite refused this when a bound had to be read for the mapper ahead of time;
+/// there is no mapper call to bound.
 #[test]
-fn a_source_with_no_count_leaves_the_mapper_unmeasured() {
-  assert_deopt_reason_contains(
-    "Array.from(({ a: 1 }).a, () => 'ab'.repeat(3))",
-    UNBOUNDED_IN_A_CALLBACK,
-  );
+fn a_source_with_no_count_iterates_nothing() {
+  assert_folds_to_strings("Array.from(({ a: 1 }).a, () => 'ab'.repeat(3))", &[]);
 }
 
 /// `Array.from` with nothing to iterate reads no mapper and declares no length,
@@ -104,10 +111,11 @@ fn a_source_with_no_count_leaves_the_mapper_unmeasured() {
 /// author reads.
 #[test]
 fn array_from_with_nothing_to_iterate_refuses() {
-  assert_deopt_reason_contains(
-    "Array.from()",
-    "TypeError: cannot convert 'null' or 'undefined' to object",
-  );
+  // `node`: TypeError, "undefined is not iterable". The reference
+  // implementation reaches the same call and crashes on it. Refusing is this
+  // compiler's answer and stays one; the sentence is the terminal label both
+  // write, where the old one quoted the engine's own throw text.
+  assert_deopt_reason_contains("Array.from()", UNSUPPORTED_CALL);
 }
 
 /// A count is arithmetic rather than syntax, so a product bounds a call as well
@@ -162,11 +170,15 @@ fn a_receiver_a_name_holds_is_measured_like_the_literal() {
   );
 }
 
-/// A receiver that resolves to something other than a string has no length to
-/// read, so the call it sizes is unbounded and refuses.
+/// A receiver that resolves to something other than a string carries no
+/// `repeat`, so the call refuses.
+///
+/// `node`: TypeError, "…a.repeat is not a function". The reference
+/// implementation gives this exact sentence (its `func` stays undefined and it
+/// falls to the terminal arm), so the two agree here character for character.
 #[test]
-fn a_receiver_that_is_not_a_string_has_no_length() {
-  assert_deopt_reason_contains("({ a: 1 }).a.repeat(3)", UNBOUNDED_STRING);
+fn a_receiver_that_is_not_a_string_has_no_repeat() {
+  assert_deopt_reason_contains("({ a: 1 }).a.repeat(3)", UNSUPPORTED_CALL);
 }
 
 /// A count written out below zero asks for nothing, so the guard admits the
@@ -175,10 +187,11 @@ fn a_receiver_that_is_not_a_string_has_no_length() {
 /// which is the case below.
 #[test]
 fn a_count_written_below_zero_is_left_to_the_language() {
-  assert_deopt_reason_contains(
-    "'ab'.repeat(-1)",
-    "RangeError: String.prototype.repeat: count must be non-negative",
-  );
+  // `node`: RangeError, "Invalid count value: -1"; the reference
+  // implementation calls `String.prototype.repeat` unbounded and crashes on
+  // the same throw. Refusing is this compiler's answer. The old sentence
+  // quoted the engine's own wording of the throw, which no engine raises now.
+  assert_deopt_reason_contains("'ab'.repeat(-1)", UNSUPPORTED_CALL);
 }
 
 /// Inside a callback the count is arithmetic over a bound the receiver settled,
@@ -188,10 +201,14 @@ fn a_count_written_below_zero_is_left_to_the_language() {
 /// only over values that are not negative, so `(-5) * (-5)` would otherwise read
 /// as twenty-five against a bound of nothing.
 #[test]
-fn a_negative_leaf_stops_the_arithmetic_a_count_is_built_by() {
-  assert_deopt_reason_contains(
+fn a_negative_leaf_folds_per_element_rather_than_stopping_the_call() {
+  // `node`: `["", "ab"]` -- the counts are `0` and `1`, neither negative, so
+  // nothing throws. The pre-measurement refused this because it could not
+  // prove the *sum* stayed non-negative without running it; the elements run
+  // now, and each count is what it is.
+  assert_folds_to_strings(
     "[1, 2].map((each) => 'ab'.repeat(each + ({ k: -1 }).k))",
-    UNBOUNDED_STRING,
+    &["", "ab"],
   );
 }
 
@@ -223,12 +240,15 @@ fn a_count_a_callback_builds_reads_a_leaf_the_module_holds() {
 /// nothing a count could be built from -- and a body that amplifies over it
 /// refuses.
 #[test]
-fn an_element_below_zero_is_no_magnitude() {
+#[should_panic(expected = "Unsupported expression: CallExpression")]
+fn an_element_below_zero_refuses_the_count_it_sizes() {
+  // The safe first row still folds: Node gives "-1!-2!".
   assert_folds_to_string("[-1, 2].map((each) => each + '!').join('-')", "-1!-2!");
-  assert_deopt_reason_contains(
-    "[-1, 2].map((each) => 'x'.repeat(each * 2))",
-    UNBOUNDED_STRING,
-  );
+  // Node/Babel throw RangeError "Invalid count value: -2" on the first element.
+  // PR #2008 at 6fc3a507 and native both throw this plain compiler Error without
+  // a frame. Parent-approved transport port: preserve that refusal and text,
+  // rather than introduce an independent error-kind channel for this input.
+  evaluate_source("[-1, 2].map((each) => 'x'.repeat(each * 2))");
 }
 
 /// The last `length` an array-like declares is the one it ends up with, so the
@@ -289,9 +309,14 @@ fn a_receiver_the_evaluator_refuses_is_measured_as_nothing() {
     "[1n].map((each) => each + '!')",
     &unsupported_expression("BigIntLiteral"),
   );
+  // Both rows refuse for the same reason now -- the literal neither compiler
+  // folds -- where the old pair asserted two different sentences because the
+  // two shapes were refused in two different places. `node` folds both to
+  // `["1!"]`; the reference implementation refuses both as `BigIntLiteral`,
+  // having no arm for one, and so does this compiler.
   assert_deopt_reason_contains(
     "Array.from([1n], (each) => each + '!')",
-    "Its receiver or one of its arguments is not in a form the compiler can evaluate.",
+    &unsupported_expression("BigIntLiteral"),
   );
 }
 
@@ -300,17 +325,22 @@ fn a_receiver_the_evaluator_refuses_is_measured_as_nothing() {
 /// the evaluator answers one as its own callback rather than as syntax.
 #[test]
 fn a_count_that_resolves_to_a_function_has_no_number() {
-  assert_deopt_reason_contains("'x'.repeat((() => 2))", UNBOUNDED_STRING);
+  // `node` folds `""` -- `ToNumber(fn)` is `NaN`, and `repeat(NaN)` is zero
+  // repetitions. Refusing is the conservative answer and is kept deliberately:
+  // a count nothing can read is not a count this compiler invents a zero for.
+  // Only the sentence moves off the pre-measurement's wording.
+  assert_deopt_reason_contains("'x'.repeat((() => 2))", UNSUPPORTED_CALL);
 }
 
 /// A count leaf a callback writes that neither the scope nor the module can
 /// answer for stops the arithmetic, whichever side of the operation it is on.
 #[test]
+#[should_panic(expected = "Unsupported expression: BigIntLiteral")]
 fn a_count_leaf_nothing_can_answer_for_stops_the_arithmetic() {
-  assert_deopt_reason_contains(
-    "[1, 2].map((each) => 'x'.repeat(each + 1n))",
-    UNBOUNDED_STRING,
-  );
+  // Node throws a mixed-BigInt TypeError. Babel refuses the literal before
+  // arithmetic and throws this exact compiler error from the executed callback.
+  // Preserve that invocation transport; this is not a returned deopt.
+  evaluate_source("[1, 2].map((each) => 'x'.repeat(each + 1n))");
 }
 
 /// A written element's magnitude bounds a count the callback builds from it, so
@@ -346,19 +376,24 @@ fn one_nested_element_with_no_width_leaves_its_join_unread() {
 /// receiver itself is neither. Reading the module for it would answer whatever
 /// the same spelling holds outside the callback, which is a different value.
 #[test]
-fn a_name_the_callback_binds_to_nothing_measured_bounds_nothing() {
-  assert_deopt_reason_contains(
-    "['a'].map((each, index, all) => 'y'.repeat(all))",
-    UNBOUNDED_STRING,
-  );
+fn a_name_the_callback_binds_to_the_whole_receiver_counts_as_the_language_reads_it() {
+  // `node`: `[""]` -- the third parameter is the receiver array, `ToNumber`
+  // of `["a"]` is `NaN`, and `repeat(NaN)` is zero repetitions. The
+  // pre-measurement refused because the receiver was neither an element nor
+  // an index and so bounded nothing; the language reads it without a bound.
+  assert_folds_to_strings("['a'].map((each, index, all) => 'y'.repeat(all))", &[""]);
 }
 
 /// A name nothing at all answers for bounds nothing either, which is the other
 /// half of the same reading: one name is bound and unmeasured, the other is not
 /// bound anywhere.
 #[test]
+#[should_panic(expected = "Referenced constant is not defined.")]
 fn a_name_nothing_answers_for_bounds_nothing() {
-  assert_deopt_reason_contains("['a'].map((each) => 'x'.repeat(missing))", UNBOUNDED_STRING);
+  // Node throws ReferenceError. Babel throws this exact unresolved-name error
+  // from the executed callback (utils/evaluate-path.js:511), so match the same
+  // invocation transport without changing the source, message or refusal.
+  evaluate_source("['a'].map((each) => 'x'.repeat(missing))");
 }
 
 /// A length written inside a callback the call did not measure is refused, even
@@ -368,9 +403,15 @@ fn a_name_nothing_answers_for_bounds_nothing() {
 /// call measures neither the width nor the count for it — and one bounded
 /// length repeated an unknown number of times is not bounded at all.
 #[test]
-fn a_declared_length_inside_an_unmeasured_callback_is_refused() {
+fn a_defaulted_parameter_refuses_the_callback_before_any_length_is_read() {
+  // A defaulted parameter is an `AssignmentPattern`, not an `Identifier`, so
+  // neither compiler folds the arrow: the reference requires
+  // `identParams.length === params.length` (`utils/evaluate-path.js:499`) and
+  // this one requires every parameter to be a plain name. `node` folds
+  // `[["a", "a", "a"]]`; what refuses here is the parameter, one rule ahead of
+  // anything about a length.
   assert_deopt_reason_contains(
     "['a'].map((each = 1) => Array(3).fill(each))",
-    "Cannot bound the array 'Array' would build inside a callback.",
+    &unsupported_expression("ArrowFunctionExpression"),
   );
 }

@@ -16,6 +16,7 @@
 //! `member_length_tests.rs`; a hole's own refusal is in `array_hole_tests.rs`.
 
 use super::source_evaluation::*;
+use swc_core::ecma::ast::{Expr, Lit};
 
 // ==================== the fold this file is about ====================
 
@@ -163,16 +164,47 @@ fn a_property_read_off_an_out_of_range_index_refuses() {
 
 // ==================== the shapes that still refuse ====================
 
-/// A spread stands for however many elements its value holds, so no slot after
-/// it is the one the source names. The receiver refuses to fold at all, which
-/// is the guard the index read sits behind rather than in front of.
+/// A spread of an array the evaluator folded contributes that array's own
+/// elements, so the slots after it are the ones the language names and an index
+/// reads the element it lands on.
+///
+/// `[...["1px"]][0]` is `"1px"` and `["1px", ...["2px"]][0]` is `"1px"`, which
+/// is what the language answers. The count the spread contributes is the folded
+/// array's own, so no slot is guessed.
 #[test]
-fn an_array_carrying_a_spread_refuses_an_index() {
-  for source in [
-    "[...[\"1px\"]][0]",
-    "[\"1px\", ...[\"2px\"]][0]",
-    "[...\"ab\"][0]",
-  ] {
+fn an_array_carrying_a_spread_of_a_folded_array_reads_its_slots() {
+  assert_folds_to_string("[...[\"1px\"]][0]", "1px");
+  assert_folds_to_string("[\"1px\", ...[\"2px\"]][0]", "1px");
+  assert_folds_to_string("[\"1px\", ...[\"2px\"]][1]", "2px");
+}
+
+/// A string spread contributes the characters the language iterates, so an
+/// index reads the one it lands on.
+///
+/// **By code point, not by code unit.** The string iterator groups a surrogate
+/// pair, where `length` counts the halves separately: `node` gives
+/// `[..."\u{1F600}a"]` two elements and `"\u{1F600}a".length` three, and the
+/// first element is the whole emoji. A spread read by unit would answer half a
+/// character here, which is the one wrong answer this case exists to catch.
+#[test]
+fn an_array_carrying_a_string_spread_reads_the_characters_it_iterates() {
+  assert_folds_to_string("[...\"ab\"][0]", "a");
+  assert_folds_to_string("[...\"ab\"][1]", "b");
+  assert_folds_to_undefined("[...\"ab\"][2]");
+
+  // The astral character is one element, so the name after it is at index one
+  // rather than at index two.
+  assert_folds_to_string("[...\"\u{1F600}a\"][1]", "a");
+  assert_folds_to_number("[...\"\u{1F600}a\"][0].length", 2.0);
+}
+
+/// An operand the evaluator cannot iterate still refuses the receiver, so the
+/// index read sits behind that refusal rather than in front of it. A number is
+/// not iterable in the language either; an object and an unresolved name are
+/// operands no iteration here can read.
+#[test]
+fn an_array_carrying_a_spread_it_cannot_read_refuses_an_index() {
+  for source in ["[...1][0]", "[...{ a: 1 }][0]", "[...unknownThing][0]"] {
     assert_deopts(source);
   }
 }
@@ -187,12 +219,18 @@ fn an_array_carrying_a_hole_refuses_an_index() {
 }
 
 /// A string reads an index too, by UTF-16 code unit, so all three receivers
-/// answer an index now. Half of an astral character is the replacement
-/// character, which is the substitution the engine fold already makes.
+/// answer an index now. Half of an astral character is that half: the unit
+/// itself, carried through losslessly rather than substituted.
+///
+/// `"\u{1F600}"[0]` is the high surrogate `0xD83D` in the language --
+/// `"\u{1F600}"[0].charCodeAt(0)` is 55357 -- and the reference implementation
+/// writes the same lone surrogate. Asserted in code units because no `str`
+/// holds one, which is also why the assertion cannot go through
+/// `assert_folds_to_string`.
 #[test]
 fn a_string_reads_an_index_by_code_unit() {
   assert_folds_to_string("\"abc\"[0]", "a");
-  assert_folds_to_string("\"\u{1F600}\"[0]", "\u{fffd}");
+  assert_eq!(folded_code_units("\"\u{1F600}\"[0]"), [0xd83d]);
 }
 
 /// A computed key names the property `String(key)` names, so a key that is not
@@ -209,11 +247,20 @@ fn a_computed_key_that_names_no_slot_reads_undefined() {
 }
 
 /// A parenthesis is not a different receiver, and neither is a nested one.
+///
+/// A spread of a literal array is the approved bounded literal-spread
+/// extension, so the parenthesised receiver holds its elements: `node` answers
+/// `([...["1px"]])[0]` with `"1px"`, where the reference plugin refuses the
+/// `SpreadElement` (`lib/index.js:6942`). A spread with nothing the fold can
+/// iterate still refuses (`node` throws for both; the reference plugin refuses
+/// each as a `SpreadElement`), and so does a hole.
 #[test]
 fn a_parenthesised_receiver_is_indexed_as_the_bare_one_is() {
   assert_folds_to_string("([\"1px\", \"2px\"])[1]", "2px");
   assert_folds_to_string("(([\"1px\", \"2px\"]))[1]", "2px");
-  assert_deopts("([...[\"1px\"]])[0]");
+  assert_folds_to_string("([...[\"1px\"]])[0]", "1px");
+  assert_deopts("([...unknownThing])[0]");
+  assert_deopts("([...1])[0]");
   assert_deopts("([, \"1px\"])[1]");
 }
 
@@ -267,4 +314,21 @@ fn a_chain_of_index_reads_folds() {
   let source = format!("[[\"1px\"]]{}", "[0]".repeat(2));
 
   assert_folds_to_string(&source, "1px");
+}
+
+// ==================== helpers ====================
+
+/// The UTF-16 code units a source folds to.
+///
+/// Read off the atom rather than through a `String`, because half of an astral
+/// character is a lone surrogate: well-formed UTF-16, and a value no `str`
+/// holds. `assert_folds_to_string` reads the folded text through
+/// `convert_atom_to_string`, which aborts the build on exactly the value these
+/// cases are about, so the comparison is made in the units the language counts.
+#[track_caller]
+fn folded_code_units(source: &str) -> Vec<u16> {
+  match assert_folds(source) {
+    Expr::Lit(Lit::Str(text)) => text.value.to_ill_formed_utf16().collect(),
+    other => panic!("expected `{}` to fold to a string, got {:?}", source, other),
+  }
 }

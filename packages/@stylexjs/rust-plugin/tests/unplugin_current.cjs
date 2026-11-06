@@ -123,3 +123,46 @@ test('an invalid compiler choice fails rather than silently falling back', () =>
     /StyleX compiler must be "babel" or "rust"/,
   );
 });
+
+test('Rust opt-in applies the project babel.config like the Babel path', async () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const project = fs.mkdtempSync(path.join(os.tmpdir(), 'stylex-unplugin-'));
+  const previous = process.cwd();
+  try {
+    fs.writeFileSync(path.join(project, 'package.json'), '{"private":true}');
+    fs.mkdirSync(path.join(project, 'node_modules/@stylexjs'), {
+      recursive: true,
+    });
+    fs.symlinkSync(
+      path.resolve(__dirname, '..'),
+      path.join(project, 'node_modules/@stylexjs/rust-plugin'),
+      'junction',
+    );
+    // A project plugin that recolors a style value before StyleX compiles it
+    // and marks the module, so both its edit and its output are observable.
+    fs.writeFileSync(
+      path.join(project, 'babel.config.js'),
+      `module.exports = { plugins: [({ types: t }) => ({ visitor: { Program: {
+        enter(p) { p.traverse({ StringLiteral(s) { if (s.node.value === 'red') s.node.value = 'green'; } }); },
+        exit(p) { p.pushContainer('body', t.expressionStatement(t.stringLiteral('project config'))); },
+      } } })] };`,
+    );
+    process.chdir(project);
+    const id = path.join(project, 'src/component.js');
+    const original = plugin('babel');
+    const expected = await original.transform(source, id);
+    const expectedCss = original.__stylexCollectCss();
+    globalThis.__stylex_unplugin_store?.rulesById.clear();
+    const rust = plugin('rust');
+    const result = await rust.transform(source, id);
+    assert.ok(expected.code.includes('"project config"'));
+    assert.ok(expectedCss.includes('color: green'));
+    assert.ok(result.code.includes('"project config"'));
+    assert.equal(rust.__stylexCollectCss(), expectedCss);
+  } finally {
+    process.chdir(previous);
+    fs.rmSync(project, { recursive: true, force: true });
+  }
+});

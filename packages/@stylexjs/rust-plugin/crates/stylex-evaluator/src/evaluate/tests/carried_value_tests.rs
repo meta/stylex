@@ -177,19 +177,22 @@ fn a_key_crosses_as_the_name_the_language_reads_it_as() {
   assert_eq!(folded_carrying("{ 2: 3 }", "carried[2] + ''"), "3");
 }
 
-/// A key the bridge carries no form of stops the whole crossing, so the call is
-/// handed back rather than folded against an object missing a property the
-/// source wrote. A big integer is such a key: it is not a value this bridge
-/// carries in any position.
+/// A big-integer key is a property key like any other: the language names the
+/// property by the key's string, so `{ 1n: 1 }` is the object `{ "1": 1 }`, and
+/// a callback carrying it hands back that object with nothing missing.
 ///
-/// Handed back is not the same as refused, and only the pair says which
-/// happened: the same call over a key the bridge does carry folds, so the
-/// refusal below belongs to the key rather than to the shape of the call.
+/// `node` answers `[{ "1": 1 }]` and `1` for the two reads below, and so does
+/// the reference implementation, which keys a written literal by the node's own
+/// value (`lib/index.js:6715-6719`, built `@stylexjs/babel-plugin` 0.19.1;
+/// executed). The optional engine's bridge carried no form of a big integer and
+/// handed the call back; the native path has no such bridge.
 #[test]
-fn a_key_with_no_carried_form_is_handed_back() {
+fn a_big_integer_key_is_carried_as_its_string() {
   let source = "[{ 1n: 1 }].map((entry) => entry)";
 
-  assert_refused(&evaluate_source(source), source);
+  assert_folds_to_a_value(source);
+  assert_folds_to_number("[{ 1n: 1 }].map((entry) => entry)[0][1]", 1.0);
+  assert_folds_to_number("[{ 1n: 1 }].map((entry) => entry)[0]['1']", 1.0);
 
   assert_folds_to_number("[{ 1: 1 }].map((entry) => entry)[0][1]", 1.0);
 }

@@ -263,14 +263,18 @@ fn a_string_receiver_is_read_by_code_unit() {
     // character count answered two keys and named the second one `1`, which
     // the language calls `2`. The third is the half of an astral character
     // written on its own, which the text holds before any index is read off it.
-    for receiver in ["'\\u{1F600}'", "'\\u{1F600}a'", "'\\ud83d'"] {
-      let source = format!("Object.{question}(sx.missing ?? {receiver}).length");
-
-      assert_refused_with(
-        &evaluated_against_a_function_fold(&source),
-        &source,
-        ILLEGAL_PROP_ARRAY_VALUE,
-      );
+    //
+    // Each is counted by code unit, lone surrogates included and carried as the
+    // exact units they are (approved native extension: lossless UTF-16, never
+    // U+FFFD): `node` answers 2, 3 and 1 for every question, and so does the
+    // reference implementation (executed). The refusal was the optional
+    // engine's, which could not carry a lone surrogate.
+    for (receiver, count) in [
+      ("'\\u{1F600}'", 2.0),
+      ("'\\u{1F600}a'", 3.0),
+      ("'\\ud83d'", 1.0),
+    ] {
+      assert_eq!(counted_past_the_fold(question, receiver), count);
     }
   }
 }
@@ -300,17 +304,28 @@ fn a_value_that_is_not_an_object_answers_the_empty_list() {
 /// answering a list without that element dropped one value out of it -- both
 /// are CSS the source does not describe.
 ///
-/// This is the deliberate parting the module doc names: the reference
-/// implementation holds the real function and counts its slot.
+/// One of the compiler's own functions is such an element, and stays the
+/// deliberate parting the module doc names: the reference implementation holds
+/// the real function and counts its slot.
+///
+/// An arrow the author wrote is not: the native path carries it as a value, so
+/// its slot is counted as the language counts it -- `node` and the reference
+/// implementation answer a length of 1 for every question (executed). The
+/// refusal of those rows was the optional engine's, which could not carry a
+/// function back.
 #[test]
 fn an_element_with_no_expression_form_refuses_the_receiver() {
   for question in QUESTIONS {
-    for receiver in ["[own]", "[[own]]", "[[[own]]]", "[() => 1]", "[[() => 1]]"] {
+    for receiver in ["[own]", "[[own]]", "[[[own]]]"] {
       assert_refuses(
         question,
         &format!("sx.missing ?? {receiver}"),
         ILLEGAL_PROP_ARRAY_VALUE,
       );
+    }
+
+    for receiver in ["[() => 1]", "[[() => 1]]"] {
+      assert_eq!(counted_past_the_fold(question, receiver), 1.0);
     }
   }
 }
@@ -382,6 +397,25 @@ fn a_callback_receiver_answers_the_empty_list() {
   }
 }
 
+/// The same answer written directly, and the two reflective reads beside it
+/// that it must not be mistaken for.
+///
+/// A source arrow's enumerable own keys are none -- `length` and `name` are
+/// non-enumerable -- so `node` and the reference implementation answer a length
+/// of 0 for each question (executed). `getOwnPropertyNames` lists the
+/// non-enumerable names (`length,name` in `node`) and `hasOwn(fn, 'length')` is
+/// `true`; neither is modelled for a function, so both still refuse rather than
+/// answering the empty list.
+#[test]
+fn a_source_function_has_no_enumerable_own_keys_and_its_other_names_still_refuse() {
+  for question in QUESTIONS {
+    assert_folds_to_number(&format!("Object.{question}(() => 1).length"), 0.0);
+  }
+
+  assert_deopts("Object.getOwnPropertyNames(() => 1)");
+  assert_deopts("Object.hasOwn(() => 1, 'length')");
+}
+
 /// A three-level array is written down whole, which is the one shape that reads
 /// a nested array out of another nested array. The count and the value at the
 /// bottom are both the reference implementation's answers for the same array.
@@ -426,10 +460,16 @@ fn a_value_that_resolved_to_nothing_refuses_the_receiver() {
       "[[[(() => 1) + 1]], 'a']",
       "[[(() => 1) + 1][0], 'a']",
     ] {
+      // The memo now replays the reason the element was refused for (eb1efe6,
+      // "preserve deopt reasons"): the `+` over an arrow. So the receiver
+      // refuses -- never a shorter list -- and says why. The reference
+      // implementation is no oracle for the value: it folds the arrow to the
+      // source text of its own wrapper closure (`lib/index.js:6440-6457`;
+      // executed).
       assert_refuses_after_the_memo(
         question,
         &format!("sx.missing ?? {receiver}"),
-        ILLEGAL_PROP_ARRAY_VALUE,
+        &unsupported_expression("BinaryExpression"),
       );
     }
   }

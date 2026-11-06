@@ -47,19 +47,17 @@ fn a_method_called_through_the_question_mark_refuses() {
   }
 }
 
-/// The call spelling of the same question. The callee is what decides, so an
-/// arrow written where it is called is a base that is there and the chain is
-/// read on rather than stopped.
-///
-/// It refuses at the call itself, because neither compiler folds an arrow
-/// applied where it is written -- but it refuses *there*, naming the call, and
-/// not at the question mark. A chain that had stopped early would have named
-/// the chain instead.
+/// The call spelling of the same question. An optional call is refused as an
+/// optional call whatever its callee is, so an arrow written where it is called
+/// is not applied: the reference plugin has no arm for it and answers exactly
+/// `Unsupported expression: OptionalCallExpression` (oracle run of the
+/// unchanged plugin; terminal arm `lib/index.js:6942`). Optional member reads
+/// are the supported extension; optional calls are not.
 #[test]
-fn a_call_chain_reads_on_through_a_callee_that_is_there() {
+fn an_optional_call_refuses_whatever_its_callee() {
   assert_deopt_reason_contains(
     "((color) => color)?.('red')",
-    &unsupported_expression("CallExpression"),
+    &unsupported_expression("OptionalCallExpression"),
   );
 }
 

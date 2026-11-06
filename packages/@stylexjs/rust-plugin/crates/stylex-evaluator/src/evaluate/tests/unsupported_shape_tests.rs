@@ -16,9 +16,8 @@
 use super::source_evaluation::*;
 use stylex_ast::ast::convertors::convert_atom_to_string;
 use stylex_constants::constants::evaluation_errors::{
-  NON_CONSTANT, SPREAD_ELEMENT, global_as_a_value, unsupported_expression,
+  NON_CONSTANT, SPREAD_ELEMENT, UNDEFINED_CONST, UNEXPECTED_MEMBER_LOOKUP, unsupported_expression,
 };
-use stylex_state::evaluate_result_value::EvaluateResultValue;
 use swc_core::ecma::ast::{Expr, Lit};
 
 // ==================== the reported input ====================
@@ -31,18 +30,28 @@ fn a_string_method_the_evaluator_does_not_fold_refuses_rather_than_aborting() {
 
 // ==================== receivers with no folded methods ====================
 
-/// A number written into the source is the one receiver kind the reference
-/// implementation cannot call a method on: it applies the method without a
-/// receiver, so `(5).toFixed(2)` reports there that `toFixed` requires a
-/// Number. Refusing keeps both compilers rejecting the same input. The rest
-/// here are receivers with no static value at all.
+/// A number written into the source answers its own methods, which is what the
+/// language answers: `(5).toFixed(2)` is `"5.00"`.
+///
+/// The reference implementation cannot do this -- it applies the method with no
+/// receiver, so `Number.prototype.toFixed` reports there that `this` must be a
+/// Number and the build stops. Folding the value the language gives is a
+/// deliberate improvement on that, and every row below is `node`'s own answer.
+#[test]
+fn a_method_call_on_a_written_number_answers_the_language() {
+  assert_folds_to_string("(5).toFixed(2)", "5.00");
+  assert_folds_to_string("((5)).toFixed(2)", "5.00");
+  assert_folds_to_string("(5.5).toPrecision(2)", "5.5");
+  assert_folds_to_string("(5).toString()", "5");
+}
+
+/// The receiver kinds that still carry no folded methods. A big integer has no
+/// CSS spelling and no safe lossy conversion, a regular expression is refused
+/// wherever it is written, and a function's `call` is a step onto the
+/// language's function graph -- so none of these may answer a method.
 #[test]
 fn a_method_call_on_a_receiver_kind_with_no_folds_refuses() {
   for source in [
-    "(5).toFixed(2)",
-    "(5.5).toPrecision(2)",
-    "(5).toString()",
-    "((5)).toFixed(2)",
     "(5n).toString()",
     "null?.toString()",
     "/re/.test(\"a\")",
@@ -215,16 +224,17 @@ fn the_math_surface_folds_rather_than_being_a_list_of_names() {
 /// `Math.random` is the one name on that surface that cannot fold: a class name
 /// is a hash of the declaration it names, so a value that differs per build
 /// would give the same source a different stylesheet every time.
+///
+/// The reason is the reference compiler's, exactly: `random` is not in its
+/// `VALID_CALLEE_METHODS` (babel-plugin `lib/index.js:6233`, checked at
+/// `:6876`), so the call reaches the terminal arm and is named as a
+/// `CallExpression` (`:6942`). The oracle run of the unchanged plugin answers
+/// `Unsupported expression: CallExpression` for both rows.
 #[test]
-fn a_static_whose_answer_moves_between_builds_refuses_by_name() {
-  assert_deopt_reason_contains(
-    "Math.random()",
-    "Cannot fold 'Math.random' at compile time.",
-  );
-  assert_deopt_reason_contains(
-    "Math.random().toFixed(2)",
-    "Cannot fold 'Math.random' at compile time.",
-  );
+fn a_static_whose_answer_moves_between_builds_refuses() {
+  for source in ["Math.random()", "Math.random().toFixed(2)"] {
+    assert_unsupported_expression(source, "CallExpression");
+  }
 }
 
 /// The `Object` statics fold the same way, and the three that read own keys
@@ -254,94 +264,89 @@ fn the_object_statics_fold_rather_than_being_a_list_of_names() {
   );
 }
 
-/// A static the reference compiler refuses by name is refused here too, and
-/// says which name.
+/// A static the reference compiler refuses is refused here too, with its
+/// reason.
 ///
 /// Each of these answers by changing the object it was handed rather than by
 /// computing one, so folding it would write a declaration the source does not
-/// describe.
+/// describe. None is in the reference compiler's `VALID_CALLEE_METHODS`
+/// (babel-plugin `lib/index.js:6233`), so each reaches the terminal arm and is
+/// named as a `CallExpression` (`:6942`); the oracle run of the unchanged plugin
+/// answers exactly that for every row.
 #[test]
-fn a_static_that_changes_its_argument_refuses_by_name() {
-  for (source, name) in [
-    ("Object.assign({}, {})", "Object.assign"),
-    ("Object.freeze({})", "Object.freeze"),
-    ("Object.seal({})", "Object.seal"),
-    (
-      "Object.defineProperty({}, \"a\", {})",
-      "Object.defineProperty",
-    ),
+fn a_static_that_changes_its_argument_refuses() {
+  for source in [
+    "Object.assign({}, {})",
+    "Object.freeze({})",
+    "Object.seal({})",
+    "Object.defineProperty({}, \"a\", {})",
   ] {
-    assert_deopt_reason_contains(source, &format!("Cannot fold '{}' at compile time.", name));
+    assert_unsupported_expression(source, "CallExpression");
   }
 }
 
-/// A static the language itself throws on refuses under the engine's own
-/// complaint, which is the sentence the reference compiler stops on too.
+/// A static the language itself throws on refuses rather than folding or
+/// aborting the build.
 ///
-/// Each case names what was thrown. The first three also show that the engine
-/// answers an own-keys call with no argument, in all three spellings of the
-/// question. That is what the dispatch below the engine relies on: it reads the
-/// first argument of such a call, and it has no reading for a call with none. A
-/// case that asked only whether the call refused could not tell the engine's
-/// answer from that dispatch's.
+/// Node throws a `TypeError` for every row (oracle `node` run: `Cannot convert
+/// undefined or null to object` for the first four, `number 1 is not iterable`
+/// and `Iterator value 1 is not an entry object` for the last two), and the
+/// unchanged reference plugin lets the same `TypeError` escape its evaluation
+/// (oracle `babel` run), which stops the build. Refusing is the answer that keeps
+/// the build and the meaning: no value is invented for a call the language
+/// rejects. The engine-specific wording these rows used to pin belonged to the
+/// retired engine and is no longer an answer either compiler gives.
 #[test]
-fn a_static_the_language_throws_on_refuses_with_what_it_threw() {
-  for (source, thrown) in [
-    (
-      "Object.keys()",
-      "TypeError: cannot convert 'null' or 'undefined' to object",
-    ),
-    (
-      "Object.values()",
-      "TypeError: cannot convert 'null' or 'undefined' to object",
-    ),
-    (
-      "Object.entries()",
-      "TypeError: cannot convert 'null' or 'undefined' to object",
-    ),
-    (
-      "Object.keys(null)",
-      "TypeError: cannot convert 'null' or 'undefined' to object",
-    ),
-    (
-      "Object.fromEntries(1)",
-      "TypeError: value with type `number` is not iterable",
-    ),
-    (
-      "Object.fromEntries([1])",
-      "TypeError: cannot get key and value from primitive item of `iterable`",
-    ),
+fn a_static_the_language_throws_on_refuses() {
+  for source in [
+    "Object.keys()",
+    "Object.values()",
+    "Object.entries()",
+    "Object.keys(null)",
+    "Object.fromEntries(1)",
+    "Object.fromEntries([1])",
   ] {
-    assert_deopt_reason_contains(source, thrown);
+    assert_deopts(source);
   }
 }
 
-/// A spread argument refuses, with the one answer upstream gives, whatever the
-/// callee is.
+/// A spread argument of a value the evaluator folded contributes that value's
+/// elements, whatever the callee is, and answers what the language answers.
 ///
 /// The reference implementation maps its evaluation over the argument *paths*,
 /// so a spread argument is a `SpreadElement` node reaching the terminal
-/// unsupported arm — the same answer a spread earns as an array element, and
-/// for the same reason. This evaluator reads `arg.expr`, so the refusal is made
-/// in `evaluate_func_call_args`, which every callee's arguments go through.
-///
-/// Made there rather than per callee because ours used to vary by callee where
-/// upstream's does not: the member built-ins said the spread was unsupported in
-/// this context, `concat` said all arguments must be a string, `join` named the
-/// call, and `firstThatWorks` said the argument must be static. One mistake,
-/// five sentences, none of them the one an author reads from upstream.
+/// unsupported arm (babel-plugin `lib/index.js:6942`) and every row here is
+/// refused there. Spreading a folded array is an approved JS-correct extension
+/// over that, and every value below is `node`'s own answer (oracle `node` run).
 #[test]
-fn a_spread_argument_refuses_as_a_spread_whatever_the_callee() {
+fn a_spread_argument_contributes_the_elements_of_a_folded_array() {
+  assert_folds_to_string("String(...[\"a\", \"b\"])", "a");
+  assert_folds_to_number("Number(...[1])", 1.0);
+  assert_folds_to_number("Math.max(...[1, 2])", 2.0);
+  assert_folds_to_number("Math.pow(2, ...[3])", 8.0);
+  assert!(
+    folds_to_a_list("Object.keys(...[{}])").is_empty(),
+    "expected `Object.keys(...[{{}}])` to fold to the empty list"
+  );
+  assert_folds_to_string("[\"a\", \"b\"].join(...[\"-\"])", "a-b");
+  assert_folds_to_string("\"a\".concat(...[\"b\"])", "ab");
+}
+
+/// A spread argument the language cannot iterate, or the evaluator cannot
+/// resolve, still refuses: the extension above only ever contributes elements
+/// of a value the fold already holds. Node throws for every row (oracle `node`
+/// run: a `TypeError` for the three literals, a `ReferenceError` for the
+/// unbound name), and the reference plugin refuses each as a `SpreadElement`
+/// (`lib/index.js:6942`).
+#[test]
+fn a_spread_argument_with_nothing_to_iterate_still_refuses() {
   for source in [
-    "String(...[\"a\", \"b\"])",
-    "Number(...[1])",
-    "Math.max(...[1, 2])",
-    "Math.pow(2, ...[3])",
-    "Object.keys(...[{}])",
-    "[\"a\", \"b\"].join(...[\"-\"])",
-    "\"a\".concat(...[\"b\"])",
+    "Math.max(...1)",
+    "String(...null)",
+    "Math.max(...{ a: 1 })",
+    "Math.max(...unknownThing)",
   ] {
-    assert_deopt_reason(source, SPREAD_ELEMENT);
+    assert_deopts(source);
   }
 }
 
@@ -357,39 +362,62 @@ fn the_same_calls_still_fold_without_a_spread() {
   assert_folds("\"a\".concat(\"b\")");
 }
 
-/// Every spread inside an array refuses, with the one answer upstream gives.
+/// A spread of an array the evaluator folded contributes that array's own
+/// elements, which is what the language does with one.
 ///
-/// The reference implementation evaluates each element *path*, so a spread
-/// arrives as a `SpreadElement` node and hits its terminal unsupported-
-/// expression arm — whatever the operand, and before the operand is looked at.
-/// This evaluator reads `elem.expr`, unwrapping the spread, so the refusal is
-/// made explicitly for the two to agree.
-///
-/// A literal operand is the case that used to fold rather than refuse:
-/// `[..."ab"]` answered `["ab"]` where the language spreads two characters, and
-/// `[...1]` answered `[1]` where the language throws.
+/// The operand is resolved first, so what the spread contributes is a count and
+/// a set of values the fold already holds rather than a guess: `[...[1, 2]]` is
+/// `[1, 2]` and `[[...[1, 2]]]` keeps the nesting the source wrote. The
+/// reference implementation refuses every spread, evaluating each element
+/// *path* and hitting its terminal unsupported-expression arm on the
+/// `SpreadElement` node; folding one is a deliberate extension over that, and
+/// the values are the language's.
 #[test]
-fn every_spread_in_an_array_refuses_as_a_spread() {
-  for source in [
-    "[...\"ab\"]",
-    "[...1]",
-    "[...null]",
-    "[...{ a: 1 }]",
-    "[...[1, 2]]",
-    "[...[1, 2], 3]",
-    "[\"red\", ...\"ab\"]",
-    "[[...[1, 2]]]",
-  ] {
+fn a_spread_of_a_folded_array_contributes_its_elements() {
+  assert_folds_to_strings("[...[\"a\", \"b\"]]", &["a", "b"]);
+  assert_folds_to_strings("[...[\"a\", \"b\"], \"c\"]", &["a", "b", "c"]);
+  assert_folds_to_strings("[\"a\", ...[\"b\", \"c\"]]", &["a", "b", "c"]);
+  assert_folds_to_number("[[...[1, 2]]].length", 1.0);
+  assert_folds_to_number("[[...[1, 2]]][0].length", 2.0);
+}
+
+/// A spread of a string inside an array contributes the string's characters,
+/// which is what the language spreads (oracle `node` run: `["a", "b"]` and
+/// `["red", "a", "b"]`). The reference plugin refuses both as a
+/// `SpreadElement` (`lib/index.js:6942`); spreading a string is an approved
+/// JS-correct extension, and `[..."ab"]` must never answer `["ab"]`.
+#[test]
+fn a_spread_of_a_string_contributes_its_characters() {
+  assert_folds_to_strings("[...\"ab\"]", &["a", "b"]);
+  assert_folds_to_strings("[\"red\", ...\"ab\"]", &["red", "a", "b"]);
+}
+
+/// Every other spread inside an array still refuses as a spread, with the one
+/// answer upstream gives: the reference plugin refuses each as a
+/// `SpreadElement` (`lib/index.js:6942`; the oracle run answers exactly
+/// `Unsupported expression: SpreadElement`), and the language throws on each
+/// (oracle `node` run: `TypeError: … is not iterable`).
+///
+/// `[...1]` answered `[1]` where the language throws, which is the guess this
+/// guards against: none of these is an operand the language iterates.
+#[test]
+fn a_spread_the_language_cannot_iterate_refuses_as_a_spread() {
+  for source in ["[...1]", "[...null]", "[...{ a: 1 }]"] {
     assert_deopt_reason(source, SPREAD_ELEMENT);
   }
 }
 
-/// An operand the evaluator cannot resolve is still a spread refusal, not the
-/// operand's own — which is why the spread is refused before the operand is
-/// evaluated at all.
+/// An operand the evaluator cannot resolve still refuses the array, and now
+/// does so under the operand's own sentence rather than the spread's: the
+/// operand *is* what stopped it, and naming it is what sends an author to the
+/// line they have to change.
+///
+/// `[...unknownThing]` is the shape that matters -- a dynamic operand must
+/// never contribute elements the fold invented. The refusal is the guard; which
+/// of the two sentences it carries is the reporting.
 #[test]
-fn a_spread_of_an_unresolvable_operand_still_refuses_as_a_spread() {
-  assert_deopt_reason("[...unknownThing]", SPREAD_ELEMENT);
+fn a_spread_of_an_unresolvable_operand_still_refuses_under_the_operand() {
+  assert_deopt_reason("[...unknownThing]", UNDEFINED_CONST);
 }
 
 // ==================== object and member shapes ====================
@@ -454,9 +482,12 @@ fn a_spread_of_a_string_or_an_array_contributes_its_indices() {
   assert_folds_to_string("Object.values({ ...\"ab\" }).join(\",\")", "a,b");
   assert_folds_to_string("Object.values({ ...[1, 2] }).join(\",\")", "1,2");
 
-  // An astral character is two code units and each is a lone surrogate, which
-  // no Rust string holds. Refused rather than approximated.
-  assert_deopts("({ ...\"\\u{1F600}\" })");
+  // An astral character is two UTF-16 code units, so it spreads to two
+  // indices, each holding a lone surrogate. Both the reference plugin and
+  // `node` answer `{ "0": "\uD83D", "1": "\uDE00" }` (oracle runs); the exact
+  // UTF-16 reading is an approved extension of the string folds.
+  assert_folds_to_object_keys("({ ...\"\\u{1F600}\" })", &["0", "1"]);
+  assert_folds_to_string("Object.keys({ ...\"\\u{1F600}\" }).join(\",\")", "0,1");
 }
 
 /// The two object lookups that answer rather than refuse keep answering: a key
@@ -613,19 +644,32 @@ fn an_operand_with_no_value_refuses_rather_than_aborting() {
 /// compiler writes for it.
 ///
 /// A key is a string whatever it names, so the whole list crosses back. The
-/// *values* do not: a function has no form the bridge carries, so asking for
-/// them refuses rather than dropping the one it cannot write.
+/// *values* cross back too, each function as the typed callback the evaluator
+/// made of it -- never as text and never dropped (parent decision: genuine
+/// source callbacks keep their typed identity). `node` and the reference
+/// implementation answer the function itself in each slot (executed). The
+/// refusal was the optional engine's bridge, which carried no function.
 #[test]
 fn a_receiver_holding_a_function_answers_its_keys_and_refuses_its_values() {
   for receiver in ["[x => x]", "[[x => x]]"] {
     assert_folds_to_string(&format!("Object.keys({}).join(\",\")", receiver), "0");
-    assert_deopts(&format!("Object.values({})", receiver));
-    assert_deopts(&format!("Object.entries({})", receiver));
   }
 
+  // The values of `[x => x]`: one slot, holding the callback itself.
+  match folds_to_a_list("Object.values([x => x])").as_slice() {
+    [stylex_state::evaluate_result_value::EvaluateResultValue::Callback(_)] => {},
+    other => panic!("expected one typed callback, got {:?}", other),
+  }
+  assert_folds_to_string("typeof Object.values([x => x])[0]", "function");
+  assert_folds_to_string("typeof Object.values([[x => x]])[0][0]", "function");
+  assert_folds_to_string("Object.entries([x => x])[0][0]", "0");
+  assert_folds_to_string("typeof Object.entries([x => x])[0][1]", "function");
+  assert_folds_to_string("typeof Object.entries([[x => x]])[0][1][0]", "function");
+
   assert_folds_to_string("Object.keys([1, x => x]).join(\",\")", "0,1");
-  assert_deopts("Object.values([1, x => x])");
-  assert_deopts("Object.entries([1, x => x])");
+  assert_eq!(folds_to_a_list("Object.values([1, x => x])").len(), 2);
+  assert_folds_to_string("typeof Object.values([1, x => x])[1]", "function");
+  assert_folds_to_string("typeof Object.entries([1, x => x])[1][1]", "function");
 }
 
 /// The receivers around it still fold, including the one that is absent for the
@@ -656,30 +700,19 @@ fn a_readable_object_method_receiver_still_folds() {
 
 /// Asserts an own-keys call folds to the strings `expected`, in order.
 ///
-/// Either spelling of a list, because the two paths that answer one write
-/// different ones: the engine answers the evaluator's own list, and the reading
-/// written out in Rust -- which is what a hole or a declined engine leaves --
-/// answers an array literal.
+/// Every spelling of a list, read through the shared [`folds_to_a_list`]: the
+/// paths that answer one write different ones -- the evaluator's own list, the
+/// engine's native array, and the array literal a hole or a declined engine
+/// leaves -- and the key list is the same answer in each.
 #[track_caller]
 fn assert_own_keys_are(source: &str, expected: &[&str]) {
-  let folded = match assert_folds_to_a_value(source) {
-    EvaluateResultValue::Vec(items) => items
-      .iter()
-      .map(|item| match item.as_expr() {
-        Some(expr) => string_of(expr, source),
-        None => panic!("expected `{}` to hold strings, got {:?}", source, item),
-      })
-      .collect::<Vec<String>>(),
-    EvaluateResultValue::Expr(Expr::Array(array)) => array
-      .elems
-      .iter()
-      .map(|elem| match elem {
-        Some(elem) => string_of(&elem.expr, source),
-        None => panic!("expected `{}` to hold no hole", source),
-      })
-      .collect::<Vec<String>>(),
-    other => panic!("expected `{}` to fold to a list, got {:?}", source, other),
-  };
+  let folded = folds_to_a_list(source)
+    .iter()
+    .map(|item| match item.as_expr() {
+      Some(expr) => string_of(expr, source),
+      None => panic!("expected `{}` to hold strings, got {:?}", source, item),
+    })
+    .collect::<Vec<String>>();
 
   assert_eq!(folded, expected, "wrong key list for `{}`", source);
 }
@@ -746,10 +779,10 @@ fn assert_unsupported_expression(source: &str, kind: &str) {
 ///
 /// The ticket claimed `["a", "b"].filter(Boolean)` answered `Unsupported
 /// expression: Unknown`. It does not, and never did: the refusal is about the
-/// *identifier* long before the call is dispatched. Which identifier it names
-/// has since changed — `Boolean` is a global the fold recognises and has no
-/// value for, so it is named as the global it is rather than as a constant
-/// nothing declared.
+/// *identifier* long before the call is dispatched. `Boolean` has no binding in
+/// the module, so it is a constant nothing declared -- the reference plugin's
+/// `UNDEFINED_CONST` (babel-plugin `lib/index.js:6226`, raised at `:6635`;
+/// the oracle run answers exactly `Referenced constant is not defined.`).
 ///
 /// `startsWith` no longer refuses for being unlisted — the whole prototype
 /// surface folds and the list it was looked up in is gone. What answers instead
@@ -762,10 +795,7 @@ fn assert_unsupported_expression(source: &str, kind: &str) {
 /// "restored" onto arms that never produced it.
 #[test]
 fn the_reported_inputs_refuse_by_name_rather_than_by_node_kind() {
-  assert_deopt_reason(
-    "[\"a\", \"b\"].filter(Boolean)",
-    &global_as_a_value("Boolean"),
-  );
+  assert_deopt_reason("[\"a\", \"b\"].filter(Boolean)", UNDEFINED_CONST);
 
   assert_deopt_reason(
     "\"documentation\".startsWith(lowerQuery)",
@@ -827,14 +857,16 @@ fn names_a_call_whose_callee_is_not_callable() {
 }
 
 /// A refusal that happens *after* an evaluation succeeded names the value it
-/// got, not the expression it was asked about. Naming the node at the deopt
-/// path here would restate the code frame — `Unsupported expression:
-/// MemberExpression` under a member expression says nothing — while the
-/// receiver's kind says which half of `a.b` the evaluator could not use.
+/// got, not the expression it was asked about.
+///
+/// A property read on an arrow is refused (decision D2) as the member lookup it
+/// could not determine. The reference plugin and `node` both answer
+/// `undefined` here (oracle runs); refusing instead is the decided guard, so
+/// no property of a function value is ever read at build time.
 #[test]
 fn names_the_value_a_refusal_arrived_with() {
-  // The receiver of a property read is a value with no properties to read.
-  assert_unsupported_expression("({ a: () => 1 }).a.b", "ArrowFunctionExpression");
+  // The receiver of a property read is a function: the read is refused.
+  assert_deopt_reason("({ a: () => 1 }).a.b", UNEXPECTED_MEMBER_LOOKUP);
 
   // `typeof` folded its operand and has no `typeof` answer for the result.
   assert_unsupported_expression("typeof /a/", "RegExpLiteral");
@@ -865,18 +897,21 @@ fn a_logical_operand_keeps_the_label_of_the_operand_that_refused() {
 
 /// The label never carries the author's text, so nothing in the source can
 /// malform it: an unterminated string, an unbalanced bracket or a lone
-/// surrogate escape reaches the same fixed name as the shape it is written in.
-/// Depth is bounded by the parser, not by the label.
+/// surrogate escape reaches the same fixed reason as the shape it is written
+/// in. Depth is bounded by the parser, not by the label.
+///
+/// The two property reads on an arrow are refused under decision D2, as the
+/// row above (the reference plugin and `node` answer `undefined`; oracle runs).
 #[test]
 fn the_label_is_unaffected_by_hostile_source_text() {
-  assert_unsupported_expression(
+  assert_deopt_reason(
     "({ '\\u{1F600}}{': () => 1 })['\\u{1F600}}{'].b",
-    "ArrowFunctionExpression",
+    UNEXPECTED_MEMBER_LOOKUP,
   );
 
-  assert_unsupported_expression(
+  assert_deopt_reason(
     "({ 'a\"b\\'c;}': () => 1 })['a\"b\\'c;}'].b",
-    "ArrowFunctionExpression",
+    UNEXPECTED_MEMBER_LOOKUP,
   );
 
   let nested = format!("{}new Date(){}", "(".repeat(200), ")".repeat(200));

@@ -27,12 +27,12 @@ fn finds_no_marker_where_none_is_written() {
   assert!(!object_has_css_marker(&object("{}")));
 }
 
-/// The marker is the value `true`. Any other value is a property that happens
-/// to share the name.
+/// Compiled debug markers are string-valued; false is not a marker.
 #[test]
 fn finds_no_marker_under_another_value() {
   assert!(!object_has_css_marker(&object("{ $$css: false }")));
-  assert!(!object_has_css_marker(&object("{ $$css: 'true' }")));
+  assert!(object_has_css_marker(&object("{ $$css: 'true' }")));
+  assert!(!object_has_css_marker(&object("{ $$css: 1 }")));
 }
 
 /// A key spelled in a way that names nothing at compile time is not the marker,

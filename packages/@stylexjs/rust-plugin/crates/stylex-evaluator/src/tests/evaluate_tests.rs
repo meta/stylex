@@ -3,7 +3,7 @@ use stylex_ast::ast::convertors::{
   create_bool_expr, create_ident_expr, create_null_expr, create_number_expr, create_string_expr,
 };
 use stylex_ast::ast::factories::create_ident;
-use stylex_constants::constants::evaluation_errors::unsupported_expression;
+use stylex_constants::constants::evaluation_errors::{UNDEFINED_CONST, unsupported_expression};
 use stylex_state::{functions::FunctionMap, state_manager::StateManager};
 use stylex_structures::stylex_options::StyleXOptions;
 use swc_core::{
@@ -776,11 +776,14 @@ fn evaluate_expr_reason_with_globals(expr: &Expr) -> (bool, Option<String>) {
   })
 }
 
-/// An unsupported method on an array literal refuses to fold and names the
-/// method, rather than aborting the build. The name matters because a deopt
-/// that lands inside `stylex.create()` is what the author reads.
+/// An unsupported method on an array literal refuses to fold rather than
+/// aborting the build, with the reference compiler's reason: `[1].unsupported()`
+/// reaches its terminal arm and is named as a `CallExpression` (babel-plugin
+/// `lib/index.js:6942`; the oracle run of the unchanged plugin answers exactly
+/// `Unsupported expression: CallExpression`). The language has no such method
+/// either (`node`: `TypeError: [1].unsupported is not a function`).
 #[test]
-fn test_unsupported_array_method_deopts_with_the_method_name() {
+fn test_unsupported_array_method_deopts_as_a_call_expression() {
   let array = make_array_expr(vec![create_number_expr(1.0)]);
   let member = make_member_expr(array, "unsupported");
   let call = make_call_expr(member, vec![]);
@@ -792,19 +795,19 @@ fn test_unsupported_array_method_deopts_with_the_method_name() {
     "Should refuse to fold an unsupported array method"
   );
 
-  let reason = reason.unwrap_or_default();
-
-  assert!(
-    reason.contains("unsupported"),
-    "Deopt reason should contain the method name 'unsupported', got: {}",
-    reason
+  assert_eq!(
+    reason.as_deref(),
+    Some(unsupported_expression("CallExpression").as_str()),
+    "wrong deopt reason for `[1].unsupported()`"
   );
 }
 
 /// The same for a string literal receiver — the exact shape reported in
-/// [#1265](https://github.com/Dwlad90/stylex-swc-plugin/issues/1265).
+/// [#1265](https://github.com/Dwlad90/stylex-swc-plugin/issues/1265). The
+/// reference compiler answers the same `CallExpression` reason (`:6942`, oracle
+/// run), and `node` throws `TypeError: "hello".unsupported is not a function`.
 #[test]
-fn test_unsupported_string_method_deopts_with_the_method_name() {
+fn test_unsupported_string_method_deopts_as_a_call_expression() {
   let string = create_string_expr("hello");
   let member = make_member_expr(string, "unsupported");
   let call = make_call_expr(member, vec![]);
@@ -816,12 +819,10 @@ fn test_unsupported_string_method_deopts_with_the_method_name() {
     "Should refuse to fold an unsupported string method"
   );
 
-  let reason = reason.unwrap_or_default();
-
-  assert!(
-    reason.contains("unsupported"),
-    "Deopt reason should contain the method name 'unsupported', got: {}",
-    reason
+  assert_eq!(
+    reason.as_deref(),
+    Some(unsupported_expression("CallExpression").as_str()),
+    "wrong deopt reason for `\"hello\".unsupported()`"
   );
 }
 
@@ -843,9 +844,13 @@ fn test_supported_array_methods_no_panic() {
   );
 }
 
-// ==================== ERROR REASON KEY-PATH TESTS ====================
-// These tests verify that when evaluating an object expression with a
-// non-static value, the error reason includes the property key name.
+// ==================== ERROR REASON OF AN OBJECT VALUE ====================
+// When an object expression holds a non-static value, the object refuses with
+// the value's own reason. The reference compiler's object arm passes the
+// value's reason through unchanged, with no key prefix (babel-plugin
+// `lib/index.js:6720-6724`), and this evaluator's `evaluate` has no
+// `stylex.create()` argument key-prefix layer either; the key is reported by
+// the code frame of the call that rejected the object.
 
 fn evaluate_expr_full(expr: &Expr) -> (bool, Option<String>) {
   let mut state_manager = StateManager::new(StyleXOptions::default());
@@ -855,8 +860,10 @@ fn evaluate_expr_full(expr: &Expr) -> (bool, Option<String>) {
 }
 
 #[test]
-fn test_object_eval_failure_reason_includes_property_key() {
-  // Evaluating { color: someVar } should produce a reason that includes "color"
+fn test_object_eval_failure_reason_is_the_reason_of_its_value() {
+  // `({ color: someVar })` refuses as the unbound `someVar` refuses: the
+  // reference plugin answers exactly `Referenced constant is not defined.`
+  // (`lib/index.js:6635`, passed through at `:6720-6724`; oracle run).
   let obj = Expr::Object(ObjectLit {
     span: DUMMY_SP,
     props: vec![PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
@@ -870,18 +877,18 @@ fn test_object_eval_failure_reason_includes_property_key() {
     !confident,
     "Object with variable value should not be confident"
   );
-  let reason_str = reason.expect("Should have a reason for the failure");
-  assert!(
-    reason_str.contains("color"),
-    "Reason should contain the property key 'color', got: {}",
-    reason_str
+  assert_eq!(
+    reason.as_deref(),
+    Some(UNDEFINED_CONST),
+    "wrong deopt reason for `({{ color: someVar }})`"
   );
 }
 
 #[test]
-fn test_object_eval_failure_reason_includes_nested_key() {
-  // Evaluating { backgroundColor: someVar } should include "backgroundColor" in
-  // reason
+fn test_object_eval_failure_reason_is_the_reason_of_its_value_for_any_key() {
+  // The same for a camel-cased key: `({ backgroundColor: dynamicValue })`
+  // answers exactly `Referenced constant is not defined.` in the reference
+  // plugin (oracle run), with no key in the reason.
   let obj = Expr::Object(ObjectLit {
     span: DUMMY_SP,
     props: vec![PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
@@ -895,10 +902,9 @@ fn test_object_eval_failure_reason_includes_nested_key() {
     !confident,
     "Object with variable value should not be confident"
   );
-  let reason_str = reason.expect("Should have a reason for the failure");
-  assert!(
-    reason_str.contains("backgroundColor"),
-    "Reason should contain the property key 'backgroundColor', got: {}",
-    reason_str
+  assert_eq!(
+    reason.as_deref(),
+    Some(UNDEFINED_CONST),
+    "wrong deopt reason for `({{ backgroundColor: dynamicValue }})`"
   );
 }

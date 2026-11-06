@@ -5,8 +5,8 @@
 
 use super::*;
 use crate::evaluate::source_evaluation::{
-  a_character_ceiling_of, assert_deopts, assert_folds_to_boolean, assert_folds_to_nan,
-  assert_folds_to_number, assert_folds_to_string,
+  a_character_ceiling_of, assert_deopt_reason_contains, assert_deopts, assert_folds_to_boolean,
+  assert_folds_to_nan, assert_folds_to_number, assert_folds_to_string, evaluate_source,
 };
 use stylex_ast::ast::convertors::create_ident_expr;
 use stylex_ast::ast::convertors::create_null_expr;
@@ -883,11 +883,13 @@ fn a_comparison_answers_a_boolean() {
     ("1 === 1", true),
     ("1 !== 2", true),
     ("1 == '1'", true),
-    // `!=` answers the negation of `===` here and in the reference
-    // implementation, where the language answers the negation of `==` and so
-    // calls this false. The parting is older than this case and deliberate --
-    // see `EqualityReading::NotStrict`.
-    ("1 != '1'", true),
+    // `!=` is the negation of `==`, as the language reads it: `node` answers
+    // `false` here and for `null != undefined`. The reference implementation
+    // answers `true` for both, because its `!=` arm returns `left !== right`
+    // (`lib/index.js:6830-6831`, built `@stylexjs/babel-plugin` 0.19.1) -- a
+    // defect this compiler does not reproduce (owner decision: JS-correct `!=`).
+    ("1 != '1'", false),
+    ("null != undefined", false),
     ("'10' < '9'", true),
     ("'a' === 'a'", true),
     ("'a' === 'b'", false),
@@ -927,36 +929,37 @@ fn a_comparison_still_decides_a_condition() {
   assert_folds_to_string("(1 < 2) && 'a'", "a");
 }
 
-/// A comparison with an object on either side refuses, whichever operator it is
-/// and whichever side the object is on.
+/// A comparison with a primitive on one side and an object on the other
+/// answers what the language answers, whichever operator it is and whichever
+/// side the object is on: the object is reduced through `ToPrimitive` and the
+/// result compared, and a strict comparison is false on the types alone. The
+/// values are `node`'s own for each source, and the reference implementation
+/// folds the same values with the language's own operators
+/// (`lib/index.js:6802-6855`, built `@stylexjs/babel-plugin` 0.19.1; executed).
 ///
-/// The language compares two objects by reference, and this evaluator holds a
-/// copy: `o == o` is one reference read twice and true, `({}) == ({})` is two
-/// references and false, and a copy cannot tell the two apart. The reference
-/// implementation holds real values and answers both.
-///
-/// Refusing every one of them is the decision, rather than answering the rows
-/// that need no identity. Two of these could be folded -- a primitive against
-/// an object reduces the object through `ToPrimitive` and compares the result,
-/// and a strict comparison of a primitive against an object is false on the
-/// types alone -- but then `1 == ({})` would fold where `({}) == ({})` beside
-/// it refused, for the same reason a copy cannot answer either. One rule that
-/// never writes a wrong value is worth more than two rows of a comparison
-/// nobody writes on purpose.
+/// Two objects compare by reference, and that comparison still refuses: the
+/// language answers `o == o` true and `({}) == ({})` false, and refusing both
+/// is what keeps a reading that lost identity from writing a wrong `true` or
+/// `false`. `node` and the reference implementation answer `false` for the row
+/// below (executed); the refusal is this compiler's guard, kept.
 #[test]
-fn a_comparison_with_an_object_on_either_side_refuses() {
-  for source in [
-    "1 == ({})",
-    "1 === ({})",
-    "1 != ({})",
-    "({}) == 1",
-    "({}) == ({})",
-    "[1, 2] == '1,2'",
-    "1 == [1]",
-    "({}) < 1",
+fn a_comparison_with_an_object_on_either_side_answers_what_the_language_answers() {
+  for (source, expected) in [
+    ("1 == ({})", false),
+    ("1 === ({})", false),
+    ("1 != ({})", true),
+    ("({}) == 1", false),
+    ("[1, 2] == '1,2'", true),
+    ("1 == [1]", true),
+    ("({}) < 1", false),
   ] {
-    assert_deopts(source);
+    assert_folds_to_boolean(source, expected);
   }
+
+  // Parent-approved JS identity: two written object allocations are distinct.
+  // Executed Node and unchanged Babel both answer false; only unknown alias
+  // identity keeps the refusal guard (pinned below in the dedicated test).
+  assert_folds_to_boolean("({}) == ({})", false);
 }
 
 /// An array or an object under an operator that reads each side as a number.
@@ -992,7 +995,6 @@ fn an_array_or_an_object_is_read_as_a_number_by_each_numeric_operator() {
     "[1, 2] * 1",
     "({}) - 1",
     "({}) ** 1",
-    "[() => 1] * 2",
     "(() => 1) - 1",
     "({ valueOf: 1 }) - 1",
     "({ valueOf: null }) * 2",
@@ -1000,17 +1002,28 @@ fn an_array_or_an_object_is_read_as_a_number_by_each_numeric_operator() {
   ] {
     assert_folds_to_nan(source);
   }
+
+  // An array holding a function reads through its join, which is the
+  // function's source text: `node` answers `NaN` from it. This compiler does
+  // not rebuild a function's source, so it refuses rather than guess at it.
+  assert_deopt_reason_contains(
+    "[() => 1] * 2",
+    "Cannot convert a function to a compile-time primitive.",
+  );
 }
 
 /// The operators that do not read each side as a number keep their own
 /// reading. `+` concatenates an array, because its primitive is a string. A
-/// comparison with an array refuses, as the test above says.
+/// relational comparison reads the array's primitive (`'2'`) and then its
+/// number, and a strict comparison is false on the types alone -- `node` and the
+/// reference implementation (`lib/index.js:6802-6855`) both answer `true` and
+/// `false`.
 #[test]
 fn the_other_operators_do_not_read_an_array_or_an_object_as_a_number() {
   assert_folds_to_string("[2] + 1", "21");
   assert_folds_to_string("1 + [2, 3]", "12,3");
-  assert_deopts("[2] < 3");
-  assert_deopts("[2] === 2");
+  assert_folds_to_boolean("[2] < 3", true);
+  assert_folds_to_boolean("[2] === 2", false);
 }
 
 /// The number of an array is read off its join, and that join is measured
@@ -1037,28 +1050,54 @@ fn a_numeric_operator_refuses_an_array_whose_text_passes_the_ceiling() {
   );
 }
 
-/// An own conversion method that answers a BigInt gives no number. The
-/// language mixes a BigInt with a number in no operator, and it throws. The
-/// reference implementation refuses each row.
+/// An own conversion method whose body is a BigInt literal has no
+/// compile-time value. The conversion runs that method as an expression arrow,
+/// so its body's refusal arrives as a throw rather than a deopt: the reference
+/// implementation folds the arrow into a closure, the operator calls it, and
+/// the closure throws `Unsupported expression: BigIntLiteral` out of
+/// `lib/index.js:6451` (built `@stylexjs/babel-plugin` 0.19.1; executed for
+/// each row). `node` throws a `TypeError` for each row (a BigInt never mixes
+/// with a number). One case per row, because each is a throw.
 #[test]
-fn a_numeric_operator_refuses_an_object_that_converts_to_a_big_integer() {
-  for source in [
-    "({ valueOf: () => 2n }) * 3",
-    "({ valueOf: () => 2n }) ** 2",
-    "3 - ({ valueOf: () => 2n })",
-    "({ toString: () => 2n }) - 1",
-  ] {
-    assert_deopts(source);
-  }
+#[should_panic(expected = "Unsupported expression: BigIntLiteral")]
+fn a_numeric_operator_over_an_object_that_converts_to_a_big_integer_throws() {
+  evaluate_source("({ valueOf: () => 2n }) * 3");
 }
 
-/// `in` asks whether an object has a key, which no number answers, so the fold
-/// refuses. The source is in parentheses, because the case parser does not read
-/// `in` at the top level.
+/// The same throw under `**`.
 #[test]
-fn in_over_an_object_refuses() {
-  for source in ["('a' in ({ a: 1 }))", "('b' in ({ a: 1 }))", "(0 in [1])"] {
-    assert_deopts(source);
+#[should_panic(expected = "Unsupported expression: BigIntLiteral")]
+fn a_power_over_an_object_that_converts_to_a_big_integer_throws() {
+  evaluate_source("({ valueOf: () => 2n }) ** 2");
+}
+
+/// The same throw with the object on the right.
+#[test]
+#[should_panic(expected = "Unsupported expression: BigIntLiteral")]
+fn a_subtraction_from_an_object_that_converts_to_a_big_integer_throws() {
+  evaluate_source("3 - ({ valueOf: () => 2n })");
+}
+
+/// The same throw through `toString`, which a number hint reaches once the
+/// inherited `valueOf` answers an object.
+#[test]
+#[should_panic(expected = "Unsupported expression: BigIntLiteral")]
+fn a_to_string_that_converts_to_a_big_integer_throws() {
+  evaluate_source("({ toString: () => 2n }) - 1");
+}
+
+/// `in` asks whether an object has a key, and the answer is the language's:
+/// `node` and the reference implementation (`lib/index.js:6848-6849`, `left in
+/// right`) answer `true`, `false`, `true`. The source is in parentheses,
+/// because the case parser does not read `in` at the top level.
+#[test]
+fn in_over_an_object_answers_what_the_language_answers() {
+  for (source, expected) in [
+    ("('a' in ({ a: 1 }))", true),
+    ("('b' in ({ a: 1 }))", false),
+    ("(0 in [1])", true),
+  ] {
+    assert_folds_to_boolean(source, expected);
   }
 }
 
@@ -1087,4 +1126,49 @@ fn an_addition_skips_a_conversion_method_that_gives_no_primitive() {
   assert_folds_to_string("({ valueOf: 1, toString: () => 'a' }) + ''", "a");
   assert_deopts("({ toString: () => ({}) }) + ''");
   assert_deopts("({ toString: [] }) + ''");
+}
+
+#[test]
+fn reference_equality_uses_fresh_literals_and_guarded_binding_identity() {
+  // Node and unchanged Babel: reference/reference equality never coerces. Two
+  // written literal allocations differ; the same initialized lexical binding
+  // denotes the same allocation. No structural-object equality is substituted.
+  for source in [
+    "({}) == ({})",
+    "({}) === ({})",
+    "[] == []",
+    "(() => 1) === (() => 1)",
+  ] {
+    assert_folds_to_boolean(source, false);
+  }
+  for source in ["({}) != ({})", "({}) !== ({})", "[] !== []"] {
+    assert_folds_to_boolean(source, true);
+  }
+  for (source, expected) in [
+    ("object == object", true),
+    ("object === object", true),
+    ("object != object", false),
+    ("object !== object", false),
+  ] {
+    let result =
+      crate::evaluate::source_evaluation::evaluated_in_a_module_binding("object", "{}", source);
+    assert!(result.confident, "{source}: {:?}", result.reason);
+    assert!(
+      matches!(result.value.as_ref().and_then(|value|value.as_expr()),Some(Expr::Lit(Lit::Bool(value))) if value.value==expected),
+      "{source}: {:?}",
+      result.value
+    );
+  }
+  // The legacy expression carrier cannot certify alias identity through a
+  // returned value. Refuse rather than claim the alias is a distinct object.
+  let alias = crate::evaluate::source_evaluation::evaluated_in_a_module_binding(
+    "object",
+    "{}",
+    "((value)=>value)(object) == object",
+  );
+  assert!(
+    !alias.confident,
+    "unproven alias identity must never fold false: {:?}",
+    alias.value
+  );
 }

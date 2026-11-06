@@ -565,20 +565,28 @@ fn an_import_resolution_writes_nothing_at_a_higher_level() {
   assert!(messages.is_empty());
 }
 
-/// Reading variables out of the file that imports them is not supported, and
-/// the compiler says so rather than resolving the import to nothing.
+/// `experimental_crossFileParsing` resolves an import as `commonJS` does, so a
+/// consumer references the theme file's variables (upstream refused the mode
+/// with "This module resolution strategy is not yet supported.").
 #[test]
-#[should_panic(expected = "This module resolution strategy is not yet supported.")]
-fn cross_file_parsing_is_refused() {
-  let state = state_for(
-    real("/repo/src/app.js"),
+fn cross_file_parsing_resolves_as_common_js() {
+  let file = fixture("package_json_with_name/app.js");
+  let cross_file = state_for(
+    real(&file.to_string_lossy()),
     CheckModuleResolution::CrossFileParsing {
       root_dir: None,
       theme_file_extension: None,
     },
   );
+  let common_js = state_for(real(&file.to_string_lossy()), common_js(None, None));
 
-  state.import_path_resolver("./vars.stylex.js", &mut FxHashMap::default());
+  let resolved = cross_file.import_path_resolver("./vars.stylex.js", &mut FxHashMap::default());
+
+  assert!(matches!(resolved, ImportPathResolution::Resolved { .. }));
+  assert_eq!(
+    resolved,
+    common_js.import_path_resolver("./vars.stylex.js", &mut FxHashMap::default())
+  );
 }
 
 /// A project that spells the variable-file extension as nothing marks every
@@ -671,15 +679,54 @@ fn a_path_with_no_folder_above_it_names_no_package() {
   );
 }
 
-/// Resolving an import needs the package the importing file belongs to. A file
-/// that belongs to none cannot be resolved against, and the compiler says which
-/// file it was.
+/// A file that belongs to no package resolves its imports against its own
+/// directory, as the Babel plugin's resolver does (a StyleX change from
+/// upstream, which refused such a file; see crates/PROVENANCE.md). An import
+/// that is not there is left unresolved like any other missing import.
 #[test]
-#[should_panic(expected = "Cannot get package name and path for")]
-fn an_import_from_a_file_outside_every_package_is_refused() {
+fn an_import_from_a_file_outside_every_package_resolves_against_its_own_directory() {
   let state = state_for(real("/vars.stylex.js"), common_js(None, None));
 
-  state.import_path_resolver("./other.stylex.js", &mut FxHashMap::default());
+  assert!(matches!(
+    state.import_path_resolver("./other.stylex.js", &mut FxHashMap::default()),
+    ImportPathResolution::Unresolved
+  ));
+}
+
+/// The positive control: beside a file that belongs to no package, an import
+/// that is on disk resolves, under the name a file outside every package is
+/// hashed under.
+#[test]
+fn an_import_beside_a_file_outside_every_package_resolves() {
+  let dir = std::env::temp_dir().join(format!(
+    "stylex-outside-every-package-{}",
+    std::process::id()
+  ));
+  let _ = std::fs::remove_dir_all(&dir);
+  std::fs::create_dir_all(&dir).unwrap();
+  std::fs::write(dir.join("app.js"), "").unwrap();
+  std::fs::write(dir.join("other.stylex.js"), "").unwrap();
+  let mut seen = FxHashMap::default();
+  assert!(
+    StateManager::get_package_name_and_path(&dir.join("app.js").to_string_lossy(), &mut seen)
+      .is_none(),
+    "the control needs a directory that belongs to no package"
+  );
+  let state = state_for(
+    real(&dir.join("app.js").to_string_lossy()),
+    common_js(None, None),
+  );
+
+  let resolution = state.import_path_resolver("./other.stylex.js", &mut seen);
+  let _ = std::fs::remove_dir_all(&dir);
+
+  assert!(
+    matches!(
+      &resolution,
+      ImportPathResolution::Resolved { path } if path == "_unknown_path_:other.stylex.js"
+    ),
+    "got {resolution:?}"
+  );
 }
 
 /// The directory the compilation runs in is the one the pass states.

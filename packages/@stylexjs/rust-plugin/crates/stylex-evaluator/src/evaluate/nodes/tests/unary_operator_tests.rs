@@ -15,7 +15,6 @@ use stylex_ast::ast::convertors::create_number_expr;
 use stylex_constants::constants::evaluation_errors::{
   NUMERIC_CONVERSION, grown_string_too_large, unsupported_expression, unsupported_operator,
 };
-use stylex_constants::constants::messages::ILLEGAL_PROP_VALUE;
 use stylex_state::{evaluate_result_value::EvaluateResultValue, functions::FunctionMap};
 use swc_core::ecma::ast::{Expr, Lit};
 
@@ -194,23 +193,24 @@ fn typeof_reads_the_kind_of_a_value_read_out_of_an_object() {
   assert_folds_to_string("typeof ({ a: [1, 2] }).a", "object");
 }
 
-/// An operand with no numeric reading refuses, and the sentence is the first
-/// reading's own -- the coercion has nothing to add about a shape the evaluator
-/// could not read at all.
+/// An operand with no numeric reading refuses, in the language's own words.
 ///
 /// `{ toString: 1 }` is such a shape, at all three operators. Its own
 /// `toString` is not callable and `Object.prototype.valueOf` answers the object
 /// rather than a primitive, so the language itself throws `Cannot convert
-/// object to primitive value` where a number was wanted. A refusal is the
-/// answer a value no runtime can produce deserves.
+/// object to primitive value` where a number was wanted: `node` throws that
+/// `TypeError` for each row, and so does the reference implementation, whose
+/// unary arm is the language's own operator (`lib/index.js:6641-6669`;
+/// executed). A refusal is the answer a value no runtime can produce deserves;
+/// the node-kind sentence was the optional engine's.
 #[test]
-fn a_numeric_operator_over_an_object_with_no_conversion_names_the_shape() {
+fn a_numeric_operator_over_an_object_with_no_conversion_refuses_in_the_languages_words() {
   for source in [
     "-({ toString: 1 })",
     "+({ toString: 1 })",
     "~({ toString: 1 })",
   ] {
-    assert_deopt_reason_contains(source, "ObjectExpression");
+    assert_deopt_reason_contains(source, "Cannot convert object to primitive value");
   }
 }
 
@@ -258,13 +258,22 @@ fn an_operator_over_an_operand_that_answered_nothing_refuses() {
   }
 }
 
-/// A value that is not there has no truthiness, no kind and no number, and each
-/// operator refuses rather than guessing one. Read as "absent" it would be
-/// falsy, `"undefined"` and `NaN`; read as "a value nothing resolved" it has
-/// none of the three -- and the evaluator does not know which it is, so a guess
-/// would put a value in the stylesheet that the source does not describe.
+/// A value the memo already refused has no truthiness, no kind and no number,
+/// and each operator refuses rather than guessing one -- a guess would put a
+/// value in the stylesheet that the source does not describe.
 ///
-/// `??` is the exception, and answers: absence is exactly what it asks about.
+/// The memo used to remember a refused subtree without its reason, and these
+/// cases pinned the sentence that stood in for it. The memo now replays the
+/// recorded reason (eb1efe6, "preserve deopt reasons"), so the second read of
+/// `(() => 1) + 1` refuses as the first did:
+/// `Unsupported expression: BinaryExpression` -- an arrow has no primitive this
+/// compiler will spell. The reference implementation is no oracle for the value:
+/// it folds the arrow to the source text of its own wrapper closure
+/// (`lib/index.js:6440-6457`, `+` at `:6806-6807`; executed). The warm is kept
+/// so the memo is what answers.
+///
+/// `??` asks about absence rather than about a value, and a refusal is not an
+/// absence, so it refuses too.
 #[test]
 fn an_operator_over_a_value_that_is_not_there_refuses() {
   for source in [
@@ -279,15 +288,18 @@ fn an_operator_over_a_value_that_is_not_there_refuses() {
     assert_refused_with(
       &evaluated_after(UNRESOLVED_MEMO_WARM, source),
       source,
-      ILLEGAL_PROP_VALUE,
+      &unsupported_expression("BinaryExpression"),
     );
   }
 
-  assert_eq!(
-    folded_text_of(
-      evaluated_after(UNRESOLVED_MEMO_WARM, "[(() => 1) + 1][0] ?? 'red'"),
-      "a fallback beside a value that is not there"
-    ),
-    "red"
+  // `??` asks about absence, and a replayed refusal is not an absence: the
+  // operand refused, so `??` refuses too rather than substituting `'red'` for a
+  // value the walk could not read. That is the reference implementation's `??`
+  // arm, which deopts whenever its left operand is not confident
+  // (`lib/index.js:6782-6794`).
+  assert_refused_with(
+    &evaluated_after(UNRESOLVED_MEMO_WARM, "[(() => 1) + 1][0] ?? 'red'"),
+    "a fallback beside a value the memo refused",
+    &unsupported_expression("BinaryExpression"),
   );
 }

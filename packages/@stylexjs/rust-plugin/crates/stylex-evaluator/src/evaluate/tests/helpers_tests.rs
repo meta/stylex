@@ -1,5 +1,4 @@
 use super::*;
-use std::rc::Rc;
 use stylex_ast::ast::convertors::{create_ident_expr, create_null_expr, create_string_expr};
 use stylex_ast::ast::factories::create_expr_or_spread;
 use stylex_state::{theme_ref::ThemeRef, types::FunctionConfigMap};
@@ -109,7 +108,9 @@ fn the_two_bridges_agree_a_function_map_is_an_object() {
 /// under it has no string at all.
 #[test]
 fn the_two_bridges_agree_a_callback_is_a_function() {
-  let callback = EvaluateResultValue::Callback(Rc::new(|_args, _fns| Some(create_null_expr())));
+  let callback = super::source_evaluation::evaluate_source("()=>null")
+    .value
+    .unwrap_or_else(|| panic!("callback must evaluate"));
 
   assert_eq!(
     string_of(&callback, coercions::FunctionForm::Refuse),

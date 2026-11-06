@@ -188,6 +188,44 @@ fn one_style_registered_twice_is_recorded_once() {
   assert_eq!(state.metadata().get("stylex").map(|set| set.len()), Some(1));
 }
 
+/// The deduplicated metadata is derived from the reported rules when read. It
+/// holds what recording each rule into a set as it arrived held: every rule
+/// once, in the order of its first report, under `"stylex"` -- also across a
+/// read made between two registrations.
+#[test]
+fn the_metadata_is_the_reported_rules_deduplicated_in_first_report_order() {
+  let mut state = state_with(None);
+  let red = regular_style("x1e2nbdu", ".x1e2nbdu{color:red}", None);
+  let blue = regular_style("xju2f9n", ".xju2f9n{color:blue}", Some(".xju2f9n{color:navy}"));
+  let mut both = red.clone();
+  both.extend(blue.clone());
+
+  state.register_styles(&call_expr("create"), &red, &object_expr(), None);
+  assert_eq!(state.metadata().get("stylex").map(|set| set.len()), Some(1));
+
+  state.register_styles(&call_expr("create"), &blue, &object_expr(), None);
+  state.register_styles(&call_expr("create"), &both, &object_expr(), None);
+  state.register_atom_styles(&red);
+
+  let mut eager: IndexMap<String, indexmap::IndexSet<_>> = IndexMap::new();
+  for rule in state.reported_rules() {
+    let set = eager.entry("stylex".to_string()).or_default();
+    if !set.contains(rule) {
+      set.insert(rule.clone());
+    }
+  }
+
+  assert_eq!(state.reported_rules().len(), 5);
+  assert_eq!(state.metadata(), &eager);
+  assert_eq!(
+    state.metadata()["stylex"]
+      .iter()
+      .map(|rule| rule.get_class_name())
+      .collect::<Vec<_>>(),
+    vec!["x1e2nbdu", "xju2f9n"]
+  );
+}
+
 /// With no runtime injection configured, the style is still recorded -- the
 /// host writes the stylesheet -- and nothing is queued to inject it.
 #[test]
@@ -673,10 +711,9 @@ fn a_theme_import_is_queued_once() {
   assert_eq!(body_shapes(&body), vec!["import", "import", "var"]);
 }
 
-/// Theme imports are dropped with the rest of the runtime work when injection
-/// is off, which is what makes them a runtime concern rather than a module one.
+/// Import evaluation compensation is independent of runtime CSS injection.
 #[test]
-fn theme_imports_are_dropped_without_the_runtime_helpers() {
+fn theme_imports_are_kept_without_the_runtime_helpers() {
   let mut state = state_with(None);
   let mut body = vec![var_item("component", object_expr())];
 
@@ -684,7 +721,7 @@ fn theme_imports_are_dropped_without_the_runtime_helpers() {
 
   flush_pending_insertions(&mut state, &mut body, false);
 
-  assert_eq!(body_shapes(&body), vec!["var"]);
+  assert_eq!(body_shapes(&body), vec!["import", "var"]);
 }
 
 /// A namespace import queued for an `sx` attribute goes above everything,
@@ -1404,5 +1441,240 @@ mod finding_the_object_a_statement_holds {
     flush_pending_insertions(&mut state, &mut body, true);
 
     assert_eq!(body_shapes(&body), vec!["import", "var", "call", "var"]);
+  }
+}
+
+/// The `create` transform records a call's style variable after the call's
+/// rules are registered, holding the compiled object, rather than before with
+/// the call and having registration rewrite it. Where the call registers rules
+/// the two orders leave the state the same, for a fresh name and for a name an
+/// earlier, differently bound declarator already holds.
+mod style_var_registration_order {
+  use super::*;
+  use swc_core::common::{BytePos, Span, SyntaxContext};
+  use swc_core::ecma::ast::{BindingIdent, Ident, Pat, VarDeclarator};
+  use stylex_enums::top_level_expression::TopLevelExpressionKind;
+  use stylex_structures::top_level_expression::TopLevelExpression;
+  use stylex_utils::hash::stable_hash_unspanned_call;
+
+  fn create_call(lo: u32) -> CallExpr {
+    CallExpr {
+      span: Span::new(BytePos(lo), BytePos(lo + 20)),
+      callee: Callee::Expr(Box::new(Expr::Ident(create_ident("create")))),
+      args: vec![swc_core::ecma::ast::ExprOrSpread {
+        spread: None,
+        expr: Box::new(string_expr("styles")),
+      }],
+      type_args: None,
+      ctxt: Default::default(),
+    }
+  }
+
+  fn declarator(name: &str, ctxt: u32, init: Expr) -> VarDeclarator {
+    VarDeclarator {
+      span: DUMMY_SP,
+      name: Pat::Ident(BindingIdent {
+        id: Ident::new(name.into(), DUMMY_SP, SyntaxContext::from_u32(ctxt)),
+        type_ann: None,
+      }),
+      init: Some(Box::new(init)),
+      definite: false,
+    }
+  }
+
+  /// A state the discovery pass filled for `name = create(...)`, optionally
+  /// with an earlier style variable of the same name already compiled.
+  fn discovered(call: &CallExpr, name: &str, predecessor: bool) -> StateManager {
+    let mut state = state_with(None);
+    let call_expr = Expr::Call(call.clone());
+    state.push_declaration(declarator(name, 1, call_expr.clone()));
+    state.push_top_level_expression(TopLevelExpression(
+      TopLevelExpressionKind::Stmt,
+      call_expr,
+      Some(name.into()),
+    ));
+    state.add_call_expression(call);
+    if predecessor {
+      state.insert_style_var(name.to_string(), declarator(name, 2, object_expr()));
+    }
+    state
+  }
+
+  fn compiled() -> Expr {
+    object_expr()
+  }
+
+  fn snapshot(state: &StateManager, call: &CallExpr) -> String {
+    let key = stable_hash_unspanned_call(call);
+    let mut style_vars: Vec<_> = state.style_vars.iter().collect();
+    style_vars.sort_by(|a, b| a.0.cmp(b.0));
+    format!(
+      "{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{}",
+      style_vars,
+      state.call_index_candidates(key),
+      state.declarations,
+      state.top_level_expressions,
+      state.call_expressions,
+      state.reported_rules(),
+      state.evaluation_input_revision(),
+      state.pending_module_items.len(),
+    )
+  }
+
+  /// What an earlier declarator left recorded before the call under test.
+  #[derive(Clone, Copy)]
+  enum Prior {
+    None,
+    /// The same name, bound differently, already compiled.
+    SameNameCompiled,
+    /// The same name, bound differently, still holding the same call because
+    /// its own call registered no rules.
+    SameNameHoldingCall,
+    /// Another name still holding the same call.
+    OtherNameHoldingCall,
+  }
+
+  fn prepared(call: &CallExpr, prior: Prior) -> StateManager {
+    let mut state = discovered(call, "styles", false);
+    let call_expr = Expr::Call(call.clone());
+    match prior {
+      Prior::None => {},
+      Prior::SameNameCompiled => {
+        state.insert_style_var("styles".to_string(), declarator("styles", 2, compiled()));
+      },
+      Prior::SameNameHoldingCall => {
+        state.insert_style_var("styles".to_string(), declarator("styles", 2, call_expr));
+      },
+      Prior::OtherNameHoldingCall => {
+        state.insert_style_var("other".to_string(), declarator("other", 3, call_expr));
+      },
+    }
+    state
+  }
+
+  /// The order the transform used before: the style variable recorded with
+  /// the call, then the rules registered.
+  fn original_sequence(state: &mut StateManager, call: &CallExpr, styles: &InjectableStylesMap) {
+    state.insert_style_var("styles".to_string(), declarator("styles", 1, Expr::Call(call.clone())));
+    state.register_styles(call, styles, &compiled(), None);
+  }
+
+  /// The order the transform uses now, guards included.
+  fn guarded_sequence(state: &mut StateManager, call: &CallExpr, styles: &InjectableStylesMap) {
+    let key = stable_hash_unspanned_call(call);
+    if !styles.is_empty() && state.style_var_for_call_keyed(call, || key).is_none() {
+      state.register_styles(call, styles, &compiled(), None);
+      state.insert_style_var("styles".to_string(), declarator("styles", 1, compiled()));
+    } else {
+      original_sequence(state, call, styles);
+    }
+  }
+
+  fn assert_same_state(prior: Prior, styles: InjectableStylesMap) {
+    let call = create_call(10);
+
+    let mut original = prepared(&call, prior);
+    original_sequence(&mut original, &call, &styles);
+
+    let mut guarded = prepared(&call, prior);
+    guarded_sequence(&mut guarded, &call, &styles);
+
+    assert_eq!(snapshot(&original, &call), snapshot(&guarded, &call));
+  }
+
+  fn rules() -> InjectableStylesMap {
+    regular_style("x1e2nbdu", ".x1e2nbdu{color:red}", None)
+  }
+
+  #[test]
+  fn a_fresh_name_ends_in_the_same_state() {
+    assert_same_state(Prior::None, rules());
+    assert_same_state(Prior::None, IndexMap::new());
+  }
+
+  #[test]
+  fn a_name_an_earlier_binding_holds_ends_in_the_same_state() {
+    assert_same_state(Prior::SameNameCompiled, rules());
+    assert_same_state(Prior::SameNameCompiled, IndexMap::new());
+  }
+
+  #[test]
+  fn an_earlier_binding_still_holding_the_call_ends_in_the_same_state() {
+    assert_same_state(Prior::SameNameHoldingCall, rules());
+    assert_same_state(Prior::SameNameHoldingCall, IndexMap::new());
+  }
+
+  #[test]
+  fn another_name_still_holding_the_call_ends_in_the_same_state() {
+    assert_same_state(Prior::OtherNameHoldingCall, rules());
+    assert_same_state(Prior::OtherNameHoldingCall, IndexMap::new());
+  }
+
+  /// Without the guards -- the call recorded compiled after registration
+  /// whatever registration did -- a call with no rules, or another name still
+  /// holding the call, would leave a different state. (The same name still
+  /// holding it happens to converge, because recording the name replaces that
+  /// entry either way; the guard keeps the original order there too.)
+  #[test]
+  fn the_unguarded_order_differs_where_the_guards_apply() {
+    for (prior, styles) in [
+      (Prior::None, IndexMap::new()),
+      (Prior::SameNameCompiled, IndexMap::new()),
+      (Prior::OtherNameHoldingCall, rules()),
+    ] {
+      let call = create_call(10);
+      let mut original = prepared(&call, prior);
+      original_sequence(&mut original, &call, &styles);
+
+      let mut unguarded = prepared(&call, prior);
+      unguarded.register_styles(&call, &styles, &compiled(), None);
+      unguarded.insert_style_var("styles".to_string(), declarator("styles", 1, compiled()));
+
+      assert_ne!(snapshot(&original, &call), snapshot(&unguarded, &call));
+    }
+  }
+
+  /// An earlier declarator of the same name whose call registered no rules
+  /// still holds that call, so registering an identical call with rules would
+  /// rewrite *it*. The transform asks this before recording its own style
+  /// variable compiled, and keeps the old order when it answers.
+  #[test]
+  fn an_unrewritten_style_variable_for_the_same_call_is_reported() {
+    let call = create_call(10);
+    let mut state = discovered(&call, "styles", false);
+    state.insert_style_var("styles".to_string(), declarator("styles", 2, Expr::Call(call.clone())));
+    state.register_styles(&call, &IndexMap::new(), &compiled(), None);
+
+    let key = stable_hash_unspanned_call(&call);
+    assert_eq!(
+      state.style_var_for_call_keyed(&call, || key).as_deref(),
+      Some("styles")
+    );
+    assert_eq!(state.style_var_for_call_keyed(&create_call(40), || key), Some("styles".into()));
+
+    state.register_styles(
+      &call,
+      &regular_style("x1e2nbdu", ".x1e2nbdu{color:red}", None),
+      &compiled(),
+      None,
+    );
+    assert_eq!(state.style_var_for_call_keyed(&call, || key), None);
+  }
+
+  /// Registration rewrites nothing for a call with no rules, so there the
+  /// orders differ -- the style variable keeps the call -- which is why the
+  /// transform records such a call's style variable before registering, as it
+  /// always did.
+  #[test]
+  fn a_call_with_no_rules_keeps_the_call_as_its_style_variable() {
+    let call = create_call(10);
+    let mut state = discovered(&call, "styles", false);
+    state.insert_style_var("styles".to_string(), declarator("styles", 1, Expr::Call(call.clone())));
+    state.register_styles(&call, &IndexMap::new(), &compiled(), None);
+
+    assert_eq!(
+      state.style_vars["styles"].init.as_deref(),
+      Some(&Expr::Call(call.clone()))
+    );
   }
 }

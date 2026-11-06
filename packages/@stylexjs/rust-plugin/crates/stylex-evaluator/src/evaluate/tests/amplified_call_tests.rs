@@ -33,15 +33,26 @@ fn a_count_written_as_an_expression_is_worked_out() {
   assert_folds_to_string("'ab'.repeat(1 + 1)", "abab");
 }
 
-/// An array amplifier is measured in entries rather than characters, and folds
-/// on the same terms -- inside a callback and out.
+/// An array amplifier is measured in entries rather than characters.
+///
+/// Both sources name `fill`, which mutates, and this compiler refuses every
+/// mutating array method today -- so what they pin is the refusal, inside a
+/// callback and out. The reference implementation folds them on a receiver
+/// nothing can name afterwards; that half is the A10 follow-up, and the
+/// sources are kept exactly as they will be asserted when it lands.
+/// The refusal happens inside the `map` callback, so it is thrown out of the
+/// callback as the Babel plugin throws it, rather than returned as a deopt.
 #[test]
-fn an_array_amplifier_folds_in_entries() {
-  assert_folds_to_string("['a'].map(() => [1, 2].fill(0)).flat().join('-')", "0-0");
-  assert_folds_to_string(
-    "['a'].map(() => Array(3).fill('x').join('')).join('-')",
-    "xxx",
-  );
+#[should_panic(expected = "Unsupported expression: CallExpression")]
+fn an_array_amplifier_refuses_in_entries() {
+  evaluate_source("['a'].map(() => [1, 2].fill(0)).flat().join('-')");
+}
+
+/// The same refusal for an amplified array filled inside the callback.
+#[test]
+#[should_panic(expected = "Unsupported expression: CallExpression")]
+fn an_amplified_array_fill_refuses_in_entries() {
+  evaluate_source("['a'].map(() => Array(3).fill('x').join('')).join('-')");
 }
 
 /// A length declared as a property rather than written as an argument is read

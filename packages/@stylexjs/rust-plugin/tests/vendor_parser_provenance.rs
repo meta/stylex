@@ -3,8 +3,8 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-const ARCHIVE: &[u8] = include_bytes!("fixtures/swc_ecma_parser-38.0.2.crate");
-const MANIFEST: &str = include_str!("fixtures/swc_ecma_parser-38.0.2.manifest");
+const ARCHIVE: &[u8] = include_bytes!("fixtures/swc_ecma_parser-45.1.6.crate");
+const MANIFEST: &str = include_str!("fixtures/swc_ecma_parser-45.1.6.manifest");
 
 fn sha256(bytes: &[u8]) -> String {
     const K: [u32; 64] = [
@@ -96,6 +96,24 @@ fn inventory(root: &Path, directory: &Path, files: &mut BTreeSet<PathBuf>) {
     }
 }
 
+fn restore_hunk(actual: &mut Vec<u8>, patched: &[u8], original: &[u8], name: &str) {
+    let matches: Vec<_> = actual
+        .windows(patched.len())
+        .enumerate()
+        .filter(|(_, bytes)| *bytes == patched)
+        .map(|(index, _)| index)
+        .collect();
+    assert_eq!(
+        matches.len(),
+        1,
+        "approved vendor hunk must occur exactly once: {name}"
+    );
+    actual.splice(
+        matches[0]..matches[0] + patched.len(),
+        original.iter().copied(),
+    );
+}
+
 #[test]
 fn sha256_matches_standard_empty_short_and_multiblock_vectors() {
     assert_eq!(
@@ -113,18 +131,18 @@ fn sha256_matches_standard_empty_short_and_multiblock_vectors() {
 }
 
 #[test]
-fn vendored_parser_diff_is_exactly_one_public_visibility_bridge() {
-    assert_eq!(ARCHIVE.len(), 180823, "immutable published archive length");
+fn vendored_parser_diff_is_exactly_the_three_approved_public_hunks() {
+    assert_eq!(ARCHIVE.len(), 206906, "immutable published archive length");
     assert_eq!(
         sha256(ARCHIVE),
-        "a7c251d44e048647b5335861d1585b3e95fa8bc74f6e7a40570b0ea95d27ba66"
+        "a4af66bb9a4cbd2a600b41c2592e27b7947b7e30aa6918d321f987f9e0ff63f5"
     );
     // This manifest was generated from every file member of that immutable
     // archive. Freeze it separately so changing source and expected file hashes
     // together cannot silently add a second vendor patch.
     assert_eq!(
         sha256(MANIFEST.as_bytes()),
-        "b1e58a84ddf109a5f05f85e0d5200463ca77774b80806ac0a7f173f9bc291b44"
+        "ec1ba12ee860af66507685421d3e28ca6292bcdfd915648cfdeb85a2eb9145f8"
     );
     let vendor = Path::new(env!("CARGO_MANIFEST_DIR")).join("vendor/swc_ecma_parser");
     let mut expected = BTreeSet::new();
@@ -160,6 +178,14 @@ fn vendored_parser_diff_is_exactly_one_public_visibility_bridge() {
                 positions[0]..positions[0] + public.len(),
                 original.iter().copied(),
             );
+        } else if name == "src/parser/expr.rs" {
+            let patched = b"        } else if cur == Token::Hash {\n            self.parse_private_name().map(Into::into)\n        } else if cur == Token::Ident {";
+            let original = b"        } else if cur == Token::Hash {\n            self.bump(); // consume `#`\n            let id = self.parse_ident_name()?;\n            if self.syntax().flow() {\n                self.emit_err(self.span(start), SyntaxError::TS1003);\n            }\n            Ok(PrivateName {\n                span: self.span(start),\n                name: id.sym,\n            }\n            .into())\n        } else if cur == Token::Ident {";
+            restore_hunk(&mut actual, patched, original, name);
+        } else if name == "src/parser/stmt.rs" {
+            let patched = b"                if await_token.is_some() {\n                    let ctx = self.ctx();\n                    if ctx.contains(Context::InStaticBlock)\n                        || (ctx.contains(Context::InFunction) && !ctx.contains(Context::InAsync))\n                    {\n                        self.emit_err(self.span(start), SyntaxError::AwaitInFunction);\n                    } else if !ctx.contains(Context::InAsync) && !ctx.contains(Context::CanBeModule) {\n                        self.emit_err(self.span(start), SyntaxError::TopLevelAwaitInScript);\n                    }\n                }";
+            let original = b"                if await_token.is_some()\n                    && self.syntax().flow()\n                    && !self.ctx().contains(Context::InAsync)\n                {\n                    self.emit_err(self.span(start), SyntaxError::AwaitForStmt);\n                }";
+            restore_hunk(&mut actual, patched, original, name);
         }
         assert_eq!(actual.len(), length, "vendored length differs for {name}");
         assert_eq!(
@@ -174,5 +200,5 @@ fn vendored_parser_diff_is_exactly_one_public_visibility_bridge() {
         actual, expected,
         "vendored file inventory differs from the published archive"
     );
-    assert_eq!(actual.len(), 41);
+    assert_eq!(actual.len(), 42);
 }

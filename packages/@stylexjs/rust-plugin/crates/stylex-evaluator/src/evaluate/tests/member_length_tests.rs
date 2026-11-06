@@ -15,7 +15,10 @@
 //! load-bearing half of this file.
 
 use super::source_evaluation::*;
-use stylex_constants::constants::evaluation_errors::BLOCKED_PROPERTY_ACCESS;
+use stylex_constants::constants::evaluation_errors::{
+  BLOCKED_PROPERTY_ACCESS, unsupported_expression,
+};
+use swc_core::ecma::ast::{Expr, Lit};
 
 // ==================== the fold this file is about ====================
 
@@ -86,17 +89,36 @@ fn an_array_a_fold_produced_answers_its_length() {
   assert_folds_to_number("[\"a\", \"b\"].join(\"-\").length", 3.0);
 }
 
-/// A spread is one written element standing for however many the spread value
-/// holds, so neither the written count nor the evaluated one is the language's
-/// answer. Refusing is the point: counting `[...[1, 2]]` as one slot would be a
-/// confidently wrong number, which is the defect this whole file removes.
+/// A spread of an array the evaluator folded contributes that array's own
+/// elements, so the count is the one the language reports rather than a guess:
+/// the written slots cannot answer it -- one written element stands for however
+/// many the spread holds -- and the evaluated elements can, because the spread
+/// has already been resolved into them.
 #[test]
-fn an_array_carrying_a_spread_refuses_rather_than_being_miscounted() {
+fn an_array_carrying_a_folded_spread_is_counted_by_its_elements() {
+  assert_folds_to_number("[...[1, 2]].length", 2.0);
+  assert_folds_to_number("[...[1, 2], 3].length", 3.0);
+  assert_folds_to_number("[1, ...[2, 3]].length", 3.0);
+}
+
+/// A string spreads into its code units, as the language spreads it (approved
+/// native extension: JavaScript-correct spread), so `[..."ab"].length` is `2` --
+/// `node`'s answer; the reference implementation refuses every spread
+/// (`Unsupported expression: SpreadElement`, array arm `lib/index.js:6670-6684`).
+///
+/// An operand the evaluator does not spread still refuses the array, so no
+/// count is answered for it: a number and a plain object are not iterable (a
+/// `TypeError` in the language) and a name nothing binds has no elements.
+/// Counting any of them as one slot would be a confidently wrong number, which
+/// is the defect this whole file removes.
+#[test]
+fn an_array_carrying_a_spread_it_cannot_read_refuses_rather_than_being_miscounted() {
+  assert_folds_to_number("[...\"ab\"].length", 2.0);
+
   for source in [
-    "[...[1, 2]].length",
-    "[...[1, 2], 3].length",
-    "[1, ...[2, 3]].length",
-    "[...\"ab\"].length",
+    "[...1].length",
+    "[...{ a: 1 }].length",
+    "[...unknownThing].length",
   ] {
     assert_deopts(source);
   }
@@ -106,16 +128,22 @@ fn an_array_carrying_a_spread_refuses_rather_than_being_miscounted() {
 ///
 /// The literal is read off the receiver's own AST, and an unnormalized read
 /// finds a `ParenExpression` instead of an array — falling through to the
-/// evaluated element count, which is blind to every spread, or to the hole's own
-/// refusal. `([, 1]).length` answered `1`, and `([...[1, 2]]).length` answered
-/// `1` confidently where the bare form refuses.
+/// evaluated element count, which is blind to the hole's own refusal, or to a
+/// spread the array resolved. `([, 1]).length` answered `1`, and a
+/// parenthesised spread answered a different number from the bare one.
 #[test]
 fn a_parenthesised_receiver_is_counted_as_the_bare_one_is() {
   assert_folds_to_number("([1, 2]).length", 2.0);
   assert_folds_to_number("([, 1]).length", 2.0);
   assert_folds_to_number("(([, 1])).length", 2.0);
-  assert_deopts("([...[1, 2]]).length");
-  assert_deopts("(([...[1, 2]])).length");
+  assert_folds_to_number("([...[1, 2]]).length", 2.0);
+  assert_folds_to_number("(([...[1, 2]])).length", 2.0);
+  // A string spreads into its code units (approved extension; `node` answers
+  // `2`), so the parenthesised spread counts as the bare one does.
+  assert_folds_to_number("([...\"ab\"]).length", 2.0);
+  assert_folds_to_number("(([...\"ab\"])).length", 2.0);
+  // And an operand that is not iterable refuses through the parentheses too.
+  assert_deopts("([...1]).length");
 }
 
 /// A template literal folds to a string before the property is read, so its
@@ -229,9 +257,18 @@ fn a_string_spelling_css_syntax_is_counted_as_text() {
 /// property a string does not carry is not answered with the string.
 ///
 /// It answers `undefined`, which is what the reference implementation's
-/// `object[property]` gives and what the object arm already gives for a key an
-/// object does not hold. `Length` and `LENGTH` are here because the property is
-/// case-sensitive and a case-insensitive test would fold them to a count.
+/// `object[property]` gives (`lib/index.js:6582`, built `@stylexjs/babel-plugin`
+/// 0.19.1) and what the object arm already gives for a key an object does not
+/// hold; `node` and the reference implementation answer `undefined` for every
+/// row of the loop (executed). `Length` and `LENGTH` are here because the
+/// property is case-sensitive and a case-insensitive test would fold them to a
+/// count.
+///
+/// A method the string *does* carry is not such a property: `node` and the
+/// reference implementation both answer a function for `"abc".toUpperCase`
+/// (executed), which is not a valid style value. So it refuses -- the
+/// fail-closed rule for a builtin function value, never a fabricated
+/// `undefined`.
 #[test]
 fn a_property_a_string_does_not_carry_answers_undefined() {
   for source in [
@@ -239,11 +276,15 @@ fn a_property_a_string_does_not_carry_answers_undefined() {
     "\"abc\".size",
     "\"abc\".Length",
     "\"abc\".LENGTH",
-    "\"abc\".toUpperCase",
     "\"abc\"[\"foo\"]",
   ] {
     assert_folds_to_undefined(source);
   }
+
+  assert_deopt_reason_contains(
+    "\"abc\".toUpperCase",
+    &unsupported_expression("MemberExpression"),
+  );
 
   // The answer exists so a fallback folds rather than reaching the runtime.
   assert_folds_to_string("\"abc\".foo ?? \"red\"", "red");
@@ -263,27 +304,41 @@ fn a_key_no_text_can_hold_is_not_read_as_an_escaping_property() {
   assert_deopts("\"abc\"[\"\\u{D800}\"]");
 }
 
-/// The four reads that are not "a property the receiver does not carry" at all.
+/// `constructor` is not "a property the receiver does not carry" at all.
 /// `"abc".constructor` is `String` in the language, so `undefined` would be a
 /// quietly wrong answer of exactly the kind this file exists to prevent — and
 /// the value it leads to compiles source text into a function. Refused, in both
-/// spellings, on both receivers, with or without a call around it.
+/// spellings, on every receiver. `call`, `apply` and `bind` are the opposite
+/// case: a string or an array does not carry them, so their reads answer
+/// `undefined`.
 #[test]
 fn a_read_that_escapes_the_value_refuses_rather_than_answering_undefined() {
-  for (source, property) in [
-    ("\"abc\".constructor", "constructor"),
-    ("\"abc\"[\"constructor\"]", "constructor"),
-    ("\"abc\".call", "call"),
-    ("\"abc\".apply", "apply"),
-    ("\"abc\".bind", "bind"),
-    ("[1, 2].constructor", "constructor"),
-    ("[1, 2][\"bind\"]", "bind"),
-    ("({ a: 1 }).constructor", "constructor"),
+  // `constructor` is the read that leaves the value, and both compilers block
+  // it with the same sentence: the reference implementation's
+  // BLOCKED_PROPERTY_ACCESS (`lib/index.js:6209`, checked at `:6579-6581`;
+  // executed for every row). The `Cannot fold a read of` sentence was the
+  // optional engine's.
+  for source in [
+    "\"abc\".constructor",
+    "\"abc\"[\"constructor\"]",
+    "[1, 2].constructor",
+    "({ a: 1 }).constructor",
   ] {
-    assert_deopt_reason_contains(
-      source,
-      &format!("Cannot fold a read of '{}' at compile time.", property),
-    );
+    assert_deopt_reason_contains(source, BLOCKED_PROPERTY_ACCESS);
+  }
+
+  // A string and an array carry no `call`, `apply` or `bind` -- those live on
+  // functions -- so each read is a property the receiver does not carry, and
+  // the answer is `undefined` in `node` and in the reference implementation
+  // (executed). Asserted as `undefined` rather than as any fold, so a read that
+  // reached a function would fail here.
+  for source in [
+    "\"abc\".call",
+    "\"abc\".apply",
+    "\"abc\".bind",
+    "[1, 2][\"bind\"]",
+  ] {
+    assert_folds_to_undefined(source);
   }
 }
 
@@ -291,16 +346,17 @@ fn a_read_that_escapes_the_value_refuses_rather_than_answering_undefined() {
 /// and what the reference implementation answers. An index past the end is
 /// `undefined`, as it is for an array.
 ///
-/// Half of an astral character is the replacement character, which is the
-/// substitution the engine fold already makes for every string it carries back
-/// -- so `s[0]` and `s.charAt(0)` are one read written two ways.
+/// Half of an astral character is that half: `"\u{1F600}"[0]` is the high
+/// surrogate `0xD83D`, carried through losslessly rather than substituted, so
+/// `"\u{1F600}"[0].charCodeAt(0)` is 55357 here as it is in the language --
+/// and `s[0]` and `s.charAt(0)` stay one read written two ways.
 #[test]
 fn an_index_into_a_string_reads_its_code_unit() {
   assert_folds_to_string("\"abc\"[0]", "a");
   assert_folds_to_string("\"abc\"[2]", "c");
   assert_folds_to_string("\"abc\"[\"0\"]", "a");
   assert_folds_to_undefined("\"abc\"[9]");
-  assert_folds_to_string("\"\\u{1F600}\"[0]", "\u{fffd}");
+  assert_eq!(folded_code_units("\"\\u{1F600}\"[0]"), [0xd83d]);
 }
 
 /// A key that looks numeric but is not an index is an ordinary property name,
@@ -324,14 +380,15 @@ fn a_numeric_looking_key_that_is_not_an_index_answers_undefined() {
 
 /// No index refuses any more. Every one on every receiver reads its slot,
 /// answers `undefined` past the end, or -- for half of an astral character --
-/// answers the replacement character.
+/// answers that code unit.
 ///
 /// Kept as a case rather than deleted because the refusal it replaced was the
 /// reason `length` and an index were read by one classification at all, and a
 /// receiver that started refusing again would fail here.
 #[test]
 fn no_index_refuses_on_any_receiver() {
-  assert_folds_to_string("\"\\u{1F600}a\"[0]", "\u{fffd}");
+  assert_eq!(folded_code_units("\"\\u{1F600}a\"[0]"), [0xd83d]);
+  assert_eq!(folded_code_units("\"\\u{1F600}a\"[1]"), [0xde00]);
   assert_folds_to_string("\"\\u{1F600}a\"[2]", "a");
   assert_folds_to_undefined("\"abc\"[7]");
   assert_folds_to_number("[1, 2][1]", 2.0);
@@ -374,18 +431,28 @@ fn an_object_with_a_length_key_answers_the_key() {
 }
 
 /// A property read off an array that is neither `length` nor an index answers
-/// `undefined`, for the same reason and by the same rule as a string.
+/// `undefined`, for the same reason and by the same rule as a string: `node`
+/// and the reference implementation answer `undefined` for every row of the
+/// loop (`lib/index.js:6582`; executed).
+///
+/// A method the array carries is a function in both (`[1, 2].reverse`;
+/// executed), not a valid style value, so it refuses rather than folding to a
+/// fabricated `undefined`.
 #[test]
 fn a_property_an_array_does_not_carry_answers_undefined() {
   for source in [
     "[1, 2].foo",
     "[1, 2].size",
-    "[1, 2].reverse",
     "[1, 2][\"foo\"]",
     "Object.keys({ a: 1 }).foo",
   ] {
     assert_folds_to_undefined(source);
   }
+
+  assert_deopt_reason_contains(
+    "[1, 2].reverse",
+    &unsupported_expression("MemberExpression"),
+  );
 
   assert_folds_to_string("[1, 2].foo ?? \"red\"", "red");
   assert_folds_to_string("Object.keys({ a: 1 }).foo ?? \"red\"", "red");
@@ -515,5 +582,22 @@ fn a_chain_past_the_length_refuses() {
     "[1, 2].foo.length",
   ] {
     assert_deopts(source);
+  }
+}
+
+// ==================== helpers ====================
+
+/// The UTF-16 code units a source folds to.
+///
+/// Read off the atom rather than through a `String`, because half of an astral
+/// character is a lone surrogate: well-formed UTF-16, and a value no `str`
+/// holds. `assert_folds_to_string` reads the folded text through
+/// `convert_atom_to_string`, which aborts the build on exactly the value these
+/// cases are about, so the comparison is made in the units the language counts.
+#[track_caller]
+fn folded_code_units(source: &str) -> Vec<u16> {
+  match assert_folds(source) {
+    Expr::Lit(Lit::Str(text)) => text.value.to_ill_formed_utf16().collect(),
+    other => panic!("expected `{}` to fold to a string, got {:?}", source, other),
   }
 }

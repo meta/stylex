@@ -1,6 +1,6 @@
 //! Real compiler entrypoint regressions: safety must be enforced by production
 //! collection/invalidation, not by a test-only evaluator wrapper.
-#[path = "../src/utils/transform/evaluate/review_tests.rs"]
+#[path = "support/evaluator_review.rs"]
 mod review_tests;
 use stylex_swc_plugin::{process_metadata_to_css, transform_source, StyleXTransformOptions};
 fn source(prefix: &str, value: &str) -> String {
@@ -243,5 +243,28 @@ fn tdz_identity_and_restricted_operations() {
         ("", "'x'.repeat(1e9)"),
     ] {
         rejects(prefix, expr);
+    }
+}
+
+/// A folded string holding an unpaired surrogate is kept exactly by the
+/// evaluator, but no Rust string spells it, so the stylesheet boundary refuses
+/// it with the existing sentence instead of writing U+FFFD. The reference
+/// plugin writes the lone surrogate (its generator escapes it); this compiler
+/// cannot, and says so rather than writing a different character.
+#[test]
+fn a_folded_unpaired_surrogate_refuses_at_the_string_boundary() {
+    for value in ["'\\u{1F600}a'.slice(1)", "'\\uD83D'.concat('')"] {
+        let input = format!(
+            "import * as stylex from '@stylexjs/stylex';\nexport const styles=stylex.create({{root:{{content:{value}}}}});"
+        );
+        let message =
+            match transform_source(&input, "evaluator.js", &StyleXTransformOptions::default()) {
+                Err(error) => format!("{error:#}"),
+                Ok(output) => format!("{:?}", output.errors),
+            };
+        assert!(
+            message.contains("String value contains invalid UTF-8 encoding."),
+            "{input}\n{message}"
+        );
     }
 }

@@ -293,10 +293,110 @@ mod get_priority_tests {
 }
 
 #[cfg(test)]
+mod compound_pseudo_priority_tests {
+  use crate::css::common::get_compound_pseudo_priority;
+  use stylex_regex::regex::PSEUDO_PART_REGEX;
+
+  /// The answer without the colon-run shortcut: every key is scanned.
+  fn scanned(key: &str) -> Option<f64> {
+    let parts: Vec<&str> = PSEUDO_PART_REGEX
+      .find_iter(key)
+      .flatten()
+      .map(|m| m.as_str())
+      .collect();
+    if parts.len() <= 1 || parts.iter().any(|p| p.contains('(')) {
+      return None;
+    }
+    Some(f64::NAN)
+  }
+
+  /// The shortcut declines only keys the scan declines too.
+  #[test]
+  fn the_colon_run_shortcut_declines_only_what_the_scan_declines() {
+    let pieces = [
+      "", ":", "::", ":::", "a", "hover", "-x", "(", ")", "(:a)", "(b)", ":not(", "[", "]", " ",
+      "before", "focus-visible", "nth-child(2)",
+    ];
+    let mut keys = Vec::new();
+    for a in pieces {
+      for b in pieces {
+        for c in pieces {
+          keys.push(format!("{a}{b}{c}"));
+        }
+      }
+    }
+    let mut compound = 0;
+    for key in keys {
+      let ours = get_compound_pseudo_priority(&key);
+      match scanned(&key) {
+        None => assert_eq!(ours, None, "{key:?}"),
+        Some(_) => {
+          compound += 1;
+          assert!(ours.is_some(), "{key:?}");
+        },
+      }
+    }
+    assert!(compound > 100, "{compound}");
+  }
+}
+
+#[cfg(test)]
 mod normalize_css_property_value_tests {
   use crate::css::common::normalize_css_property_value;
   use crate::css::tests::support::{default_options, panic_message, rem_enabled_options};
   use std::panic::{AssertUnwindSafe, catch_unwind};
+
+  /// The keyword shortcut answers what the full parse, check and print does,
+  /// for every property the passes treat specially and with each option that
+  /// changes a pass.
+  #[test]
+  fn a_plain_keyword_normalizes_as_the_full_pipeline_does() {
+    use crate::css::common::is_plain_keyword;
+    use crate::css::normalize_value::normalize_value;
+
+    let mut words: Vec<String> = [
+      "red", "purple", "transparent", "solid", "border-box", "flex", "inline-flex", "top",
+      "underline", "none", "auto", "inherit", "initial", "unset", "revert", "currentcolor",
+      "e", "ms", "s", "px", "em", "infinity", "nan", "important", "var", "url", "calc", "a-",
+      "a--b", "x-", "margin-top", "opacity", "transform", "will-change", "ease-in-out",
+      "step-start", "space-between", "nowrap", "pre-wrap", "break-word", "sticky",
+    ]
+    .iter()
+    .map(|word| word.to_string())
+    .collect();
+    // Every keyword of up to three characters the class allows.
+    let alphabet: Vec<char> = ('a'..='z').chain(['-']).collect();
+    for first in 'a'..='z' {
+      words.push(first.to_string());
+      for &second in &alphabet {
+        words.push(format!("{first}{second}"));
+        for &third in &alphabet {
+          words.push(format!("{first}{second}{third}"));
+        }
+      }
+    }
+
+    let keys = [
+      "color", "transitionProperty", "willChange", "fontSize", "transitionDuration",
+      "animationName", "content", "margin", "width", "--custom",
+    ];
+    for opts in [default_options(), rem_enabled_options()] {
+      for word in &words {
+        assert!(is_plain_keyword(word), "{word}");
+        for key in keys {
+          assert_eq!(
+            normalize_css_property_value(key, word, &opts),
+            normalize_value(word, key, &opts),
+            "{key}: {word}"
+          );
+        }
+      }
+    }
+
+    for not_plain in ["", "-a", "--a", "A", "aB", "1px", "a b", "a,b", "a(b)", "'a'", "a!", "a_b", "é"] {
+      assert!(!is_plain_keyword(not_plain), "{not_plain}");
+    }
+  }
 
   // --- Simple values ---
 
@@ -772,22 +872,16 @@ mod normalize_css_property_value_tests {
     assert!(result.is_err());
   }
 
-  /// A custom property has no grammar of its own, so the unclosed-function
-  /// error is reported against `color` in its place. The rule embedded in the
-  /// message must name `color`, not `--my-var`.
+  /// The compatibility core emits Babel's bare unclosed-function sentence;
+  /// source/code-frame context belongs to the host, not a stand-in CSS rule.
   #[test]
-  fn unclosed_function_in_custom_property_reports_against_color() {
+  fn unclosed_function_in_custom_property_uses_babel_message() {
     let opts = default_options();
     let result = catch_unwind(AssertUnwindSafe(|| {
       normalize_css_property_value("--my-var", "var(--token", &opts)
     }));
-
     let message = panic_message(result);
-
-    assert!(
-      message.contains("* { color: var(--token }"),
-      "expected the error to name `color`, got: {message}"
-    );
+    assert_eq!(message.trim_start_matches("[StyleX] "), "Rule contains an unclosed function");
   }
 
   #[test]

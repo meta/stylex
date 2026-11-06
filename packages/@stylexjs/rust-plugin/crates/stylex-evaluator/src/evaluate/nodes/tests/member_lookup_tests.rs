@@ -31,7 +31,7 @@ use stylex_state::{
 use stylex_structures::named_import_source::ImportSources;
 use stylex_structures::stylex_env::{EnvEntry, JSFunction};
 use swc_core::atoms::Atom;
-use swc_core::ecma::ast::Expr;
+use swc_core::ecma::ast::{Expr, Lit};
 
 // ==================== a key the receiver does not carry ====================
 
@@ -82,19 +82,21 @@ fn a_string_is_indexed_by_code_unit() {
   assert_folds_to_string("'\u{1F600}a'[2]", "a");
 }
 
-/// An index that lands on half an astral character answers the replacement
-/// character, which is the substitution the engine fold already makes for every
-/// string it carries back.
+/// An index that lands on half an astral character answers that code unit,
+/// which is what the language answers: `'\u{1F600}a'[0]` is the high surrogate
+/// `0xD83D` and `[1]` is the low one `0xDE00`.
 ///
-/// So `s[0]` and `s.charAt(0)` are one read written two ways. The reference
-/// implementation writes the lone surrogate itself, which becomes this same
-/// character once the stylesheet is written to a file -- so the declaration
-/// text agrees and only the class name parts.
+/// Carried through losslessly rather than substituted, so
+/// `'\u{1F600}a'[0].charCodeAt(0)` is 55357 here as it is in the language. The
+/// reference implementation writes the same lone surrogate. `s[0]` and
+/// `s.charAt(0)` are one read written two ways, so both are asserted -- in code
+/// units, because no `str` holds one and the text comparison would abort the
+/// build before it could fail.
 #[test]
-fn an_index_that_lands_on_half_a_character_answers_the_replacement_character() {
-  assert_folds_to_string("'\u{1F600}a'[0]", "\u{fffd}");
-  assert_folds_to_string("'\u{1F600}a'[1]", "\u{fffd}");
-  assert_folds_to_string("'\u{1F600}a'.charAt(0)", "\u{fffd}");
+fn an_index_that_lands_on_half_a_character_answers_that_code_unit() {
+  assert_eq!(folded_code_units("'\u{1F600}a'[0]"), [0xd83d]);
+  assert_eq!(folded_code_units("'\u{1F600}a'[1]"), [0xde00]);
+  assert_eq!(folded_code_units("'\u{1F600}a'.charAt(0)"), [0xd83d]);
 }
 
 /// A computed key that folded to something with no name reads no property.
@@ -197,10 +199,11 @@ fn an_env_entry_answers_by_what_the_option_configured_it_as() {
   );
 }
 
-/// An `env` object the build never configured names itself in the refusal,
-/// rather than reading as an option that is merely empty.
+/// An unset environment is an empty typed object at the evaluator boundary.
+/// Its missing style leaves are rejected by validation with Babel's plain,
+/// unframed style-value error (covered end to end in native_api_current).
 #[test]
-fn an_unconfigured_env_object_says_so() {
+fn an_unconfigured_env_object_is_empty_at_the_evaluator_boundary() {
   let mut entries = FunctionConfigMap::default();
 
   entries.insert(
@@ -210,11 +213,10 @@ fn an_unconfigured_env_object_says_so() {
 
   let fns = map_binding("sx", FunctionConfigType::Map(entries));
 
-  assert_refused_with(
-    &evaluated_against(&fns, "sx.env"),
-    "sx.env",
-    "The stylex.env object is not configured. Check that the 'env' option is set in your StyleX configuration.",
-  );
+  assert!(matches!(
+    folded_value_of(evaluated_against(&fns, "sx.env"), "sx.env"),
+    EvaluateResultValue::EnvObject(env) if env.is_empty()
+  ));
 }
 
 /// A namespace bound to nothing still answers the `env` object it carries, so
@@ -549,19 +551,24 @@ fn a_member_that_is_a_call_callee_is_left_to_the_call() {
   );
 }
 
-/// A computed key that answered nothing while the walk stayed confident names
-/// itself, rather than leaving the whole member expression to be reported.
+/// A computed key the memo already refused refuses again with the reason it was
+/// refused for, rather than as a property that was not found.
 ///
-/// The memo is what produces such a key. A binary expression over a value with
-/// no expression form refuses without recording a path, and the answer is
-/// remembered -- so a later read of the same subtree is handed nothing back
-/// with nothing said about it. Warming the memo is the only way to write one.
+/// The memo used to remember a refused subtree without its reason, and this
+/// case pinned the sentence that stood in for it. The memo now replays the
+/// recorded reason (eb1efe6, "preserve deopt reasons"), so the second read of
+/// `(() => 1) + 1` refuses as the first did:
+/// `Unsupported expression: BinaryExpression` -- an arrow has no primitive this
+/// compiler will spell. The reference implementation is no oracle for the value:
+/// it folds the arrow to the source text of its own wrapper closure
+/// (`lib/index.js:6440-6457`, `+` at `:6806-6807`; executed). The warm is kept
+/// so the memo is what answers.
 #[test]
-fn a_computed_key_that_answered_nothing_names_itself() {
+fn a_computed_key_the_memo_refused_replays_its_reason() {
   assert_refused_with(
     &evaluated_after(UNRESOLVED_MEMO_WARM, "({ a: 1 })[(() => 1) + 1]"),
     "a key the memo answers nothing for",
-    PROPERTY_NOT_FOUND,
+    &unsupported_expression("BinaryExpression"),
   );
 }
 
@@ -592,5 +599,22 @@ fn a_key_with_no_name_refuses_on_every_receiver() {
       &source,
       UNEXPECTED_MEMBER_LOOKUP,
     );
+  }
+}
+
+// ==================== helpers ====================
+
+/// The UTF-16 code units a source folds to.
+///
+/// Read off the atom rather than through a `String`, because half of an astral
+/// character is a lone surrogate: well-formed UTF-16, and a value no `str`
+/// holds. `assert_folds_to_string` reads the folded text through
+/// `convert_atom_to_string`, which aborts the build on exactly the value these
+/// cases are about, so the comparison is made in the units the language counts.
+#[track_caller]
+fn folded_code_units(source: &str) -> Vec<u16> {
+  match assert_folds(source) {
+    Expr::Lit(Lit::Str(text)) => text.value.to_ill_formed_utf16().collect(),
+    other => panic!("expected `{}` to fold to a string, got {:?}", source, other),
   }
 }

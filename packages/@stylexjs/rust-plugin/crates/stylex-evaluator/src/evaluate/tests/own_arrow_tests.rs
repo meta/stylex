@@ -18,10 +18,7 @@
 use std::rc::Rc;
 
 use super::source_evaluation::*;
-use stylex_constants::constants::evaluation_errors::{
-  FUNCTION_BODY_WITHOUT_VALUE, unsupported_expression,
-};
-use stylex_constants::constants::messages::ARGUMENT_NOT_EXPRESSION;
+use stylex_constants::constants::evaluation_errors::unsupported_expression;
 use stylex_state::{
   functions::{FunctionMap, FunctionType},
   theme_ref::ThemeRef,
@@ -101,31 +98,38 @@ fn an_argument_with_no_form_costs_a_body_that_never_reads_it_nothing() {
   );
 }
 
-/// The same argument, in a body that does read the parameter. The name resolves
-/// to nothing, so the call refuses -- and names the argument, which is the half
-/// of the call an author can change.
+/// The same argument, in a body that does read the parameter. The arrow is a
+/// value the native path carries, so the body hands it back and the call folds
+/// to that function -- `node` and the reference implementation both answer the
+/// function itself (executed). The refusal was the optional engine's, which had
+/// no form for a function argument. Read through `typeof`, which says so without
+/// asking a function for an expression form.
 #[test]
-fn an_argument_with_no_form_refuses_a_body_that_reads_it() {
-  assert_refused_in_a_module_binding(
-    "echo",
-    "(fn) => fn",
+fn an_argument_with_no_form_is_handed_back_by_a_body_that_reads_it() {
+  folded_value_of(
+    evaluated_in_a_module_binding("echo", "(fn) => fn", "echo(() => 1)"),
     "echo(() => 1)",
-    ARGUMENT_NOT_EXPRESSION,
+  );
+  assert_eq!(
+    folded_in_a_module_binding("echo", "(fn) => fn", "typeof echo(() => 1)"),
+    "function"
   );
 }
 
-/// A body that reads a name nothing binds refuses too, with every argument
-/// bound. That is the other half of the pair of reasons the application can
-/// give, and it names the body rather than an argument -- because the arguments
-/// are what an author can rule out from here.
+/// A body that reads a name nothing binds fails too, with every argument
+/// bound.
+///
+/// The arrow is an expression arrow the call has run, so its body's refusal
+/// arrives as a throw rather than a deopt: the reference implementation folds
+/// the binding into a closure, applies it, and the closure throws
+/// `Referenced constant is not defined.` out of `lib/index.js:6451` (executed).
+/// This compiler reproduces that throw at the invocation boundary
+/// (`callback_failure.rs`); the body-without-value sentence was the optional
+/// engine's.
 #[test]
-fn a_body_that_folds_to_nothing_refuses_with_every_argument_bound() {
-  assert_refused_in_a_module_binding(
-    "shadow",
-    "(color) => missingName",
-    "shadow('red')",
-    FUNCTION_BODY_WITHOUT_VALUE,
-  );
+#[should_panic(expected = "Referenced constant is not defined.")]
+fn a_body_that_folds_to_nothing_throws_with_every_argument_bound() {
+  evaluated_in_a_module_binding("shadow", "(color) => missingName", "shadow('red')");
 }
 
 /// A parameter list the binding cannot read by name -- a destructuring pattern,

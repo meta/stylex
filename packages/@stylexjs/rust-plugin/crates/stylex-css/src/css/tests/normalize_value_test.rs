@@ -384,14 +384,11 @@ fn reads_the_zero_off_the_spelling_not_the_quantity() {
   ]);
 }
 
-/// Inside a function the unit stays, because dropping it would change what the
-/// function computes. The test is a comparison of source offsets against the
-/// end of the *first* function seen, so a second function later in the value is
-/// outside that window and its zero does lose its unit.
-///
-/// The asymmetry between the two `translate` calls below is the whole of it.
+/// Current-main #1750 extends the source-offset window for every function, so
+/// a later function retains its zero unit too. This expectation is from Babel
+/// 2d42d72, not the vendored public compiler's older 0.19.1 oracle.
 #[test]
-fn keeps_a_unit_on_a_zero_inside_the_first_function_only() {
+fn keeps_a_unit_on_a_zero_inside_every_function() {
   check(&[
     ("translate(0px, 0em)", "transform", "translate(0px,0em)"),
     ("calc(0px + 1px)", "width", "calc(0px + 1px)"),
@@ -403,7 +400,7 @@ fn keeps_a_unit_on_a_zero_inside_the_first_function_only() {
     (
       "translate(0px) translate(0em)",
       "transform",
-      "translate(0px) translate(0)",
+      "translate(0px) translate(0em)",
     ),
     ("var(--a) 0px", "margin", "var(--a) 0"),
     ("0px var(--a)", "margin", "0 var(--a)"),
@@ -799,35 +796,17 @@ fn rejects_an_unclosed_function() {
   }
 }
 
-/// The rejection names the declaration, and a custom property — which has no
-/// grammar of its own — is reported under a stand-in property name.
+/// Current Babel core emits the same bare diagnostic for a property, custom
+/// property and pseudo selector. The outer host supplies source context.
 #[test]
-fn names_the_declaration_in_an_unclosed_function_report() {
+fn unclosed_function_report_matches_babel_for_every_key_kind() {
   let options = default_options();
-
-  let message = panic_message(catch_unwind(AssertUnwindSafe(|| {
-    normalize_value("calc(1px", "width", &options)
-  })));
-  assert!(
-    message.contains("* { width: calc(1px }"),
-    "expected the report to quote the rule, got: {message}"
-  );
-
-  let custom = panic_message(catch_unwind(AssertUnwindSafe(|| {
-    normalize_value("calc(1px", "--x", &options)
-  })));
-  assert!(
-    custom.contains("* { color: calc(1px }"),
-    "expected a custom property to be reported under a stand-in, got: {custom}"
-  );
-
-  let pseudo = panic_message(catch_unwind(AssertUnwindSafe(|| {
-    normalize_value("calc(1px", ":hover", &options)
-  })));
-  assert!(
-    pseudo.contains(":hover calc(1px"),
-    "expected a pseudo selector to be reported rule-shaped, got: {pseudo}"
-  );
+  for key in ["width", "--x", ":hover"] {
+    let message = panic_message(catch_unwind(AssertUnwindSafe(|| {
+      normalize_value("calc(1px", key, &options)
+    })));
+    assert_eq!(message.trim_start_matches("[StyleX] "), LINT_UNCLOSED_FUNCTION, "{key}");
+  }
 }
 
 /// An unclosed string is rejected. The scanner invents the closing quote rather

@@ -115,44 +115,62 @@ fn a_group_handed_back_by_a_conversion_is_still_the_group() {
   );
 }
 
-/// A group that comes back *inside* an answer converts to the text it answers
-/// for itself, rather than being handed back as the reference. Its members live
-/// in another file and no expression this side writes stands for them, so the
-/// array carries the same text the language would have read off the group the
-/// moment anything joined or printed it.
-///
-/// A group standing alone as the answer is handed back instead, which is what
-/// the conversion case above asserts -- there the dispatch still holds the
-/// reference and can resolve a member off it.
+/// A group handed to a callback is the group there: a token read off the
+/// parameter names the same variable a read off the import does. The reference
+/// implementation compiles `[colors].map((group) => group.primary).join('')` to
+/// `var(--…)`, and so does the published rust-plugin PR (#2008; executed with
+/// a real `.stylex.js` import), so this shape may not regress.
+#[test]
+fn a_token_read_off_a_group_handed_to_a_callback_names_the_same_variable() {
+  assert_eq!(
+    folded_reading_the_group(&format!("[{GROUP}].map((group) => group.primary).join('')")),
+    "var(--x1ineb92)"
+  );
+}
+
+/// A group joined into text refuses. The group's own text is the hash of its
+/// variables, which the reference implementation writes here (it compiles
+/// `[colors].map((group) => group).join('')` to that hash; executed), but the
+/// rust-plugin PR (#2008) refuses this shape too, and a group passed through an
+/// array helper is no style value an author writes on purpose -- so it fails
+/// closed rather than writing a hash into a declaration (owner decision).
 #[test]
 fn a_group_inside_a_folded_answer_carries_its_own_text() {
-  assert_eq!(
-    folded_reading_the_group(&format!("[{GROUP}].map((group) => group).join('')")),
-    "xop34xu"
-  );
+  let source = format!("[{GROUP}].map((group) => group).join('')");
+
+  assert_refused(&evaluated_against(&map_holding_a_group(), &source), &source);
 }
 
-/// A group that comes back *inside* an answer converts to its own text there
-/// too, rather than only where something in the engine joined or printed it.
-///
-/// The case above joins inside the engine, so what crosses back is one string
-/// the language wrote. Here the array crosses, and the group is read as the
-/// group on this side -- which is the one exotic object a fold can hand over.
+/// A group carried back out of a callback inside an array is still the group,
+/// as a group handed back by a conversion is (the case above): the reference
+/// implementation's evaluation of `[colors].map((group) => group)[0]` is the
+/// group proxy itself, which its `stylex.create` then rejects as a style value,
+/// and the rust-plugin PR (#2008) rejects it the same way (executed).
 #[test]
 fn a_group_carried_out_inside_an_array_answers_its_own_text() {
-  assert_eq!(
-    folded_reading_the_group(&format!("[{GROUP}].map((group) => group)[0]")),
-    "xop34xu"
+  let source = format!("[{GROUP}].map((group) => group)[0]");
+
+  assert!(
+    matches!(
+      folded_value_of(evaluated_against(&map_holding_a_group(), &source), &source),
+      EvaluateResultValue::ThemeRef(_)
+    ),
+    "expected the group itself back from `{source}`"
   );
 }
 
-/// The same under a key, which is the other position an answer carries a value
-/// in. One reader answers both, and a group read one way here and another there
-/// would put two custom properties in the stylesheet.
+/// The same under a key: `Object.fromEntries([['a', colors]]).a` is the group
+/// itself in the reference implementation's evaluation, rejected as a style
+/// value by its `stylex.create` and by the rust-plugin PR alike (executed).
 #[test]
 fn a_group_carried_out_under_a_key_answers_its_own_text() {
-  assert_eq!(
-    folded_reading_the_group(&format!("Object.fromEntries([['a', {GROUP}]]).a")),
-    "xop34xu"
+  let source = format!("Object.fromEntries([['a', {GROUP}]]).a");
+
+  assert!(
+    matches!(
+      folded_value_of(evaluated_against(&map_holding_a_group(), &source), &source),
+      EvaluateResultValue::ThemeRef(_)
+    ),
+    "expected the group itself back from `{source}`"
   );
 }

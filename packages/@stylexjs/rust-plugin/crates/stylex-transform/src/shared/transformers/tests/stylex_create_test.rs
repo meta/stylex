@@ -200,11 +200,12 @@ mod stylex_create {
   }
 
   type InjectedStylesArg<'a> = [(&'a str, &'a [(&'a str, (&'a str, f64))])];
+  type ClassPathsArg<'a> = [(&'a str, &'a [(&'a str, &'a [&'a str])])];
 
   fn exprected_result_factory(
     resolved_namespaces: &[(&str, &[(&str, &str)])],
     injected_styles: &InjectedStylesArg,
-    class_paths_in_namespace: &[(&str, &[(&str, &[&str])])],
+    class_paths_in_namespace: &ClassPathsArg,
   ) -> (StylesObjectMap, InjectableStylesMap, ClassPathsMap) {
     let mut expected_resolved_namespaces = IndexMap::new();
     let mut expected_injected_styles = IndexMap::new();
@@ -849,7 +850,6 @@ mod stylex_create {
   }
 
   #[test]
-  #[ignore]
   fn transforms_nested_pseudo_classes_within_pseudo_elements_v2() {
     let before_hover_object = style_multiple_depth_nested_object_factory(&[(
       "default",
@@ -876,30 +876,48 @@ mod stylex_create {
       )],
     )]);
 
-    let (before_hover, _, _) = stylex_create(before_hover_object);
-    let (hover_before, _, _) = stylex_create(hover_before_object);
+    let (before_hover, before_hover_rules, before_hover_paths) = stylex_create(before_hover_object);
+    let (hover_before, hover_before_rules, hover_before_paths) = stylex_create(hover_before_object);
+
+    // Executed current Babel (2d42d72): shared/stylex-create.js:76-87 hashes
+    // namespace keys; shared/utils/convert-to-className.js:49-63 preserves
+    // pseudo-element segment order in the class hash. Its selector builder
+    // (shared/utils/generate-css-rule.js:32-48) puts pseudo-classes first.
+    let (expected_before_hover, expected_before_hover_rules, expected_before_hover_paths) =
+      exprected_result_factory(
+        &[("default", &[("::before_color-kxBb7d", "xeb2lg0")])],
+        &[(
+          "default",
+          &[("xeb2lg0", (".xeb2lg0:hover::before{color:blue}", 8130.0))],
+        )],
+        &[("default", &[("xeb2lg0", &["::before", ":hover", "color"])])],
+      );
+    let (expected_hover_before, expected_hover_before_rules, expected_hover_before_paths) =
+      exprected_result_factory(
+        &[("default", &[(":hover_::before_color-kFlxxK", "xzzpreb")])],
+        &[(
+          "default",
+          &[("xzzpreb", (".xzzpreb:hover::before{color:blue}", 8130.0))],
+        )],
+        &[("default", &[("xzzpreb", &[":hover", "::before", "color"])])],
+      );
+
+    assert_eq!(before_hover, expected_before_hover);
+    assert_eq!(before_hover_rules, expected_before_hover_rules);
+    assert_eq!(before_hover_paths, expected_before_hover_paths);
+    assert_eq!(hover_before, expected_hover_before);
+    assert_eq!(hover_before_rules, expected_hover_before_rules);
+    assert_eq!(hover_before_paths, expected_hover_before_paths);
 
     let before_hover_class = before_hover
       .get("default")
-      .and_then(|a| a.get("::before_color"))
+      .and_then(|namespace| namespace.get("::before_color-kxBb7d"))
       .unwrap();
-
     let hover_before_class = hover_before
       .get("default")
-      .and_then(|a| a.get(":hover_::before_color"))
+      .and_then(|namespace| namespace.get(":hover_::before_color-kFlxxK"))
       .unwrap();
-
-    assert_eq!(
-      before_hover_class,
-      &Rc::new(FlatCompiledStylesValue::String("xeb2lg0".to_string()))
-    );
-
-    assert_eq!(
-      hover_before_class,
-      &Rc::new(FlatCompiledStylesValue::String("xeb2lg0".to_string()))
-    );
-
-    assert_ne!(before_hover_class, hover_before_class)
+    assert_ne!(before_hover_class, hover_before_class);
   }
 
   #[test]

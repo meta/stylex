@@ -37,12 +37,26 @@ fn suppress_panic_stderr_guard_toggles_flag() {
   assert!(!is_panic_stderr_suppressed());
 }
 
+/// A guard dropped inside another restores the outer guard's suppression.
+#[test]
+fn suppress_panic_stderr_guards_nest() {
+  assert!(!is_panic_stderr_suppressed());
+  {
+    let _outer = SuppressPanicStderr::new();
+    {
+      let _inner = SuppressPanicStderr::new();
+      assert!(is_panic_stderr_suppressed());
+    }
+    assert!(is_panic_stderr_suppressed());
+  }
+  assert!(!is_panic_stderr_suppressed());
+}
+
 /// SuppressPanicStderr::default() should behave identically to ::new().
 #[test]
 fn suppress_panic_stderr_default_works() {
   assert!(!is_panic_stderr_suppressed());
   {
-    #[allow(clippy::default_constructed_unit_structs)]
     let _guard = SuppressPanicStderr::default();
     assert!(is_panic_stderr_suppressed());
   }
