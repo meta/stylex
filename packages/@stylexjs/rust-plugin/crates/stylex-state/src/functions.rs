@@ -207,7 +207,7 @@ impl std::hash::Hash for FunctionConfigType {
           sum = sum.wrapping_add(entry.finish());
         }
         sum.hash(state);
-      }
+      },
       Self::IndexMap(map) => (Rc::as_ptr(map) as usize).hash(state),
       Self::EnvObject(map) => (Rc::as_ptr(map) as usize).hash(state),
     }
@@ -255,7 +255,7 @@ impl FunctionMap {
           config.fn_ptr,
           FunctionType::Mapper(_) | FunctionType::ValueMapper(_) | FunctionType::ThemeRefMapper(_)
         ),
-        FunctionConfigType::Map(map) => map.values().all(|value| static_config(value)),
+        FunctionConfigType::Map(map) => map.values().all(static_config),
         FunctionConfigType::IndexMap(_) | FunctionConfigType::EnvObject(_) => true,
       }
     }
@@ -281,7 +281,7 @@ impl FunctionMap {
               .iter()
               .zip(b.iter())
               .all(|((ak, av), (bk, bv))| ak == bk && equal_config(av, bv))
-        }
+        },
         _ => a == b,
       }
     }

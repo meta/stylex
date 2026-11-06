@@ -21,6 +21,44 @@ fn math() -> Expr {
   })
 }
 #[test]
+fn memo_structural_witness_preserves_identifier_scope_identity() {
+  use swc_core::common::SyntaxContext;
+  let first = create_ident("value");
+  let mut shadowed = first.clone();
+  shadowed.ctxt = SyntaxContext::from_u32(1);
+  use swc_core::common::EqIgnoreSpan;
+  assert!(!Expr::Ident(first).eq_ignore_span(&Expr::Ident(shadowed)));
+}
+
+#[test]
+fn memo_call_time_context_bypasses_even_parameter_independent_ancestors() {
+  use stylex_state::functions::{FunctionConfig, FunctionConfigType, FunctionType};
+  let mut functions = FunctionMap::default();
+  functions.bindings.insert(
+    create_ident("unused").to_id(),
+    Box::new(FunctionConfigType::Regular(FunctionConfig {
+      fn_ptr: FunctionType::ValueMapper(std::rc::Rc::new(|| {
+        EvaluateResultValue::Expr(create_number_expr(7.0))
+      })),
+      takes_path: false,
+    })),
+  );
+  let mut state = EvaluationState::with_functions(std::rc::Rc::new(functions));
+  let mut traversal = StateManager::default();
+  let mut calls = 0;
+  for _ in 0..2 {
+    memoized_fold(&math(), &mut state, &mut traversal, |_, _| {
+      calls += 1;
+      Some(EvaluateResultValue::Expr(create_number_expr(3.0)))
+    })
+    .unwrap();
+  }
+  assert_eq!(calls, 2);
+  assert!(traversal.seen.is_empty());
+  assert!(state.memo_inventory.is_none());
+}
+
+#[test]
 fn memo_hash_bucket_requires_a_matching_subtree_witness() {
   for missing in [false, true] {
     let mut traversal = StateManager::default();

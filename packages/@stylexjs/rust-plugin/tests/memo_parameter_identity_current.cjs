@@ -6,9 +6,11 @@ const original = require("../../babel-plugin/lib");
 const native = require("..");
 const filename = require("node:path").resolve("/app/MemoReduce.js");
 const options = { unstable_moduleResolution: { type: "haste" } };
-function check(expression, count) {
+function check(expression, count, prelude = "") {
   const source =
-    "import * as stylex from '@stylexjs/stylex';export const s=stylex.create({root:{width:" +
+    "import * as stylex from '@stylexjs/stylex';" +
+    prelude +
+    "export const s=stylex.create({root:{width:" +
     expression +
     "}});";
   const oracle = babel.transformSync(source, {
@@ -32,6 +34,10 @@ function check(expression, count) {
 test("retained callback parameter memo contexts always compile reduce width as six", () =>
   check("[1,2,3].reduce((total,x)=>total+x,0)", 6));
 test("multiple reduce steps and nested helpers never truncate the accumulator", () =>
-  check("((a)=>a.reduce((total,x)=>total+x,0))([5,7,1,8])", 21));
+  check(
+    "helper([5,7,1,8])",
+    21,
+    "const helper=a=>a.reduce((total,x)=>total+x,0);",
+  ));
 test("nested reduce invocation frames do not share parameter-dependent folds", () =>
   check("[1,2,3].reduce((total,x)=>total+[x,x+1].reduce((a,b)=>a+b,0),0)", 15));

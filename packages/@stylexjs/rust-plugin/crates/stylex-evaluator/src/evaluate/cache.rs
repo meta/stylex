@@ -237,7 +237,7 @@ fn inert_literal_repeat(call: &CallExpr) -> bool {
     MemberProp::Ident(name) => name.sym == "repeat",
     MemberProp::Computed(key) => {
       matches!(normalize_expr(&key.expr), Expr::Lit(Lit::Str(name)) if name.value.as_str() == Some("repeat"))
-    }
+    },
     MemberProp::PrivateName(_) => false,
   };
   repeat
@@ -337,7 +337,7 @@ fn memoized_fold<T: Memoized>(
       deopt(path, state, PATH_WITHOUT_NODE);
 
       None
-    }
+    },
     None => {
       let filings_before = traversal_state.nested_rules_filed();
       let host_before = stylex_js::native::host_epoch();
@@ -403,7 +403,7 @@ fn memoized_fold<T: Memoized>(
       }
 
       val
-    }
+    },
   }
 }
 
