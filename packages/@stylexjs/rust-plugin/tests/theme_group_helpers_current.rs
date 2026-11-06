@@ -17,16 +17,18 @@ impl Drop for Fixture {
     }
 }
 
-fn fixture() -> Fixture {
+/// A fixture directory of the test's own: named by the test, the process and a
+/// counter no two fixtures share, so tests running at once never meet in one
+/// directory (a clock reading alone can repeat between two threads).
+fn fixture(test: &str) -> Fixture {
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
     let directory = std::env::temp_dir().join(format!(
-        "stylex-group-helpers-{}-{}",
+        "stylex-group-helpers-{test}-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
-    std::fs::create_dir(&directory).unwrap();
+    std::fs::create_dir_all(&directory).unwrap();
     std::fs::write(
         directory.join("package.json"),
         "{\"name\":\"stylex-group-helpers-fixture\"}",
@@ -59,7 +61,7 @@ fn compile(fixture: &Fixture, value: &str) -> anyhow::Result<Vec<String>> {
 
 #[test]
 fn a_token_read_off_a_group_inside_a_callback_compiles_to_its_variable() {
-    let fixture = fixture();
+    let fixture = fixture("a_token_read_off_a_group_inside_a_callback_compiles_to_its_variable");
     let direct = compile(&fixture, "colors.primary").unwrap();
     let through_a_callback =
         compile(&fixture, "[colors].map((group) => group.primary).join('')").unwrap();
@@ -71,7 +73,7 @@ fn a_token_read_off_a_group_inside_a_callback_compiles_to_its_variable() {
 
 #[test]
 fn a_group_carried_out_of_a_helper_is_rejected_as_a_style_value() {
-    let fixture = fixture();
+    let fixture = fixture("a_group_carried_out_of_a_helper_is_rejected_as_a_style_value");
 
     for value in [
         "[colors].map((group) => group)[0]",
