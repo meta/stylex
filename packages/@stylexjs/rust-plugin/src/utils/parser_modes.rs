@@ -1,12 +1,12 @@
 //! Explicit parser modes retained through lexical emission and postflight.
-use swc_common::Span;
-use swc_ecma_ast::*;
+use swc_core::common::Span;
+use swc_core::ecma::ast::*;
+use swc_core::ecma::visit::{Visit, VisitWith};
 use swc_ecma_parser::{
     error::{Error, SyntaxError},
     input::Tokens,
     PResult, Parser, Syntax,
 };
-use swc_ecma_visit::{Visit, VisitWith};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum SourceType {
@@ -43,6 +43,7 @@ pub(crate) fn supported_syntax(mut syntax: Syntax) -> Syntax {
         Syntax::Flow(flow) => {
             flow.decorators = true;
             flow.enums = true;
+            flow.components = true;
         }
     }
     syntax
@@ -140,6 +141,87 @@ impl Visit for ModuleNames {
     }
 }
 
+/// Private names are expressions only as the direct left operand of `in`.
+/// Keep lexical class environments: methods, accessors, arrows and nested
+/// classes may capture the enclosing class's private names.
+#[derive(Default)]
+struct PrivateBrands {
+    scopes: Vec<Vec<PrivateName>>,
+    error: Option<Error>,
+}
+impl PrivateBrands {
+    fn brand(&mut self, name: &PrivateName) {
+        if self.error.is_none()
+            && !self
+                .scopes
+                .iter()
+                .rev()
+                .any(|scope| scope.iter().any(|decl| decl.name == name.name))
+        {
+            self.error = Some(Error::new(
+                name.span,
+                SyntaxError::Unexpected {
+                    got: format!("#{}", name.name),
+                    expected: "a private name declared in an enclosing class",
+                },
+            ));
+        }
+    }
+}
+impl Visit for PrivateBrands {
+    fn visit_class(&mut self, class: &Class) {
+        // The new private environment begins at the body, not the heritage.
+        class.decorators.visit_with(self);
+        class.super_class.visit_with(self);
+        let names = class
+            .body
+            .iter()
+            .filter_map(|member| match member {
+                ClassMember::PrivateProp(prop) => Some(prop.key.clone()),
+                ClassMember::PrivateMethod(method) => Some(method.key.clone()),
+                ClassMember::AutoAccessor(accessor) => match &accessor.key {
+                    Key::Private(name) => Some(name.clone()),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect();
+        self.scopes.push(names);
+        class.body.visit_with(self);
+        class.type_params.visit_with(self);
+        class.super_type_params.visit_with(self);
+        class.implements.visit_with(self);
+        self.scopes.pop();
+    }
+    fn visit_expr(&mut self, expr: &Expr) {
+        if let Expr::PrivateName(name) = expr {
+            if self.error.is_none() {
+                self.error = Some(Error::new(name.span, SyntaxError::Hash));
+            }
+        } else {
+            expr.visit_children_with(self);
+        }
+    }
+    fn visit_bin_expr(&mut self, expr: &BinExpr) {
+        if let (BinaryOp::In, Expr::PrivateName(name)) = (expr.op, &*expr.left) {
+            self.brand(name);
+            expr.right.visit_with(self);
+        } else {
+            expr.visit_children_with(self);
+        }
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn validate_expr(expr: &Expr) -> PResult<()> {
+    let mut brands = PrivateBrands::default();
+    expr.visit_with(&mut brands);
+    match brands.error {
+        Some(error) => Err(error),
+        None => Ok(()),
+    }
+}
+
 pub(crate) fn parse_source<I: Tokens>(
     parser: &mut Parser<I>,
     source_type: SourceType,
@@ -175,6 +257,11 @@ pub(crate) fn parse_source<I: Tokens>(
         if let Some(span) = names.0 {
             return Err(Error::new(span, SyntaxError::InvalidIdentInAsync));
         }
+    }
+    let mut brands = PrivateBrands::default();
+    module.visit_with(&mut brands);
+    if let Some(error) = brands.error {
+        return Err(error);
     }
     Ok((module, actual))
 }

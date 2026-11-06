@@ -28,6 +28,27 @@ fn is_await_ident_or_expr(expr: &Expr) -> bool {
         || matches!(expr, Expr::Ident(Ident { sym, .. }) if &**sym == "await")
 }
 
+/// Returns the identifier for a direct `this` pattern or a single assignment
+/// layer whose left-hand side is a direct `this` pattern.
+fn direct_ts_this_ident(pat: &Pat) -> Option<&Ident> {
+    let ident = match pat {
+        Pat::Ident(BindingIdent { id, .. }) => id,
+        Pat::Assign(AssignPat { left, .. }) => {
+            let Pat::Ident(BindingIdent { id, .. }) = &**left else {
+                return None;
+            };
+            id
+        }
+        _ => return None,
+    };
+
+    if &*ident.sym != "this" {
+        return None;
+    }
+
+    Some(ident)
+}
+
 impl<I: Tokens> Parser<I> {
     pub fn parse_pat(&mut self) -> PResult<Pat> {
         self.parse_binding_pat_or_ident(false)
@@ -308,6 +329,16 @@ impl<I: Tokens> Parser<I> {
                                             self.emit_err(span, SyntaxError::DotsWithoutIdentifier);
                                             Pat::Invalid(Invalid { span })
                                         }
+                                    } else if is_array_or_object_literal_rest_target(&expr) {
+                                        // Per ECMA-262 13.15.5.1, AssignmentRestProperty's
+                                        // DestructuringAssignmentTarget may not be an
+                                        // ArrayLiteral or ObjectLiteral.  Parenthesized forms
+                                        // are rejected too, matching V8 / SpiderMonkey behavior.
+                                        // Other shapes (member access, optional chain, calls)
+                                        // are syntactically valid per spec and either reparse
+                                        // successfully or throw at runtime.  Closes #11543.
+                                        self.emit_err(span, SyntaxError::NotSimpleAssign);
+                                        Pat::Invalid(Invalid { span })
                                     } else {
                                         self.reparse_expr_as_pat(element_pat_ty, expr)?
                                     };
@@ -332,55 +363,28 @@ impl<I: Tokens> Parser<I> {
                 .into())
             }
             Expr::Ident(ident) => Ok(ident.into()),
-            Expr::Array(ArrayLit {
-                elems: mut exprs, ..
-            }) => {
-                if exprs.is_empty() {
-                    return Ok(ArrayPat {
-                        span,
-                        elems: Vec::new(),
-                        optional: false,
-                        type_ann: None,
-                    }
-                    .into());
-                }
-                // Trailing comma may exist. We should remove those commas.
-                let count_of_trailing_comma =
-                    exprs.iter().rev().take_while(|e| e.is_none()).count();
+            Expr::Array(ArrayLit { elems: exprs, .. }) => {
                 let len = exprs.len();
-                let mut params = Vec::with_capacity(exprs.len() - count_of_trailing_comma);
-                // Comma or other pattern cannot follow a rest pattern.
-                let idx_of_rest_not_allowed = if count_of_trailing_comma == 0 {
-                    len - 1
-                } else {
-                    // last element is comma, so rest is not allowed for every pattern element.
-                    len - count_of_trailing_comma
-                };
-                for expr in exprs.drain(..idx_of_rest_not_allowed) {
-                    match expr {
+                let mut params = Vec::with_capacity(len);
+                // Array literals do not store a trailing comma as an element. Every `None`,
+                // including a trailing one, is an elision that advances the iterator in both
+                // binding and assignment patterns.
+                for (idx, expr) in exprs.into_iter().enumerate() {
+                    let pat = match expr {
                         Some(
                             expr @ ExprOrSpread {
                                 spread: Some(..), ..
                             },
-                        ) => self.emit_err(expr.span(), SyntaxError::NonLastRestParam),
-                        Some(ExprOrSpread { expr, .. }) => {
-                            params.push(self.reparse_expr_as_pat(pat_ty.element(), expr).map(Some)?)
+                        ) if idx + 1 != len => {
+                            self.emit_err(expr.span(), SyntaxError::NonLastRestParam);
+                            continue;
                         }
-                        None => params.push(None),
-                    }
-                }
-                if count_of_trailing_comma == 0 {
-                    let expr = exprs.into_iter().next().unwrap();
-                    let outer_expr_span = expr.span();
-                    let last = match expr {
-                        // Rest
                         Some(ExprOrSpread {
                             spread: Some(dot3_token),
                             expr,
                         }) => {
-                            // TODO: is BindingPat correct?
                             if let Expr::Assign(_) = *expr {
-                                self.emit_err(outer_expr_span, SyntaxError::TS1048);
+                                self.emit_err(dot3_token.to(expr.span()), SyntaxError::TS1048);
                             };
                             if let Some(trailing_comma) = self.state().trailing_commas.get(&span.lo)
                             {
@@ -400,13 +404,11 @@ impl<I: Tokens> Parser<I> {
                                 .map(Some)?
                         }
                         Some(ExprOrSpread { expr, .. }) => {
-                            // TODO: is BindingPat correct?
                             self.reparse_expr_as_pat(pat_ty.element(), expr).map(Some)?
                         }
-                        // TODO: syntax error if last element is ellison and ...rest exists.
                         None => None,
                     };
-                    params.push(last);
+                    params.push(pat);
                 }
                 Ok(ArrayPat {
                     span,
@@ -438,12 +440,21 @@ impl<I: Tokens> Parser<I> {
     }
 
     pub(super) fn parse_binding_element(&mut self) -> PResult<Pat> {
+        self.parse_binding_element_with_initializer()
+            .map(|(pat, _)| pat)
+    }
+
+    /// Returns the span of an initializer owned by this binding element.
+    /// Initializers nested in destructuring patterns are not propagated.
+    fn parse_binding_element_with_initializer(&mut self) -> PResult<(Pat, Option<Span>)> {
         trace_cur!(self, parse_binding_element);
 
         let start = self.cur_pos();
         let left = self.parse_binding_pat_or_ident(false)?;
 
         if self.input_mut().eat(Token::Eq) {
+            let initializer_span = self.input().prev_span();
+
             let right = self.allow_in_expr(Self::parse_assignment_expr)?;
 
             if self.ctx().contains(Context::InParameters)
@@ -457,15 +468,18 @@ impl<I: Tokens> Parser<I> {
                 self.emit_err(self.span(start), SyntaxError::TS2371);
             }
 
-            return Ok(AssignPat {
-                span: self.span(start),
-                left: Box::new(left),
-                right,
-            }
-            .into());
+            return Ok((
+                AssignPat {
+                    span: self.span(start),
+                    left: Box::new(left),
+                    right,
+                }
+                .into(),
+                Some(initializer_span),
+            ));
         }
 
-        Ok(left)
+        Ok((left, None))
     }
 
     pub(crate) fn parse_binding_pat_or_ident(&mut self, disallow_let: bool) -> PResult<Pat> {
@@ -556,11 +570,27 @@ impl<I: Tokens> Parser<I> {
         let has_modifier = self.eat_any_ts_modifier()?;
 
         let pat_start = self.cur_pos();
-        let mut pat = self.parse_binding_element()?;
+        let (mut pat, initializer_span) = self.parse_binding_element_with_initializer()?;
+        let is_direct_ts_this_param = self.syntax().typescript()
+            && !self.syntax().flow()
+            && direct_ts_this_ident(&pat).is_some();
+        if let (true, Some(initializer_span)) = (is_direct_ts_this_param, initializer_span) {
+            self.emit_err(
+                initializer_span,
+                SyntaxError::Expected(",".into(), "=".into()),
+            );
+        }
         let mut opt = false;
 
         if self.input().syntax().typescript() {
             if self.input_mut().eat(Token::QuestionMark) {
+                if is_direct_ts_this_param {
+                    self.emit_err(
+                        self.input().prev_span(),
+                        SyntaxError::Expected(",".into(), "?".into()),
+                    );
+                }
+
                 match pat {
                     Pat::Ident(BindingIdent {
                         id:
@@ -632,8 +662,15 @@ impl<I: Tokens> Parser<I> {
         }
 
         let pat = if self.input_mut().eat(Token::Eq) {
+            if is_direct_ts_this_param && !opt {
+                self.emit_err(
+                    self.input().prev_span(),
+                    SyntaxError::Expected(",".into(), "=".into()),
+                );
+            }
+
             // `=` cannot follow optional parameter.
-            if opt && !self.input().syntax().flow() {
+            if opt && !is_direct_ts_this_param && !self.input().syntax().flow() {
                 self.emit_err(pat.span(), SyntaxError::TS1015);
             }
 
@@ -706,6 +743,10 @@ impl<I: Tokens> Parser<I> {
     }
 
     pub(crate) fn parse_constructor_params(&mut self) -> PResult<Vec<ParamOrTsParamProp>> {
+        self.do_inside_of_context(Context::InParameters, Self::parse_constructor_params_inner)
+    }
+
+    fn parse_constructor_params_inner(&mut self) -> PResult<Vec<ParamOrTsParamProp>> {
         let mut params = Vec::new();
         let mut rest_span = Span::default();
 
@@ -751,7 +792,10 @@ impl<I: Tokens> Parser<I> {
 
             if !self.input().is(Token::RParen) {
                 expect!(self, Token::Comma);
-                if self.input().is(Token::RParen) && is_rest {
+                if self.input().is(Token::RParen)
+                    && is_rest
+                    && (!self.ctx().contains(Context::InDeclare) || self.syntax().flow())
+                {
                     self.emit_err(self.input().prev_span(), SyntaxError::CommaAfterRestElement);
                 }
             }
@@ -761,6 +805,10 @@ impl<I: Tokens> Parser<I> {
     }
 
     pub(crate) fn parse_formal_params(&mut self) -> PResult<Vec<Param>> {
+        self.do_inside_of_context(Context::InParameters, Self::parse_formal_params_inner)
+    }
+
+    fn parse_formal_params_inner(&mut self) -> PResult<Vec<Param>> {
         let mut params = Vec::new();
         let mut rest_span = Span::default();
 
@@ -773,7 +821,9 @@ impl<I: Tokens> Parser<I> {
             let decorators = self.parse_decorators(false)?;
             let pat_start = self.cur_pos();
 
-            let pat = if self.input_mut().eat(Token::DotDotDot) {
+            let pat = if let Some(pat) = self.try_parse_flow_anon_formal_param(params.len())? {
+                pat
+            } else if self.input_mut().eat(Token::DotDotDot) {
                 let dot3_token = self.span(pat_start);
 
                 let mut pat = self.parse_binding_pat_or_ident(false)?;
@@ -817,6 +867,9 @@ impl<I: Tokens> Parser<I> {
                 self.parse_formal_param_pat()?
             };
             let is_rest = matches!(pat, Pat::Rest(_));
+            if is_rest {
+                rest_span = pat.span();
+            }
 
             params.push(Param {
                 span: self.span(param_start),
@@ -826,9 +879,22 @@ impl<I: Tokens> Parser<I> {
 
             if !self.input().is(Token::RParen) {
                 expect!(self, Token::Comma);
-                if is_rest && self.input().is(Token::RParen) {
+                // Ambient TypeScript signatures allow a trailing comma after rest.
+                if is_rest
+                    && self.input().is(Token::RParen)
+                    && (!self.ctx().contains(Context::InDeclare) || self.syntax().flow())
+                {
                     self.emit_err(self.input().prev_span(), SyntaxError::CommaAfterRestElement);
                 }
+            }
+        }
+
+        if self.syntax().typescript() && !self.syntax().flow() {
+            for param in params.iter().skip(1) {
+                let Some(ident) = direct_ts_this_ident(&param.pat) else {
+                    continue;
+                };
+                self.emit_err(ident.span, SyntaxError::TS2680);
             }
         }
 
@@ -935,6 +1001,17 @@ impl<I: Tokens> Parser<I> {
             }
         }
         Ok(params)
+    }
+}
+
+/// Returns `true` when `expr` is a `{...}` or `[...]` literal (possibly wrapped
+/// in parentheses).  Used to detect invalid `AssignmentRestProperty` targets
+/// per ECMA-262 13.15.5.1.
+fn is_array_or_object_literal_rest_target(expr: &Expr) -> bool {
+    match expr {
+        Expr::Array(_) | Expr::Object(_) => true,
+        Expr::Paren(ParenExpr { expr, .. }) => is_array_or_object_literal_rest_target(expr),
+        _ => false,
     }
 }
 

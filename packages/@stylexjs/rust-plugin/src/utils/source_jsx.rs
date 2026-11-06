@@ -2,6 +2,9 @@
 //! JSX parsers retain backslash sequences instead of unescaping them as JS. Check
 //! exact generated raw spelling first, then compare the rest of the AST normally.
 use super::*;
+use swc_core::common::EqIgnoreSpan;
+use swc_core::ecma::ast::{JSXAttr, JSXAttrName, JSXAttrValue, Module, Str};
+use swc_core::ecma::visit::{Visit, VisitMut, VisitMutWith, VisitWith};
 
 struct GeneratedAttribute {
     index: usize,
@@ -22,24 +25,32 @@ impl Visit for GeneratedAttributes {
         if attribute.span.is_dummy() {
             if let Some(JSXAttrValue::Str(value)) = &attribute.value {
                 if value.span.is_dummy() {
-                    if let Some(raw) = &value.raw {
-                        let Some(text) = value.value.as_str() else {
-                            self.error = Some("generated JSX raw literal has an unrepresentable isolated surrogate".into());
-                            return;
-                        };
-                        // Babel's escaped double-quote JSX output is invalid.
-                        // The producer deliberately leaves raw=None for that
-                        // case, retaining SWC's valid quote selection and the
-                        // ordinary cooked-value postflight comparison.
-                        if text.contains('"') {
+                    let Some(text) = value.value.as_str() else {
+                        self.error = Some(
+                            "generated JSX raw literal has an unrepresentable isolated surrogate"
+                                .into(),
+                        );
+                        return;
+                    };
+                    // Quotes require native JSX quote selection, not JS escapes.
+                    if text.contains('"') {
+                        if value.raw.is_some() {
                             self.error = Some("generated JSX containing a double quote must use native quote selection".into());
                             return;
                         }
+                    } else {
                         let literal = js_literal::string_literal(text);
-                        if raw.as_ref() != literal {
+                        if value
+                            .raw
+                            .as_ref()
+                            .is_some_and(|raw| raw.as_ref() != literal)
+                        {
                             self.error = Some("generated JSX attribute raw literal is not canonical Babel spelling".into());
                             return;
                         }
+                        // The public core produces DUMMY/raw=None literals;
+                        // codegen fills their spelling on a clone. Authorize
+                        // only this exact intended value and canonical spelling.
                         self.generated.push(GeneratedAttribute {
                             index,
                             name: attribute.name.clone(),
@@ -126,6 +137,7 @@ pub(super) fn validate_generated_attribute_text(
 mod tests {
     use super::*;
     use crate::utils::parser::parse_module;
+    use swc_core::common::DUMMY_SP;
 
     fn expected() -> Module {
         let mut module = parse_module(
@@ -174,6 +186,77 @@ mod tests {
         .module;
         assert!(source_compare::modules_equivalent(&wrong, &expected));
         assert!(validate_generated_attribute_text(&mut wrong, &expected).is_err());
+    }
+
+    #[test]
+    fn public_core_dummy_raw_none_uses_exact_generated_spelling() {
+        let mut expected = expected();
+        struct PublicMetadata;
+        impl VisitMut for PublicMetadata {
+            fn visit_mut_jsx_attr(&mut self, attribute: &mut JSXAttr) {
+                if attribute.span.is_dummy() {
+                    let Some(JSXAttrValue::Str(value)) = &mut attribute.value else {
+                        panic!()
+                    };
+                    value.raw = None;
+                }
+            }
+        }
+        expected.visit_mut_with(&mut PublicMetadata);
+        let mut actual = parse_module(
+            r#"const view=<Box original='a\b' generated="a\\b"/>;"#,
+            "jsx.jsx",
+        )
+        .unwrap()
+        .module;
+        validate_generated_attribute_text(&mut actual, &expected).unwrap();
+        assert!(source_compare::modules_equivalent(&actual, &expected));
+        let mut incorrect = parse_module(
+            r#"const view=<Box original='a\b' generated="a\b"/>;"#,
+            "jsx.jsx",
+        )
+        .unwrap()
+        .module;
+        assert!(validate_generated_attribute_text(&mut incorrect, &expected).is_err());
+    }
+
+    #[test]
+    fn real_span_raw_none_and_noncanonical_raw_some_are_not_authority() {
+        let mut expected = parse_module(
+            r#"const view=<Box original='a\b' generated="a\b"/>;"#,
+            "jsx.jsx",
+        )
+        .unwrap()
+        .module;
+        struct ClearRaw;
+        impl VisitMut for ClearRaw {
+            fn visit_mut_str(&mut self, value: &mut Str) {
+                value.raw = None;
+            }
+        }
+        expected.visit_mut_with(&mut ClearRaw);
+        let mut changed = parse_module(
+            r#"const view=<Box original='a\b' generated="a\\b"/>;"#,
+            "jsx.jsx",
+        )
+        .unwrap()
+        .module;
+        validate_generated_attribute_text(&mut changed, &expected).unwrap();
+        assert!(!source_compare::modules_equivalent(&changed, &expected));
+        let mut expected = self::expected();
+        struct WrongRaw;
+        impl VisitMut for WrongRaw {
+            fn visit_mut_jsx_attr(&mut self, attribute: &mut JSXAttr) {
+                if attribute.span.is_dummy() {
+                    let Some(JSXAttrValue::Str(value)) = &mut attribute.value else {
+                        panic!()
+                    };
+                    value.raw = Some("\"not canonical\"".into());
+                }
+            }
+        }
+        expected.visit_mut_with(&mut WrongRaw);
+        assert!(validate_generated_attribute_text(&mut changed, &expected).is_err());
     }
 
     #[test]

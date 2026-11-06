@@ -1,9 +1,6 @@
 //! Media-query syntax tree used by responsive cancellation and final CSS sorting.
 //! Numeric interval and media-type behavior follows style-value-parser/at-queries.
-use super::{
-    values::{dimension, js_number},
-    StyleValue,
-};
+use super::numbers::{dimension, js_number};
 use indexmap::IndexMap;
 use regex::Regex;
 use std::sync::OnceLock;
@@ -520,111 +517,6 @@ fn resolve_types(q: Query) -> Query {
         }
         q => q,
     }
-}
-
-pub(crate) fn serialize(q: &Query, top: bool) -> String {
-    match q {
-        Query::Type { key, not, only } => format!(
-            "{}{key}",
-            if *not {
-                "not "
-            } else if *only {
-                "only "
-            } else {
-                ""
-            }
-        ),
-        Query::Pair { key, value } => format!("({key}: {value})"),
-        Query::Feature(key) => format!("({key})"),
-        Query::Not(q) => {
-            if matches!(&**q, Query::And(_) | Query::Or(_) | Query::Not(_)) {
-                format!("(not ({}))", serialize(q, false))
-            } else {
-                format!("(not {})", serialize(q, false))
-            }
-        }
-        Query::And(q) => q
-            .iter()
-            .map(|q| serialize(q, false))
-            .collect::<Vec<_>>()
-            .join(" and "),
-        Query::Or(q) => {
-            let rules: Vec<_> = q
-                .iter()
-                .filter(|q| !matches!(q, Query::Or(rules) if rules.is_empty()))
-                .collect();
-            match rules.as_slice() {
-                [] => "not all".to_owned(),
-                [rule] => serialize(rule, top),
-                rules => rules
-                    .iter()
-                    .map(|q| {
-                        let text = serialize(q, false);
-                        if !top && matches!(q, Query::And(_) | Query::Or(_)) {
-                            format!("({text})")
-                        } else {
-                            text
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join(if top { ", " } else { " or " }),
-            }
-        }
-    }
-}
-
-pub(crate) fn transform_style(
-    style: &IndexMap<String, StyleValue>,
-    depth: usize,
-) -> Result<IndexMap<String, StyleValue>, String> {
-    let mut result = IndexMap::new();
-    for (key, value) in style {
-        result.insert(
-            key.clone(),
-            match value {
-                StyleValue::Object(value) => StyleValue::Object(transform_style(value, depth + 1)?),
-                value => value.clone(),
-            },
-        );
-    }
-    if depth >= 1 {
-        let keys: Vec<_> = result
-            .keys()
-            .filter(|key| key.starts_with("@media "))
-            .cloned()
-            .collect();
-        let parsed = keys
-            .iter()
-            .map(|key| parse(key))
-            .collect::<Result<Vec<_>, _>>()?;
-        for (i, key) in keys.iter().enumerate() {
-            let current = parsed[i].clone();
-            let negatives: Vec<_> = parsed[i + 1..]
-                .iter()
-                .cloned()
-                .map(|q| Query::Not(Box::new(q)))
-                .collect();
-            let combined = if negatives.is_empty() {
-                current
-            } else {
-                match current {
-                    Query::Or(branches) => Query::Or(
-                        branches
-                            .into_iter()
-                            .map(|q| {
-                                Query::And(std::iter::once(q).chain(negatives.clone()).collect())
-                            })
-                            .collect(),
-                    ),
-                    q => Query::And(std::iter::once(q).chain(negatives).collect()),
-                }
-            };
-            let new = resolve_types(normalize(combined));
-            let value = result.shift_remove(key).unwrap();
-            result.insert(format!("@media {}", serialize(&new, true)), value);
-        }
-    }
-    Ok(result)
 }
 
 #[derive(Clone, Debug, PartialEq)]

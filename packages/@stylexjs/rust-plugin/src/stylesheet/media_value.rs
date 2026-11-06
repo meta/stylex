@@ -1,5 +1,5 @@
 //! Values accepted by MediaQuery's simple-pair and Calc parsers.
-use super::values::{dimension, js_number};
+use super::numbers::{dimension, js_number};
 
 fn error() -> String {
     "Invalid media query syntax.".to_owned()

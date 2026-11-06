@@ -175,7 +175,7 @@ fn resolve(
 fn value_text(value: &Value) -> String {
     match value {
         Value::String(v) => v.clone(),
-        Value::Number(v) => super::values::js_number(v.as_f64().unwrap()),
+        Value::Number(v) => super::numbers::js_number(v.as_f64().unwrap()),
         value => value.to_string(),
     }
 }

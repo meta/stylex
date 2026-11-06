@@ -2,12 +2,12 @@
 
 use std::{borrow::Cow, char, rc::Rc};
 
+use compact_str::CompactString;
 use either::Either::{self, Left, Right};
 use rustc_hash::FxHashMap;
-use smartstring::{LazyCompact, SmartString};
 use swc_atoms::{
     wtf8::{CodePoint, Wtf8, Wtf8Buf},
-    Atom, AtomStoreCell,
+    Atom, AtomStoreCell, Wtf8Atom,
 };
 use swc_common::{
     comments::{Comment, CommentKind, Comments},
@@ -208,6 +208,8 @@ pub struct Lexer<'a> {
     comments: Option<&'a dyn Comments>,
     /// [Some] if comment comment parsing is enabled. Otherwise [None]
     comments_buffer: Option<CommentsBuffer>,
+    /// Whether comments should remain buffered while the parser may rewind.
+    defer_comments: bool,
 
     pub ctx: Context,
     input: StringInput<'a>,
@@ -312,6 +314,7 @@ impl<'a> Lexer<'a> {
         Lexer {
             comments,
             comments_buffer: comments.is_some().then(CommentsBuffer::new),
+            defer_comments: false,
             ctx: Default::default(),
             input,
             start_pos,
@@ -704,6 +707,7 @@ impl<'a> Lexer<'a> {
         if self.ctx().contains(Context::IgnoreError) {
             return;
         }
+        #[cfg(debug_assertions)]
         tracing::warn!("Lexer error at {:?}", span);
         let err = crate::error::Error::new(span, kind);
         self.push_error(err);
@@ -1000,6 +1004,7 @@ impl<'a> Lexer<'a> {
         );
 
         if cfg!(feature = "debug") {
+            #[cfg(debug_assertions)]
             tracing::trace!("read_digits(radix = {}), cur = {:?}", RADIX, self.cur());
         }
 
@@ -1335,6 +1340,7 @@ impl<'a> Lexer<'a> {
         if let Some(comments) = self.comments() {
             let last = self.state.prev_hi;
             let start_pos = self.start_pos();
+            let defer_comments = self.defer_comments;
             let comments_buffer = self.comments_buffer_mut().unwrap();
 
             // if the file had no tokens and no shebang, then treat any
@@ -1347,6 +1353,10 @@ impl<'a> Lexer<'a> {
             };
             // move the pending to the leading or trailing
             comments_buffer.pending_to_comment(kind, last);
+
+            if defer_comments {
+                return;
+            }
 
             // now fill the user's passed in comments
             for comment in comments_buffer.take_comments() {
@@ -1362,17 +1372,41 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn read_jsx_entity(&mut self) -> LexResult<(char, String)> {
+    fn finalize_comments(&mut self) {
+        self.defer_comments = false;
+
+        let Some(comments) = self.comments() else {
+            return;
+        };
+        let Some(comments_buffer) = self.comments_buffer.as_mut() else {
+            return;
+        };
+
+        for comment in comments_buffer.take_comments() {
+            match comment.kind {
+                BufferedCommentKind::Leading => {
+                    comments.add_leading(comment.pos, comment.comment);
+                }
+                BufferedCommentKind::Trailing => {
+                    comments.add_trailing(comment.pos, comment.comment);
+                }
+            }
+        }
+    }
+
+    fn read_jsx_entity(&mut self) -> LexResult<(Wtf8Atom, String)> {
         debug_assert!(self.syntax().jsx());
 
-        fn from_code(s: &str, radix: u32) -> LexResult<char> {
-            // TODO(kdy1): unwrap -> Err
-            let c = char::from_u32(
-                u32::from_str_radix(s, radix).expect("failed to parse string as number"),
-            )
-            .expect("failed to parse number as char");
+        fn parse_from_code(lexer: &mut Lexer, s: &str, radix: u32) -> Option<u32> {
+            let num = match u32::from_str_radix(s, radix) {
+                Ok(num) if num <= 0x10ffff => num,
+                _ => {
+                    lexer.emit_error(lexer.input.cur_pos(), SyntaxError::InvalidJSXValue);
+                    return None;
+                }
+            };
 
-            Ok(c)
+            Some(num)
         }
 
         fn is_hex(s: &str) -> bool {
@@ -1383,49 +1417,96 @@ impl<'a> Lexer<'a> {
             s.chars().all(|c| c.is_ascii_digit())
         }
 
-        let mut s = SmartString::<LazyCompact>::default();
+        let mut s = CompactString::default();
 
         debug_assert!(self.input().cur().is_some_and(|c| c == b'&'));
         self.bump(1); // `&`
 
         let start_pos = self.input().cur_pos();
-
-        for _ in 0..10 {
+        let mut buf = Wtf8Buf::with_capacity(8);
+        let mut raw = String::new();
+        const NO_PREV_RESULT: u32 = 0xdc00;
+        let mut prev_result: u32 = NO_PREV_RESULT;
+        for _ in 0..20 {
             let c = match self.input().cur() {
                 Some(c) => c,
                 None => break,
             };
             self.bump(1); // `c` is u8
 
-            if c == b';' {
-                if let Some(stripped) = s.strip_prefix('#') {
-                    if stripped.starts_with('x') {
-                        if is_hex(&s[2..]) {
-                            let value = from_code(&s[2..], 16)?;
-
-                            return Ok((value, format!("&{s};")));
-                        }
-                    } else if is_dec(stripped) {
-                        let value = from_code(stripped, 10)?;
-
-                        return Ok((value, format!("&{s};")));
+            if c != b';' {
+                s.push(c as char);
+                continue;
+            }
+            if let Some(stripped) = s.strip_prefix('#') {
+                let mut result: u32;
+                if stripped.starts_with('x') {
+                    if is_hex(&s[2..]) {
+                        result = parse_from_code(self, &s[2..], 16).unwrap();
+                    } else {
+                        return Ok((Wtf8Atom::from(format!("&{s};")), format!("&{s};")));
                     }
-                } else if let Some(entity) = xhtml(&s) {
-                    return Ok((entity, format!("&{s};")));
+                } else if is_dec(stripped) {
+                    result = parse_from_code(self, stripped, 10).unwrap();
+                } else {
+                    return Ok((Wtf8Atom::from(format!("&{s};")), format!("&{s};")));
                 }
 
-                break;
-            }
+                if (0xd800..=0xdfff).contains(&result) {
+                    if result < 0xdc00 {
+                        if prev_result != NO_PREV_RESULT {
+                            // If the previous result is a high surrogate
+                            // We can be sure `prev_result` is less than 0xdc00
+                            buf.push_str(format!("&#x{prev_result:04X};").as_str());
+                        }
+                        if self.input().cur() == Some(b'&') && self.input().peek() == Some(b'#') {
+                            self.bump(1); // `&`
 
-            s.push(c as char)
+                            // wait for the next surrogate
+                            prev_result = result;
+                            raw.push_str(format!("&{s};").as_str());
+                            s.clear();
+                            continue;
+                        } else {
+                            // Safety: result is a valid Unicode code point
+                            buf.push(unsafe { CodePoint::from_u32_unchecked(result) });
+                            return Ok((Wtf8Atom::from(buf), format!("&{s};")));
+                        }
+                    } else if prev_result != NO_PREV_RESULT {
+                        // Low surrogate pair
+                        // Decode to supplementary plane code point
+                        // (0x10000-0x10FFFF)
+                        result = 0x10000 + ((result & 0x3ff) | ((prev_result & 0x3ff) << 10));
+                        // Safety: result is a valid Unicode code point
+                        buf.push(unsafe { CodePoint::from_u32_unchecked(result) });
+                        raw.push_str(format!("&{s};").as_str());
+                        return Ok((Wtf8Atom::from(buf), raw));
+                    }
+                } else {
+                    if prev_result != NO_PREV_RESULT {
+                        buf.push(unsafe { CodePoint::from_u32_unchecked(prev_result) });
+                        raw.push_str(format!("&{s};").as_str());
+                    }
+                    // Safety: result is a valid Unicode code point
+                    buf.push(unsafe { CodePoint::from_u32_unchecked(result) });
+                    return Ok((Wtf8Atom::from(buf), format!("&{s};")));
+                }
+                // Maybe prev_result here but ignore it follow babel behavior
+                // Safety: result is a valid Unicode code point
+                buf.push(unsafe { CodePoint::from_u32_unchecked(result) });
+                return Ok((Wtf8Atom::from(buf), format!("&{s};")));
+            } else if let Some(entity) = xhtml(&s) {
+                return Ok((Wtf8Atom::from(entity.to_string()), format!("&{s};")));
+            }
         }
 
         unsafe {
             // Safety: start_pos is a valid position because we got it from self.input
             self.input_mut().reset_to(start_pos);
         }
+        buf.push_char('&');
 
-        Ok(('&', "&".to_string()))
+        Ok((Wtf8Atom::from(buf), "&".to_string()))
     }
 
     fn read_jsx_new_line(&mut self, normalize_crlf: bool) -> LexResult<Either<&'static str, char>> {
@@ -1446,7 +1527,7 @@ impl<'a> Lexer<'a> {
         debug_assert!(self.syntax().jsx());
         let start = self.input().cur_pos();
         self.bump(1); // `quote`
-        let mut out = String::new();
+        let mut buf: Wtf8Buf = Wtf8Buf::new();
         let mut chunk_start = self.input().cur_pos();
         loop {
             let ch = match self.input().cur_as_char() {
@@ -1463,8 +1544,8 @@ impl<'a> Lexer<'a> {
                     self.input_slice_str(chunk_start, cur_pos)
                 };
 
-                out.push_str(value);
-                out.push('\\');
+                buf.push_str(value);
+                buf.push_char('\\');
 
                 self.bump(1); // ch == '\\'
 
@@ -1483,11 +1564,11 @@ impl<'a> Lexer<'a> {
                     self.input_slice_str(chunk_start, cur_pos)
                 };
 
-                out.push_str(value);
+                buf.push_str(value);
 
                 let jsx_entity = self.read_jsx_entity()?;
 
-                out.push(jsx_entity.0);
+                buf.push_wtf8(&jsx_entity.0);
 
                 chunk_start = self.input().cur_pos();
             } else if ch.is_line_terminator() {
@@ -1496,14 +1577,14 @@ impl<'a> Lexer<'a> {
                     self.input_slice_str(chunk_start, cur_pos)
                 };
 
-                out.push_str(value);
+                buf.push_str(value);
 
                 match self.read_jsx_new_line(false)? {
                     Either::Left(s) => {
-                        out.push_str(s);
+                        buf.push_str(s);
                     }
                     Either::Right(c) => {
-                        out.push(c);
+                        buf.push_char(c);
                     }
                 }
 
@@ -1516,12 +1597,11 @@ impl<'a> Lexer<'a> {
             // Safety: We already checked for the range
             self.input_slice_str(chunk_start, self.cur_pos())
         };
-        let value = if out.is_empty() {
-            // Fast path: We don't need to allocate
-            self.atom(s)
+        let value = if buf.is_empty() {
+            self.wtf8_atom(Wtf8::from_str(s))
         } else {
-            out.push_str(s);
-            self.atom(out)
+            buf.push_str(s);
+            self.wtf8_atom(&*buf)
         };
 
         // it might be at the end of the file when
@@ -1530,7 +1610,7 @@ impl<'a> Lexer<'a> {
             self.bump(1);
         }
 
-        Ok(Token::str(value.into(), self))
+        Ok(Token::str(value, self))
     }
 
     // Modified based on <https://github.com/oxc-project/oxc/blob/f0e1510b44efdb1b0d9a09f950181b0e4c435abe/crates/oxc_parser/src/lexer/unicode.rs#L237>
@@ -1868,16 +1948,21 @@ impl<'a> Lexer<'a> {
         self.bump(1); // '/'
 
         // Spec says "It is a Syntax Error if IdentifierPart contains a Unicode escape
-        // sequence." TODO: check for escape
-
-        // Need to use `read_word` because '\uXXXX' sequences are allowed
-        // here (don't ask).
-        // let flags_start = self.cur_pos();
+        // sequence."
+        // Need to use `read_word` because '\uXXXX' sequences are accepted by the
+        // scanner — we still reject them as an early error below.
+        // Use `cur_as_char` so non-ASCII IdentifierPart flags (e.g. `/a/π\u0067`)
+        // are scanned; `cur()` only yields the first UTF-8 byte and would miss them.
         let flags = {
-            match self.cur() {
-                Some(c) if c.is_ident_start() => self
-                    .read_word_as_str_with()
-                    .map(|(s, _)| Some(self.atom(s))),
+            match self.cur_as_char() {
+                Some(c) if c == '\\' || c.is_ident_part() => {
+                    let (s, has_escape) = self.read_word_as_str_with()?;
+                    if has_escape {
+                        let span = self.span(start);
+                        self.emit_error_span(span, SyntaxError::UnicodeEscapeInRegExpFlags);
+                    }
+                    Ok(Some(self.atom(s)))
+                }
                 _ => Ok(None),
             }
         }?;
@@ -1918,13 +2003,11 @@ impl<'a> Lexer<'a> {
         // Fast path: try to scan ASCII identifier using byte_search
         if let Some(c) = self.input().cur_as_ascii() {
             if Ident::is_valid_ascii_start(c) {
-                // Advance past first byte
-                self.bump(1); // c is a valid ascii
-
                 // Use byte_search to quickly scan to end of ASCII identifier
                 let next_byte = byte_search! {
                     lexer: self,
                     table: NOT_ASCII_ID_CONTINUE_TABLE,
+                    start_at: 1,
                     handle_eof: {
                         // Reached EOF, entire remainder is identifier
                         let s = unsafe {
@@ -2383,24 +2466,16 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn read_keyword_with(&mut self, convert: &dyn Fn(&str) -> Option<Token>) -> LexResult<Token> {
+    fn read_keyword_with(&mut self, convert: fn(&str) -> Option<Token>) -> LexResult<Token> {
         debug_assert!(self.cur().is_some());
 
-        let start = self.cur_pos();
         let (s, has_escape) = self.read_keyword_as_str_with()?;
         if let Some(word) = convert(s.as_ref()) {
-            // Note: ctx is store in lexer because of this error.
-            // 'await' and 'yield' may have semantic of reserved word, which means lexer
-            // should know context or parser should handle this error. Our approach to this
-            // problem is former one.
-            if has_escape && word.is_reserved(self.ctx()) {
-                self.error(
-                    start,
-                    SyntaxError::EscapeInReservedWord { word: Atom::new(s) },
-                )
-            } else {
-                Ok(word)
-            }
+            // Keep escaped keyword spellings until the parser knows whether this
+            // is a keyword or an IdentifierName (for example, a property name).
+            let value = has_escape.then(|| TokenValue::Word(self.atom(s)));
+            self.set_token_value(value);
+            Ok(word)
         } else {
             let atom = self.atom(s);
             Ok(Token::unknown_ident(atom, self))
@@ -2415,13 +2490,11 @@ impl<'a> Lexer<'a> {
 
         // Fast path: try to scan ASCII identifier using byte_search
         // Performance optimization: check if first char disqualifies as keyword
-        // Advance past first byte
-        self.bump(1);
-
         // Use byte_search to quickly scan to end of ASCII identifier
         let next_byte = byte_search! {
             lexer: self,
             table: NOT_ASCII_ID_CONTINUE_TABLE,
+            start_at: 1,
             handle_eof: {
                 // Reached EOF, entire remainder is identifier
                 let s = unsafe {

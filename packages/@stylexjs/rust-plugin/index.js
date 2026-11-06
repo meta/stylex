@@ -32,11 +32,15 @@ function sourcePosition(source, offset) {
   return { line: lines.length, column: lines[lines.length - 1].length + 1 };
 }
 
-function rethrowDiagnostic(cause, source, filename) {
+// `file` is the absolute filename Babel would report, or undefined for a file
+// without one, which Babel's parser calls 'unknown' and its transform
+// 'unknown file'.
+function rethrowDiagnostic(cause, source, file) {
   const prefix = 'STYLEX_DIAGNOSTIC:';
   if (!cause.message?.startsWith(prefix)) throw cause;
   const diagnostic = JSON.parse(cause.message.slice(prefix.length));
   const parse = diagnostic.kind === 'parse';
+  const filename = file ?? (parse ? 'unknown' : 'unknown file');
   let message = diagnostic.message;
   let start;
   if (diagnostic.range) {
@@ -67,6 +71,27 @@ function rethrowDiagnostic(cause, source, filename) {
   throw error;
 }
 
+// The host outlives the transform when compiler functions were retained, so
+// an exception is reported once and does not linger for their later calls.
+function takeThrown(host) {
+  const { thrown } = host.state;
+  host.state.hasThrown = false;
+  host.state.thrown = undefined;
+  return thrown;
+}
+
+// Babel's `run` wraps an exception escaping a plugin in place: the same value,
+// its message prefixed with the file and a code added when it has none. The
+// statements are Babel's own, in strict mode, so a thrown string, null or
+// frozen error fails with exactly the TypeError Babel raises for it.
+function babelTransformError(e, label) {
+  e.message = `${label}: ${e.message}`;
+  if (!e.code) {
+    e.code = 'BABEL_TRANSFORM_ERROR';
+  }
+  return e;
+}
+
 const MAX_NESTED_TRANSFORMS = 64;
 let depth = 0;
 
@@ -74,7 +99,45 @@ function transformSync(source, options = {}) {
   if (typeof source !== 'string') {
     throw new TypeError('StyleX transformSync expects JavaScript source text');
   }
-  const { filename = 'unknown.js', ...pluginOptions } = options;
+  const {
+    filename: givenFilename,
+    // Internal: set by the Babel facade (babel.js) on every compile, whose
+    // exceptions Babel itself wraps once. Never forwarded to the compiler.
+    __errorsHandledByBabel: handledByBabel,
+    ...rest
+  } = options;
+  const unnamed = givenFilename === undefined;
+  const filename = unnamed ? 'unknown.js' : givenFilename;
+  // A file without a name compiles as Babel's plugin compiles one: with the
+  // empty name the facade passes for it (no import resolution, no file label).
+  const pluginOptions = unnamed ? { ...rest, __sourceFileName: '' } : { ...rest };
+  // Babel resolves `filename` against the working directory when it loads the
+  // options.
+  const file =
+    typeof givenFilename === 'string' ? path.resolve(givenFilename) : undefined;
+  const label = file ?? 'unknown file';
+  // A user exception escapes this transform: rethrown as Babel would.
+  const userThrow = (host) => {
+    const thrown = takeThrown(host);
+    if (handledByBabel != null && typeof handledByBabel === 'object') {
+      handledByBabel.userThrew = true;
+      return thrown;
+    }
+    return babelTransformError(thrown, label);
+  };
+  // Babel's own map objects carry `file`/`sourceRoot` as `undefined`; an absent
+  // field means the same, so only those are left out. Every other value is
+  // passed through unchanged for the compiler to validate.
+  const { inputSourceMap } = pluginOptions;
+  if (
+    inputSourceMap != null &&
+    typeof inputSourceMap === 'object' &&
+    !Array.isArray(inputSourceMap)
+  ) {
+    pluginOptions.inputSourceMap = Object.fromEntries(
+      Object.entries(inputSourceMap).filter(([, value]) => value !== undefined),
+    );
+  }
   const host = require('./host').createHost(
     pluginOptions,
     filename,
@@ -97,12 +160,15 @@ function transformSync(source, options = {}) {
   } catch (cause) {
     // A user callback threw: propagate that exception, as Babel does, rather
     // than the compiler error it caused.
-    if (host.state.hasThrown) throw host.state.thrown;
-    rethrowDiagnostic(cause, source, filename);
+    if (host.state.hasThrown) throw userThrow(host);
+    if (require('./host').stackOverflow(cause)) {
+      throw new RangeError('Maximum call stack size exceeded');
+    }
+    rethrowDiagnostic(cause, source, file);
   } finally {
     depth--;
   }
-  if (host.state.hasThrown) throw host.state.thrown;
+  if (host.state.hasThrown) throw userThrow(host);
   const { map, metadata, errors, warnings } = JSON.parse(output.json);
   return { code: output.code, map, metadata, errors, warnings };
 }

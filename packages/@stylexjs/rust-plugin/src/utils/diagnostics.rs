@@ -1,7 +1,7 @@
 //! Structured native compiler diagnostics. Rendering code frames belongs to the host.
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use swc_common::Span;
+use swc_core::common::Span;
 
 #[cfg(any(test, feature = "node"))]
 pub(crate) const ENVELOPE_PREFIX: &str = "STYLEX_DIAGNOSTIC:";
@@ -67,14 +67,16 @@ impl fmt::Display for DiagnosticError {
     }
 }
 impl std::error::Error for DiagnosticError {}
+#[cfg(test)]
 pub(crate) fn syntax_error(message: impl Into<String>, span: Span) -> anyhow::Error {
     Diagnostic::syntax(message, span).into_error()
 }
+#[cfg(test)]
 pub(crate) fn plain_error(message: impl Into<String>) -> anyhow::Error {
     Diagnostic::plain(message).into_error()
 }
-#[cfg(any(test, feature = "node"))]
-pub(crate) fn from_error(error: &anyhow::Error) -> Diagnostic {
+
+pub fn from_error(error: &anyhow::Error) -> Diagnostic {
     error
         .downcast_ref::<DiagnosticError>()
         .map(|error| error.0.clone())
@@ -84,7 +86,7 @@ pub(crate) fn from_error(error: &anyhow::Error) -> Diagnostic {
 #[cfg(test)]
 mod tests {
     use super::{from_error, Diagnostic, ENVELOPE_PREFIX};
-    use swc_common::{BytePos, Span};
+    use swc_core::common::{BytePos, Span};
 
     #[test]
     fn native_diagnostic_envelope_preserves_range_and_error_kind() {

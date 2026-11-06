@@ -1,8 +1,16 @@
-//! Typed lexical planning fast paths. JSON is confined to unsupported changed
-//! regions; untouched modules, arrays, declarations and registered snippets never
-//! round-trip through serde's ContentDeserializer.
+//! Typed lexical planning and source-owned region emission. ASTs stay typed for
+//! provenance, comparison, changed-region rendering, and final postflight.
 use super::source_compare::{expressions_equivalent, items_equivalent};
 use super::*;
+use swc_core::common::{
+    comments::SingleThreadedComments, EqIgnoreSpan, FileName, SourceFile, SourceMap, Span, Spanned,
+};
+use swc_core::ecma::ast::{
+    Decl, EsVersion, Expr, ExprStmt, Id, Lit, Module, ModuleDecl, ModuleItem, Pat, Prop,
+    PropOrSpread, Stmt, TsType,
+};
+use swc_core::ecma::parser::Syntax;
+use swc_core::ecma::visit::{Visit, VisitWith};
 
 #[derive(Clone, Copy)]
 enum Root<'a> {
@@ -22,11 +30,49 @@ impl<'a> Root<'a> {
             _ => None,
         }
     }
-    fn value(self) -> Result<Value> {
-        Ok(match self {
-            Self::Module(item) => serde_json::to_value(item)?,
-            Self::Statement(item) => serde_json::to_value(item)?,
-        })
+    fn visit(self, visitor: &mut impl Visit) {
+        match self {
+            Self::Module(item) => item.visit_with(visitor),
+            Self::Statement(item) => item.visit_with(visitor),
+        }
+    }
+    fn terminated(self) -> bool {
+        match self {
+            Self::Module(ModuleItem::ModuleDecl(declaration)) => {
+                matches!(
+                    declaration,
+                    ModuleDecl::Import(_)
+                        | ModuleDecl::ExportDefaultExpr(_)
+                        | ModuleDecl::ExportNamed(_)
+                        | ModuleDecl::ExportAll(_)
+                ) || matches!(declaration, ModuleDecl::ExportDecl(export) if matches!(export.decl, Decl::Var(_)))
+            }
+            _ => matches!(
+                self.stmt(),
+                Some(
+                    Stmt::Decl(Decl::Var(_))
+                        | Stmt::Expr(_)
+                        | Stmt::Return(_)
+                        | Stmt::Throw(_)
+                        | Stmt::Break(_)
+                        | Stmt::Continue(_)
+                        | Stmt::Debugger(_)
+                )
+            ),
+        }
+    }
+    fn expression_ending(self) -> bool {
+        match self {
+            Self::Module(ModuleItem::ModuleDecl(ModuleDecl::ExportDefaultExpr(_))) => true,
+            Self::Module(ModuleItem::ModuleDecl(ModuleDecl::ExportDecl(export))) => {
+                matches!(export.decl, Decl::Var(_))
+            }
+            _ => match self.stmt() {
+                Some(Stmt::Decl(Decl::Var(_)) | Stmt::Expr(_) | Stmt::Throw(_)) => true,
+                Some(Stmt::Return(returned)) => returned.arg.is_some(),
+                _ => false,
+            },
+        }
     }
     fn same(self, other: Self) -> bool {
         match (self, other) {
@@ -65,6 +111,135 @@ impl<'a> Root<'a> {
             _ => None,
         }
     }
+}
+
+#[derive(Clone)]
+enum TypedAnchor {
+    Ident(Ident),
+    Name(IdentName),
+    String(Str),
+    Number(Number),
+    BigInt(BigInt),
+    Bool(Bool),
+    Null(Null),
+    Private(PrivateName),
+}
+impl TypedAnchor {
+    fn same(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Ident(a), Self::Ident(b)) => a == b && a.eq_ignore_span(b),
+            (Self::Name(a), Self::Name(b)) => a == b && a.eq_ignore_span(b),
+            (Self::String(a), Self::String(b)) => a == b && a.eq_ignore_span(b),
+            (Self::Number(a), Self::Number(b)) => a == b && a.eq_ignore_span(b),
+            (Self::BigInt(a), Self::BigInt(b)) => a == b && a.eq_ignore_span(b),
+            (Self::Bool(a), Self::Bool(b)) => a == b && a.eq_ignore_span(b),
+            (Self::Null(a), Self::Null(b)) => a == b && a.eq_ignore_span(b),
+            (Self::Private(a), Self::Private(b)) => a == b && a.eq_ignore_span(b),
+            _ => false,
+        }
+    }
+}
+struct TypedAnchors<'a> {
+    file: &'a SourceFile,
+    nodes: HashMap<(u32, u32, &'static str), Vec<TypedAnchor>>,
+}
+impl<'a> TypedAnchors<'a> {
+    fn new(file: &'a SourceFile) -> Self {
+        Self {
+            file,
+            nodes: HashMap::new(),
+        }
+    }
+    fn add(&mut self, span: Span, kind: &'static str, node: TypedAnchor) {
+        if source_range(self.file, span).is_ok() {
+            self.nodes
+                .entry((span.lo.0, span.hi.0, kind))
+                .or_default()
+                .push(node);
+        }
+    }
+}
+impl Visit for TypedAnchors<'_> {
+    fn visit_ident(&mut self, node: &Ident) {
+        self.add(node.span, "identifier", TypedAnchor::Ident(node.clone()));
+    }
+    fn visit_ident_name(&mut self, node: &IdentName) {
+        self.add(node.span, "name", TypedAnchor::Name(node.clone()));
+    }
+    fn visit_str(&mut self, node: &Str) {
+        self.add(node.span, "string", TypedAnchor::String(node.clone()));
+    }
+    fn visit_number(&mut self, node: &Number) {
+        self.add(node.span, "number", TypedAnchor::Number(node.clone()));
+    }
+    fn visit_big_int(&mut self, node: &BigInt) {
+        self.add(node.span, "bigint", TypedAnchor::BigInt(node.clone()));
+    }
+    fn visit_bool(&mut self, node: &Bool) {
+        self.add(node.span, "bool", TypedAnchor::Bool(*node));
+    }
+    fn visit_null(&mut self, node: &Null) {
+        self.add(node.span, "null", TypedAnchor::Null(*node));
+    }
+    fn visit_private_name(&mut self, node: &PrivateName) {
+        self.add(node.span, "private", TypedAnchor::Private(node.clone()));
+    }
+}
+
+/// Pair only retained keyword wrappers. The operand is either generated or
+/// the same authored node kind/span; an arbitrary snippet span is not an origin.
+fn keyword_operands<'a, 'b>(
+    before: &'a Expr,
+    after: &'b Expr,
+) -> Option<(Span, &'static str, &'a Expr, &'b Expr)> {
+    let pair = match (before, after) {
+        (Expr::Paren(old), Expr::Paren(new)) if !old.span.is_dummy() && old.span == new.span => {
+            return keyword_operands(&old.expr, &new.expr)
+        }
+        (Expr::Yield(old), Expr::Yield(new))
+            if !old.span.is_dummy() && old.span == new.span && old.delegate == new.delegate =>
+        {
+            (old.span, "yield", old.arg.as_deref()?, new.arg.as_deref()?)
+        }
+        (Expr::Await(old), Expr::Await(new)) if !old.span.is_dummy() && old.span == new.span => {
+            (old.span, "await", &*old.arg, &*new.arg)
+        }
+        _ => return None,
+    };
+    (pair.3.span().is_dummy()
+        || pair.2.span() == pair.3.span()
+            && std::mem::discriminant(pair.2) == std::mem::discriminant(pair.3))
+    .then_some(pair)
+}
+
+fn arrow_header(arrow: &ArrowExpr) -> ArrowExpr {
+    // Explicit construction checks every AST29 header field and never clones
+    // the body just to discard it. A new upstream field requires a port here.
+    ArrowExpr {
+        span: arrow.span,
+        ctxt: arrow.ctxt,
+        params: arrow.params.clone(),
+        body: Box::new(ArrowFunctionBody::FunctionBody(FunctionBody {
+            span: DUMMY_SP,
+            stmts: Vec::new(),
+        })),
+        is_async: arrow.is_async,
+        is_generator: arrow.is_generator,
+        type_params: arrow.type_params.clone(),
+        return_type: arrow.return_type.clone(),
+    }
+}
+
+fn import_literal_only_changed(before: &ImportDecl, after: &ImportDecl) -> bool {
+    if before.src.span.is_dummy() || before.src.span != after.src.span {
+        return false;
+    }
+    // Compare every declaration field, including future AST fields, after
+    // substituting only the literal being edited. No declaration reprint is
+    // needed when the resolver retained its authored container and bindings.
+    let mut header = before.clone();
+    header.src = after.src.clone();
+    header == *after
 }
 
 fn binding_key(item: &ModuleItem) -> Option<Vec<Id>> {
@@ -153,6 +328,8 @@ pub(super) fn emit(
     ordered_authored.sort_by_key(|index| (authored[*index].start, authored[*index].end));
     let mut planner = TypedPlanner {
         file,
+        source_module: original,
+        source_prefix: std::cell::OnceCell::new(),
         grammar: grammar.syntax,
         source_type: grammar.source_type,
         comments: &ranges,
@@ -160,6 +337,7 @@ pub(super) fn emit(
         by_range,
         ordered_authored,
         used: HashSet::new(),
+        used_source_roots: HashSet::new(),
         by_binding,
         other_items,
         inserted_origins: Vec::new(),
@@ -176,13 +354,21 @@ pub(super) fn emit(
     if planner.used.len() != authored.len() {
         bail!("an authored edit does not name a changed or redundant original expression boundary");
     }
-    let output = apply_source_edits_with_origins(file, edits, &planner.inserted_origins)?;
-    verify_output_typed(&output.code, file, transformed, &ranges, grammar)?;
-    Ok(output)
+    finish_source_output(
+        file,
+        original,
+        transformed,
+        &ranges,
+        edits,
+        &planner.inserted_origins,
+        grammar,
+    )
 }
 
 struct TypedPlanner<'a> {
     file: &'a SourceFile,
+    source_module: &'a Module,
+    source_prefix: std::cell::OnceCell<String>,
     grammar: Syntax,
     source_type: SourceType,
     comments: &'a [Range<usize>],
@@ -190,11 +376,16 @@ struct TypedPlanner<'a> {
     by_range: HashMap<(usize, usize), usize>,
     ordered_authored: Vec<usize>,
     used: HashSet<usize>,
+    used_source_roots: HashSet<(u32, u32, &'static str)>,
     by_binding: HashMap<Vec<Id>, &'a AuthoredModuleItem>,
     other_items: Vec<&'a AuthoredModuleItem>,
     inserted_origins: Vec<InsertedOrigin>,
 }
 impl TypedPlanner<'_> {
+    fn source_prefix(&self) -> &str {
+        self.source_prefix
+            .get_or_init(|| source_unique_prefix(self.file))
+    }
     fn trivia_planner<'a>(&'a self, index: &'a SourceIndex<'a>) -> Planner<'a, 'a> {
         Planner {
             file: self.file,
@@ -249,9 +440,9 @@ impl TypedPlanner<'_> {
                 let expr = parser.parse_expr()?;
                 let span = parser.input().cur_span();
                 if span.lo != file.end_pos || span.hi != file.end_pos {
-                    return Err(swc_ecma_parser::error::Error::new(
+                    return Err(swc_core::ecma::parser::error::Error::new(
                         span,
-                        swc_ecma_parser::error::SyntaxError::Unexpected {
+                        swc_core::ecma::parser::error::SyntaxError::Unexpected {
                             got: parser.input().dump_cur(),
                             expected: "end of authored expression",
                         },
@@ -265,6 +456,383 @@ impl TypedPlanner<'_> {
             bail!("authored expression has recovered syntax errors");
         }
         Ok(expr)
+    }
+    fn append_arguments(
+        &mut self,
+        span: Span,
+        old: &[ExprOrSpread],
+        new: &[ExprOrSpread],
+    ) -> Result<Vec<TextEdit>> {
+        let range = source_range(self.file, span)?;
+        if !self.file.src[range.clone()].ends_with(')') {
+            bail!("call arguments have no owned closing parenthesis");
+        }
+        let end = range.end - 1;
+        let mut trailing_comma = false;
+        if let Some(last) = old.last() {
+            let mut cursor = source_range(self.file, last.expr.span())?.end;
+            while cursor < end {
+                if let Some(comment) = self
+                    .comments
+                    .iter()
+                    .find(|comment| comment.start == cursor && comment.end <= end)
+                {
+                    cursor = comment.end;
+                    continue;
+                }
+                let character = self.file.src[cursor..end]
+                    .chars()
+                    .next()
+                    .context("call argument trivia")?;
+                if character.is_whitespace() {
+                    cursor += character.len_utf8();
+                    continue;
+                }
+                trailing_comma = character == ',';
+                break;
+            }
+        }
+        let mut values = Vec::new();
+        for argument in &new[old.len()..] {
+            let code = emit_node(&*argument.expr)?;
+            values.push(format!(
+                "{}({})",
+                if argument.spread.is_some() { "..." } else { "" },
+                code.trim()
+            ));
+        }
+        Ok(vec![TextEdit {
+            start: end,
+            end,
+            new_text: format!(
+                "{} {}",
+                if old.is_empty() || trailing_comma {
+                    ""
+                } else {
+                    ","
+                },
+                values.join(", ")
+            ),
+        }])
+    }
+    fn template(&mut self, before: &Tpl, after: &Tpl) -> Result<Vec<TextEdit>> {
+        if before.exprs.len() != after.exprs.len()
+            || before.quasis.len() != after.quasis.len()
+            || !before
+                .quasis
+                .iter()
+                .zip(&after.quasis)
+                .all(|(old, new)| old.tail == new.tail)
+        {
+            bail!("template interpolation shape requires an explicit source boundary");
+        }
+        let mut edits = Vec::new();
+        for (old, new) in before.exprs.iter().zip(&after.exprs) {
+            edits.extend(self.expr(old, new)?);
+        }
+        for (old, new) in before.quasis.iter().zip(&after.quasis) {
+            if old.raw != new.raw {
+                let range = source_range(self.file, old.span)?;
+                if &self.file.src[range.clone()] != old.raw.as_ref() {
+                    bail!("template raw text has no owned original quasi span");
+                }
+                edits.push(TextEdit {
+                    start: range.start,
+                    end: range.end,
+                    new_text: new.raw.to_string(),
+                });
+            } else if old.cooked != new.cooked {
+                bail!("template cooked value cannot change without its raw source");
+            }
+        }
+        Ok(edits)
+    }
+    fn jsx_attribute_range(
+        &self,
+        opening: &JSXOpeningElement,
+        attribute: &JSXAttrOrSpread,
+    ) -> Result<Range<usize>> {
+        let range = source_range(self.file, attribute.span())?;
+        if !matches!(attribute, JSXAttrOrSpread::SpreadElement(_)) {
+            return Ok(range);
+        }
+        let bounds = source_range(self.file, opening.span)?;
+        let mut start = range.start;
+        loop {
+            if let Some(comment) = self
+                .comments
+                .iter()
+                .find(|comment| comment.end == start && comment.start >= bounds.start)
+            {
+                start = comment.start;
+                continue;
+            }
+            if start <= bounds.start {
+                bail!("JSX spread has no owned opening brace");
+            }
+            let c = self.file.src[bounds.start..start]
+                .chars()
+                .next_back()
+                .context("JSX opening trivia")?;
+            if c.is_whitespace() {
+                start -= c.len_utf8();
+                continue;
+            }
+            if c != '{' {
+                bail!("JSX spread has no owned opening brace");
+            }
+            start -= 1;
+            break;
+        }
+        let mut end = range.end;
+        loop {
+            if let Some(comment) = self
+                .comments
+                .iter()
+                .find(|comment| comment.start == end && comment.end <= bounds.end)
+            {
+                end = comment.end;
+                continue;
+            }
+            let c = self.file.src[end..bounds.end]
+                .chars()
+                .next()
+                .context("JSX spread closing brace")?;
+            if c.is_whitespace() {
+                end += c.len_utf8();
+                continue;
+            }
+            if c != '}' {
+                bail!("JSX spread has no owned closing brace");
+            }
+            end += 1;
+            break;
+        }
+        Ok(start..end)
+    }
+    fn insert_jsx_attributes(
+        &self,
+        position: usize,
+        attributes: &[&JSXAttrOrSpread],
+    ) -> Result<TextEdit> {
+        let mut text = String::from(" ");
+        for attribute in attributes {
+            text.push_str(
+                &emit_region_from_source_cached(
+                    self.source_prefix(),
+                    self.file,
+                    self.source_module,
+                    *attribute,
+                )?
+                .code,
+            );
+            text.push(' ');
+        }
+        Ok(TextEdit {
+            start: position,
+            end: position,
+            new_text: text,
+        })
+    }
+    fn jsx_attributes(
+        &mut self,
+        before: &JSXOpeningElement,
+        after: &JSXOpeningElement,
+    ) -> Result<Vec<TextEdit>> {
+        let key = |attribute: &JSXAttrOrSpread| match attribute {
+            JSXAttrOrSpread::JSXAttr(a) => (a.span, false),
+            JSXAttrOrSpread::SpreadElement(a) => (a.dot3_token, true),
+        };
+        let old: HashMap<_, _> = before
+            .attrs
+            .iter()
+            .enumerate()
+            .map(|(index, attr)| {
+                let (span, spread) = key(attr);
+                ((span.lo.0, span.hi.0, spread), index)
+            })
+            .collect();
+        if old.len() != before.attrs.len() {
+            bail!("duplicate source-owned JSX attribute anchor");
+        }
+        let mut matched = Vec::new();
+        let mut previous = None;
+        for attribute in &after.attrs {
+            let (span, spread) = key(attribute);
+            if span.is_dummy() {
+                matched.push(None);
+                continue;
+            }
+            let index = *old
+                .get(&(span.lo.0, span.hi.0, spread))
+                .context("new JSX attribute has an untrusted source span")?;
+            if previous.is_some_and(|old| index <= old) {
+                bail!("source attributes cannot be reordered or reused twice");
+            }
+            previous = Some(index);
+            matched.push(Some(index));
+        }
+        let kept: HashSet<_> = matched.iter().flatten().copied().collect();
+        let mut edits = Vec::new();
+        for (index, attribute) in before.attrs.iter().enumerate() {
+            if !kept.contains(&index) {
+                let range = self.jsx_attribute_range(before, attribute)?;
+                edits.push(TextEdit {
+                    start: range.start,
+                    end: range.end,
+                    new_text: self.retain(&range, String::new())?,
+                });
+            }
+        }
+        let bounds = source_range(self.file, before.span)?;
+        let end = bounds.end - if before.self_closing { 2 } else { 1 };
+        let mut pending = Vec::new();
+        for (attribute, matched) in after.attrs.iter().zip(matched) {
+            let Some(index) = matched else {
+                pending.push(attribute);
+                continue;
+            };
+            if !pending.is_empty() {
+                edits.push(
+                    self.insert_jsx_attributes(
+                        self.jsx_attribute_range(before, &before.attrs[index])?
+                            .start,
+                        &pending,
+                    )?,
+                );
+                pending.clear();
+            }
+            let original = &before.attrs[index];
+            if original == attribute {
+                continue;
+            }
+            match (original, attribute) {
+                (JSXAttrOrSpread::SpreadElement(old), JSXAttrOrSpread::SpreadElement(new))
+                    if old.dot3_token == new.dot3_token =>
+                {
+                    edits.extend(self.expr(&old.expr, &new.expr)?)
+                }
+                (JSXAttrOrSpread::JSXAttr(old), JSXAttrOrSpread::JSXAttr(new))
+                    if old.name == new.name =>
+                {
+                    match (&old.value, &new.value) {
+                        (
+                            Some(JSXAttrValue::JSXExprContainer(old)),
+                            Some(JSXAttrValue::JSXExprContainer(new)),
+                        ) => match (&old.expr, &new.expr) {
+                            (JSXExpr::Expr(old), JSXExpr::Expr(new)) => {
+                                edits.extend(self.expr(old, new)?)
+                            }
+                            _ => bail!("JSX expression kind changed without a source boundary"),
+                        },
+                        _ => {
+                            let range = self.jsx_attribute_range(before, original)?;
+                            let region = emit_region_from_source_cached(
+                                self.source_prefix(),
+                                self.file,
+                                original,
+                                attribute,
+                            )?;
+                            let null = Value::Null;
+                            let index = SourceIndex::new(&null);
+                            let text = self.trivia_planner(&index).retain_comments(
+                                &range,
+                                &region.reused,
+                                region.code,
+                            )?;
+                            edits.push(TextEdit {
+                                start: range.start,
+                                end: range.end,
+                                new_text: text,
+                            });
+                        }
+                    }
+                }
+                _ => {
+                    let range = self.jsx_attribute_range(before, original)?;
+                    let region = emit_region_from_source_cached(
+                        self.source_prefix(),
+                        self.file,
+                        original,
+                        attribute,
+                    )?;
+                    let null = Value::Null;
+                    let index = SourceIndex::new(&null);
+                    let text = self.trivia_planner(&index).retain_comments(
+                        &range,
+                        &region.reused,
+                        region.code,
+                    )?;
+                    edits.push(TextEdit {
+                        start: range.start,
+                        end: range.end,
+                        new_text: text,
+                    });
+                }
+            }
+        }
+        if !pending.is_empty() {
+            edits.push(self.insert_jsx_attributes(end, &pending)?);
+        }
+        Ok(edits)
+    }
+    fn jsx_children(
+        &mut self,
+        before: &[JSXElementChild],
+        after: &[JSXElementChild],
+    ) -> Result<Vec<TextEdit>> {
+        if before.len() != after.len() {
+            bail!("JSX child layout changes require explicit source boundaries");
+        }
+        let mut edits = Vec::new();
+        for (old, new) in before.iter().zip(after) {
+            if old == new {
+                continue;
+            }
+            match (old, new) {
+                (JSXElementChild::JSXElement(old), JSXElementChild::JSXElement(new)) => {
+                    edits.extend(self.jsx_element(old, new)?)
+                }
+                (JSXElementChild::JSXFragment(old), JSXElementChild::JSXFragment(new))
+                    if old.opening == new.opening && old.closing == new.closing =>
+                {
+                    edits.extend(self.jsx_children(&old.children, &new.children)?)
+                }
+                (
+                    JSXElementChild::JSXExprContainer(old),
+                    JSXElementChild::JSXExprContainer(new),
+                ) if old.span == new.span => match (&old.expr, &new.expr) {
+                    (JSXExpr::Expr(old), JSXExpr::Expr(new)) => edits.extend(self.expr(old, new)?),
+                    _ => bail!("JSX child expression kind changed"),
+                },
+                (JSXElementChild::JSXSpreadChild(old), JSXElementChild::JSXSpreadChild(new))
+                    if old.span == new.span =>
+                {
+                    edits.extend(self.expr(&old.expr, &new.expr)?)
+                }
+                _ => bail!("JSX child changed without an owned matching lexical container"),
+            }
+        }
+        Ok(edits)
+    }
+    fn jsx_element(&mut self, before: &JSXElement, after: &JSXElement) -> Result<Vec<TextEdit>> {
+        if before.opening.name != after.opening.name
+            || before.opening.self_closing != after.opening.self_closing
+            || before.opening.type_args != after.opening.type_args
+            || before.closing != after.closing
+        {
+            bail!("JSX tag/header changed without an owned lexical edit");
+        }
+        let mut edits = self.jsx_attributes(&before.opening, &after.opening)?;
+        edits.extend(self.jsx_children(&before.children, &after.children)?);
+        Ok(edits)
+    }
+    fn has_comments(&self, span: Span) -> bool {
+        source_range(self.file, span).is_ok_and(|range| {
+            self.comments
+                .iter()
+                .any(|comment| range.start <= comment.start && comment.end <= range.end)
+        })
     }
     fn expr(&mut self, before: &Expr, after: &Expr) -> Result<Vec<TextEdit>> {
         if before == after && before.eq_ignore_span(after) {
@@ -313,7 +881,91 @@ impl TypedPlanner<'_> {
                 new_text: format!("({})", self.retain(&range, code)?),
             }]);
         }
+        if let Some((_, _, old, new)) = keyword_operands(before, after) {
+            // Retain yield/await, delegation `*`, grouping and all trivia in
+            // their original positions. Only the paired operand is rewritten.
+            return self.expr(old, new);
+        }
         match (before, after) {
+            (Expr::Arrow(old), Expr::Arrow(new))
+                if !old.span.is_dummy()
+                    && self.has_comments(old.span)
+                    && arrow_header(old) == arrow_header(new) =>
+            {
+                match (&*old.body, &*new.body) {
+                    (
+                        ArrowFunctionBody::FunctionBody(old),
+                        ArrowFunctionBody::FunctionBody(new),
+                    ) if old.span == new.span => self.list(
+                        &old.stmts.iter().map(Root::Statement).collect::<Vec<_>>(),
+                        &new.stmts.iter().map(Root::Statement).collect::<Vec<_>>(),
+                        source_range(self.file, old.span)?.end - 1,
+                    ),
+                    (ArrowFunctionBody::Expr(old), ArrowFunctionBody::Expr(new)) => {
+                        self.expr(old, new)
+                    }
+                    _ => self.legacy_expr(before, after),
+                }
+            }
+            (Expr::Fn(old), Expr::Fn(new))
+                if self.has_comments(old.function.span) && old.ident == new.ident =>
+            {
+                self.function_body(&old.function, &new.function)
+            }
+            (Expr::JSXElement(old), Expr::JSXElement(new)) => self.jsx_element(old, new),
+            (Expr::JSXFragment(old), Expr::JSXFragment(new))
+                if old.opening == new.opening && old.closing == new.closing =>
+            {
+                self.jsx_children(&old.children, &new.children)
+            }
+            (Expr::Tpl(old), Expr::Tpl(new)) => self.template(old, new),
+            (Expr::TaggedTpl(old), Expr::TaggedTpl(new))
+                if old.tag == new.tag && old.type_params == new.type_params =>
+            {
+                self.template(&old.tpl, &new.tpl)
+            }
+            (Expr::Call(old), Expr::Call(new))
+                if old.callee == new.callee
+                    && old.type_args == new.type_args
+                    && old.ctxt == new.ctxt
+                    && old.args.len() == new.args.len()
+                    && old
+                        .args
+                        .iter()
+                        .zip(&new.args)
+                        .all(|(old, new)| old.spread == new.spread) =>
+            {
+                // Keep argument separators and their comments in the authored
+                // call. Rewrite only the paired argument expression boundaries.
+                let mut edits = Vec::new();
+                for (old, new) in old.args.iter().zip(&new.args) {
+                    edits.extend(self.expr(&old.expr, &new.expr)?);
+                }
+                Ok(edits)
+            }
+            (Expr::Call(old), Expr::Call(new))
+                if old.callee == new.callee
+                    && old.type_args == new.type_args
+                    && old.ctxt == new.ctxt
+                    && new.args.len() > old.args.len()
+                    && old.args.iter().zip(&new.args).all(|(old, new)| old == new) =>
+            {
+                self.append_arguments(old.span, &old.args, &new.args)
+            }
+            (Expr::OptChain(old), Expr::OptChain(new)) if old.optional == new.optional => {
+                match (&*old.base, &*new.base) {
+                    (OptChainBase::Call(old), OptChainBase::Call(new))
+                        if old.callee == new.callee
+                            && old.type_args == new.type_args
+                            && old.ctxt == new.ctxt
+                            && new.args.len() > old.args.len()
+                            && old.args.iter().zip(&new.args).all(|(old, new)| old == new) =>
+                    {
+                        self.append_arguments(old.span, &old.args, &new.args)
+                    }
+                    _ => self.legacy_expr(before, after),
+                }
+            }
             (Expr::Array(before), Expr::Array(after))
                 if before.elems.len() == after.elems.len() =>
             {
@@ -383,11 +1035,35 @@ impl TypedPlanner<'_> {
         }
     }
     fn legacy_expr(&mut self, before: &Expr, after: &Expr) -> Result<Vec<TextEdit>> {
-        self.region(
-            serde_json::to_value(before)?,
-            serde_json::to_value(after)?,
-            Role::Expression,
-        )
+        let range = source_range(self.file, before.span())?;
+        if self
+            .authored
+            .iter()
+            .any(|edit| range.start <= edit.start && edit.end <= range.end)
+        {
+            // Compatibility for an explicitly authored textual replacement;
+            // the public-core pipeline supplies no such registry.
+            return self.region(
+                serde_json::to_value(before)?,
+                serde_json::to_value(after)?,
+                Role::Expression,
+            );
+        }
+        let region =
+            emit_region_from_source_cached(self.source_prefix(), self.file, before, after)?;
+        let null = Value::Null;
+        let index = SourceIndex::new(&null);
+        let code = self.trivia_planner(&index).retain_expression_comments(
+            &range,
+            &region.reused,
+            format!("({})", region.code.trim()),
+        )?;
+        self.cover(&range);
+        Ok(vec![TextEdit {
+            start: range.start,
+            end: range.end,
+            new_text: code,
+        }])
     }
     fn region(&mut self, before: Value, after: Value, role: Role) -> Result<Vec<TextEdit>> {
         let range = span_of(&before)
@@ -496,12 +1172,76 @@ impl TypedPlanner<'_> {
         }
         Ok(())
     }
+    fn typed_root_region(&mut self, before: Root<'_>, after: Root<'_>) -> Result<Vec<TextEdit>> {
+        let range = source_range(self.file, before.span())?;
+        let region = match (before, after) {
+            (Root::Module(before), Root::Module(after)) => {
+                emit_region_from_source_cached(self.source_prefix(), self.file, before, after)?
+            }
+            (Root::Statement(before), Root::Statement(after)) => {
+                emit_region_from_source_cached(self.source_prefix(), self.file, before, after)?
+            }
+            _ => bail!("source region changes a statement/module container kind"),
+        };
+        let null = Value::Null;
+        let index = SourceIndex::new(&null);
+        let text =
+            self.trivia_planner(&index)
+                .retain_comments(&range, &region.reused, region.code)?;
+        self.cover(&range);
+        Ok(vec![TextEdit {
+            start: range.start,
+            end: range.end,
+            new_text: text,
+        }])
+    }
+    fn import_source(&mut self, before: &ImportDecl, after: &ImportDecl) -> Result<Vec<TextEdit>> {
+        let declaration = source_range(self.file, before.span)?;
+        let literal = source_range(self.file, before.src.span)?;
+        if literal.start < declaration.start || literal.end > declaration.end {
+            bail!("import specifier literal is not owned by its declaration");
+        }
+        // Untouched values retain their original quote spelling and trivia.
+        if before.src.value == after.src.value {
+            return Ok(Vec::new());
+        }
+        let value = after
+            .src
+            .value
+            .as_str()
+            .context("rewritten import specifier is not representable as UTF-8")?;
+        let code = js_literal::string_literal(value);
+        self.cover(&literal);
+        Ok(vec![TextEdit {
+            start: literal.start,
+            end: literal.end,
+            new_text: code,
+        }])
+    }
     fn root(&mut self, before: Root<'_>, after: Root<'_>) -> Result<Vec<TextEdit>> {
         if before.same(after) {
             self.noop_root(before)?;
             return Ok(Vec::new());
         }
+        if before
+            .directive()
+            .zip(after.directive())
+            .is_some_and(|(old, new)| {
+                old.value == new.value
+                    && old.raw.as_ref().is_some_and(|raw| raw.contains('\\'))
+                        == new.raw.as_ref().is_some_and(|raw| raw.contains('\\'))
+            })
+        {
+            // Do not turn an authored directive into a grouped expression just
+            // because the core replaced raw/location metadata on its literal.
+            self.noop_root(before)?;
+            return Ok(Vec::new());
+        }
         match (before, after) {
+            (
+                Root::Module(ModuleItem::ModuleDecl(ModuleDecl::Import(old))),
+                Root::Module(ModuleItem::ModuleDecl(ModuleDecl::Import(new))),
+            ) if import_literal_only_changed(old, new) => self.import_source(old, new),
             (
                 Root::Module(ModuleItem::ModuleDecl(ModuleDecl::ExportDecl(old))),
                 Root::Module(ModuleItem::ModuleDecl(ModuleDecl::ExportDecl(new))),
@@ -515,7 +1255,7 @@ impl TypedPlanner<'_> {
                 (Some(Stmt::Expr(old)), Some(Stmt::Expr(new))) => self.expr(&old.expr, &new.expr),
                 (Some(Stmt::Return(old)), Some(Stmt::Return(new))) => match (&old.arg, &new.arg) {
                     (Some(old), Some(new)) => self.expr(old, new),
-                    _ => self.region(before.value()?, after.value()?, Role::Other),
+                    _ => self.typed_root_region(before, after),
                 },
                 (Some(Stmt::Throw(old)), Some(Stmt::Throw(new))) => self.expr(&old.arg, &new.arg),
                 (Some(Stmt::Block(old)), Some(Stmt::Block(new))) if old.ctxt == new.ctxt => self
@@ -524,12 +1264,52 @@ impl TypedPlanner<'_> {
                         &new.stmts.iter().map(Root::Statement).collect::<Vec<_>>(),
                         source_range(self.file, old.span)?.end - 1,
                     ),
-                _ => self.region(before.value()?, after.value()?, Role::Other),
+                _ => self.typed_root_region(before, after),
             },
         }
     }
+    fn function_body(&mut self, before: &Function, after: &Function) -> Result<Vec<TextEdit>> {
+        let mut old_header = before.clone();
+        old_header.body = None;
+        let mut new_header = after.clone();
+        new_header.body = None;
+        if old_header != new_header || !old_header.eq_ignore_span(&new_header) {
+            bail!("source preserving emission cannot rewrite an unsupported function header");
+        }
+        match (&before.body, &after.body) {
+            (Some(old), Some(new)) if old.span == new.span => self.list(&old.stmts.iter().map(Root::Statement).collect::<Vec<_>>(), &new.stmts.iter().map(Root::Statement).collect::<Vec<_>>(), source_range(self.file, old.span)?.end - 1),
+            (None, None) => Ok(Vec::new()),
+            _ => bail!("source preserving emission cannot replace a function body without a retained source container"),
+        }
+    }
+    fn typed_decl_region(&mut self, before: &Decl, after: &Decl) -> Result<Vec<TextEdit>> {
+        let range = source_range(self.file, before.span())?;
+        let region =
+            emit_region_from_source_cached(self.source_prefix(), self.file, before, after)?;
+        let null = Value::Null;
+        let index = SourceIndex::new(&null);
+        let code =
+            self.trivia_planner(&index)
+                .retain_comments(&range, &region.reused, region.code)?;
+        self.cover(&range);
+        Ok(vec![TextEdit {
+            start: range.start,
+            end: range.end,
+            new_text: code,
+        }])
+    }
     fn decl(&mut self, before: &Decl, after: &Decl) -> Result<Vec<TextEdit>> {
         match (before, after) {
+            (Decl::TsTypeAlias(old), Decl::TsTypeAlias(new))
+                if self.grammar.flow() && old != new =>
+            {
+                bail!("original Flow type declarations require an explicit authored lexical edit")
+            }
+            (Decl::Fn(old), Decl::Fn(new))
+                if old.ident == new.ident && old.declare == new.declare =>
+            {
+                self.function_body(&old.function, &new.function)
+            }
             (Decl::Var(old), Decl::Var(new))
                 if old.kind == new.kind
                     && old.declare == new.declare
@@ -546,27 +1326,65 @@ impl TypedPlanner<'_> {
                     match (&old.init, &new.init) {
                         (Some(old), Some(new)) => edits.extend(self.expr(old, new)?),
                         (None, None) => {}
-                        _ => {
-                            return self.region(
-                                serde_json::to_value(before)?,
-                                serde_json::to_value(after)?,
-                                Role::Other,
-                            )
-                        }
+                        _ => return self.typed_decl_region(before, after),
                     }
                 }
                 Ok(edits)
             }
-            _ => self.region(
-                serde_json::to_value(before)?,
-                serde_json::to_value(after)?,
-                Role::Other,
-            ),
+            _ => self.typed_decl_region(before, after),
         }
     }
     fn provenance(&self, before: Root<'_>, after: Root<'_>) -> Result<bool> {
         if before.same(after) {
             return Ok(true);
+        }
+        if let (
+            Root::Module(ModuleItem::ModuleDecl(ModuleDecl::Import(old))),
+            Root::Module(ModuleItem::ModuleDecl(ModuleDecl::Import(new))),
+        ) = (before, after)
+        {
+            if import_literal_only_changed(old, new) {
+                let declaration = source_range(self.file, old.span)?;
+                let literal = source_range(self.file, old.src.span)?;
+                return Ok(declaration.start <= literal.start && literal.end <= declaration.end);
+            }
+        }
+        if let (Some(Stmt::Expr(old)), Some(Stmt::Expr(new))) = (before.stmt(), after.stmt()) {
+            if old.span == new.span {
+                if let Some((span, keyword, operand, _)) = keyword_operands(&old.expr, &new.expr) {
+                    let container = source_range(self.file, old.span)?;
+                    let wrapper = source_range(self.file, span)?;
+                    let argument = source_range(self.file, operand.span())?;
+                    // The parsed before-AST owns the keyword and operand. A
+                    // generated operand may remove every old identifier anchor
+                    // without changing the retained statement's provenance.
+                    return Ok(container.start <= wrapper.start
+                        && wrapper.end <= container.end
+                        && wrapper.start <= argument.start
+                        && argument.end <= wrapper.end
+                        && self.file.src[wrapper].starts_with(keyword));
+                }
+            }
+            if old.span == new.span && new.expr.span().is_dummy() {
+                // The caller supplies the trusted original AST. A retained
+                // source-owned statement container can contain a generated
+                // expression; its DUMMY root claims no snippet provenance.
+                // A fabricated real-span snippet does not qualify here.
+                let container = source_range(self.file, old.span)?;
+                let expression = source_range(self.file, old.expr.span())?;
+                return Ok(container.start <= expression.start && expression.end <= container.end);
+            }
+        }
+        if let (Some(Stmt::Block(old)), Some(Stmt::Block(new))) = (before.stmt(), after.stmt()) {
+            if old.span == new.span && old.ctxt == new.ctxt {
+                let range = source_range(self.file, old.span)?;
+                let source = &self.file.src[range];
+                // A retained braced statement is an owned container even when
+                // every former leaf was replaced by a generated hoist reference.
+                // Its statement list is still recursively paired and postflight
+                // checks the complete transformed module without exemptions.
+                return Ok(source.starts_with('{') && source.ends_with('}'));
+            }
         }
         if matches!(
             before.kind(),
@@ -593,9 +1411,59 @@ impl TypedPlanner<'_> {
         {
             return Ok(true);
         }
-        // Other source-backed headers still use the exact existing anchor check,
-        // but only serialize this changed structural region.
-        Ok(shared_anchor(&before.value()?, &after.value()?))
+        // Anchors are typed, source-owned leaf identities, not serialized AST
+        // fields or coincident snippet spans. The paired root still owns the
+        // exact original range and final postflight checks every field.
+        let mut before_anchors = TypedAnchors::new(self.file);
+        before.visit(&mut before_anchors);
+        let mut after_anchors = TypedAnchors::new(self.file);
+        after.visit(&mut after_anchors);
+        Ok(after_anchors.nodes.iter().any(|(key, nodes)| {
+            before_anchors.nodes.get(key).is_some_and(|old| {
+                nodes
+                    .iter()
+                    .any(|node| old.iter().any(|old| old.same(node)))
+            })
+        }))
+    }
+    fn statement_range(&self, root: Root<'_>, limit: usize) -> Result<Range<usize>> {
+        let mut range = source_range(self.file, root.span())?;
+        if !root.terminated() || self.file.src[range.clone()].ends_with(';') {
+            return Ok(range);
+        }
+        let mut cursor = range.end;
+        while cursor < limit {
+            if let Some(comment) = self
+                .comments
+                .iter()
+                .find(|comment| comment.start == cursor && comment.end <= limit)
+            {
+                cursor = comment.end;
+                continue;
+            }
+            let character = self.file.src[cursor..limit]
+                .chars()
+                .next()
+                .context("statement trivia cursor")?;
+            if character.is_whitespace() {
+                cursor += character.len_utf8();
+                continue;
+            }
+            if character == ';' {
+                range.end = cursor + 1;
+            }
+            break;
+        }
+        Ok(range)
+    }
+    fn needs_asi_terminator(&self, root: Root<'_>, range: &Range<usize>, next: &str) -> bool {
+        if self.file.src[range.clone()].ends_with(';') || !root.expression_ending() {
+            return false;
+        }
+        let next = next.trim_start();
+        matches!(next.chars().next(), Some('(' | '[' | '`' | '/'))
+            || next.starts_with('+') && !next.starts_with("++")
+            || next.starts_with('-') && !next.starts_with("--")
     }
     fn list(
         &mut self,
@@ -625,11 +1493,18 @@ impl TypedPlanner<'_> {
             let index = *roots
                 .get(&(span.lo.0, span.hi.0, item.kind()))
                 .context("new list item has an untrusted snippet span; mark its root DUMMY_SP")?;
-            if previous.is_some_and(|old| index <= old) {
-                bail!("source-preserving emission does not reorder original statements/attributes")
-            }
             if !self.provenance(before[index], *item)? {
                 bail!("ambiguous modified list-item provenance at {:?}; numeric snippet spans are not origins",span)
+            }
+            let key = (span.lo.0, span.hi.0, item.kind());
+            if !self.used_source_roots.insert(key) {
+                // Additional copies of a proven source-owned root are printed
+                // as generated nodes, never claiming its lexical origin twice.
+                matched.push(None);
+                continue;
+            }
+            if previous.is_some_and(|old| index <= old) {
+                bail!("source-preserving emission does not reorder original statements/attributes")
             }
             previous = Some(index);
             matched.push(Some(index))
@@ -638,12 +1513,23 @@ impl TypedPlanner<'_> {
             .iter()
             .take_while(|item| item.directive().is_some())
             .count();
-        if after
+        let after_directives = after
             .iter()
-            .take_while(|item| item.directive().is_some())
-            .count()
-            != directive_count
-        {
+            .enumerate()
+            .take_while(|(index, item)| {
+                let Some(literal) = item.directive() else {
+                    return false;
+                };
+                // A generated string replacing a source-owned non-directive
+                // expression statement is printed as `(string)`, so it cannot
+                // promote either itself or later authored strings to directives.
+                !(!item.span().is_dummy()
+                    && literal.span.is_dummy()
+                    && matched[*index]
+                        .is_some_and(|original| before[original].directive().is_none()))
+            })
+            .count();
+        if after_directives != directive_count {
             bail!("source edits must preserve the original directive prologue without promoting later strings")
         }
         for index in 0..directive_count {
@@ -661,21 +1547,13 @@ impl TypedPlanner<'_> {
         }
         let kept: HashSet<_> = matched.iter().flatten().copied().collect();
         let mut ranges = Vec::new();
-        let null = Value::Null;
-        let index = SourceIndex::new(&null);
-        let trivia = self.trivia_planner(&index);
         for (i, item) in before.iter().enumerate() {
             let limit = before
                 .get(i + 1)
                 .map(|item| source_range(self.file, item.span()).map(|range| range.start))
                 .transpose()?
                 .unwrap_or(end);
-            source_range(self.file, item.span())?;
-            // Only minimal headers are needed for terminator/ASI decisions.
-            let header = header_value(*item);
-            let mut header = header;
-            header["span"] = serde_json::to_value(item.span())?;
-            ranges.push(trivia.statement_range(&header, limit)?);
+            ranges.push(self.statement_range(*item, limit)?);
         }
         let mut edits = Vec::new();
         let mut terminators = HashSet::new();
@@ -689,7 +1567,7 @@ impl TypedPlanner<'_> {
             } else {
                 self.generated(after[i + 1])?
             };
-            if trivia.needs_asi_terminator(&header_value(before[old]), &ranges[old], &next)
+            if self.needs_asi_terminator(before[old], &ranges[old], &next)
                 && terminators.insert(ranges[old].end)
             {
                 edits.push(TextEdit {
@@ -699,7 +1577,6 @@ impl TypedPlanner<'_> {
                 });
             }
         }
-        drop(trivia);
         for (i, range) in ranges.iter().enumerate() {
             if !kept.contains(&i) {
                 self.cover(range);
@@ -842,30 +1719,253 @@ impl TypedPlanner<'_> {
         Ok(edit)
     }
 }
-fn header_value(root: Root<'_>) -> Value {
-    let kind = match root {
-        Root::Module(ModuleItem::ModuleDecl(ModuleDecl::Import(_))) => "ImportDeclaration",
-        Root::Module(ModuleItem::ModuleDecl(ModuleDecl::ExportDecl(_))) => "ExportDeclaration",
-        Root::Module(ModuleItem::ModuleDecl(ModuleDecl::ExportDefaultExpr(_))) => {
-            "ExportDefaultExpression"
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::utils::parser::{parse_expr, parse_module};
+    use swc_core::common::DUMMY_SP;
+    use swc_core::ecma::ast::Str;
+
+    #[test]
+    fn placeholder_prefix_is_selected_once_per_file_and_not_for_unchanged_files() {
+        let parsed = parse_module("const a=old(1); const b=old(2);", "prefix.js").unwrap();
+        let mut changed = parsed.module.clone();
+        for item in &mut changed.body {
+            let ModuleItem::Stmt(Stmt::Decl(Decl::Var(var))) = item else {
+                unreachable!()
+            };
+            var.decls[0].init = Some(Box::new(Expr::Lit(Lit::Str(Str {
+                span: DUMMY_SP,
+                value: "generated".into(),
+                raw: None,
+            }))));
         }
-        _ => match root.stmt() {
-            Some(Stmt::Decl(Decl::Var(_))) => "VariableDeclaration",
-            Some(Stmt::Expr(_)) => "ExpressionStatement",
-            Some(Stmt::Return(_)) => "ReturnStatement",
-            Some(Stmt::Throw(_)) => "ThrowStatement",
-            _ => "Other",
-        },
-    };
-    let mut value = json!({"type":kind});
-    if kind == "ExportDeclaration" {
-        let Root::Module(ModuleItem::ModuleDecl(ModuleDecl::ExportDecl(export))) = root else {
+        let scans = super::super::source_regions::prefix_scans();
+        let output = emit(
+            &parsed.file,
+            &parsed.module,
+            &changed,
+            &parsed.comments,
+            &[],
+            &[],
+            parsed.syntax.into(),
+        )
+        .unwrap();
+        assert!(output.code.contains("generated"));
+        assert_eq!(super::super::source_regions::prefix_scans() - scans, 1);
+        let scans = super::super::source_regions::prefix_scans();
+        emit(
+            &parsed.file,
+            &parsed.module,
+            &parsed.module,
+            &parsed.comments,
+            &[],
+            &[],
+            parsed.syntax.into(),
+        )
+        .unwrap();
+        assert_eq!(super::super::source_regions::prefix_scans(), scans);
+    }
+
+    #[test]
+    fn retained_block_anchor_does_not_authorize_real_span_child_snippets() {
+        let parsed = parse_module("{stylex.props(value);}", "block.js").unwrap();
+        let mut transformed = parsed.module.clone();
+        let ModuleItem::Stmt(Stmt::Block(block)) = &mut transformed.body[0] else {
             unreachable!()
         };
-        value["declaration"] = json!({"type":if matches!(export.decl,Decl::Var(_)){"VariableDeclaration"}else{"Other"}})
+        let Stmt::Expr(statement) = &mut block.stmts[0] else {
+            unreachable!()
+        };
+        statement.expr = parse_expr("inject()", "snippet.js").unwrap();
+        let error = emit(
+            &parsed.file,
+            &parsed.module,
+            &transformed,
+            &parsed.comments,
+            &[],
+            &[],
+            parsed.syntax.into(),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("provenance"), "{error}");
     }
-    if let Some(Stmt::Return(statement)) = root.stmt() {
-        value["argument"] = Value::Bool(statement.arg.is_some())
+
+    #[test]
+    fn rewritten_import_specifiers_change_only_the_owned_string_literal_bytes() {
+        for source in [
+            "/* license */ import { colors as theme } from '~t/tokens.stylex'; // keep\nexport const value=1;\n",
+            "import  \"~t/tokens.stylex\"  ; // bare\nexport const value=1;\n",
+            "import type { Props } from '~t/tokens.stylex'; /* type */\nconst value: Props=null;",
+            "import { colors } from '~t/tokens.stylex' with { type: 'json' }; // attributes\n",
+        ] {
+            let parsed=parse_module(source,"imports.js").unwrap();
+            let mut transformed=parsed.module.clone();
+            let ModuleItem::ModuleDecl(ModuleDecl::Import(import))=&mut transformed.body[0] else { unreachable!() };
+            let original_range=source_range(&parsed.file,import.src.span).unwrap();
+            import.src.value="./theme/tokens.stylex".into();
+            import.src.raw=None;
+            let output=emit(&parsed.file,&parsed.module,&transformed,&parsed.comments,&[],&[],parsed.syntax.into()).unwrap();
+            let expected=format!("{}\"./theme/tokens.stylex\"{}",&source[..original_range.start],&source[original_range.end..]);
+            assert_eq!(output.code,expected);
+            assert_eq!(output.edits.len(),1);
+            assert_eq!((output.edits[0].start,output.edits[0].end),(original_range.start,original_range.end));
+        }
     }
-    value
+
+    #[test]
+    fn keyword_operand_pair_requires_retained_headers_and_owned_or_dummy_roots() {
+        for source in [
+            "function* f(){yield old();}",
+            "async function f(){await old();}",
+        ] {
+            let parsed = parse_module(source, "keyword.js").unwrap();
+            let ModuleItem::Stmt(Stmt::Decl(Decl::Fn(function))) = &parsed.module.body[0] else {
+                unreachable!()
+            };
+            let Stmt::Expr(statement) = &function.function.body.as_ref().unwrap().stmts[0] else {
+                unreachable!()
+            };
+            let before = &*statement.expr;
+            let mut after = before.clone();
+            match &mut after {
+                Expr::Yield(value) => {
+                    value.arg = Some(Box::new(Expr::Lit(Lit::Num(Number {
+                        span: DUMMY_SP,
+                        value: 1.0,
+                        raw: None,
+                    }))))
+                }
+                Expr::Await(value) => {
+                    *value.arg = Expr::Lit(Lit::Num(Number {
+                        span: DUMMY_SP,
+                        value: 1.0,
+                        raw: None,
+                    }))
+                }
+                _ => unreachable!(),
+            }
+            assert!(keyword_operands(before, &after).is_some());
+            let mut fake = after.clone();
+            let original_operand = match before {
+                Expr::Yield(value) => value.arg.as_ref().unwrap().span(),
+                Expr::Await(value) => value.arg.span(),
+                _ => unreachable!(),
+            };
+            let fake_operand = Box::new(Expr::Lit(Lit::Num(Number {
+                span: original_operand,
+                value: 1.0,
+                raw: None,
+            })));
+            match &mut fake {
+                Expr::Yield(value) => value.arg = Some(fake_operand),
+                Expr::Await(value) => value.arg = fake_operand,
+                _ => unreachable!(),
+            }
+            assert!(
+                keyword_operands(before, &fake).is_none(),
+                "a matching snippet number is not a retained operand"
+            );
+            match &mut after {
+                Expr::Yield(value) => value.delegate = !value.delegate,
+                Expr::Await(value) => value.span = DUMMY_SP,
+                _ => unreachable!(),
+            }
+            assert!(
+                keyword_operands(before, &after).is_none(),
+                "keyword flags and authored wrapper spans remain mandatory"
+            );
+        }
+    }
+
+    #[test]
+    fn retained_source_expression_statement_accepts_generated_dummy_expression() {
+        let parsed = parse_module("import stylex from 'stylex'; stylex();", "paired.js").unwrap();
+        let mut transformed = parsed.module.clone();
+        let ModuleItem::Stmt(Stmt::Expr(statement)) = &mut transformed.body[1] else {
+            panic!()
+        };
+        *statement.expr = Expr::Lit(Lit::Str(Str {
+            span: DUMMY_SP,
+            value: "".into(),
+            raw: None,
+        }));
+        let output = emit(
+            &parsed.file,
+            &parsed.module,
+            &transformed,
+            &parsed.comments,
+            &[],
+            &[],
+            parsed.syntax.into(),
+        )
+        .unwrap();
+        assert!(output.code.starts_with("import stylex from 'stylex';"));
+        assert!(!output.code.contains("stylex()"));
+        assert!(super::super::source_compare::modules_equivalent(
+            &parse_module(&output.code, "paired.js").unwrap().module,
+            &transformed,
+        ));
+    }
+
+    #[test]
+    fn generated_expression_statement_inside_flow_function_keeps_header() {
+        let parsed = parse_module(
+            "import stylex from 'stylex'; function f<T: ?number>(value:T): mixed{stylex(value);}",
+            "nested.js",
+        )
+        .unwrap();
+        let mut transformed = parsed.module.clone();
+        struct Replace;
+        impl swc_core::ecma::visit::VisitMut for Replace {
+            fn visit_mut_expr(&mut self, expression: &mut Expr) {
+                if matches!(expression, Expr::Call(call) if matches!(&call.callee, swc_core::ecma::ast::Callee::Expr(callee) if matches!(&**callee, Expr::Ident(id) if id.sym == "stylex")))
+                {
+                    *expression = Expr::Lit(Lit::Str(Str {
+                        span: DUMMY_SP,
+                        value: "x123".into(),
+                        raw: None,
+                    }));
+                } else {
+                    swc_core::ecma::visit::VisitMutWith::visit_mut_children_with(expression, self);
+                }
+            }
+        }
+        swc_core::ecma::visit::VisitMutWith::visit_mut_with(&mut transformed, &mut Replace);
+        let output = emit(
+            &parsed.file,
+            &parsed.module,
+            &transformed,
+            &parsed.comments,
+            &[],
+            &[],
+            parsed.syntax.into(),
+        )
+        .unwrap();
+        assert!(output
+            .code
+            .contains("function f<T: ?number>(value:T): mixed{"));
+        assert!(!output.code.contains("stylex(value)"));
+    }
+
+    #[test]
+    fn retained_statement_does_not_authorize_a_real_span_snippet_collision() {
+        let parsed = parse_module("stylex.props(value);", "collision.js").unwrap();
+        let mut transformed = parsed.module.clone();
+        let ModuleItem::Stmt(Stmt::Expr(statement)) = &mut transformed.body[0] else {
+            panic!()
+        };
+        statement.expr = parse_expr("inject()", "snippet.js").unwrap();
+        let error = emit(
+            &parsed.file,
+            &parsed.module,
+            &transformed,
+            &parsed.comments,
+            &[],
+            &[],
+            parsed.syntax.into(),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("provenance"));
+    }
 }

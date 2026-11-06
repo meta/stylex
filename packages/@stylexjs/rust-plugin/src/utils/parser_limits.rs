@@ -1,8 +1,8 @@
 //! Parser-side limits, applied to the real context-sensitive SWC token stream.
 //! This runs before recursive descent, on normal production/test thread stacks.
 
-use swc_common::{comments::Comments, BytePos, SourceFile, Span};
-use swc_ecma_ast::EsVersion;
+use swc_core::common::{comments::Comments, BytePos, SourceFile, Span};
+use swc_core::ecma::ast::EsVersion;
 use swc_ecma_parser::{
     error::{Error, SyntaxError},
     input::Tokens,
@@ -27,6 +27,7 @@ pub(crate) fn syntax_for_filename(filename: &str) -> Syntax {
             all: true,
             decorators: true,
             enums: true,
+            components: true,
             ..Default::default()
         })
     }
@@ -52,6 +53,7 @@ struct Frame {
     finish_statement: bool,
     pending_function_body: bool,
     function_body: bool,
+    property_value: bool,
     arrows: usize,
 }
 #[derive(Clone)]
@@ -64,6 +66,8 @@ pub(crate) struct Limits {
     jsx: Vec<JsxFrame>,
     can_end: bool,
     function_header: Option<usize>,
+    // Contextual Flow `hook`/`component`, then its name, before parameters.
+    flow_function_keyword: Option<(usize, bool)>,
     resource_error: Option<Error>,
     resource_reported: bool,
     type_depth: usize,
@@ -80,6 +84,7 @@ impl Default for Limits {
                 finish_statement: false,
                 pending_function_body: false,
                 function_body: false,
+                property_value: false,
                 arrows: 0,
             }],
             prefix: 0,
@@ -89,6 +94,7 @@ impl Default for Limits {
             jsx: Vec::new(),
             can_end: false,
             function_header: None,
+            flow_function_keyword: None,
             resource_error: None,
             resource_reported: false,
             type_depth: 0,
@@ -473,6 +479,38 @@ impl BoundedLexer<'_> {
         let previous = self.limits.last.map(|(kind, _)| kind);
         let kind = token.token;
         let frame_index = self.limits.frames.len() - 1;
+        if !jsx_scan {
+            // Confirm the contextual declaration with its name and parameter
+            // opener. `hook()`, `component.as` and `component as T` are ordinary
+            // expressions, not function headers. Use the real token stream;
+            // never classify source text before lexing it.
+            if let Some((frame, named)) = self.limits.flow_function_keyword.take() {
+                if frame == frame_index {
+                    if !named && kind.is_word() {
+                        self.limits.flow_function_keyword = Some((frame, true));
+                    } else if named && matches!(kind, Token::LParen | Token::Lt) {
+                        self.limits.function_header = Some(frame);
+                        if let Some(leaf) = self.limits.frames[frame].statements.leaf.as_mut() {
+                            leaf.first = Token::Function;
+                            leaf.declaration = true;
+                        }
+                    }
+                }
+            }
+            let statements = &self.limits.frames[frame_index].statements;
+            let declaration_start = statements.expects_statement()
+                || statements.leaf.is_some_and(|leaf| {
+                    matches!(leaf.first, Token::Export | Token::Default | Token::Declare)
+                });
+            if self.lexer.syntax().flow_components()
+                && !self.lexer.ctx().contains(Context::InType)
+                && declaration_start
+                && kind == Token::Ident
+                && matches!(self.lexer.get_token_value(), Some(TokenValue::Word(word)) if word == "hook" || word == "component")
+            {
+                self.limits.flow_function_keyword = Some((frame_index, false));
+            }
+        }
         // Fragments have no JSX-name rescan: ordinary `>` must confirm the `<`.
         if kind == Token::Gt
             && previous == Some(Token::Lt)
@@ -488,8 +526,11 @@ impl BoundedLexer<'_> {
         }
         let header = self.jsx_header();
         let within_header = self.within_jsx_header();
+        // The parser may lex the next `as` while still leaving the preceding
+        // cast's InType context. Charge it in Flow as well as TypeScript; line
+        // breaks are not casts in this pinned grammar and still permit ASI.
         let cast_word = self.lexer.syntax().typescript()
-            && !self.lexer.syntax().flow()
+            && !token.had_line_break
             && matches!(kind, Token::As | Token::Satisfies)
             && self.limits.can_end;
         let mut block_statement = self.limits.frames[frame_index]
@@ -588,7 +629,11 @@ impl BoundedLexer<'_> {
         }
         let function_parameters = kind == Token::LParen
             && self.limits.function_header == Some(frame_index)
-            && !self.lexer.ctx().contains(Context::InType);
+            // Lookahead can lex the parameter opener before leaving the
+            // preceding generic's InType context, unlike parens inside it.
+            && (!self.lexer.ctx().contains(Context::InType)
+                || (self.limits.type_depth == 0
+                    && matches!(previous, Some(Token::Gt | Token::RShift | Token::ZeroFillRShift))));
         if function_parameters {
             self.limits.function_header = None;
         }
@@ -621,9 +666,29 @@ impl BoundedLexer<'_> {
                     | Token::NoSubstitutionTemplateLiteral
                     | Token::TemplateHead
             ));
+        let property = self.limits.frames.last_mut().unwrap();
+        if property.closing == Some(Token::RBrace)
+            && !property.statements.code
+            && !property.pending_function_body
+            && !self.lexer.ctx().contains(Context::InType)
+            && matches!(kind, Token::Colon | Token::Eq | Token::DotDotDot)
+        {
+            property.property_value = true;
+        }
+        // Parser 45 no longer keeps InPropertyName while lexing a method's
+        // `(`. A key/parameter opener is distinct from a call in a property
+        // value (`key: f()` or `field = f()`).
         let method_parameters = kind == Token::LParen
-            && self.lexer.ctx().contains(Context::InPropertyName)
-            && self.limits.frames.last().unwrap().closing == Some(Token::RBrace);
+            && self.limits.frames.last().unwrap().closing == Some(Token::RBrace)
+            && !self.limits.frames.last().unwrap().statements.code
+            && !self.limits.frames.last().unwrap().property_value
+            && !self.lexer.ctx().contains(Context::InClassField)
+            && (!self.lexer.ctx().contains(Context::InType)
+                || (self.limits.type_depth == 0
+                    && matches!(
+                        previous,
+                        Some(Token::Gt | Token::RShift | Token::ZeroFillRShift)
+                    )));
         if method_parameters && previous == Some(Token::New) {
             // `new` as a method name was lexed before the parser marked the
             // property-name context; undo its tentative constructor cost.
@@ -733,6 +798,7 @@ impl BoundedLexer<'_> {
                 finish_statement,
                 pending_function_body: false,
                 function_body,
+                property_value: false,
                 arrows: 0,
             });
         } else if self.limits.frames.last().and_then(|frame| frame.closing) == Some(kind) {
@@ -747,6 +813,14 @@ impl BoundedLexer<'_> {
             if closed.finish_statement {
                 parent.statements.complete();
             }
+            if closed.function_body
+                && !parent.statements.code
+                && !parent.property_value
+                && parent.closing == Some(Token::RBrace)
+            {
+                parent.operators = 0;
+                parent.arrows = 0;
+            }
         }
         if kind == Token::Semi {
             self.limits.frames.last_mut().unwrap().pending_function_body = false;
@@ -754,6 +828,7 @@ impl BoundedLexer<'_> {
         if matches!(kind, Token::Semi | Token::Comma) {
             self.limits.frames.last_mut().unwrap().operators = 0;
             self.limits.frames.last_mut().unwrap().arrows = 0;
+            self.limits.frames.last_mut().unwrap().property_value = false;
         }
         let mut completed_jsx = false;
         if header {
@@ -774,48 +849,46 @@ impl BoundedLexer<'_> {
             }
         }
         self.limits.jsx_depth = self.limits.jsx.len();
-        self.limits.can_end =
-            completed_jsx || (!header && !cast_word && can_end_expression(kind, self.lexer.ctx()));
+        let const_cast_end = self.lexer.syntax().typescript()
+            && kind == Token::Const
+            && previous == Some(Token::As)
+            && !token.had_line_break;
+        self.limits.can_end = completed_jsx
+            || const_cast_end
+            || (!header && !cast_word && can_end_expression(kind, self.lexer.ctx()));
         self.limits.last = Some((kind, token.span));
-        let code_blocks = self
-            .limits
-            .frames
-            .iter()
-            .filter(|frame| frame.closing == Some(Token::RBrace) && frame.statements.code)
-            .count();
+        // One pass over the frames and one over the JSX frames for the four
+        // totals, each summed exactly as a separate pass would.
+        let mut code_blocks = 0usize;
+        let mut frame_operators = 0usize;
+        let mut frame_arrows = 0usize;
+        let mut controls = 0usize;
+        for frame in &self.limits.frames {
+            if frame.closing == Some(Token::RBrace) && frame.statements.code {
+                code_blocks += 1;
+            }
+            frame_operators += frame.operators;
+            frame_arrows += frame.arrows;
+            controls += frame.statements.controls.len();
+        }
+        let mut jsx_operators = 0usize;
+        let mut jsx_arrows = 0usize;
+        for frame in &self.limits.jsx {
+            jsx_operators += frame.operators;
+            jsx_arrows += frame.arrows;
+        }
         let expression_delimiters = self.limits.frames.len() - 1 - code_blocks;
         let complexity = expression_delimiters
             + self.limits.jsx_depth
             + self.limits.prefix
-            + self
-                .limits
-                .frames
-                .iter()
-                .map(|f| f.operators)
-                .sum::<usize>()
-            + self.limits.jsx.iter().map(|f| f.operators).sum::<usize>();
+            + frame_operators
+            + jsx_operators;
         let expression_depth = expression_delimiters
             + self.limits.prefix
             + self.limits.type_depth
-            + self
-                .limits
-                .frames
-                .iter()
-                .map(|frame| frame.arrows)
-                .sum::<usize>()
-            + self
-                .limits
-                .jsx
-                .iter()
-                .map(|frame| frame.arrows)
-                .sum::<usize>();
-        let statement_depth = code_blocks
-            + self
-                .limits
-                .frames
-                .iter()
-                .map(|frame| frame.statements.controls.len())
-                .sum::<usize>();
+            + frame_arrows
+            + jsx_arrows;
+        let statement_depth = code_blocks + controls;
         if complexity > MAX_SYNTAX_COMPLEXITY
             || expression_depth > MAX_RECURSIVE_DEPTH
             || statement_depth > MAX_STATEMENT_DEPTH
@@ -938,6 +1011,23 @@ impl<'a> Tokens for BoundedLexer<'a> {
         }
         errors
     }
+    fn has_errors(&self) -> bool {
+        self.limits.resource_error.is_some() || self.lexer.has_errors()
+    }
+    fn diagnostic_checkpoint_save(&self) -> (usize, usize) {
+        self.lexer.diagnostic_checkpoint_save()
+    }
+    fn diagnostic_checkpoint_load(&mut self, checkpoint: (usize, usize)) {
+        // Resource diagnostics live in Limits, restored with the token
+        // checkpoint; the lexer owns the recoverable diagnostic buffers.
+        self.lexer.diagnostic_checkpoint_load(checkpoint);
+    }
+    fn set_defer_comments(&mut self, defer: bool) {
+        self.lexer.set_defer_comments(defer);
+    }
+    fn finalize_comments(&mut self) {
+        self.lexer.finalize_comments();
+    }
     fn take_script_module_errors(&mut self) -> Vec<Error> {
         self.lexer.take_script_module_errors()
     }
@@ -1014,6 +1104,7 @@ pub(crate) fn with_bounded_file_parser<T>(
         let lexer = Lexer::new(syntax, target, StringInput::from(file), comments);
         let mut parser = Parser::new_from(BoundedLexer::new(lexer));
         let result = op(&mut parser);
+        parser.input_mut().iter_mut().finalize_comments();
         errors.extend(parser.take_errors());
         result
     })

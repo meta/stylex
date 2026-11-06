@@ -8,7 +8,7 @@
  */
 
 import { createUnplugin } from 'unplugin';
-import { transformAsync } from '@babel/core';
+import { loadPartialConfigAsync, transformAsync } from '@babel/core';
 import stylexBabelPlugin from '@stylexjs/babel-plugin';
 import flowSyntaxPlugin from '@babel/plugin-syntax-flow';
 import jsxSyntaxPlugin from '@babel/plugin-syntax-jsx';
@@ -318,7 +318,21 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
   const DISK_RULES_PATH = path.join(DISK_RULES_DIR, 'rules.json');
 
   async function runBabelTransform(inputCode, filename, callerName) {
-    if (compiler === 'rust' && plugins.length === 0 && presets.length === 0) {
+    const caller = {
+      name: callerName,
+      supportsStaticESM: true,
+      supportsDynamicImport: true,
+      supportsTopLevelAwait: !inputCode.includes('require('),
+      supportsExportNamespaceFrom: true,
+    };
+    // The Babel route below also loads the project's root babel.config. The
+    // native route may only replace it when no such configuration applies.
+    if (
+      compiler === 'rust' &&
+      plugins.length === 0 &&
+      presets.length === 0 &&
+      !(await hasProjectBabelConfig(filename, caller))
+    ) {
       let result;
       try {
         result = await getRustCompiler().transform(inputCode, {
@@ -372,19 +386,25 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
           unstable_moduleResolution,
         }),
       ],
-      caller: {
-        name: callerName,
-        supportsStaticESM: true,
-        supportsDynamicImport: true,
-        supportsTopLevelAwait: !inputCode.includes('require('),
-        supportsExportNamespaceFrom: true,
-      },
+      caller,
     });
 
     if (!result || result.code == null) {
       return { code: inputCode, map: null, metadata: {} };
     }
     return result;
+  }
+
+  // Whether Babel resolves a project configuration file (babel.config.*) for
+  // this file, exactly as the Babel route's transformAsync call would. A file
+  // the configuration ignores is left untouched by both routes.
+  async function hasProjectBabelConfig(filename, caller) {
+    const partial = await loadPartialConfigAsync({
+      babelrc: false,
+      filename,
+      caller,
+    });
+    return partial == null || partial.config != null;
   }
 
   function escapeReg(src) {

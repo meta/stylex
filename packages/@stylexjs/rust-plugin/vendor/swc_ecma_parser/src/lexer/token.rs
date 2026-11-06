@@ -13,13 +13,13 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub enum TokenValue {
-    /// unknown ident, jsx name and shebang
+    /// Unknown identifiers, escaped keyword spellings, JSX names, and shebangs.
     Word(Atom),
     Template(LexResult<Wtf8Atom>),
     // string
     Str(Wtf8Atom),
     // jsx text
-    JsxText(Atom),
+    JsxText(Wtf8Atom),
     // regexp
     Regex(BytePos),
     Num(f64),
@@ -373,13 +373,9 @@ impl<'a> Token {
         buffer.expect_error_token_value()
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn take_word<I: Tokens>(self, buffer: &Buffer<I>) -> Atom {
-        if self == Token::Ident {
-            let value = buffer.get_token_value();
-            let Some(TokenValue::Word(word)) = value else {
-                unreachable!("{:#?}", value)
-            };
+        if let Some(TokenValue::Word(word)) = buffer.get_token_value() {
             return word.clone();
         }
 
@@ -390,9 +386,7 @@ impl<'a> Token {
 
     #[inline(always)]
     pub fn take_known_ident<I: Tokens>(self, buffer: &Buffer<I>) -> Atom {
-        let span = buffer.cur.span;
-        let atom = Atom::new(buffer.iter.read_string(span));
-        atom
+        self.take_word(buffer)
     }
 
     #[inline(always)]
@@ -523,6 +517,17 @@ impl Token {
         let t = self as u8;
         (t >= Token::EqEq as u8 && t <= Token::NullishCoalescing as u8)
             || (t >= Token::Plus as u8 && t <= Token::Ampersand as u8)
+    }
+
+    #[inline(always)]
+    pub const fn needs_unary_expr_prefix_parse(self) -> bool {
+        let t = self as u8;
+        (t >= Token::Bang as u8 && t <= Token::Minus as u8)
+            || (t >= Token::PlusPlus as u8 && t <= Token::MinusMinus as u8)
+            || matches!(
+                self,
+                Token::Lt | Token::Await | Token::Delete | Token::TypeOf | Token::Void
+            )
     }
 
     pub const fn as_bin_op(self) -> Option<swc_ecma_ast::BinaryOp> {

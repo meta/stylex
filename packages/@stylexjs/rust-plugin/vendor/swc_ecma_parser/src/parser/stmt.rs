@@ -5,7 +5,7 @@ use super::*;
 use crate::parser::{pat::PatType, Parser};
 
 #[allow(clippy::enum_variant_names)]
-enum TempForHead {
+pub(super) enum TempForHead {
     For {
         init: Option<VarDeclOrExpr>,
         test: Option<Box<Expr>>,
@@ -97,9 +97,8 @@ impl<I: Tokens> Parser<I> {
     }
 
     fn parse_return_stmt(&mut self) -> PResult<Stmt> {
-        let start = self.cur_pos();
-
         self.assert_and_bump(Token::Return);
+        let start = self.input().prev_span().lo;
 
         let arg = if self.is_general_semi() {
             None
@@ -132,8 +131,12 @@ impl<I: Tokens> Parser<I> {
         let is_let_or_const = matches!(kind, VarDeclKind::Let | VarDeclKind::Const);
 
         let mut name = self.parse_binding_pat_or_ident(is_let_or_const)?;
+        let cur = self.input().cur();
+        let is_typescript =
+            matches!(cur, Token::Bang | Token::Colon) && self.input().syntax().typescript();
 
-        let definite = if self.input().syntax().typescript() {
+        // `!` cannot be a definite assignment assertion after a line break.
+        let definite = if is_typescript && !self.input().had_line_break_before_cur() {
             match name {
                 Pat::Ident(..) => self.input_mut().eat(Token::Bang),
                 _ => false,
@@ -143,7 +146,7 @@ impl<I: Tokens> Parser<I> {
         };
 
         // Typescript extension
-        if self.input().syntax().typescript() && self.input().is(Token::Colon) {
+        if is_typescript && self.input().is(Token::Colon) {
             let type_annotation = self.try_parse_ts_type_ann()?;
             match name {
                 Pat::Array(ArrayPat {
@@ -384,13 +387,14 @@ impl<I: Tokens> Parser<I> {
         })))
     }
 
-    fn parse_for_head(&mut self) -> PResult<TempForHead> {
+    pub(super) fn parse_for_head(&mut self) -> PResult<TempForHead> {
         // let strict = self.ctx().contains(Context::Strict);
 
         let cur = self.input().cur();
         if cur == Token::Const
             || cur == Token::Var
             || (self.input().is(Token::Let)
+                && !self.input().has_escaped_keyword()
                 && peek!(self).map_or(false, |v| v.follows_keyword_let()))
         {
             let decl = self.parse_var_stmt(true)?;
@@ -472,7 +476,8 @@ impl<I: Tokens> Parser<I> {
             }
 
             if maybe_using_decl
-                && !self.input().is(Token::Of)
+                // Only synchronous `using` forbids `of` as a for-of binding name.
+                && (maybe_await_using_decl || !self.input().is(Token::Of))
                 && (peek!(self).is_some_and(|peek| peek == Token::Of || peek == Token::In))
             {
                 is_using_decl = maybe_using_decl;
@@ -541,6 +546,9 @@ impl<I: Tokens> Parser<I> {
         } else {
             None
         };
+        if await_token.is_some() && self.can_classify_module() {
+            self.mark_found_module_item();
+        }
         expect!(self, Token::LParen);
 
         let head = self.do_inside_of_context(Context::ForLoopInit, |p| {
@@ -590,11 +598,15 @@ impl<I: Tokens> Parser<I> {
                 .into()
             }
             TempForHead::ForOf { left, right } => {
-                if await_token.is_some()
-                    && self.syntax().flow()
-                    && !self.ctx().contains(Context::InAsync)
-                {
-                    self.emit_err(self.span(start), SyntaxError::AwaitForStmt);
+                if await_token.is_some() {
+                    let ctx = self.ctx();
+                    if ctx.contains(Context::InStaticBlock)
+                        || (ctx.contains(Context::InFunction) && !ctx.contains(Context::InAsync))
+                    {
+                        self.emit_err(self.span(start), SyntaxError::AwaitInFunction);
+                    } else if !ctx.contains(Context::InAsync) && !ctx.contains(Context::CanBeModule) {
+                        self.emit_err(self.span(start), SyntaxError::TopLevelAwaitInScript);
+                    }
                 }
 
                 ForOfStmt {
@@ -1035,6 +1047,7 @@ impl<I: Tokens> Parser<I> {
 
         Ok(SwitchStmt {
             span: self.span(switch_start),
+            body_ctxt: Default::default(),
             discriminant,
             cases,
         }
@@ -1572,6 +1585,8 @@ impl<I: Tokens> Parser<I> {
     }
 
     fn flow_match_parse_pattern(&mut self) -> PResult<FlowMatchPattern> {
+        // Flow allows one optional leading pipe, including in nested patterns.
+        self.input_mut().eat(Token::Pipe);
         let mut pat = self.flow_match_parse_primary_pattern()?;
 
         while self.input_mut().eat(Token::Pipe) {
@@ -1594,6 +1609,16 @@ impl<I: Tokens> Parser<I> {
         }
 
         Ok(pat)
+    }
+
+    fn flow_match_expect_case_separator(&mut self) -> PResult<()> {
+        if self.input_mut().eat(Token::Colon) || self.input_mut().eat(Token::Arrow) {
+            return Ok(());
+        }
+
+        let cur = format!("{:?}", self.input().cur());
+        let span = self.input().cur_span();
+        syntax_error!(self, span, SyntaxError::Expected(": or =>".into(), cur))
     }
 
     fn flow_match_parse_subject_expr(&mut self, start: BytePos) -> PResult<Box<Expr>> {
@@ -1675,13 +1700,10 @@ impl<I: Tokens> Parser<I> {
             ident: None,
             function: Box::new(Function {
                 span,
+                this_param: None,
                 params: Vec::new(),
                 decorators: Vec::new(),
-                body: Some(BlockStmt {
-                    span,
-                    stmts,
-                    ctxt: Default::default(),
-                }),
+                body: Some(FunctionBody { span, stmts }),
                 is_async: false,
                 is_generator: false,
                 type_params: None,
@@ -1715,7 +1737,7 @@ impl<I: Tokens> Parser<I> {
             } else {
                 None
             };
-            expect!(self, Token::Colon);
+            self.flow_match_expect_case_separator()?;
 
             let body = self.allow_in_expr(Self::parse_assignment_expr)?;
             let lowered = self.flow_match_lower_pattern(span, temp_expr.clone(), &pattern);
@@ -1769,7 +1791,7 @@ impl<I: Tokens> Parser<I> {
             } else {
                 None
             };
-            expect!(self, Token::Colon);
+            self.flow_match_expect_case_separator()?;
 
             let body = if self.input().is(Token::LBrace) {
                 self.parse_block(false)?
@@ -1902,15 +1924,40 @@ impl<I: Tokens> Parser<I> {
         }
 
         if cur == Token::Await && (include_decl || top_level) {
-            if top_level {
+            let is_await_using = peek!(self).is_some_and(|peek| peek == Token::Using)
+                && !self.input_mut().has_linebreak_between_cur_and_peeked();
+
+            // In Script grammar, `await` can start an expression or a label.
+            // Only `await using` needs a statement-level context error.
+            let handled_by_explicit_program = top_level
+                && self.program_parse_mode == ProgramParseMode::None
+                && (self
+                    .ctx()
+                    .intersects(Context::Module.union(Context::CanBeModule))
+                    || is_await_using);
+            if handled_by_explicit_program {
                 self.mark_found_module_item();
                 if !self.ctx().contains(Context::CanBeModule) {
                     self.emit_err(self.input().cur_span(), SyntaxError::TopLevelAwaitInScript);
                 }
             }
 
-            if peek!(self).is_some_and(|peek| peek == Token::Using) {
+            if is_await_using {
                 let eaten_await = Some(self.input().cur_pos());
+                if self.can_classify_module() {
+                    self.mark_found_module_item();
+                } else if !self
+                    .ctx()
+                    .intersects(Context::InAsync.union(Context::Module))
+                    && !handled_by_explicit_program
+                {
+                    let error = if self.ctx().contains(Context::InFunction) {
+                        SyntaxError::AwaitInFunction
+                    } else {
+                        SyntaxError::TopLevelAwaitInScript
+                    };
+                    self.emit_err(self.input().cur_span(), error);
+                }
                 self.assert_and_bump(Token::Await);
                 let v = self.parse_using_decl(start, true)?;
                 if let Some(v) = v {
@@ -2017,8 +2064,8 @@ impl<I: Tokens> Parser<I> {
         } else if cur == Token::Var || (cur == Token::Const && include_decl) {
             let v = self.parse_var_stmt(false)?;
             return Ok(v.into());
-        } else if cur == Token::Let && include_decl {
-            // 'let' can start an identifier reference.
+        } else if cur == Token::Let && include_decl && !self.input().has_escaped_keyword() {
+            // Only an unescaped 'let' can introduce a lexical declaration.
             let is_keyword = match peek!(self) {
                 Some(t) => t.follows_keyword_let(),
                 _ => false,
@@ -2053,8 +2100,8 @@ impl<I: Tokens> Parser<I> {
             && is_typescript
             && self.input().syntax().typescript_allows_enum()
             && peek!(self).is_some_and(|peek| peek.is_word())
-            && !self.input_mut().has_linebreak_between_cur_and_peeked()
         {
+            // A line break before an enum name does not terminate the declaration.
             let start = self.input().cur_pos();
             self.bump();
             return Ok(self.parse_ts_enum_decl(start, false)?.into());
@@ -2184,28 +2231,31 @@ impl<I: Tokens> Parser<I> {
         };
 
         let parse_stmts = |p: &mut Self, stmts: &mut Vec<Type>| -> PResult<()> {
-            let is_stmt_start = |p: &mut Self| {
-                let cur = p.input().cur();
-                match end {
-                    Some(end) => {
-                        if cur == Token::Eof {
-                            let eof_text = p.input_mut().dump_cur();
-                            p.emit_err(
-                                p.input().cur_span(),
-                                SyntaxError::Expected(format!("{end:?}"), eof_text),
-                            );
-                            false
-                        } else {
-                            cur != end
-                        }
+            if let Some(end) = end {
+                loop {
+                    let cur = p.input().cur();
+                    if cur == Token::Eof {
+                        let eof_text = p.input_mut().dump_cur();
+                        p.emit_err(
+                            p.input().cur_span(),
+                            SyntaxError::Expected(format!("{end:?}"), eof_text),
+                        );
+                        break;
                     }
-                    None => cur != Token::Eof,
+                    if cur == end {
+                        break;
+                    }
+
+                    let stmt = p.parse_stmt_like(true, &handle_import_export)?;
+                    stmts.push(stmt);
                 }
-            };
-            while is_stmt_start(p) {
-                let stmt = p.parse_stmt_like(true, &handle_import_export)?;
-                stmts.push(stmt);
+            } else {
+                while p.input().cur() != Token::Eof {
+                    let stmt = p.parse_stmt_like(true, &handle_import_export)?;
+                    stmts.push(stmt);
+                }
             }
+
             Ok(())
         };
 
@@ -2905,7 +2955,7 @@ export default function waitUntil(callback, options = {}) {
     }
 
     #[test]
-    #[should_panic(expected = "top level await is only allowed in module")]
+    #[should_panic(expected = "Expected ';', '}' or <eof>")]
     fn top_level_await_in_script() {
         let src = "await promise";
         test_parser(src, Syntax::Es(Default::default()), |p| p.parse_script());
@@ -2937,7 +2987,7 @@ export default function waitUntil(callback, options = {}) {
     }
 
     #[test]
-    #[should_panic(expected = "await isn't allowed in non-async function")]
+    #[should_panic(expected = "Expected ';', '}' or <eof>")]
     fn await_in_function_in_script() {
         let src = "function foo (p) { await p; }";
         test_parser(src, Syntax::Es(Default::default()), |p| p.parse_script());

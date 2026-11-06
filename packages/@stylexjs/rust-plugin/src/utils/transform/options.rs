@@ -1,8 +1,11 @@
-use super::state::TransformState;
-use crate::core::CreateOptions;
 use crate::shared::StyleXTransformOptions;
 use serde_json::{json, Value};
-use swc_ecma_ast::{Module, ModuleDecl, ModuleItem};
+
+/// Option errors are reported the way the Babel plugin's `logAndDefault`
+/// reports them; the transform continues with the documented fallback.
+pub(super) struct TransformState {
+    pub errors: Vec<String>,
+}
 
 #[derive(Clone)]
 enum Check {
@@ -17,7 +20,37 @@ enum Check {
     Function,
 }
 impl Check {
+    /// Acceptance is allocation-free. A union may reject early alternatives
+    /// while succeeding later; those speculative failures need no diagnostic.
+    fn accepts(&self, value: &Value) -> bool {
+        match self {
+            Self::Boolean => value.is_boolean(),
+            Self::String => value.is_string(),
+            Self::Nullish => value.is_null(),
+            Self::Literal(literal) => value == literal,
+            Self::Function => value.as_object().is_some_and(|object| {
+                object.contains_key("__stylexCallback") || object.contains_key("__stylexFunction")
+            }),
+            Self::Union(checks) => checks.iter().any(|check| check.accepts(value)),
+            Self::Array(check) => value
+                .as_array()
+                .is_some_and(|array| array.iter().all(|value| check.accepts(value))),
+            // Preserve the existing object validator's array/missing-key rules.
+            Self::Object(shape) => {
+                (value.is_object() || value.is_array())
+                    && shape
+                        .iter()
+                        .all(|(key, check)| check.accepts(value.get(*key).unwrap_or(&Value::Null)))
+            }
+            Self::ObjectOf(check) => value
+                .as_object()
+                .is_some_and(|object| object.values().all(|value| check.accepts(value))),
+        }
+    }
     fn error(&self, value: &Value, name: Option<&str>) -> Option<String> {
+        if self.accepts(value) {
+            return None;
+        }
         let expected = match self {
             Self::Boolean => "a boolean",
             Self::String => "a string",
@@ -62,7 +95,11 @@ impl Check {
                     .iter()
                     .enumerate()
                     .filter_map(|(index, value)| {
-                        check.error(value, Some(&format!("{name}[{index}]")))
+                        if check.accepts(value) {
+                            None
+                        } else {
+                            check.error(value, Some(&format!("{name}[{index}]")))
+                        }
                     })
                     .collect::<Vec<_>>();
                 (!errors.is_empty()).then(|| {
@@ -79,16 +116,6 @@ impl Check {
             Self::Object(shape) => {
                 if !value.is_object() && !value.is_array() {
                     return Some(primitive_error("an object where:", value, name));
-                }
-                if shape.iter().all(|(key, check)| {
-                    check
-                        .error(
-                            value.get(*key).unwrap_or(&Value::Null),
-                            Some(&format!("{}.{}", name.unwrap_or("obj"), key)),
-                        )
-                        .is_none()
-                }) {
-                    return None;
                 }
                 let description = shape
                     .iter()
@@ -122,6 +149,9 @@ impl Check {
                     );
                 };
                 for (key, value) in object {
+                    if check.accepts(value) {
+                        continue;
+                    }
                     if let Some(error) = check.error(
                         value,
                         Some(
@@ -145,7 +175,11 @@ impl Check {
         }
     }
 }
+#[cfg(test)]
+thread_local! { static BUILT_ERRORS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
 fn primitive_error(expected: &str, value: &Value, name: Option<&str>) -> String {
+    #[cfg(test)]
+    BUILT_ERRORS.with(|count| count.set(count.get() + 1));
     name.map(|name| format!("Expected ({name}) to be {expected}, but got `{value}`."))
         .unwrap_or_else(|| expected.to_owned())
 }
@@ -203,6 +237,9 @@ pub(super) fn normalize_options(
                 Check::Object(vec![("from", Check::String), ("as", Check::String)]),
             ])
         };
+        if check.accepts(&value) {
+            continue;
+        }
         if let Some(error) = check.error(&value, Some(&format!("options.{key}"))) {
             state
                 .errors
@@ -407,87 +444,102 @@ fn normalize(
         .filter(|value| !value.is_null())
         .cloned()
         .unwrap_or(default);
-    let value = if let Some(error) = check.error(&value, Some(&format!("options.{key}"))) {
+    let value = if check.accepts(&value) {
+        value
+    } else {
+        let error = check
+            .error(&value, Some(&format!("options.{key}")))
+            .expect("a rejected value has a validation diagnostic");
         state
             .errors
             .push(format!("[@stylexjs/babel-plugin] {error}"));
         fallback
-    } else {
-        value
     };
     options.additional_options.insert(key.to_owned(), value);
 }
 
-pub(super) fn rewrite_theme_imports(
-    module: &mut Module,
-    filename: &str,
-    options: &StyleXTransformOptions,
-) {
-    if !options.rewrite_aliases {
-        return;
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invalid_option_union_messages_remain_exact() {
+        assert_eq!(
+            union(vec![Check::Boolean, Check::String]).error(&json!(17), Some("options.union")),
+            Some(
+                "Expected (options.union) to be one of\n\t- a boolean\n\t- a string\nBut got: 17"
+                    .into()
+            )
+        );
+        assert_eq!(literals(&["application-order","property-specificity","legacy-expand-shorthands"]).error(&json!("invalid"),Some("options.styleResolution")),Some("Expected (options.styleResolution) to be one of\n\t- the literal \"application-order\"\n\t- the literal \"property-specificity\"\n\t- the literal \"legacy-expand-shorthands\"\nBut got: \"invalid\"".into()));
+        assert_eq!(union(vec![Check::Nullish,Check::String]).error(&json!([17]),Some("options.rootDir")),Some("Expected (options.rootDir) to be one of\n\t- `null` or `undefined`\n\t- a string\nBut got: [17]".into()));
+        assert_eq!(union(vec![Check::String,Check::Literal(json!(false))]).error(&json!(true),Some("options.sxPropName")),Some("Expected (options.sxPropName) to be one of\n\t- a string\n\t- the literal false\nBut got: true".into()));
     }
-    use crate::utils::host::{invoke_string, HostValue};
-    let resolved = options.additional_options.get("__rewrittenImports");
-    for item in &mut module.body {
-        let ModuleItem::ModuleDecl(ModuleDecl::Import(import)) = item else {
-            continue;
-        };
-        let Some(original) = import.src.value.as_str() else {
-            continue;
-        };
-        if !["", ".js", ".ts", ".tsx", ".jsx", ".mjs", ".cjs"]
-            .iter()
-            .any(|extension| original.ends_with(&format!(".stylex{extension}")))
-        {
-            continue;
-        }
-        let rewritten = resolved
-            .and_then(|v| v.get(original))
-            .and_then(Value::as_str)
-            .map(str::to_owned)
-            .or_else(|| {
-                invoke_string(
-                    "@rewriteImport",
-                    &[
-                        HostValue::String(original.to_owned()),
-                        HostValue::String(filename.to_owned()),
-                    ],
-                )
-                .ok()
-                .flatten()
-            });
-        if let Some(source) = rewritten {
-            import.src.value = source.into();
-            import.src.raw = None;
-        }
+
+    #[test]
+    fn lazy_validation_preserves_object_array_and_function_boundary_rules() {
+        let nullable = Check::Object(vec![("optional", Check::Nullish)]);
+        assert!(
+            nullable.accepts(&json!([])),
+            "the existing object-shape validator also accepts arrays with nullish missing keys"
+        );
+        assert!(nullable.error(&json!([]), Some("options.test")).is_none());
+        let required = Check::Object(vec![("required", Check::String)]);
+        assert!(!required.accepts(&json!([])));
+        assert!(required.error(&json!([]), Some("options.test")).is_some());
+        assert!(
+            Check::Function.accepts(&json!({"__stylexCallback":false})),
+            "presence-only callback markers must not become a stricter validator"
+        );
+        assert!(Check::Function.accepts(&json!({"__stylexFunction":null})));
+        assert!(!Check::Function.accepts(&json!({"other":true})));
+        assert!(!Check::ObjectOf(Box::new(Check::String)).accepts(&json!([])));
+        assert!(
+            Check::Array(Box::new(union(vec![Check::Boolean, Check::String])))
+                .accepts(&json!([true, "x"]))
+        );
+        assert!(
+            !Check::Array(Box::new(union(vec![Check::Boolean, Check::String])))
+                .accepts(&json!([true, 17]))
+        );
     }
-}
-pub(super) fn create_options(options: &StyleXTransformOptions) -> CreateOptions {
-    CreateOptions {
-        class_name_prefix: options
-            .additional_options
-            .get("classNamePrefix")
-            .and_then(Value::as_str)
-            .unwrap_or("x")
-            .to_owned(),
-        debug: options.bool_option("debug", options.bool_option("dev", false)),
-        enable_debug_class_names: false,
-        enable_minified_keys: options.bool_option("enableMinifiedKeys", true),
-        enable_font_size_px_to_rem: options.bool_option("enableFontSizePxToRem", false),
-        enable_media_query_order: options.bool_option("enableMediaQueryOrder", true),
-        enable_legacy_value_flipping: options.bool_option("enableLegacyValueFlipping", false),
-        enable_logical_styles_polyfill: options.bool_option("enableLogicalStylesPolyfill", false),
-        style_resolution: options
-            .additional_options
-            .get("styleResolution")
-            .and_then(Value::as_str)
-            .unwrap_or("property-specificity")
-            .to_owned(),
-        property_validation_mode: options
-            .additional_options
-            .get("propertyValidationMode")
-            .and_then(Value::as_str)
-            .unwrap_or("silent")
-            .to_owned(),
+
+    #[test]
+    fn successful_option_unions_build_no_error_text() {
+        let checks = [
+            (union(vec![Check::Boolean, Check::String]), json!("x")),
+            (
+                literals(&[
+                    "application-order",
+                    "property-specificity",
+                    "legacy-expand-shorthands",
+                ]),
+                json!("property-specificity"),
+            ),
+            (
+                union(vec![
+                    Check::Nullish,
+                    Check::Object(vec![("type", Check::Literal(json!("commonJS")))]),
+                    Check::Object(vec![("type", Check::Literal(json!("haste")))]),
+                ]),
+                json!({"type":"haste"}),
+            ),
+            (
+                Check::ObjectOf(Box::new(union(vec![
+                    Check::Array(Box::new(Check::String)),
+                    Check::String,
+                ]))),
+                json!({"key":"value"}),
+            ),
+        ];
+        for (check, value) in checks {
+            BUILT_ERRORS.with(|count| count.set(0));
+            assert!(check.error(&value, Some("options.test")).is_none());
+            assert_eq!(
+                BUILT_ERRORS.with(|count| count.get()),
+                0,
+                "valid union eagerly formatted an alternative error: {value}"
+            );
+        }
     }
 }

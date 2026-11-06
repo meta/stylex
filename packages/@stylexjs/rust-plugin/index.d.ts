@@ -28,6 +28,8 @@ export type ModuleResolution =
 export interface CompilerOptions {
   filename?: string;
   sourceMaps?: boolean;
+  /** A source map from an earlier transform of the input, composed into `map`. */
+  inputSourceMap?: object;
   classNamePrefix?: string;
   dev?: boolean;
   debug?: boolean;

@@ -1,9 +1,11 @@
 use anyhow::{anyhow, Result};
-use swc_common::{
+use swc_core::common::{
     comments::SingleThreadedComments, sync::Lrc, FileName, SourceFile, SourceMap, Spanned,
 };
-use swc_ecma_ast::{EsVersion, Expr, Module, ModuleItem};
-use swc_ecma_codegen::{text_writer::JsWriter, Config as CodegenConfig, Emitter};
+use swc_core::ecma::ast::{EsVersion, Module};
+#[cfg(test)]
+use swc_core::ecma::ast::{Expr, ModuleItem};
+use swc_core::ecma::codegen::{text_writer::JsWriter, Config as CodegenConfig, Emitter};
 use swc_ecma_parser::{
     error::{Error, SyntaxError},
     PResult, Parser, Syntax,
@@ -78,7 +80,7 @@ fn parse_file<T>(
         // adds its filename/code frame; this is a parse error, not a StyleX
         // validation error, and recovered diagnostics are still fatal.
         let span = error.span();
-        let relative = |position: swc_common::BytePos| {
+        let relative = |position: swc_core::common::BytePos| {
             position
                 .0
                 .saturating_sub(file.start_pos.0)
@@ -133,10 +135,12 @@ pub(crate) fn parse_module_with_options(
     })
 }
 
+#[cfg(test)]
 pub(crate) fn parse_expr(source: &str, filename: &str) -> Result<Box<Expr>> {
     parse_expr_with_syntax(source, filename, syntax_for_file(filename))
 }
 
+#[cfg(test)]
 pub(crate) fn parse_expr_with_syntax(
     source: &str,
     filename: &str,
@@ -147,9 +151,14 @@ pub(crate) fn parse_expr_with_syntax(
     let file =
         source_map.new_source_file(FileName::Real(filename.into()).into(), source.to_owned());
     let comments = SingleThreadedComments::default();
-    parse_file(&file, &comments, syntax, |parser| parser.parse_expr())
+    parse_file(&file, &comments, syntax, |parser| {
+        let expr = parser.parse_expr()?;
+        parser_modes::validate_expr(&expr)?;
+        Ok(expr)
+    })
 }
 
+#[cfg(test)]
 pub(crate) fn parse_module_items(source: &str, filename: &str) -> Result<Vec<ModuleItem>> {
     Ok(parse_module(source, filename)?.module.body)
 }
@@ -174,7 +183,7 @@ pub fn normalize_js(code: &str, filename: &str) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use swc_ecma_ast::{Decl, Lit, Pat, Stmt};
+    use swc_core::ecma::ast::{Decl, Lit, Pat, Stmt};
 
     #[test]
     fn selects_flow_for_javascript_and_typescript_for_typescript() {
@@ -371,8 +380,10 @@ mod tests {
         let decoded: Diagnostic =
             serde_json::from_str(envelope.strip_prefix(ENVELOPE_PREFIX).unwrap()).unwrap();
         assert_eq!(decoded, diagnostic);
-        let validation =
-            crate::utils::diagnostics::syntax_error("invalid StyleX call", swc_common::DUMMY_SP);
+        let validation = crate::utils::diagnostics::syntax_error(
+            "invalid StyleX call",
+            swc_core::common::DUMMY_SP,
+        );
         assert_eq!(
             from_error(&validation).kind,
             None,

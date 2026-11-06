@@ -1,3 +1,5 @@
 /target/
 /native/
 *.tgz
+!crates/stylex-path-resolver/fixtures/**/node_modules
+!crates/stylex-path-resolver/fixtures/**/node_modules/**

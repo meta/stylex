@@ -14,14 +14,22 @@ use serde_json::{json, Value};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
-use swc_common::{
+use swc_core::common::{
     comments::SingleThreadedComments, sync::Lrc, EqIgnoreSpan, FileName, SourceFile, SourceMap,
     Span, Spanned, DUMMY_SP,
 };
-use swc_ecma_ast::*;
-use swc_ecma_codegen::{text_writer::JsWriter, Config, Emitter, Node};
+use swc_core::ecma::ast::*;
+use swc_core::ecma::codegen::{text_writer::JsWriter, Config, Emitter, Node};
+use swc_core::ecma::visit::{Visit, VisitMut, VisitMutWith, VisitWith};
 use swc_ecma_parser::Syntax;
-use swc_ecma_visit::{Visit, VisitMut, VisitMutWith, VisitWith};
+
+#[cfg(test)]
+#[path = "source_postflight_tests.rs"]
+mod source_postflight_tests;
+
+#[path = "source_maps.rs"]
+pub(crate) mod source_maps;
+use source_maps::{MappingWriter, Position};
 
 #[path = "js_literal.rs"]
 pub(crate) mod js_literal;
@@ -30,8 +38,11 @@ mod source_jsx;
 
 #[path = "source_compare.rs"]
 mod source_compare;
+#[path = "source_regions.rs"]
+mod source_regions;
 #[path = "source_typed.rs"]
 mod source_typed;
+use source_regions::{emit_region_from_source_cached, source_unique_prefix};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -70,13 +81,6 @@ pub fn source_range(file: &SourceFile, span: Span) -> Result<Range<usize>> {
         bail!("span {:?} does not end on UTF-8 boundaries", span);
     }
     Ok(start..end)
-}
-
-/// Only use for an expression known to belong to this original SourceFile.
-/// Generated snippet spans must never be passed off as original source spans.
-pub fn original_expr_text(file: &SourceFile, expr: &Expr) -> Result<String> {
-    let range = source_range(file, expr.span())?;
-    Ok(file.src[range].to_owned())
 }
 
 /// Explicit lexical expression replacements authored by the transforming pass.
@@ -138,14 +142,14 @@ fn span_of(value: &Value) -> Option<Span> {
         let token = value.get("spread")?;
         let argument = span_of(value.get("arguments")?)?;
         return Some(Span::new(
-            swc_common::BytePos(u32::try_from(token.get("start")?.as_u64()?).ok()?),
+            swc_core::common::BytePos(u32::try_from(token.get("start")?.as_u64()?).ok()?),
             argument.hi,
         ));
     }
     let span = value.get("span")?;
     Some(Span::new(
-        swc_common::BytePos(u32::try_from(span.get("start")?.as_u64()?).ok()?),
-        swc_common::BytePos(u32::try_from(span.get("end")?.as_u64()?).ok()?),
+        swc_core::common::BytePos(u32::try_from(span.get("start")?.as_u64()?).ok()?),
+        swc_core::common::BytePos(u32::try_from(span.get("end")?.as_u64()?).ok()?),
     ))
 }
 
@@ -153,8 +157,8 @@ fn own_list_span(value: &Value) -> Option<Span> {
     if tag(value) == Some("SpreadElement") {
         let span = value.get("spread")?;
         return Some(Span::new(
-            swc_common::BytePos(u32::try_from(span.get("start")?.as_u64()?).ok()?),
-            swc_common::BytePos(u32::try_from(span.get("end")?.as_u64()?).ok()?),
+            swc_core::common::BytePos(u32::try_from(span.get("start")?.as_u64()?).ok()?),
+            swc_core::common::BytePos(u32::try_from(span.get("end")?.as_u64()?).ok()?),
         ));
     }
     span_of(value)
@@ -507,7 +511,11 @@ impl Planner<'_, '_> {
             span_of(before).context("edit has no source-backed AST boundary")?,
         )?;
         let (text, reused) = self.fragment(after, role)?;
-        let text = self.retain_comments(&range, &reused, text)?;
+        let text = if matches!(role, Role::Expression) {
+            self.retain_expression_comments(&range, &reused, text)?
+        } else {
+            self.retain_comments(&range, &reused, text)?
+        };
         for (index, authored) in self.authored.iter().enumerate() {
             if range.start <= authored.start && authored.end <= range.end {
                 self.used_authored.borrow_mut().insert(index);
@@ -640,6 +648,11 @@ impl Planner<'_, '_> {
     fn keyword_anchor(&self, before: &Value, after: &Value) -> Result<bool> {
         if tag(before) != tag(after) || span_of(before) != span_of(after) {
             return Ok(false);
+        }
+        if tag(before) == Some("BlockStatement") && before.get("ctxt") == after.get("ctxt") {
+            let range = source_range(self.file, span_of(before).context("block container span")?)?;
+            let source = &self.file.src[range];
+            return Ok(source.starts_with('{') && source.ends_with('}'));
         }
         let keyword = match tag(before) {
             Some("ReturnStatement") => "return",
@@ -1210,6 +1223,30 @@ impl Planner<'_, '_> {
         reuse.finish(code)
     }
 
+    fn retain_expression_comments(
+        &self,
+        range: &Range<usize>,
+        reused: &[Range<usize>],
+        text: String,
+    ) -> Result<String> {
+        let has_orphan = self.comments.iter().any(|comment| {
+            range.start <= comment.start
+                && comment.end <= range.end
+                && !reused
+                    .iter()
+                    .any(|source| source.start <= comment.start && comment.end <= source.end)
+        });
+        let text = self.retain_comments(range, reused, text)?;
+        // Retention may prepend a line comment or a multi-line block comment.
+        // Put it inside an expression boundary, never between `return`/`throw`
+        // and their first argument token. No-orphan output stays byte-identical.
+        Ok(if has_orphan {
+            format!("({text})")
+        } else {
+            text
+        })
+    }
+
     fn retain_comments(
         &self,
         range: &Range<usize>,
@@ -1455,9 +1492,156 @@ impl VisitMut for Reuse<'_, '_> {
     }
 }
 
-fn emit_node(node: &impl Node) -> Result<String> {
+pub(super) struct GeneratedStrings;
+fn generated_expression_precedence(expression: &Expr) -> i8 {
+    match expression {
+        Expr::Seq(_) => -2,
+        Expr::Assign(_) | Expr::Arrow(_) | Expr::Yield(_) => -1,
+        Expr::Cond(_) => 0,
+        Expr::Bin(binary) => binary.op.precedence() as i8,
+        Expr::Unary(_) | Expr::Await(_) => 12,
+        Expr::Update(_) => 13,
+        Expr::Call(_) | Expr::New(_) | Expr::Member(_) | Expr::SuperProp(_) | Expr::OptChain(_) => {
+            14
+        }
+        _ => 15,
+    }
+}
+fn group_generated_expression(expression: &mut Box<Expr>) {
+    use swc_core::common::util::take::Take;
+    let inner = expression.take();
+    **expression = Expr::Paren(ParenExpr {
+        span: DUMMY_SP,
+        expr: inner,
+    });
+}
+fn binary_child_needs_grouping(parent: BinaryOp, child: &Expr, right: bool) -> bool {
+    let priority = generated_expression_precedence(child);
+    if priority < parent.precedence() as i8 {
+        return true;
+    }
+    if let Expr::Bin(binary) = child {
+        let mixed_nullish = matches!(parent, BinaryOp::NullishCoalescing)
+            && matches!(binary.op, BinaryOp::LogicalOr | BinaryOp::LogicalAnd)
+            || matches!(binary.op, BinaryOp::NullishCoalescing)
+                && matches!(parent, BinaryOp::LogicalOr | BinaryOp::LogicalAnd);
+        if mixed_nullish {
+            return true;
+        }
+        if priority == parent.precedence() as i8 {
+            return if parent == BinaryOp::Exp {
+                !right
+            } else {
+                right
+            };
+        }
+    }
+    !right && parent == BinaryOp::Exp && matches!(child, Expr::Unary(_) | Expr::Await(_))
+}
+impl VisitMut for GeneratedStrings {
+    fn visit_mut_arrow_expr(&mut self, arrow: &mut ArrowExpr) {
+        arrow.visit_mut_children_with(self);
+        if let ArrowFunctionBody::Expr(expression) = &mut *arrow.body {
+            // `{}` after `=>` is a block, not an implicitly returned object;
+            // comma expressions also need a boundary to remain the arrow body.
+            if matches!(&**expression, Expr::Object(_) | Expr::Seq(_)) {
+                group_generated_expression(expression);
+            }
+        }
+    }
+    fn visit_mut_bin_expr(&mut self, binary: &mut BinExpr) {
+        binary.visit_mut_children_with(self);
+        if binary_child_needs_grouping(binary.op, &binary.left, false) {
+            group_generated_expression(&mut binary.left);
+        }
+        if binary_child_needs_grouping(binary.op, &binary.right, true) {
+            group_generated_expression(&mut binary.right);
+        }
+    }
+    fn visit_mut_cond_expr(&mut self, conditional: &mut CondExpr) {
+        conditional.visit_mut_children_with(self);
+        if generated_expression_precedence(&conditional.test) <= 0 {
+            group_generated_expression(&mut conditional.test);
+        }
+        if matches!(&*conditional.cons, Expr::Seq(_)) {
+            group_generated_expression(&mut conditional.cons);
+        }
+        if matches!(&*conditional.alt, Expr::Seq(_)) {
+            group_generated_expression(&mut conditional.alt);
+        }
+    }
+    fn visit_mut_unary_expr(&mut self, unary: &mut UnaryExpr) {
+        unary.visit_mut_children_with(self);
+        if generated_expression_precedence(&unary.arg) < 12 {
+            group_generated_expression(&mut unary.arg);
+        }
+    }
+    fn visit_mut_member_expr(&mut self, member: &mut MemberExpr) {
+        member.visit_mut_children_with(self);
+        if generated_expression_precedence(&member.obj) < 14
+            || matches!(&*member.obj, Expr::Object(_) | Expr::Fn(_) | Expr::Class(_))
+        {
+            group_generated_expression(&mut member.obj);
+        }
+    }
+    fn visit_mut_call_expr(&mut self, call: &mut CallExpr) {
+        call.visit_mut_children_with(self);
+        if let Callee::Expr(callee) = &mut call.callee {
+            if generated_expression_precedence(callee) < 14
+                || matches!(&**callee, Expr::Fn(_) | Expr::Object(_) | Expr::Class(_))
+            {
+                // Fix only the printed clone where JS precedence requires a
+                // boundary. Optional-chain structure and source containers are
+                // never normalized or erased by this visitor.
+                group_generated_expression(callee);
+            }
+        }
+    }
+    fn visit_mut_str(&mut self, literal: &mut Str) {
+        // Public StyleXTransform emits brand-new literal nodes with dummy spans
+        // and no raw spelling. Original surviving literals retain real spans
+        // and raw text. Never re-quote those source-backed nodes.
+        if literal.span.is_dummy() && literal.raw.is_none() {
+            if let Some(value) = literal.value.as_str() {
+                literal.raw = Some(js_literal::string_literal(value).into());
+            }
+        }
+    }
+    fn visit_mut_jsx_attr(&mut self, attr: &mut JSXAttr) {
+        if attr.span.is_dummy() {
+            if let Some(JSXAttrValue::Str(value)) = &mut attr.value {
+                if value.span.is_dummy() && value.raw.is_none() {
+                    if let Some(text) = value.value.as_str().filter(|text| !text.contains('"')) {
+                        value.raw = Some(js_literal::string_literal(text).into());
+                    }
+                }
+            }
+        }
+        // Quoted JSX uses the explicit generated-attribute text contract, not
+        // the ordinary JS-string visitor. Preserve authored attributes exactly.
+        attr.name.visit_mut_with(self);
+        if let Some(value) = &mut attr.value {
+            if !matches!(value, JSXAttrValue::Str(_)) {
+                value.visit_mut_children_with(self);
+            }
+        }
+    }
+}
+
+pub(super) fn emit_node<N>(node: &N) -> Result<String>
+where
+    N: Node + Clone + VisitMutWith<GeneratedStrings>,
+{
+    emit_owned_node(node.clone())
+}
+
+fn emit_owned_node<N>(mut node: N) -> Result<String>
+where
+    N: Node + VisitMutWith<GeneratedStrings>,
+{
     // No original comments/source map are given to SWC: numeric generated spans
     // cannot accidentally pull trivia or source text from the original file.
+    node.visit_mut_with(&mut GeneratedStrings);
     let source_map = Lrc::new(SourceMap::default());
     let mut output = Vec::new();
     {
@@ -1531,12 +1715,318 @@ fn snippet_has_comments(file: &SourceFile, code: &str, grammar: Syntax) -> Resul
     Ok(!leading.is_empty() || !trailing.is_empty())
 }
 
+#[derive(Clone)]
+struct AnnotationChange {
+    range: Range<usize>,
+    replacement: String,
+}
+
+fn optimizer_marker_ranges(text: &str) -> Vec<Range<usize>> {
+    let mut ranges = Vec::new();
+    for marker in [
+        "#__PURE__",
+        "@__PURE__",
+        "#__NO_SIDE_EFFECTS__",
+        "@__NO_SIDE_EFFECTS__",
+    ] {
+        for (start, _) in text.match_indices(marker) {
+            ranges.push(start..start + marker.len());
+        }
+    }
+    ranges.sort_by_key(|range| range.start);
+    ranges
+}
+
+fn strip_optimizer_markers(text: &str) -> String {
+    let ranges = optimizer_marker_ranges(text);
+    let mut output = String::with_capacity(text.len());
+    let mut cursor = 0;
+    for range in ranges {
+        output.push_str(&text[cursor..range.start]);
+        cursor = range.end;
+    }
+    output.push_str(&text[cursor..]);
+    // Keep ordinary comment text/license notices byte-for-byte, removing only
+    // the optimization token. An otherwise empty annotation needs no comment.
+    let content = output
+        .strip_prefix("/*")
+        .and_then(|value| value.strip_suffix("*/"))
+        .or_else(|| output.strip_prefix("//"));
+    if content.is_some_and(|value| value.trim().is_empty()) {
+        String::new()
+    } else {
+        output
+    }
+}
+
+fn annotation_changes(
+    file: &SourceFile,
+    original: &Module,
+    comments: &[Range<usize>],
+    edits: &[TextEdit],
+) -> Vec<AnnotationChange> {
+    let annotations: Vec<_> = comments
+        .iter()
+        .filter(|range| !optimizer_marker_ranges(&file.src[(*range).clone()]).is_empty())
+        .collect();
+    if annotations.is_empty() || edits.is_empty() {
+        return Vec::new();
+    }
+    // An annotation belongs to the next expression/declaration through trivia
+    // and grouping parentheses, not simply to the next surviving statement.
+    let mut gaps = Vec::new();
+    for range in &annotations {
+        let mut end = range.end;
+        loop {
+            if let Some(comment) = comments.iter().find(|comment| comment.start == end) {
+                end = comment.end;
+                continue;
+            }
+            let Some(character) = file.src[end..].chars().next() else {
+                break;
+            };
+            if character.is_whitespace() || character == '(' {
+                end += character.len_utf8();
+            } else {
+                break;
+            }
+        }
+        gaps.push(range.end..end);
+    }
+    struct Targets<'a> {
+        file: &'a SourceFile,
+        gaps: &'a [Range<usize>],
+        targets: Vec<Option<Range<usize>>>,
+    }
+    impl Targets<'_> {
+        fn target(&mut self, span: Span) {
+            let Ok(range) = source_range(self.file, span) else {
+                return;
+            };
+            for (gap, target) in self.gaps.iter().zip(&mut self.targets) {
+                if gap.start <= range.start
+                    && range.start <= gap.end
+                    && target.as_ref().is_none_or(|old| {
+                        range.start < old.start || range.start == old.start && range.end > old.end
+                    })
+                {
+                    *target = Some(range.clone());
+                }
+            }
+        }
+    }
+    impl Visit for Targets<'_> {
+        fn visit_call_expr(&mut self, node: &CallExpr) {
+            self.target(node.span);
+            node.visit_children_with(self);
+        }
+        fn visit_new_expr(&mut self, node: &NewExpr) {
+            self.target(node.span);
+            node.visit_children_with(self);
+        }
+        fn visit_arrow_expr(&mut self, node: &ArrowExpr) {
+            self.target(node.span);
+            node.visit_children_with(self);
+        }
+        fn visit_fn_decl(&mut self, node: &FnDecl) {
+            self.target(node.function.span);
+            node.visit_children_with(self);
+        }
+        fn visit_fn_expr(&mut self, node: &FnExpr) {
+            self.target(node.function.span);
+            node.visit_children_with(self);
+        }
+        fn visit_var_decl(&mut self, node: &VarDecl) {
+            self.target(node.span);
+            node.visit_children_with(self);
+        }
+    }
+    let mut collector = Targets {
+        file,
+        gaps: &gaps,
+        targets: vec![None; annotations.len()],
+    };
+    original.visit_with(&mut collector);
+    annotations
+        .into_iter()
+        .zip(collector.targets)
+        .filter_map(|(comment, target)| {
+            let end = target.as_ref().map_or(comment.end, |range| range.end);
+            let affected = edits.iter().any(|edit| {
+                if edit.start == edit.end {
+                    comment.start <= edit.start && edit.start < end
+                } else {
+                    edit.start < end && comment.start < edit.end
+                }
+            });
+            affected.then(|| AnnotationChange {
+                range: comment.clone(),
+                replacement: strip_optimizer_markers(&file.src[comment.clone()]),
+            })
+        })
+        .collect()
+}
+
+fn finish_source_output(
+    file: &SourceFile,
+    original: &Module,
+    transformed: &Module,
+    original_comments: &[Range<usize>],
+    mut edits: Vec<TextEdit>,
+    origins: &[InsertedOrigin],
+    grammar: ParseOptions,
+) -> Result<SourcePreservingOutput> {
+    edits.sort_by_key(|edit| (edit.start, edit.end));
+    let changes = annotation_changes(file, original, original_comments, &edits);
+    if changes.is_empty() {
+        let output = apply_source_edits_with_origins(file, edits, origins)?;
+        verify_output_typed(
+            &output.code,
+            file,
+            transformed,
+            original_comments,
+            grammar,
+            &[],
+        )?;
+        return Ok(output);
+    }
+    let first = apply_source_edits_with_origins(file, edits.clone(), origins)?;
+    let map = SourceMap::default();
+    let parsed_file = map.new_source_file(
+        FileName::Custom(file.name.to_string()).into(),
+        first.code.clone(),
+    );
+    let comments = SingleThreadedComments::default();
+    let mut errors = Vec::new();
+    with_bounded_file_parser(
+        &parsed_file,
+        grammar.syntax,
+        EsVersion::Es2022,
+        Some(&comments),
+        &mut errors,
+        |parser| parser_modes::parse_source(parser, grammar.source_type),
+    )
+    .map_err(|error| {
+        anyhow!(
+            "annotation preservation produced invalid syntax: {}",
+            error.kind().msg()
+        )
+    })?;
+    if !errors.is_empty() {
+        bail!("annotation preservation produced recovered syntax errors");
+    }
+    let (leading, trailing) = comments.borrow_all();
+    let mut emitted = leading
+        .values()
+        .chain(trailing.values())
+        .flatten()
+        .map(|comment| source_range(&parsed_file, comment.span))
+        .collect::<Result<Vec<_>>>()?;
+    emitted.sort_by_key(|range| (range.start, range.end));
+    emitted.dedup();
+    // Locate copies by the existing ordered source-comment contract, never by
+    // rewriting strings/templates containing annotation-looking text.
+    let mut cursor = 0;
+    let mut generated_changes = Vec::new();
+    for original_comment in original_comments {
+        let text = &file.src[original_comment.clone()];
+        while cursor < emitted.len() && &first.code[emitted[cursor].clone()] != text {
+            cursor += 1;
+        }
+        if cursor == emitted.len() {
+            bail!("source edit dropped or reordered an original comment");
+        }
+        if let Some(change) = changes
+            .iter()
+            .find(|change| change.range == *original_comment)
+        {
+            generated_changes.push((emitted[cursor].clone(), change.clone()));
+        }
+        cursor += 1;
+    }
+    let mut spans = Vec::with_capacity(edits.len());
+    let mut old_cursor = 0;
+    let mut new_cursor = 0;
+    for edit in &edits {
+        new_cursor += edit.start - old_cursor;
+        spans.push(new_cursor..new_cursor + edit.new_text.len());
+        new_cursor += edit.new_text.len();
+        old_cursor = edit.end;
+    }
+    let mut local: HashMap<usize, Vec<TextEdit>> = HashMap::new();
+    let mut outside = Vec::new();
+    for (generated, change) in generated_changes {
+        if let Some((index, span)) = spans
+            .iter()
+            .enumerate()
+            .find(|(_, span)| span.start <= generated.start && generated.end <= span.end)
+        {
+            local.entry(index).or_default().push(TextEdit {
+                start: generated.start - span.start,
+                end: generated.end - span.start,
+                new_text: change.replacement,
+            });
+        } else {
+            outside.push(TextEdit {
+                start: change.range.start,
+                end: change.range.end,
+                new_text: change.replacement,
+            });
+        }
+    }
+    let mut updated_origins = origins.to_vec();
+    for (index, mut updates) in local {
+        updates.sort_by_key(|edit| (edit.start, edit.end));
+        let old = edits[index].clone();
+        let mut replacement = String::new();
+        let mut cursor = 0;
+        for update in &updates {
+            replacement.push_str(&old.new_text[cursor..update.start]);
+            replacement.push_str(&update.new_text);
+            cursor = update.end;
+        }
+        replacement.push_str(&old.new_text[cursor..]);
+        edits[index].new_text = replacement;
+        for origin in &mut updated_origins {
+            if origin.edit == old {
+                let adjust = |offset: usize| -> Result<usize> {
+                    let delta: isize = updates
+                        .iter()
+                        .filter(|edit| edit.end <= offset)
+                        .map(|edit| edit.new_text.len() as isize - (edit.end - edit.start) as isize)
+                        .sum();
+                    offset
+                        .checked_add_signed(delta)
+                        .ok_or_else(|| anyhow!("annotation edit origin offset overflow"))
+                };
+                for (section, _) in &mut origin.sections {
+                    section.start = adjust(section.start)?;
+                    section.end = adjust(section.end)?;
+                }
+                origin.edit = edits[index].clone();
+            }
+        }
+    }
+    edits.extend(outside);
+    let output = apply_source_edits_with_origins(file, edits, &updated_origins)?;
+    verify_output_typed(
+        &output.code,
+        file,
+        transformed,
+        original_comments,
+        grammar,
+        &changes,
+    )?;
+    Ok(output)
+}
+
 fn verify_output_typed(
     code: &str,
     file: &SourceFile,
     expected: &Module,
     original_comments: &[Range<usize>],
     grammar: ParseOptions,
+    annotation_changes: &[AnnotationChange],
 ) -> Result<()> {
     let source_map = SourceMap::default();
     let generated = source_map.new_source_file(
@@ -1579,7 +2069,15 @@ fn verify_output_typed(
     emitted_comments.dedup();
     let mut cursor = 0;
     for original in original_comments {
-        let text = &file.src[original.clone()];
+        let text = annotation_changes
+            .iter()
+            .find(|change| change.range == *original)
+            .map_or(&file.src[original.clone()], |change| {
+                change.replacement.as_str()
+            });
+        if text.is_empty() {
+            continue;
+        }
         while cursor < emitted_comments.len() && &code[emitted_comments[cursor].clone()] != text {
             cursor += 1;
         }
@@ -1618,115 +2116,6 @@ fn canonicalize(value: &mut Value) {
             }
         }
         _ => {}
-    }
-}
-
-#[derive(Clone, Copy, Default)]
-struct Position {
-    line: usize,
-    column: usize,
-    cr: bool,
-}
-impl Position {
-    fn advance(&mut self, character: char) {
-        match character {
-            '\r' => {
-                self.line += 1;
-                self.column = 0;
-                self.cr = true;
-            }
-            '\n' if self.cr => {
-                self.cr = false;
-            }
-            '\n' | '\u{2028}' | '\u{2029}' => {
-                self.line += 1;
-                self.column = 0;
-                self.cr = false;
-            }
-            character => {
-                self.column += character.len_utf16();
-                self.cr = false;
-            }
-        }
-    }
-}
-struct MappingWriter {
-    lines: Vec<String>,
-    generated: Position,
-    previous_generated_column: usize,
-    previous_original: Position,
-    last_mapping: Option<(usize, usize, usize)>,
-}
-impl MappingWriter {
-    fn new() -> Self {
-        Self {
-            lines: vec![String::new()],
-            generated: Position::default(),
-            previous_generated_column: 0,
-            previous_original: Position::default(),
-            last_mapping: None,
-        }
-    }
-    fn map(&mut self, original: Position) {
-        // Constant-origin generated ranges need one segment per line, not one
-        // heap-allocated segment per emitted character. Unchanged source still
-        // gets exact UTF-16-column identity mappings.
-        let key = (self.generated.line, original.line, original.column);
-        if self.last_mapping == Some(key) {
-            return;
-        }
-        while self.lines.len() <= self.generated.line {
-            self.lines.push(String::new());
-            self.previous_generated_column = 0;
-        }
-        let line = &mut self.lines[self.generated.line];
-        if !line.is_empty() {
-            line.push(',');
-        }
-        for value in [
-            self.generated.column as i64 - self.previous_generated_column as i64,
-            0,
-            original.line as i64 - self.previous_original.line as i64,
-            original.column as i64 - self.previous_original.column as i64,
-        ] {
-            write_vlq(value, line);
-        }
-        self.previous_generated_column = self.generated.column;
-        self.previous_original = original;
-        self.last_mapping = Some(key);
-    }
-    fn text(&mut self, text: &str, mut original: Position, unchanged: bool) {
-        for character in text.chars() {
-            if !(character == '\n' && self.generated.cr) {
-                self.map(original);
-            }
-            self.generated.advance(character);
-            if unchanged {
-                original.advance(character);
-            }
-        }
-    }
-    fn finish(self) -> String {
-        self.lines.join(";")
-    }
-}
-fn write_vlq(value: i64, result: &mut String) {
-    const BASE64: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut value = if value < 0 {
-        ((-value) as u64) << 1 | 1
-    } else {
-        (value as u64) << 1
-    };
-    loop {
-        let mut digit = (value & 31) as usize;
-        value >>= 5;
-        if value != 0 {
-            digit |= 32;
-        }
-        result.push(BASE64[digit] as char);
-        if value == 0 {
-            return;
-        }
     }
 }
 

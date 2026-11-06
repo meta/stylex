@@ -1,7 +1,5 @@
-use crate::core::RuleEntry;
+use crate::stylesheet::RuleEntry;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use swc_ecma_ast::{Id, Ident};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -105,12 +103,6 @@ impl StyleXTransformOptions {
                 ImportSource::Aliased { from, .. } => from == source,
             })
     }
-    pub fn import_alias(&self, source: &str) -> Option<&str> {
-        self.import_sources.iter().find_map(|entry| match entry {
-            ImportSource::Aliased { from, as_ } if from == source => Some(as_.as_str()),
-            _ => None,
-        })
-    }
     pub fn runtime_injection_enabled(&self) -> bool {
         !matches!(self.runtime_injection, RuntimeInjectionOption::Bool(false))
     }
@@ -121,12 +113,6 @@ impl StyleXTransformOptions {
             RuntimeInjectionOption::Named { from, .. } => from,
         }
     }
-    pub fn runtime_injection_name(&self) -> Option<&str> {
-        match &self.runtime_injection {
-            RuntimeInjectionOption::Named { as_, .. } => Some(as_),
-            _ => None,
-        }
-    }
     pub fn bool_option(&self, key: &str, default: bool) -> bool {
         self.additional_options
             .get(key)
@@ -135,60 +121,17 @@ impl StyleXTransformOptions {
     }
 }
 
-/// Strings remain for public import inventory compatibility. Transform decisions use IDs.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct CollectedImports {
-    pub create_imports: Vec<String>,
-    pub props_imports: Vec<String>,
-    pub attrs_imports: Vec<String>,
-    pub keyframes_imports: Vec<String>,
-    pub position_try_imports: Vec<String>,
-    pub when_imports: Vec<String>,
-    pub first_that_works_imports: Vec<String>,
-    pub env_imports: Vec<String>,
-    pub define_vars_imports: Vec<String>,
-    pub define_vars_nested_imports: Vec<String>,
-    pub define_marker_imports: Vec<String>,
-    pub define_consts_imports: Vec<String>,
-    pub define_consts_nested_imports: Vec<String>,
-    pub create_theme_imports: Vec<String>,
-    pub create_theme_nested_imports: Vec<String>,
-    pub view_transition_class_imports: Vec<String>,
-    pub named_imports: Vec<String>,
-    pub namespace_imports: Vec<String>,
-    pub sources: Vec<String>,
-    pub theme_imports: HashMap<String, ThemeImport>,
-    pub namespace_bindings: Vec<Id>,
-    pub runtime_source_hint: Option<String>,
-    pub method_bindings: HashMap<Id, String>,
-    pub theme_bindings: HashMap<Id, ThemeImport>,
-    pub atom_bindings: HashMap<Id, String>,
-}
-impl CollectedImports {
-    pub fn matches_namespace(&self, ident: &Ident) -> bool {
-        self.namespace_bindings.contains(&ident.to_id())
-    }
-    pub fn matches_method(&self, ident: &Ident, method: &str) -> bool {
-        self.method_bindings
-            .get(&ident.to_id())
-            .is_some_and(|name| name == method)
-    }
-    pub fn theme_for(&self, ident: &Ident) -> Option<&ThemeImport> {
-        self.theme_bindings.get(&ident.to_id())
-    }
-}
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ThemeImport {
-    pub import_path: String,
-    pub imported_name: String,
-}
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct TransformOutput {
     pub code: String,
-    pub collected_imports: CollectedImports,
     pub metadata_stylex: Vec<RuleEntry>,
-    pub metadata_registered: bool,
     pub source_map: Option<serde_json::Value>,
     pub errors: Vec<String>,
+    /// The warnings the Babel plugin prints with `console.warn`, in order.
+    ///
+    /// The compiler core reports them through the `log` facade, and this crate
+    /// installs the logger that routes them here the first time it compiles.
+    /// An embedder that installed its own `log` logger before that receives
+    /// them through its logger instead, and this list stays empty.
     pub warnings: Vec<String>,
 }

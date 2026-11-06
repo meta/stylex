@@ -4,18 +4,18 @@
 //! (including escapes/grouping), provenance, and non-finite-number validity.
 
 use std::borrow::Cow;
-use swc_common::{util::take::Take, EqIgnoreSpan, SyntaxContext};
-use swc_ecma_ast::{Expr, Ident, Module, ModuleItem, SimpleAssignTarget};
-use swc_ecma_visit::{Visit, VisitMut, VisitMutWith, VisitWith};
+use swc_core::common::{util::take::Take, EqIgnoreSpan, SyntaxContext};
+use swc_core::ecma::ast::{Expr, Ident, Module, ModuleItem, Number, SimpleAssignTarget};
+use swc_core::ecma::visit::{Visit, VisitMut, VisitMutWith, VisitWith};
 
 pub(crate) fn modules_equivalent(actual: &Module, expected: &Module) -> bool {
     if actual == expected {
-        // PartialEq includes Ident.optional; EqIgnoreSpan additionally protects
-        // signed zero (and does not equate NaN with itself).
-        return actual.eq_ignore_span(expected);
+        // Strict equality includes Ident.optional; EqIgnoreSpan retains AST29's
+        // numeric value policy while ignoring locations and literal spelling.
+        return actual.eq_ignore_span(expected) && !contains_nan(actual);
     }
     if actual.eq_ignore_span(expected) {
-        return optional_identifiers_equivalent(actual, expected);
+        return !contains_nan(actual) && optional_identifiers_equivalent(actual, expected);
     }
     // Modules only contain a span, shebang, and ordered items. Normalize items
     // independently: a single rewritten call must not clone the entire module.
@@ -43,16 +43,16 @@ where
         + EqIgnoreSpan
         + VisitWith<NormalizationNeeded>
         + VisitWith<OptionalIdentifiers>
+        + VisitWith<NumericValidity>
         + VisitMutWith<Normalize>,
 {
     if actual == expected {
-        return actual.eq_ignore_span(expected);
+        return actual.eq_ignore_span(expected) && !contains_nan(actual);
     }
-    // PartialEq alone is not a safe shortcut: SWC Number's PartialEq equates
-    // +0/-0. EqIgnoreSpan ignores primitive literal raw, but preserves values
-    // (including signed zero and typed WTF-8) and template raw/cooked fields.
+    // EqIgnoreSpan ignores primitive literal raw, but preserves AST29 numeric
+    // value semantics (including signed zero), typed WTF-8, and template fields.
     if actual.eq_ignore_span(expected) {
-        return optional_identifiers_equivalent(actual, expected);
+        return !contains_nan(actual) && optional_identifiers_equivalent(actual, expected);
     }
     let normalize_actual = normalization_needed(actual);
     let normalize_expected = normalization_needed(expected);
@@ -68,7 +68,28 @@ where
         expected.to_mut().visit_mut_with(&mut Normalize);
     }
     actual.as_ref().eq_ignore_span(expected.as_ref())
+        && !contains_nan(actual.as_ref())
         && optional_identifiers_equivalent(actual.as_ref(), expected.as_ref())
+}
+
+// AST29 canonicalizes NaN equality, but NaN cannot be an authored JS numeric
+// literal. Preserve the prior strict postflight contract without serializing.
+#[derive(Default)]
+struct NumericValidity(bool);
+impl Visit for NumericValidity {
+    fn visit_number(&mut self, number: &Number) {
+        self.0 |= number.value.is_nan();
+    }
+    fn visit_expr(&mut self, expression: &Expr) {
+        if !self.0 {
+            expression.visit_children_with(self);
+        }
+    }
+}
+fn contains_nan<T: VisitWith<NumericValidity>>(value: &T) -> bool {
+    let mut visitor = NumericValidity::default();
+    value.visit_with(&mut visitor);
+    visitor.0
 }
 
 #[derive(Default)]
@@ -135,7 +156,7 @@ impl VisitMut for Normalize {
             let expression = parenthesized.expr.take();
             *target = match SimpleAssignTarget::try_from(expression) {
                 Ok(target) => target,
-                Err(expression) => SimpleAssignTarget::Paren(swc_ecma_ast::ParenExpr {
+                Err(expression) => SimpleAssignTarget::Paren(swc_core::ecma::ast::ParenExpr {
                     span,
                     expr: expression,
                 }),
@@ -176,9 +197,9 @@ fn optional_identifiers_equivalent<T: VisitWith<OptionalIdentifiers>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use swc_common::{FileName, Globals, Mark, SourceMap, DUMMY_SP, GLOBALS};
-    use swc_ecma_ast::*;
-    use swc_ecma_parser::{with_file_parser, FlowSyntax, Syntax, TsSyntax};
+    use swc_core::common::{FileName, Globals, Mark, SourceMap, DUMMY_SP, GLOBALS};
+    use swc_core::ecma::ast::*;
+    use swc_core::ecma::parser::{with_file_parser, FlowSyntax, Syntax, TsSyntax};
 
     fn syntax(filename: &str) -> Syntax {
         if filename.ends_with(".ts") {
@@ -288,10 +309,7 @@ mod tests {
         };
         let positive = number(0.0);
         let negative = number(-0.0);
-        assert_eq!(
-            positive, negative,
-            "exercise SWC PartialEq's signed-zero omission"
-        );
+        assert_ne!(positive, negative, "AST29 PartialEq preserves signed zero");
         assert!(!expressions_equivalent(&positive, &negative));
         let parenthesized = Expr::Paren(ParenExpr {
             span: DUMMY_SP,
@@ -309,7 +327,7 @@ mod tests {
         };
         let positive_module = as_module(number(0.0));
         let negative_module = as_module(number(-0.0));
-        assert_eq!(positive_module, negative_module);
+        assert_ne!(positive_module, negative_module);
         assert!(!modules_equivalent(&positive_module, &negative_module));
         assert!(!items_equivalent(
             &positive_module.body[0],
@@ -318,6 +336,16 @@ mod tests {
         assert!(!expressions_equivalent(
             &number(f64::NAN),
             &number(f64::NAN)
+        ));
+        let nan_module = as_module(number(f64::NAN));
+        assert!(!modules_equivalent(&nan_module, &nan_module));
+        assert!(!items_equivalent(&nan_module.body[0], &nan_module.body[0]));
+        assert!(!expressions_equivalent(
+            &number(f64::NAN),
+            &Expr::Paren(ParenExpr {
+                span: DUMMY_SP,
+                expr: Box::new(number(f64::NAN)),
+            }),
         ));
         assert!(!expressions_equivalent(
             &number(f64::INFINITY),
