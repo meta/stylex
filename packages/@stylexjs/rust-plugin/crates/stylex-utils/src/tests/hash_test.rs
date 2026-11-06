@@ -7,8 +7,8 @@ use std::hash::Hasher;
 use crate::test_support;
 #[cfg(test)]
 use swc_core::{
-  common::DUMMY_SP,
-  ecma::ast::{Expr, Lit, Number},
+  common::{DUMMY_SP, SyntaxContext},
+  ecma::ast::{BinExpr, BinaryOp, Expr, Ident, Lit, Number},
 };
 
 /// A [`Hasher`] that counts the bytes the walk feeds it and hashes nothing.
@@ -59,14 +59,32 @@ fn number(value: f64) -> Expr {
   }))
 }
 
+/// `MY_CONST` under `depth` levels of `+ 1`.
+#[cfg(test)]
+fn arithmetic_tower(depth: usize) -> Expr {
+  let mut expr = Expr::Ident(Ident::new(
+    "MY_CONST".into(),
+    DUMMY_SP,
+    SyntaxContext::empty(),
+  ));
+
+  for _ in 0..depth {
+    expr = Expr::Bin(BinExpr {
+      span: DUMMY_SP,
+      op: BinaryOp::Add,
+      left: Box::new(expr),
+      right: Box::new(number(1.0)),
+    });
+  }
+
+  expr
+}
+
 /// Parses one expression in the grammar the compiler reads.
 #[cfg(test)]
 fn parse_expr(source: &str) -> Expr {
   test_support::parse_expr(source, test_support::es_jsx())
 }
-
-#[cfg(test)]
-mod create_hash_tests {}
 
 #[cfg(test)]
 mod stable_hash_tests {
@@ -77,12 +95,6 @@ mod stable_hash_tests {
     assert_eq!(stable_hash(&42u64), stable_hash(&42u64));
   }
 }
-
-#[cfg(test)]
-mod create_short_hash_tests {}
-
-#[cfg(test)]
-mod hash_f64_tests {}
 
 #[cfg(test)]
 mod unspanned_fast_path_tests {
@@ -465,11 +477,6 @@ mod unspanned_fast_path_tests {
   }
 }
 
-/// Pins how much of the tree each memo key hashes, counted in bytes rather than timed.
-/// See `stylex-evaluator/docs/adr/0005` and `0006` for why the key is a whole-subtree hash.
-#[cfg(test)]
-mod key_cost_scaling_tests {}
-
 #[cfg(test)]
 mod wide_hasher_tests {
   use std::hash::Hasher;
@@ -501,11 +508,13 @@ mod wide_hasher_tests {
 mod key_edge_case_tests {
   use swc_core::{
     common::DUMMY_SP,
-    ecma::ast::{ArrayLit, Expr, ExprOrSpread},
+    ecma::ast::{
+      ArrayLit, Expr, ExprOrSpread, KeyValueProp, ObjectLit, Prop, PropName, PropOrSpread,
+    },
   };
 
   use super::super::{MAX_UNSPANNED_HASH_COLLECTION_LEN, stable_hash_unspanned};
-  use super::{hashed_in_place, key_cost, number};
+  use super::{arithmetic_tower, hashed_in_place, key_cost, number};
 
   fn array_of(len: usize) -> Expr {
     Expr::Array(ArrayLit {
@@ -519,6 +528,90 @@ mod key_edge_case_tests {
         })
         .collect(),
     })
+  }
+
+  fn object_of(len: usize) -> Expr {
+    Expr::Object(ObjectLit {
+      span: DUMMY_SP,
+      props: (0..len)
+        .map(|index| {
+          PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+            key: PropName::Str(format!("key{index}").into()),
+            value: Box::new(number(index as f64)),
+          })))
+        })
+        .collect(),
+    })
+  }
+
+  fn object_of_holding(len: usize, value: Expr) -> Expr {
+    let Expr::Object(object) = object_of(len) else {
+      panic!("object_of builds an object");
+    };
+
+    let mut props = object.props;
+    props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+      key: PropName::Str("nested".into()),
+      value: Box::new(value),
+    }))));
+
+    Expr::Object(ObjectLit {
+      span: DUMMY_SP,
+      props,
+    })
+  }
+
+  #[test]
+  fn an_over_limit_collection_nested_pays_the_fallback_at_every_level() {
+    // The fallback arm is chosen per level, so each over-limit level pays for a deep clone.
+    let limit = MAX_UNSPANNED_HASH_COLLECTION_LEN;
+    let mut chain = object_of(limit + 1);
+
+    for level in 0..4 {
+      chain = object_of_holding(limit + 1, chain);
+
+      let mut inner = &chain;
+      let mut descended = 0;
+
+      while let Expr::Object(object) = inner {
+        assert!(
+          !hashed_in_place(inner),
+          "level {descended} of a {level}-deep chain was hashed in place"
+        );
+
+        let Some(PropOrSpread::Prop(last)) = object.props.last() else {
+          break;
+        };
+        let Prop::KeyValue(entry) = last.as_ref() else {
+          break;
+        };
+
+        inner = entry.value.as_ref();
+        descended += 1;
+      }
+
+      assert_eq!(
+        descended,
+        level + 2,
+        "the chain should be one level deeper than the last iteration"
+      );
+    }
+  }
+
+  #[test]
+  fn a_deep_expression_hashes_the_whole_depth_without_running_out_of_stack() {
+    // A key one level shorter differs, which shows the walk reached the bottom.
+    let deep = arithmetic_tower(1024);
+    let shallower = arithmetic_tower(1023);
+
+    assert_ne!(
+      stable_hash_unspanned(&deep),
+      stable_hash_unspanned(&shallower)
+    );
+    assert_eq!(
+      key_cost(&deep) - key_cost(&shallower),
+      key_cost(&arithmetic_tower(1)) - key_cost(&arithmetic_tower(0))
+    );
   }
 
   #[test]

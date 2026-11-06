@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use indexmap::IndexMap;
-use stylex_ast::ast::convertors::convert_lit_to_number;
 use stylex_ast::ast::convertors::get_key_values_from_object;
+use stylex_ast::ast::convertors::{convert_lit_to_number, convert_lit_to_string};
 use stylex_nested_config::nested::{NestedVarsValue, flatten_nested_vars_config};
 use stylex_structures::nested::{NestedStringValue, flatten_nested_string_config};
 use swc_core::ecma::ast::{Expr, Lit};
@@ -14,11 +14,27 @@ use stylex_state::{
   flat_compiled_styles_value::FlatCompiledStylesValue, types::FlatCompiledStyles,
 };
 
+fn namespace(entries: Vec<(&str, NestedVarsValue)>) -> NestedVarsValue {
+  NestedVarsValue::Namespace(
+    entries
+      .into_iter()
+      .map(|(key, value)| (key.to_string(), value))
+      .collect(),
+  )
+}
+
 fn flat_styles(entries: Vec<(&str, FlatCompiledStylesValue)>) -> FlatCompiledStyles {
   entries
     .into_iter()
     .map(|(key, value)| (key.to_string(), Rc::new(value)))
     .collect()
+}
+
+fn lit_string(expr: &Expr) -> String {
+  match expr.as_lit().and_then(convert_lit_to_string) {
+    Some(value) => value,
+    None => panic!("expected string literal"),
+  }
 }
 
 fn lit_number(expr: &Expr) -> f64 {
@@ -84,6 +100,89 @@ fn unflattened_object_converts_back_to_nested_ast() {
   ));
 }
 
+fn conditional(entries: Vec<(&str, NestedVarsValue)>) -> NestedVarsValue {
+  NestedVarsValue::Conditional(
+    entries
+      .into_iter()
+      .map(|(key, value)| (key.to_string(), value))
+      .collect(),
+  )
+}
+
+fn s(value: &str) -> NestedVarsValue {
+  NestedVarsValue::Str(value.to_string())
+}
+
+fn unflattened_object(
+  value: &UnflattenedCompiledStylesValue,
+) -> &IndexMap<String, UnflattenedCompiledStylesValue> {
+  match value {
+    UnflattenedCompiledStylesValue::Object(map) => map,
+    UnflattenedCompiledStylesValue::Leaf(_) => panic!("expected nested object"),
+  }
+}
+
+fn unflattened_leaf_string(value: &UnflattenedCompiledStylesValue) -> String {
+  match value {
+    UnflattenedCompiledStylesValue::Leaf(value) => match value.as_ref() {
+      FlatCompiledStylesValue::String(s) => s.clone(),
+      _ => panic!("expected string leaf"),
+    },
+    UnflattenedCompiledStylesValue::Object(_) => panic!("expected leaf, got object"),
+  }
+}
+
+#[test]
+fn flattens_a_deeply_nested_object_3_levels() {
+  let input = IndexMap::from([(
+    "button".to_string(),
+    namespace(vec![
+      ("primary", namespace(vec![("background", s("#00FF00"))])),
+      ("secondary", namespace(vec![("background", s("#CCCCCC"))])),
+    ]),
+  )]);
+  let result = flatten_nested_vars_config(&input);
+  assert_eq!(result.len(), 2);
+  assert_eq!(lit_string(&result["button.primary.background"]), "#00FF00");
+  assert_eq!(
+    lit_string(&result["button.secondary.background"]),
+    "#CCCCCC"
+  );
+}
+
+#[test]
+fn flattens_4_levels_deep() {
+  let input = IndexMap::from([(
+    "a".to_string(),
+    namespace(vec![(
+      "b",
+      namespace(vec![("c", namespace(vec![("d", s("value"))]))]),
+    )]),
+  )]);
+  let result = flatten_nested_vars_config(&input);
+  assert_eq!(lit_string(&result["a.b.c.d"]), "value");
+  assert_eq!(result.len(), 1);
+}
+
+#[test]
+fn stops_at_deeply_nested_conditional_at_rule_values() {
+  let inner_cond = conditional(vec![
+    ("default", s("lightblue")),
+    ("@supports (color: oklch(0 0 0))", s("oklch(0.7 -0.3 -0.4)")),
+  ]);
+  let outer_cond = conditional(vec![
+    ("default", s("blue")),
+    ("@media (prefers-color-scheme: dark)", inner_cond),
+  ]);
+  let input = IndexMap::from([(
+    "button".to_string(),
+    namespace(vec![("primary", namespace(vec![("color", outer_cond)]))]),
+  )]);
+  let result = flatten_nested_vars_config(&input);
+  assert_eq!(result.len(), 1);
+  assert!(result.contains_key("button.primary.color"));
+}
+
 #[test]
 #[should_panic(expected = "Key \"color.brand\" must not contain the \".\" character")]
 fn string_throws_on_keys_containing_dots() {
@@ -92,6 +191,18 @@ fn string_throws_on_keys_containing_dots() {
     NestedStringValue::Str("var(--x1)".to_string()),
   )]);
   let _ = flatten_nested_string_config(&input);
+}
+
+#[test]
+fn handles_deeply_nested_keys_4_levels() {
+  let result = unflatten_object(&flat_styles(vec![(
+    "a.b.c.d",
+    FlatCompiledStylesValue::String("deep".to_string()),
+  )]));
+  let a = unflattened_object(&result["a"]);
+  let b = unflattened_object(&a["b"]);
+  let c = unflattened_object(&b["c"]);
+  assert_eq!(unflattened_leaf_string(&c["d"]), "deep");
 }
 
 /// The nested key wins: the leaf is what the flat spelling of the same name would write.

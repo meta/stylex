@@ -127,6 +127,21 @@ fn first_returns_none_for_empty_list() {
   );
 }
 
+/// `cssparser` 0.38 caps nesting at 75 levels; `tokenize_all` lifts it, as upstream StyleX has
+/// no limit.
+#[test]
+fn a_block_nested_past_the_cssparser_default_limit_is_tokenized() {
+  const DEPTH: usize = 100;
+  let input = format!("{}a{}", "(".repeat(DEPTH), ")".repeat(DEPTH));
+
+  let tokens = TokenList::new(&input).tokens;
+
+  let count = |wanted: &SimpleToken| tokens.iter().filter(|token| *token == wanted).count();
+  assert_eq!(count(&SimpleToken::LeftParen), DEPTH);
+  assert_eq!(count(&SimpleToken::RightParen), DEPTH);
+  assert_eq!(count(&SimpleToken::Ident("a".to_string())), 1);
+}
+
 // parse_nested_or_panic: the error arm, unreachable through normal tokenization.
 
 /// The guard logs the error before it panics; `catch_unwind` so the log is asserted afterwards.

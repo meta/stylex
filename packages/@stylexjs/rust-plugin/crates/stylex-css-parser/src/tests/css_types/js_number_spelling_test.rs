@@ -109,15 +109,6 @@ mod a_negative_zero_loses_its_sign {
 }
 
 #[cfg(test)]
-mod an_overflow_is_named_infinity {}
-
-#[cfg(test)]
-mod the_edges_of_the_double_range {}
-
-#[cfg(test)]
-mod a_print_time_division_is_spelled_the_same_way {}
-
-#[cfg(test)]
 mod a_composite_type_reaches_the_formatter_through_its_parts {
   use super::*;
 
@@ -153,5 +144,18 @@ mod malformed_and_extreme_input {
     refused!(Length, ")");
     refused!(Length, "px");
     refused!(Number, "1px");
+  }
+
+  #[test]
+  fn a_deeply_nested_calc_prints_without_exhausting_the_stack() {
+    const DEPTH: usize = 200;
+    let input = format!("calc({}1e21px{})", "(".repeat(DEPTH), ")".repeat(DEPTH));
+
+    // A refusal is acceptable at this depth; a panic is not.
+    if let Ok(calc) = Calc::parser().parse_to_end(&input) {
+      let printed = calc.to_string();
+      assert!(printed.contains("1e+21px"), "{printed}");
+      assert_eq!(printed.matches('(').count(), DEPTH + 1);
+    }
   }
 }

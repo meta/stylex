@@ -6,6 +6,15 @@ use crate::constants::{
 };
 
 #[test]
+fn test_expression_too_deep() {
+  assert_eq!(
+    expression_too_deep(32),
+    "Expression is too deeply nested to evaluate at compile time.\nAt most 32 levels of nested evaluation are supported.\n\n"
+  );
+  assert!(expression_too_deep(320).contains("At most 320 levels"));
+}
+
+#[test]
 fn test_nesting_too_deep_to_carry() {
   assert_eq!(
     nesting_too_deep_to_carry(8192),

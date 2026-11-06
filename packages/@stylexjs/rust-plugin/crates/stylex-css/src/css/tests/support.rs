@@ -1,8 +1,13 @@
 //! Fixtures shared by the CSS test modules: options and rejection reading.
 
-use std::any::Any;
+use std::{
+  any::Any,
+  panic::{AssertUnwindSafe, catch_unwind},
+};
 
 use stylex_structures::stylex_state_options::StyleXStateOptions;
+
+use crate::css::common::normalize_css_property_value;
 
 pub(super) fn default_options() -> StyleXStateOptions {
   StyleXStateOptions::default()
@@ -25,4 +30,25 @@ pub(super) fn panic_message<T>(result: Result<T, Box<dyn Any + Send>>) -> String
     .or_else(|| panic.downcast_ref::<&str>().copied())
     .unwrap_or_default()
     .to_string()
+}
+
+/// Asserts every value is rejected for `property` with a message containing `expected`.
+pub(super) fn rejects(
+  property: &str,
+  values: &[&str],
+  expected: &str,
+  options: &StyleXStateOptions,
+) {
+  for value in values {
+    let result = catch_unwind(AssertUnwindSafe(|| {
+      normalize_css_property_value(property, value, options)
+    }));
+
+    let message = panic_message(result);
+
+    assert!(
+      message.contains(expected),
+      "expected `{property}: {value}` to be rejected with `{expected}`, got: {message}"
+    );
+  }
 }

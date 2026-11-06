@@ -53,3 +53,6 @@ pub(crate) fn find_closest_path(path: &Path, target_folder_name: &str) -> Option
     None => None,
   }
 }
+
+#[cfg(test)]
+mod tests;

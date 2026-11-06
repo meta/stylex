@@ -36,6 +36,31 @@ fn a_value_nested_past_the_budget_is_handed_on_whole() {
   assert_eq!(parts(&nested), std::slice::from_ref(&nested));
 }
 
+#[test]
+fn a_value_nested_far_past_the_budget_still_returns_rather_than_aborting() {
+  // Regression for a stack-overflow abort, which `#[should_panic]` cannot express.
+  let depth = 200_000;
+  let nested = "calc(".repeat(depth);
+
+  assert_eq!(parts(&nested), std::slice::from_ref(&nested));
+}
+
+#[test]
+fn a_value_nested_up_to_the_budget_is_still_split() {
+  // The last accepted depth must still be split.
+  let nested = format!(
+    "{}{}",
+    "calc(".repeat(MAX_VALUE_NESTING_DEPTH),
+    ")".repeat(MAX_VALUE_NESTING_DEPTH)
+  );
+
+  let result = parts(&format!("1px {nested}"));
+
+  assert_eq!(result.len(), 2);
+  assert_eq!(result[0], "1px");
+  assert_eq!(result[1], nested);
+}
+
 // ── Values a longhand keeps whole ──
 
 // ── An empty part is a part ──

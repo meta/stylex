@@ -135,6 +135,23 @@ fn from_object_lit_panics_when_deeply_nested_value_is_null_lit() {
 }
 
 #[test]
+#[should_panic(expected = "Value must be a string")]
+fn from_object_lit_panics_when_deeply_nested_value_is_non_lit_non_object() {
+  // value: { default: ..., states: { hover: <ident> } } → catch-all panic in
+  // inner loop.
+  let inner_inner = obj_with(vec![("hover", ident_expr())]);
+  let value_obj = obj_with(vec![
+    ("default", Expr::Lit(create_string_lit("red"))),
+    ("states", Expr::Object(inner_inner)),
+  ]);
+  let outer = obj_with(vec![
+    ("syntax", Expr::Lit(create_string_lit("<color>"))),
+    ("value", Expr::Object(value_obj)),
+  ]);
+  let _: BaseCSSType = outer.into();
+}
+
+#[test]
 #[should_panic(expected = "Expected a string value")]
 fn from_object_lit_panics_when_mid_level_value_is_null_lit() {
   // value: { default: null } → middle Lit branch → string conversion fails.

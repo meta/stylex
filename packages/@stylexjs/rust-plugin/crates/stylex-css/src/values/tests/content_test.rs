@@ -50,3 +50,11 @@ fn reads_a_backslash_as_the_start_of_an_escape() {
 }
 
 // ── large and awkward input ──────────────────────────────────────────
+
+#[test]
+fn reads_a_deeply_nested_function_as_one_component() {
+  let nested = format!("{}{}", "calc(".repeat(500), ")".repeat(500));
+  let input = format!("\"a\" {}", nested);
+
+  assert_eq!(transform_content_value(&input), input);
+}

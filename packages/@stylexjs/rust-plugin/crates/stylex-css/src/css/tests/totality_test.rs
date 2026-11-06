@@ -129,6 +129,9 @@ const ALPHABET: &[char] = &[
   '}', ';',
 ];
 
+/// The nesting and quoting subset, swept one character longer.
+const CORE_ALPHABET: &[char] = &['(', ')', '\'', '"', '\\', '/', '*', ',', ' ', '0'];
+
 /// Every string of exactly `length` characters over `alphabet`.
 fn combinations(alphabet: &[char], length: u32) -> Vec<String> {
   let mut out = vec![String::new()];
@@ -165,6 +168,57 @@ fn no_short_arrangement_of_the_characters_the_seam_branches_on_can_crash_it() {
   let values = combinations_up_to(ALPHABET, 3);
 
   sweep(values.iter().map(String::as_str));
+}
+
+#[test]
+fn no_longer_arrangement_of_the_nesting_characters_can_crash_it() {
+  let values = combinations(CORE_ALPHABET, 4);
+
+  sweep(values.iter().map(String::as_str));
+}
+
+/// Length and token count are unbounded and must normalize; nesting must reject, not overflow.
+#[test]
+fn only_nesting_is_bounded_and_it_rejects_rather_than_aborting() {
+  let options = default_options();
+
+  let long = format!("\"{}\"", "a".repeat(1_000_000));
+  assert!(
+    matches!(answer("fontFamily", &long, &options), Answer::Normalized(_)),
+    "a value of a megabyte should normalize"
+  );
+
+  let many = vec!["0px"; 50_000].join(" ");
+  assert!(
+    matches!(answer("margin", &many, &options), Answer::Normalized(_)),
+    "a value of fifty thousand tokens should normalize"
+  );
+
+  let deep = format!("{}1px{}", "calc(".repeat(5_000), ")".repeat(5_000));
+  assert_eq!(
+    answer("width", &deep, &options),
+    Answer::Rejected(LINT_VALUE_NESTED_TOO_DEEPLY),
+    "nesting past the limit should be rejected"
+  );
+
+  // Unbalanced: the depth guard runs before, and must win over, the unclosed-function pass.
+  let unbalanced = "calc(".repeat(5_000);
+  assert_eq!(
+    answer("width", &unbalanced, &options),
+    Answer::Rejected(LINT_VALUE_NESTED_TOO_DEEPLY),
+    "unbalanced nesting past the limit should be rejected by the depth guard"
+  );
+
+  // The limit is inclusive.
+  let admitted = format!(
+    "{}1px{}",
+    "calc(".repeat(MAX_VALUE_NESTING_DEPTH),
+    ")".repeat(MAX_VALUE_NESTING_DEPTH)
+  );
+  assert!(
+    matches!(answer("width", &admitted, &options), Answer::Normalized(_)),
+    "nesting at the limit should normalize"
+  );
 }
 
 /// An unreachable entry would weaken every sweep, so each is provoked by its shortest input.

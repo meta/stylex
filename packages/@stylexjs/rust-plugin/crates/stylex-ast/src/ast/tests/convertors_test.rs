@@ -135,6 +135,26 @@ fn convert_member_prop_to_string_bigint() {
 }
 
 #[test]
+fn normalize_expr_handles_deeply_nested_parens_without_recursion() {
+  let mut expr = create_string_expr("before");
+  for _ in 0..16_384 {
+    expr = Expr::Paren(ParenExpr {
+      span: DUMMY_SP,
+      expr: Box::new(expr),
+    });
+  }
+
+  assert!(matches!(normalize_expr(&expr), Expr::Lit(Lit::Str(_))));
+  *normalize_expr_mut(&mut expr) = create_string_expr("after");
+
+  // Drop iteratively so cleanup does not recurse.
+  while let Expr::Paren(paren) = expr {
+    expr = *paren.expr;
+  }
+  assert!(matches!(expr, Expr::Lit(Lit::Str(_))));
+}
+
+#[test]
 #[should_panic(expected = "Variable declaration must be initialized")]
 fn get_expr_from_var_decl_panics_without_initializer() {
   let decl = VarDeclarator {

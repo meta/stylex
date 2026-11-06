@@ -3,7 +3,8 @@
 use indexmap::IndexMap;
 
 use crate::nested::{
-  NestedConstsValue, NestedNamespace, NestedStringValue, is_consts_leaf, is_string_leaf,
+  NestedConstsValue, NestedNamespace, NestedStringValue, flatten_nested_string_config,
+  is_consts_leaf, is_string_leaf,
 };
 
 fn map<T>(entries: Vec<(&str, T)>) -> IndexMap<String, T> {
@@ -66,4 +67,13 @@ fn is_consts_leaf_rejects_namespace() {
   assert!(!is_consts_leaf(&NestedConstsValue::Namespace(
     IndexMap::new()
   )));
+}
+
+#[test]
+fn flatten_nested_string_config_handles_deep_nesting() {
+  let deepest = map(vec![("z", NestedStringValue::Str("end".into()))]);
+  let middle = map(vec![("y", NestedStringValue::Namespace(deepest))]);
+  let top = map(vec![("x", NestedStringValue::Namespace(middle))]);
+  let out = flatten_nested_string_config(&top);
+  assert_eq!(out.get("x.y.z").map(String::as_str), Some("end"));
 }
