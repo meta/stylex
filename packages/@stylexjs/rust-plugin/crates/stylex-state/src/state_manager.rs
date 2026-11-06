@@ -908,7 +908,8 @@ pub struct StateManager {
   declaration_initializers: Rc<FxHashMap<usize, DeclarationInitializer>>,
   /// Strong immutable owners for the initializer identities admitted to memo
   /// keys. An arbitrary temporary expression address is never admitted.
-  initializer_roots: Rc<FxHashMap<usize, Rc<Expr>>>,
+  initializer_roots: Rc<FxHashMap<usize, (u64, Rc<Expr>)>>,
+  next_initializer_id: u64,
   evaluation_input_revision: u64,
   /// Positions in [`Self::declarations`] of the declarators initialised by a
   /// given call, so pinning a call to its declarator is a hash probe rather
@@ -1220,6 +1221,7 @@ impl StateManager {
       declaration_index: Rc::default(),
       declaration_initializers: Rc::default(),
       initializer_roots: Rc::default(),
+      next_initializer_id: 0,
       evaluation_input_revision: 0,
       declaration_call_index: Rc::default(),
       declaration_span_index: Rc::default(),
@@ -1701,20 +1703,19 @@ impl StateManager {
       value: declaration.init.as_deref().cloned().map(Rc::new),
     };
     if let Some(owner) = &snapshot.value {
+      let id = self.next_initializer_id;
+      self.next_initializer_id = id.checked_add(1)?;
       Rc::make_mut(&mut self.initializer_roots)
-        .insert(Rc::as_ptr(owner) as usize, Rc::clone(owner));
+        .insert(Rc::as_ptr(owner) as usize, (id, Rc::clone(owner)));
     }
     let result = (snapshot.span, snapshot.value.clone());
     Rc::make_mut(&mut self.declaration_initializers).insert(position, snapshot);
     Some(result)
   }
 
-  pub fn retained_initializer_site(&self, expression: &Expr) -> Option<usize> {
+  pub fn retained_initializer_site(&self, expression: &Expr) -> Option<u64> {
     let address = expression as *const Expr as usize;
-    self
-      .initializer_roots
-      .contains_key(&address)
-      .then_some(address)
+    self.initializer_roots.get(&address).map(|(id, _)| *id)
   }
 
   pub fn evaluation_input_revision(&self) -> u64 {
@@ -2226,12 +2227,12 @@ impl StateManager {
   pub fn import_as(&self, import: &str) -> Option<&str> {
     for import_source in &self.options.import_sources {
       match import_source {
-        ImportSources::Regular(_) => {},
+        ImportSources::Regular(_) => {}
         ImportSources::Named(named) => {
           if named.from.eq(import) {
             return Some(named.r#as.as_str());
           }
-        },
+        }
       }
     }
 
@@ -2347,7 +2348,7 @@ impl StateManager {
       CheckModuleResolution::Haste { .. } => {
         let filename = FileName::Real(filename.into());
         extract_filename_with_ext_from_path(&filename).map(|s| s.to_string())
-      },
+      }
       // `custom`: the host's `getCanonicalFilePath` names the file, as the
       // Babel plugin asks it; a throw there aborts the transform.
       CheckModuleResolution::Custom { .. } => match self
@@ -2363,7 +2364,7 @@ impl StateManager {
       },
       CheckModuleResolution::CommonJs { .. } | CheckModuleResolution::CrossFileParsing { .. } => {
         Some(self.common_js_canonical_name(filename, package_json_seen))
-      },
+      }
       // The Babel plugin hashes no file name without a module resolution.
       CheckModuleResolution::Unconfigured => None,
     }
@@ -2509,18 +2510,18 @@ impl StateManager {
               return ImportPathResolution::Resolved {
                 path: self.common_js_canonical_name(&path, package_json_seen),
               };
-            },
+            }
             NativeResolution::NeedsHost => return ask_host(resolver),
           }
-        },
-        _ => {},
+        }
+        _ => {}
       }
     }
 
     match &self.options.unstable_module_resolution {
       CheckModuleResolution::Unconfigured | CheckModuleResolution::Custom { .. } => {
         ImportPathResolution::Unresolved
-      },
+      }
       // `experimental_crossFileParsing` resolves its imports as `commonJS` does
       // and references the theme file's variables rather than re-reading it:
       // the Babel plugin's own cross-file read rejects every parsed file (it
@@ -2554,7 +2555,7 @@ impl StateManager {
           Err(err) => {
             debug!("Could not resolve import path {}: {}", import_path, err);
             return ImportPathResolution::Unresolved;
-          },
+          }
         };
 
         debug!("Resolved import path: {}", resolved_file_path);
@@ -2565,7 +2566,7 @@ impl StateManager {
         ImportPathResolution::Resolved {
           path: resolved_file_path,
         }
-      },
+      }
       CheckModuleResolution::Haste { .. } => ImportPathResolution::Resolved {
         path: add_file_extension(import_path, source_file_path),
       },
@@ -3371,7 +3372,7 @@ pub fn flush_pending_insertions(
         if runtime_injection {
           before_imports.push(item);
         }
-      },
+      }
       InsertionSlot::ThemeImports => theme_imports.push(item),
       InsertionSlot::ThemeImportAt(span) => before_statements.entry(span).or_default().push(item),
       InsertionSlot::AfterImports => after_imports.push(item),
@@ -3382,7 +3383,7 @@ pub fn flush_pending_insertions(
         if runtime_injection {
           before_decl.entry(hash).or_default().push(item);
         }
-      },
+      }
     }
   }
 
@@ -3671,7 +3672,7 @@ impl RegisteredObjects<'_> {
       Some(metadata) => {
         self.placed.extend(metadata);
         true
-      },
+      }
       None => false,
     }
   }
@@ -3698,12 +3699,12 @@ impl Visit for RegisteredObjects<'_> {
       // different keys.
       Expr::Lit(Lit::Str(_)) => {
         self.place_metadata_of(expr);
-      },
+      }
       Expr::Object(_) => {
         if !self.place_metadata_of(expr) {
           expr.visit_children_with(self);
         }
-      },
+      }
       _ => expr.visit_children_with(self),
     }
   }
@@ -3977,7 +3978,7 @@ fn possible_file_paths(file_path: &str) -> Vec<String> {
   let stem = match extension {
     Some(extension) if RESOLVER_CODE_EXTENSIONS.contains(&extension.as_str()) => {
       &file_path[..file_path.len() - extension.len()]
-    },
+    }
     _ => file_path,
   };
   std::iter::once(file_path.to_owned())
@@ -4181,7 +4182,7 @@ mod native_resolution_tests {
           .unwrap_or(&path)
           // Compare with `/` on every platform; Windows paths use `\`.
           .replace(std::path::MAIN_SEPARATOR, "/")
-      },
+      }
       NativeResolution::NeedsHost => "host".to_owned(),
     }
   }

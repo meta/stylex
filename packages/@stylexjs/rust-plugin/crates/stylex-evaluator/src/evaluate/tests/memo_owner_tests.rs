@@ -63,7 +63,7 @@ fn memo_allocations_are_not_stored_as_one_shared_instance() {
 fn memo_effect_nodes_leave_function_fingerprinting_lazy() {
   let mut traversal = StateManager::default();
   let mut state = EvaluationState::default();
-  assert!(state.functions_fingerprint.is_none());
+  assert!(state.memo_inventory.is_none());
   super::evaluate_cached(
     &create_number_expr(1.0),
     &mut state,
@@ -72,7 +72,7 @@ fn memo_effect_nodes_leave_function_fingerprinting_lazy() {
   )
   .unwrap();
   assert!(
-    state.functions_fingerprint.is_none(),
+    state.memo_inventory.is_none(),
     "one-shot literal must not hash the function inventory"
   );
   let call = Expr::Call(swc_core::ecma::ast::CallExpr {
@@ -90,7 +90,7 @@ fn memo_effect_nodes_leave_function_fingerprinting_lazy() {
     &FunctionMap::default(),
   );
   assert!(
-    call_state.functions_fingerprint.is_none(),
+    call_state.memo_inventory.is_none(),
     "effect-capable call/get/identifier path must not fingerprint"
   );
   let mut pure_state = EvaluationState::default();
@@ -99,8 +99,8 @@ fn memo_effect_nodes_leave_function_fingerprinting_lazy() {
   })
   .unwrap();
   assert!(
-    pure_state.functions_fingerprint.is_some(),
-    "pure AST memo still fingerprints and stays enabled"
+    pure_state.memo_inventory.is_some(),
+    "pure AST memo still retains its exact inventory and stays enabled"
   );
 }
 

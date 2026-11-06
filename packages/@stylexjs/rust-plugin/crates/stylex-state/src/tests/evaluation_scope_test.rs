@@ -362,7 +362,21 @@ fn a_snapshot_leaves_the_modules_own_output_behind() {
   module.seen.insert(
     crate::seen_value::SeenKey {
       subtree: crate::seen_value::MemoExpressionKey::SubtreeHash(7),
-      functions: 11,
+      context: crate::seen_value::MemoContext {
+        inventory: crate::seen_value::StaticMemoInventory(Rc::new(
+          crate::functions::FunctionMap::default(),
+        )),
+        characters: 0,
+        entries: 0,
+        depth: 0,
+        span: DUMMY_SP,
+        execution_position: None,
+        host_epoch: 0,
+        host_revision: 0,
+        model_epoch: 0,
+        rule_epoch: 0,
+        input_revision: 0,
+      },
     },
     Rc::new(crate::seen_value::SeenValue {
       value: None,

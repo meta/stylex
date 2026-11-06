@@ -1,38 +1,56 @@
-use crate::evaluate_result_value::EvaluateResultValue;
+use crate::{evaluate_result_value::EvaluateResultValue, functions::FunctionMap};
+use std::{
+  hash::{Hash, Hasher},
+  rc::Rc,
+};
+use swc_core::common::Span;
 
-/// What one memoized evaluation answers for: a subtree, folded under one
-/// function map.
-///
-/// The structural hash alone used to be the key, and it is one question short:
-/// what the fold could see besides the subtree. A fold reads its
-/// `FunctionMap`, and the two callers that share this memo fold with
-/// different maps. The `props` merge holds imports inside the module
-/// (`disable_imports`) and registers no helper, so an imported marker in a
-/// style list refuses and `stylex.firstThatWorks(...)` stays a call, both
-/// handed to the runtime as the reference implementation hands them. A
-/// `create` call resolves the import to the theme reference and folds the
-/// helper to its value. One entry cannot serve both: a `create` call that
-/// folded first left its answer in the memo, the props merge read it back as a
-/// confident value, and a style list holding a theme reference (or a helper's
-/// value) aborted the build.
-///
-/// The reference implementation never meets the question: its memo lives on
-/// one `evaluate()` call, so each caller asks it afresh. This memo lives for
-/// the module, which is what makes it pay for itself, so the map is part of
-/// the key instead, as `FunctionMap::memo_fingerprint` spells it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum MemoExpressionKey {
-  /// Content fallback for rebuilt or otherwise unretained expressions.
-  SubtreeHash(u128),
-  /// Exact immutable initializer root whose Rc owner the state retains.
-  RetainedInitializer(usize),
+/// A retained, exact static inventory. Hashing selects a bucket only; equality
+/// confirms the full inventory, including JS-visible nested map ordering.
+#[derive(Clone, Debug)]
+pub struct StaticMemoInventory(pub Rc<FunctionMap>);
+impl PartialEq for StaticMemoInventory {
+  fn eq(&self, other: &Self) -> bool {
+    self.0.same_memo_inventory(&other.0)
+  }
+}
+impl Eq for StaticMemoInventory {}
+impl Hash for StaticMemoInventory {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    self.0.disable_imports.hash(state);
+    self.0.identifiers.len().hash(state);
+    self.0.member_expressions.len().hash(state);
+  }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum MemoExpressionKey {
+  SubtreeHash(u128),
+  /// Logical id assigned independently of addresses, with an immutable witness.
+  RetainedInitializer(u64),
+}
+
+/// Exact semantic context, not a compressed fingerprint. No allocation address
+/// or sum-derived identity can establish equality of two memo keys.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct MemoContext {
+  pub inventory: StaticMemoInventory,
+  pub characters: usize,
+  pub entries: usize,
+  pub depth: usize,
+  pub span: Span,
+  pub execution_position: Option<u32>,
+  pub host_epoch: u64,
+  pub host_revision: u64,
+  pub model_epoch: u64,
+  pub rule_epoch: u64,
+  pub input_revision: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SeenKey {
   pub subtree: MemoExpressionKey,
-  /// `FunctionMap::memo_fingerprint` of the fold's map.
-  pub functions: u64,
+  pub context: MemoContext,
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -207,7 +207,7 @@ impl std::hash::Hash for FunctionConfigType {
           sum = sum.wrapping_add(entry.finish());
         }
         sum.hash(state);
-      },
+      }
       Self::IndexMap(map) => (Rc::as_ptr(map) as usize).hash(state),
       Self::EnvObject(map) => (Rc::as_ptr(map) as usize).hash(state),
     }
@@ -246,6 +246,68 @@ pub struct FunctionMap {
 }
 
 impl FunctionMap {
+  /// Only static module inventories may participate in AST memoization. A
+  /// call-time binding is not described by the mapper closure's identity.
+  pub fn is_static_memo_context(&self) -> bool {
+    fn static_config(config: &FunctionConfigType) -> bool {
+      match config {
+        FunctionConfigType::Regular(config) => !matches!(
+          config.fn_ptr,
+          FunctionType::Mapper(_) | FunctionType::ValueMapper(_) | FunctionType::ThemeRefMapper(_)
+        ),
+        FunctionConfigType::Map(map) => map.values().all(|value| static_config(value)),
+        FunctionConfigType::IndexMap(_) | FunctionConfigType::EnvObject(_) => true,
+      }
+    }
+    self.bindings.is_empty()
+      && self
+        .identifiers
+        .values()
+        .all(|config| static_config(config))
+      && self
+        .member_expressions
+        .values()
+        .all(|members| members.values().all(|config| static_config(config)))
+  }
+
+  /// Exact static-inventory comparison. Registration order is not meaningful,
+  /// but nested JS-visible map entry order is part of the value it produces.
+  pub fn same_memo_inventory(&self, other: &Self) -> bool {
+    fn equal_config(a: &FunctionConfigType, b: &FunctionConfigType) -> bool {
+      match (a, b) {
+        (FunctionConfigType::Map(a), FunctionConfigType::Map(b)) => {
+          a.len() == b.len()
+            && a
+              .iter()
+              .zip(b.iter())
+              .all(|((ak, av), (bk, bv))| ak == bk && equal_config(av, bv))
+        }
+        _ => a == b,
+      }
+    }
+    self.disable_imports == other.disable_imports
+      && self.bindings.is_empty()
+      && other.bindings.is_empty()
+      && self.identifiers.len() == other.identifiers.len()
+      && self.identifiers.iter().all(|(key, value)| {
+        other
+          .identifiers
+          .get(key)
+          .is_some_and(|other| equal_config(value, other))
+      })
+      && self.member_expressions.len() == other.member_expressions.len()
+      && self.member_expressions.iter().all(|(key, members)| {
+        other.member_expressions.get(key).is_some_and(|others| {
+          members.len() == others.len()
+            && members.iter().all(|(key, value)| {
+              others
+                .get(key)
+                .is_some_and(|other| equal_config(value, other))
+            })
+        })
+      })
+  }
+
   /// What this map contributes to a fold's answer, as one number: the names it
   /// registers, as identifiers and as members of an import source, with the
   /// kind of entry each is bound to, and whether imports resolve.

@@ -236,7 +236,7 @@ fn inert_literal_repeat(call: &CallExpr) -> bool {
     MemberProp::Ident(name) => name.sym == "repeat",
     MemberProp::Computed(key) => {
       matches!(normalize_expr(&key.expr), Expr::Lit(Lit::Str(name)) if name.value.as_str() == Some("repeat"))
-    },
+    }
     MemberProp::PrivateName(_) => false,
   };
   repeat
@@ -259,6 +259,13 @@ fn memoized_fold<T: Memoized>(
   traversal_state: &mut StateManager,
   fold: impl FnOnce(&mut EvaluationState, &mut StateManager) -> Option<T>,
 ) -> Option<T> {
+  // Only static module inventories are memo contexts. Call-time parameters,
+  // overlays and externally supplied mapper bindings must run for every call.
+  // Their closure addresses neither describe the bound value nor distinguish
+  // contexts under a lossy aggregate fingerprint.
+  if !state.functions.is_static_memo_context() {
+    return fold(state, traversal_state);
+  }
   // Calls/gets run live; identifiers reach the guarded operation binding ledger.
   // Fresh literal/local allocations cannot become one instance across frames.
   let normalized = normalize_expr(path);
@@ -278,8 +285,7 @@ fn memoized_fold<T: Memoized>(
   // Retained immutable initializer roots use exact owned identity. Rebuilt
   // expressions keep the structural fallback; no transient AST address is a
   // memo key. Position, call-time context and limits remain distinct inputs.
-  use std::hash::{Hash, Hasher};
-  use stylex_state::seen_value::MemoExpressionKey;
+  use stylex_state::seen_value::{MemoContext, MemoExpressionKey};
   if super::member_observer::active()
     && super::member_observer::needs_events(path, stable_hash_unspanned(path))
   {
@@ -291,21 +297,21 @@ fn memoized_fold<T: Memoized>(
     || MemoExpressionKey::SubtreeHash(stable_hash_unspanned(path)),
     MemoExpressionKey::RetainedInitializer,
   );
-  let mut context = rustc_hash::FxHasher::default();
-  state.memo_fingerprint().hash(&mut context);
-  traversal_state.character_ceiling().hash(&mut context);
-  traversal_state.entry_ceiling().hash(&mut context);
-  traversal_state.evaluation_ceiling().hash(&mut context);
-  path.span().hash(&mut context);
-  stylex_js::native::execution_position().hash(&mut context);
-  stylex_js::native::host_epoch().hash(&mut context);
-  host_revision.hash(&mut context);
-  stylex_js::native::model_refusal_epoch().hash(&mut context);
-  traversal_state.nested_rules_filed().hash(&mut context);
-  input_revision.hash(&mut context);
   let key = SeenKey {
     subtree: expression,
-    functions: context.finish(),
+    context: MemoContext {
+      inventory: state.static_memo_inventory(),
+      characters: traversal_state.character_ceiling(),
+      entries: traversal_state.entry_ceiling(),
+      depth: traversal_state.evaluation_ceiling(),
+      span: path.span(),
+      execution_position: stylex_js::native::execution_position(),
+      host_epoch: stylex_js::native::host_epoch(),
+      host_revision,
+      model_epoch: stylex_js::native::model_refusal_epoch(),
+      rule_epoch: traversal_state.nested_rules_filed(),
+      input_revision,
+    },
   };
   let existing = traversal_state.seen.get(&key);
 
@@ -320,7 +326,7 @@ fn memoized_fold<T: Memoized>(
       deopt(path, state, PATH_WITHOUT_NODE);
 
       None
-    },
+    }
     None => {
       let filings_before = traversal_state.nested_rules_filed();
       let host_before = stylex_js::native::host_epoch();
@@ -382,7 +388,7 @@ fn memoized_fold<T: Memoized>(
       }
 
       val
-    },
+    }
   }
 }
 

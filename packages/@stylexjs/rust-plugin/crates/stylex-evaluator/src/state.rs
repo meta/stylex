@@ -11,9 +11,9 @@ pub struct EvaluationState {
   pub deopt_path: Option<Expr>,
   pub added_imports: FxHashSet<String>,
   pub functions: Rc<FunctionMap>,
-  /// Computed only when a pure AST memo needs it. The retained immutable map
-  /// witnesses the cached fingerprint and prevents address reuse.
-  pub functions_fingerprint: Option<(Rc<FunctionMap>, u64)>,
+  /// Lazily retained static inventory. Memo key equality confirms its complete
+  /// content; this is not an address-derived fingerprint.
+  pub memo_inventory: Option<stylex_state::seen_value::StaticMemoInventory>,
   pub deopt_reason: Option<String>,
 }
 
@@ -28,15 +28,15 @@ impl EvaluationState {
     EvaluationState::default()
   }
 
-  pub fn memo_fingerprint(&mut self) -> u64 {
-    if let Some((owner, fingerprint)) = &self.functions_fingerprint
-      && Rc::ptr_eq(owner, &self.functions)
+  pub fn static_memo_inventory(&mut self) -> stylex_state::seen_value::StaticMemoInventory {
+    if let Some(inventory) = &self.memo_inventory
+      && Rc::ptr_eq(&inventory.0, &self.functions)
     {
-      return *fingerprint;
+      return inventory.clone();
     }
-    let fingerprint = self.functions.memo_fingerprint();
-    self.functions_fingerprint = Some((Rc::clone(&self.functions), fingerprint));
-    fingerprint
+    let inventory = stylex_state::seen_value::StaticMemoInventory(Rc::clone(&self.functions));
+    self.memo_inventory = Some(inventory.clone());
+    inventory
   }
 
   /// A fresh, confident state folding under `functions`.
@@ -47,7 +47,7 @@ impl EvaluationState {
       added_imports: FxHashSet::default(),
       deopt_reason: None,
       functions,
-      functions_fingerprint: None,
+      memo_inventory: None,
     }
   }
 }
