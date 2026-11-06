@@ -10,7 +10,7 @@ text came from.
 - The StyleX compiler core in `crates/` is vendored from
   [stylex-swc-plugin](https://github.com/Dwlad90/stylex-swc-plugin) 0.19.2 under
   the MIT license: see `crates/LICENSE` (license text and copyright),
-  `crates/NOTICE.md` (the upstream notice, unchanged) and `crates/PROVENANCE.md`
+  `crates/NOTICE.md` (attribution) and `crates/PROVENANCE.md`
   (exact source and every local change).
 - `vendor/swc_ecma_parser` is the published `swc_ecma_parser` 45.1.6 crate with
   the patches described in `vendor/README.md` (Apache-2.0).
