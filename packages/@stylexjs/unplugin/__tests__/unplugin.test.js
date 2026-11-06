@@ -530,4 +530,64 @@ describe('@stylexjs/unplugin', () => {
       }
     });
   });
+
+  // Regression: https://github.com/facebook/stylex/issues/1912
+  describe('Rollup and Vite watch mode', () => {
+    const source = `
+      import * as stylex from '@stylexjs/stylex';
+      import { other } from './other.js';
+      export const styles = stylex.create({ foo: { color: 'red' } });
+    `;
+
+    test('transform does not wait for its imports to load', async () => {
+      const plugin = unplugin.raw({ runtimeInjection: false });
+      plugin.buildStart();
+      // `./other.js` can't finish loading until this transform returns, like
+      // the other side of an import cycle in watch mode, or a prebundled
+      // dependency on a cold start of the Vite dev server.
+      const ctx = {
+        meta: { watchMode: true },
+        parse: () => ({
+          body: [
+            { type: 'ImportDeclaration', source: { value: './other.js' } },
+          ],
+        }),
+        resolve: async (spec) => ({ id: `/virtual/${spec}`, external: false }),
+        load: jest.fn(() => new Promise(() => {})),
+      };
+      let timer;
+      const timeout = new Promise((resolve) => {
+        timer = setTimeout(() => resolve('timed out'), 1000);
+      });
+      const result = await Promise.race([
+        plugin.transform.call(ctx, source, '/virtual/watch.js'),
+        timeout,
+      ]);
+      clearTimeout(timer);
+      expect(result).not.toBe('timed out');
+      expect(ctx.load).not.toHaveBeenCalled();
+    });
+
+    test('restores the rules of a cached module from its meta', async () => {
+      const id = '/virtual/cached.js';
+      const plugin = unplugin.raw({ runtimeInjection: false });
+      plugin.buildStart();
+      const { meta } = await plugin.transform(source, id);
+
+      // A build that starts without these rules, for example from a Rollup
+      // cache saved by another process, skips the unchanged module and only
+      // gets its meta back.
+      const saved = globalThis.__stylex_unplugin_store;
+      globalThis.__stylex_unplugin_store = undefined;
+      try {
+        const next = unplugin.raw({ runtimeInjection: false });
+        next.buildStart();
+        expect(next.__stylexCollectCss()).toBe('');
+        expect(next.shouldTransformCachedModule({ id, meta })).toBe(false);
+        expect(next.__stylexCollectCss()).toContain('color: red');
+      } finally {
+        globalThis.__stylex_unplugin_store = saved;
+      }
+    });
+  });
 });

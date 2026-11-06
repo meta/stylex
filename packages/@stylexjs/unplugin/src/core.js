@@ -439,17 +439,15 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
 
       const result = await runBabelTransform(code, file, '@stylexjs/unplugin');
       const { metadata } = result;
+      const rules =
+        metadata && Array.isArray(metadata.stylex) ? metadata.stylex : [];
       if (!stylexOptions.runtimeInjection) {
-        const hasRules =
-          metadata &&
-          Array.isArray(metadata.stylex) &&
-          metadata.stylex.length > 0;
         const shared = getSharedStore();
-        if (hasRules) {
-          stylexRulesById.set(id, metadata.stylex);
-          shared.rulesById.set(id, metadata.stylex);
+        if (rules.length > 0) {
+          stylexRulesById.set(id, rules);
+          shared.rulesById.set(id, rules);
           shared.version++;
-          await persistRulesToDisk(id, metadata.stylex);
+          await persistRulesToDisk(id, rules);
         } else {
           stylexRulesById.delete(id);
           if (shared.rulesById.has(id)) {
@@ -460,40 +458,23 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
         }
       }
 
-      // Rollup/Vite watch-mode support: collect stylex metadata from cached deps
-      // Only when running in rollup-like context
-      // $FlowExpectedError[incompatible-use]
-      const ctx = this;
-      if (
-        ctx &&
-        ctx.meta &&
-        ctx.meta.watchMode &&
-        typeof ctx.parse === 'function'
-      ) {
-        try {
-          const ast = ctx.parse(result.code);
-          for (const stmt of ast.body) {
-            if (stmt.type === 'ImportDeclaration') {
-              // $FlowExpectedError[incompatible-call]
-              const resolved = await ctx.resolve(stmt.source.value, id);
-              if (resolved && !resolved.external) {
-                // $FlowExpectedError[incompatible-call]
-                const loaded = await ctx.load(resolved);
-                if (loaded && loaded.meta && 'stylex' in loaded.meta) {
-                  stylexRulesById.set(resolved.id, loaded.meta.stylex);
-                }
-              }
-            }
-          }
-        } catch {}
-      }
-      return { code: result.code, map: result.map };
+      // Rollup keeps `meta` with a cached module, so when a watch rebuild skips
+      // an unchanged file, `shouldTransformCachedModule` below gets its rules
+      // back. Don't load imports from here: awaiting `this.load()` inside
+      // `transform` never finishes when two StyleX files import each other in
+      // watch mode, and on a cold start of the Vite dev server it can wait on
+      // the dependency optimizer, which is waiting on this transform (#1912).
+      return { code: result.code, map: result.map, meta: { stylex: rules } };
     },
 
     // Rollup: ensure cached modules still provide their metadata
     shouldTransformCachedModule({ id, meta }) {
-      if (meta && 'stylex' in meta) {
-        stylexRulesById.set(id, meta.stylex);
+      if (!stylexOptions.runtimeInjection && Array.isArray(meta?.stylex)) {
+        if (meta.stylex.length > 0) {
+          stylexRulesById.set(id, meta.stylex);
+        } else {
+          stylexRulesById.delete(id);
+        }
       }
       return false;
     },
