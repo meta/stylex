@@ -1292,3 +1292,34 @@ mod over_the_authored_text {
     )
   }
 }
+
+/// The short name keeps the last two segments of the filename whichever
+/// separator it is written with, as the Babel plugin's name for the same file
+/// does once Babel has resolved it (`D:\repo\Comp.js` on Windows).
+#[test]
+fn the_short_path_keeps_the_last_two_segments_for_either_separator() {
+  let state = StateManager::default();
+  assert_eq!(
+    super::get_short_path("/repo/Comp.js", &state),
+    "repo/Comp.js"
+  );
+  assert_eq!(
+    super::get_package_prefix("/app/node_modules/pkg/lib/a.js").as_deref(),
+    Some("pkg")
+  );
+  #[cfg(windows)]
+  {
+    assert_eq!(
+      super::get_short_path(r"D:\repo\Comp.js", &state),
+      "repo/Comp.js"
+    );
+    assert_eq!(
+      super::get_short_path(r"D:/repo\Comp.js", &state),
+      "repo/Comp.js"
+    );
+    assert_eq!(
+      super::get_package_prefix(r"D:\app\node_modules\pkg\lib\a.js").as_deref(),
+      Some("pkg")
+    );
+  }
+}

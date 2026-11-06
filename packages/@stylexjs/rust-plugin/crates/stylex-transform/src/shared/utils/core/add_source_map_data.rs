@@ -341,7 +341,7 @@ fn get_package_prefix(absolute_path: &str) -> Option<String> {
   }
 
   absolute_path[start_pos..]
-    .split(std::path::MAIN_SEPARATOR)
+    .split(std::path::is_separator)
     .next()
     .map(String::from)
 }
@@ -380,8 +380,11 @@ fn get_short_path(relative_path: &str, state: &StateManager) -> String {
     }
   }
 
-  // Normalize slashes in the path and truncate to last 2 segments
-  let path_parts: Vec<&str> = relative_path.split(std::path::MAIN_SEPARATOR).collect();
+  // Normalize slashes in the path and truncate to last 2 segments. The Babel
+  // plugin splits a filename Babel has already resolved, which on Windows
+  // spells every separator `\`; splitting on each separator the platform
+  // accepts gives the same segments for a filename written with `/`.
+  let path_parts: Vec<&str> = relative_path.split(std::path::is_separator).collect();
 
   let path_segments = if path_parts.len() >= 2 {
     &path_parts[path_parts.len() - 2..]
