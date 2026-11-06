@@ -201,3 +201,25 @@ type Options = {
   validImports: Array<string | { from: string; as: string }>;
 };
 ```
+
+### `@stylexjs/no-raw-media-queries` rule
+
+Disallows raw media query strings within `stylex.create` calls in favor of
+shared constants defined with
+[`stylex.defineConsts`](/docs/api/javascript/defineConsts).
+
+```ts
+type Options = {
+  // Possible strings where you can import stylex from
+  //
+  // Default: ['stylex', '@stylexjs/stylex']
+  validImports: Array<string | { from: string; as: string }>;
+
+  // Raw media query strings that are still allowed,
+  // e.g. while migrating a codebase incrementally.
+  // Entries are compared as exact strings.
+  //
+  // Default: []
+  allowedMediaQueries: Array<string>;
+};
+```
