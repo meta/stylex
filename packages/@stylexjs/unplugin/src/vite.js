@@ -128,7 +128,7 @@ function attachViteHooks(plugin) {
           tag: 'script',
           attrs: {
             type: 'module',
-            src: path.join(base, '/@id/virtual:stylex:runtime'),
+            src: path.posix.join(base, '/@id/virtual:stylex:runtime'),
           },
           injectTo: 'head',
         },
@@ -136,7 +136,7 @@ function attachViteHooks(plugin) {
           tag: 'link',
           attrs: {
             rel: 'stylesheet',
-            href: path.join(base, DEV_CSS_PATH),
+            href: path.posix.join(base, DEV_CSS_PATH),
           },
           injectTo: 'head',
         },

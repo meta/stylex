@@ -466,6 +466,71 @@ describe('@stylexjs/unplugin', () => {
   // The Vite adapter's shared-store polling timer must never keep the process
   // alive. Vitest's Vite server has no `httpServer`, so the `close` cleanup is
   // skipped and a still-referenced interval would hang `vitest run` on exit.
+  describe('Vite dev URLs', () => {
+    function makeServer(base) {
+      const closeListeners = [];
+
+      return {
+        config: { base },
+        middlewares: { use: () => {} },
+        ws: { send: () => {} },
+        httpServer: {
+          once(event, fn) {
+            if (event === 'close') {
+              closeListeners.push(fn);
+            }
+          },
+        },
+        close() {
+          closeListeners.forEach((fn) => fn());
+        },
+      };
+    }
+
+    test('uses URL separators for injected runtime and CSS paths', () => {
+      const plugin = unplugin.vite({});
+      const server = makeServer('/');
+
+      plugin.configureServer(server);
+
+      const tags = plugin.transformIndexHtml();
+
+      expect(tags).toEqual([
+        {
+          tag: 'script',
+          attrs: {
+            type: 'module',
+            src: '/@id/virtual:stylex:runtime',
+          },
+          injectTo: 'head',
+        },
+        {
+          tag: 'link',
+          attrs: {
+            rel: 'stylesheet',
+            href: '/virtual:stylex.css',
+          },
+          injectTo: 'head',
+        },
+      ]);
+
+      server.close();
+    });
+
+    test('preserves a non-root Vite base when constructing URLs', () => {
+      const plugin = unplugin.vite({});
+      const server = makeServer('/my-app/');
+
+      plugin.configureServer(server);
+
+      const tags = plugin.transformIndexHtml();
+
+      expect(tags[0].attrs.src).toBe('/my-app/@id/virtual:stylex:runtime');
+      expect(tags[1].attrs.href).toBe('/my-app/virtual:stylex.css');
+
+      server.close();
+    });
+  });
   describe('Vite dev shared-store polling timer', () => {
     function makeServer(httpServer) {
       return {
