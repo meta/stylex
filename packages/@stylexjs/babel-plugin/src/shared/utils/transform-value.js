@@ -146,6 +146,7 @@ const unitlessNumberProperties = new Set([
   'fontSizeAdjust',
   'fontWeight',
   'hyphenateLimitChars',
+  'initialLetter',
   'lineClamp',
   'lineHeight',
   'maskBorderOutset',
