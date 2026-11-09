@@ -225,6 +225,13 @@ function discoverStylexPackages({
 
 const JS_LIKE_RE = /\.[cm]?[jt]sx?(\?|$)/;
 const SVELTE_LIKE_RE = /\.svelte(\?|$)/;
+const ASTRO_LIKE_RE = /\.astro(\?|$)/;
+
+function isTransformableId(id) {
+  return (
+    JS_LIKE_RE.test(id) || SVELTE_LIKE_RE.test(id) || ASTRO_LIKE_RE.test(id)
+  );
+}
 
 export const unpluginFactory = (userOptions = {}, metaOptions) => {
   // framework :: 'rollup' | 'vite' | 'rolldown' | 'farm' | 'unloader'
@@ -423,13 +430,13 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
     },
 
     transformInclude(id) {
-      return JS_LIKE_RE.test(id) || SVELTE_LIKE_RE.test(id);
+      return isTransformableId(id);
     },
 
     // Core code transform
     async transform(code, id) {
       // Only handle JS-like files; avoid parsing CSS/JSON/etc
-      if (!JS_LIKE_RE.test(id) && !SVELTE_LIKE_RE.test(id)) return null;
+      if (!isTransformableId(id)) return null;
       if (!shouldHandle(code)) return null;
 
       // Extract the pure filename by removing everything after '?' (e.g., handling Vite's '?v=' cache busting).
