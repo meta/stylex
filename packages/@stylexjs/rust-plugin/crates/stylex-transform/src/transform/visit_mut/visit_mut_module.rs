@@ -303,6 +303,11 @@ impl ModuleBindingsCollector {
     } else {
       self.innermost_scope()
     };
+    // A module-scope declaration can't shadow a module-level `stylex` binding: it either is
+    // that binding (a top-level `require`) or would be a redeclaration error.
+    if scope == MODULE_SCOPE_SPAN {
+      return;
+    }
     self.bound_names.insert(name.clone());
     self
       .local_rebinding_scopes

@@ -608,6 +608,32 @@ function F() {
   );
 });
 
+// The original plugin, configured like `transform`, as the reference output.
+function transformWithBabel(source, options = {}, parserPlugins = [], file = filename) {
+  return babel.transformSync(source, {
+    filename: file,
+    babelrc: false,
+    configFile: false,
+    highlightCode: false,
+    parserOpts: { plugins: parserPlugins },
+    plugins: [[require('@stylexjs/babel-plugin'), options]],
+  });
+}
+
+test('sx reuses a top-level CommonJS require of stylex, as Babel does', () => {
+  const native = require('../index');
+  for (const source of [
+    "const stylex=require('@stylexjs/stylex');module.exports=(s)=><div sx={s}/>;",
+    "var stylex=require('@stylexjs/stylex');module.exports=(s)=><div sx={s}/>;",
+    "const stylex=require('@stylexjs/stylex');module.exports=(stylex,s)=><div sx={s}/>;",
+  ]) {
+    const expected = transformWithBabel(source, {}, ['jsx']).code;
+    assert.equal(transform(source, {}, [], ['jsx']).code, expected, source);
+    const direct = native.transformSync(source, { filename }).code;
+    assert.equal(direct.includes('import'), expected.includes('import'), source);
+  }
+});
+
 test('Hermes parser overrides retain JSX grammar without rerunning visitors', () => {
   const result = transform('const x=<div/>;', {}, [
     ['babel-plugin-syntax-hermes-parser', { flow: 'detect' }],
