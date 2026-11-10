@@ -1082,7 +1082,20 @@ pub(crate) fn with_bounded_file_parser<T>(
         let mut parser = Parser::new_from(BoundedLexer::new(lexer));
         let result = op(&mut parser);
         parser.input_mut().iter_mut().finalize_comments();
-        errors.extend(parser.take_errors());
+        let recovered = parser.take_errors();
+        errors.extend(recovered.into_iter().filter(|e| !babel_accepts(e)));
         result
     })
+}
+
+/// Babel 7 accepts a raw `>` or `}` in JSX text, which SWC reports as a recovered error.
+fn babel_accepts(error: &Error) -> bool {
+    matches!(
+        error.kind(),
+        SyntaxError::UnexpectedTokenWithSuggestions { candidate_list }
+            if matches!(
+                candidate_list.as_slice(),
+                ["`{'>'}`", "`&gt;`"] | ["`{'}'}`", "`&rbrace;`"]
+            )
+    )
 }

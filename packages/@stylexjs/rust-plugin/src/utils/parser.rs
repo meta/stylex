@@ -288,6 +288,14 @@ mod tests {
     }
 
     #[test]
+    fn accepts_the_raw_jsx_text_babel_accepts() {
+        for source in ["<div>></div>;", "<div>a > b</div>;", "<div>}</div>;"] {
+            assert!(parse_module(source, "input.js").is_ok(), "{source}");
+        }
+        assert!(parse_module("<div>{</div>;", "input.js").is_err());
+    }
+
+    #[test]
     fn rejects_expression_trailing_tokens_including_lookahead_and_newlines() {
         for source in [
             "value extra",

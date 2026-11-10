@@ -658,6 +658,15 @@ test('defineConsts writes negative numbers as Babel does', () => {
   }
 });
 
+test('a raw > or } in JSX text compiles, as in Babel 7', () => {
+  const native = require('../index');
+  const source =
+    "import * as stylex from '@stylexjs/stylex';const s=stylex.create({a:{color:'red'}});export const C=()=><div {...stylex.props(s.a)}>a > b }</div>;";
+  const expected = transformWithBabel(source, {}, ['jsx']);
+  assert.equal(transform(source, {}, [], ['jsx']).code, expected.code);
+  assert.match(native.transformSync(source, { filename }).code, /a > b }/);
+});
+
 test('Hermes parser overrides retain JSX grammar without rerunning visitors', () => {
   const result = transform('const x=<div/>;', {}, [
     ['babel-plugin-syntax-hermes-parser', { flow: 'detect' }],
