@@ -11,70 +11,41 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const root = path.resolve(__dirname, '..');
+// `--js-only` skips the Rust tests, for runs on other Node versions.
+const jsOnly = process.argv.includes('--js-only');
+const nodeSuites = [
+  'babel_facade_current',
+  'native_api_current',
+  'host_boundary_current',
+  'babel_validation_current',
+  'creation_data_boundary_current',
+  'compiled_consumer_current',
+  'named_env_callee_site_current',
+  'host_memo_current',
+  'creation_callback_effects_current',
+  'theme_projection_current',
+  'count_refusal_current',
+  'memo_parameter_identity_current',
+  'hole_spread_diagnostics_current',
+  'benchmark_current',
+];
+const cargoTest = [
+  'cargo',
+  [
+    'test',
+    '--locked',
+    '--no-fail-fast',
+    '--workspace',
+    '--manifest-path',
+    path.join(root, 'Cargo.toml'),
+  ],
+];
 const steps = [
-  [
-    'cargo',
-    [
-      'test',
-      '--locked',
-      '--no-fail-fast',
-      '--workspace',
-      '--manifest-path',
-      path.join(root, 'Cargo.toml'),
-    ],
-  ],
-  [
+  ...(jsOnly ? [] : [cargoTest]),
+  ...nodeSuites.map((name) => [
     process.execPath,
-    ['--test', path.join(root, 'tests/babel_facade_current.cjs')],
-  ],
-  [
-    process.execPath,
-    ['--test', path.join(root, 'tests/native_api_current.cjs')],
-  ],
-  [
-    process.execPath,
-    ['--test', path.join(root, 'tests/host_boundary_current.cjs')],
-  ],
-  [
-    process.execPath,
-    ['--test', path.join(root, 'tests/babel_validation_current.cjs')],
-  ],
-  [
-    process.execPath,
-    ['--test', path.join(root, 'tests/creation_data_boundary_current.cjs')],
-  ],
-  [
-    process.execPath,
-    ['--test', path.join(root, 'tests/compiled_consumer_current.cjs')],
-  ],
-  [
-    process.execPath,
-    ['--test', path.join(root, 'tests/named_env_callee_site_current.cjs')],
-  ],
-  [
-    process.execPath,
-    ['--test', path.join(root, 'tests/host_memo_current.cjs')],
-  ],
-  [
-    process.execPath,
-    ['--test', path.join(root, 'tests/creation_callback_effects_current.cjs')],
-  ],
-  [
-    process.execPath,
-    ['--test', path.join(root, 'tests/theme_projection_current.cjs')],
-  ],
-  [
-    process.execPath,
-    ['--test', path.join(root, 'tests/count_refusal_current.cjs')],
-  ],
-  [
-    process.execPath,
-    ['--test', path.join(root, 'tests/memo_parameter_identity_current.cjs')],
-  ],
-  [
-    process.execPath,
-    ['--test', path.join(root, 'tests/benchmark_current.cjs')],
-  ],
+    ['--test', path.join(root, 'tests', `${name}.cjs`)],
+  ]),
   // `compare` (used on Windows) tolerates the suite's own platform failures.
   [
     process.execPath,
