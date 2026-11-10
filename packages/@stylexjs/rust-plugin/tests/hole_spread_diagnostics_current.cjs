@@ -2,16 +2,18 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const path = require('node:path');
 const { runEngine } = require('./support/babel_errors.cjs');
 
-const filename = '/app/Probe.js';
+// Resolved, so the expected messages carry the same path as Babel's on Windows.
+const filename = path.resolve('/app/Probe.js');
 const header = "import * as stylex from '@stylexjs/stylex';\n";
 const options = {
   classNamePrefix: 'x',
   dev: false,
   test: false,
   runtimeInjection: false,
-  unstable_moduleResolution: { type: 'commonJS', rootDir: '/app' },
+  unstable_moduleResolution: { type: 'commonJS', rootDir: path.dirname(filename) },
 };
 
 function failure(engine, prelude, value) {
