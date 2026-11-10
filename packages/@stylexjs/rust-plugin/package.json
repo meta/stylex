@@ -47,6 +47,7 @@
     "index.d.ts",
     "babel.js",
     "babel.d.ts",
+    "plugin/*.js",
     "host.js",
     "native/*.node",
     "README.md",
