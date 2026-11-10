@@ -9,7 +9,7 @@ use swc_core::{
   ecma::{
     ast::{
       BigInt, Bool, CallExpr, Expr, Ident, KeyValueProp, Lit, MemberProp, Number, ObjectLit, Prop,
-      PropName, PropOrSpread, Str, Tpl, TplElement, VarDeclarator,
+      PropName, PropOrSpread, Str, Tpl, TplElement, UnaryExpr, UnaryOp, VarDeclarator,
     },
     parser::Context,
     utils::{quote_ident, quote_str},
@@ -177,7 +177,15 @@ pub fn create_number_expr(value: f64) -> Expr {
 
 /// A numeric literal spelled the way JavaScript spells it (`0` for `-0`, `NaN`, `Infinity`),
 /// unlike [`create_number_expr`], which leaves the emitter to invent `0 / 0` and `1 / 0`.
+/// A negative number is `-` applied to its magnitude, the shape its text parses back to.
 pub fn create_js_number_expr(value: f64) -> Expr {
+  if value < 0.0 && value.is_finite() {
+    return Expr::Unary(UnaryExpr {
+      span: DUMMY_SP,
+      op: UnaryOp::Minus,
+      arg: Box::new(create_js_number_expr(-value)),
+    });
+  }
   Expr::Lit(Lit::Num(Number {
     span: DUMMY_SP,
     value,

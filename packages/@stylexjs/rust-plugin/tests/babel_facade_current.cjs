@@ -634,6 +634,30 @@ test('sx reuses a top-level CommonJS require of stylex, as Babel does', () => {
   }
 });
 
+test('defineConsts writes negative numbers as Babel does', () => {
+  const native = require('../index');
+  const tokens = path.resolve(__dirname, 'tokens.stylex.js');
+  const source =
+    "import * as stylex from '@stylexjs/stylex';export const c=stylex.defineConsts({a:-1,b:-0.5,c:-1e21,d:-(2),e:2});";
+  for (const runtimeInjection of [false, true]) {
+    const options = {
+      runtimeInjection,
+      unstable_moduleResolution: { type: 'commonJS', rootDir: __dirname },
+    };
+    const expected = transformWithBabel(source, options, [], tokens);
+    const facade = babel.transformSync(source, {
+      filename: tokens,
+      babelrc: false,
+      configFile: false,
+      plugins: [[plugin, options]],
+    });
+    assert.equal(facade.code, expected.code);
+    assert.deepEqual(facade.metadata.stylex, expected.metadata.stylex);
+    const direct = native.transformSync(source, { filename: tokens, ...options });
+    assert.deepEqual(direct.metadata.stylex, expected.metadata.stylex);
+  }
+});
+
 test('Hermes parser overrides retain JSX grammar without rerunning visitors', () => {
   const result = transform('const x=<div/>;', {}, [
     ['babel-plugin-syntax-hermes-parser', { flow: 'detect' }],
