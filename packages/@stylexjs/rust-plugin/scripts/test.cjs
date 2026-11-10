@@ -27,6 +27,7 @@ const nodeSuites = [
   'count_refusal_current',
   'memo_parameter_identity_current',
   'hole_spread_diagnostics_current',
+  'unplugin_current',
   'benchmark_current',
 ];
 const cargoTest = [

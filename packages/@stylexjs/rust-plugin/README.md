@@ -33,6 +33,8 @@ When other Babel plugins must run first, use the Babel adapter in place of
 plugins: [myPlugin, [require('@stylexjs/rust-plugin/babel'), stylexOptions]];
 ```
 
+`@stylexjs/unplugin` uses this package when configured with `compiler: 'rust'`.
+
 ## Differences from the Babel plugin
 
 - A shadowed `stylex` import or namespace parameter is left as authored.
