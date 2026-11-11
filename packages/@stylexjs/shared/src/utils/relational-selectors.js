@@ -26,12 +26,12 @@ export type RelationalSelector = $ReadOnly<{
 const RELATIONAL_SELECTORS: $ReadOnlyArray<[RelationalKind, RegExp]> = [
   [
     'anySibling',
-    /^:where\(\.([0-9a-zA-Z_-]+)([:[].*?)\s+~\s+\*,\s+:has\(~\s\.\1\2\)\)$/,
+    /^:where\(\.([0-9a-zA-Z_-]+)([:[][\s\S]*?)\s+~\s+\*,\s+:has\(~\s\.\1\2\)\)$/,
   ],
-  ['siblingBefore', /^:where\(\.([0-9a-zA-Z_-]+)([:[].*?)\s+~\s+\*\)$/],
-  ['ancestor', /^:where\(\.([0-9a-zA-Z_-]+)([:[].*?)\s+\*\)$/],
-  ['siblingAfter', /^:where\(:has\(~\s\.([0-9a-zA-Z_-]+)([:[].*?)\)\)$/],
-  ['descendant', /^:where\(:has\(\.([0-9a-zA-Z_-]+)([:[].*?)\)\)$/],
+  ['siblingBefore', /^:where\(\.([0-9a-zA-Z_-]+)([:[][\s\S]*?)\s+~\s+\*\)$/],
+  ['ancestor', /^:where\(\.([0-9a-zA-Z_-]+)([:[][\s\S]*?)\s+\*\)$/],
+  ['siblingAfter', /^:where\(:has\(~\s\.([0-9a-zA-Z_-]+)([:[][\s\S]*?)\)\)$/],
+  ['descendant', /^:where\(:has\(\.([0-9a-zA-Z_-]+)([:[][\s\S]*?)\)\)$/],
 ];
 
 /**

@@ -482,6 +482,40 @@ describe('@stylexjs/babel-plugin', () => {
       `);
     });
 
+    test.each([
+      ':is(\n.a, .b)',
+      ':is(\r.a, .b)',
+      ':is(\r\n.a, .b)',
+      ':has(\n> *)',
+      ':has(\r> *)',
+      ':has(\r\n> *)',
+    ])('narrows the subject with a multiline pseudo %j', (pseudo) => {
+      for (const kind of ['ancestor', 'siblingBefore', 'anySibling']) {
+        const { metadata } = transform(`
+          import * as stylex from '@stylexjs/stylex';
+          const styles = stylex.create({
+            root: {
+              color: {
+                default: null,
+                [stylex.when.${kind}(${JSON.stringify(pseudo)})]: 'red',
+              },
+            },
+          });
+        `);
+        const [[className, { ltr }, priority]] = metadata.stylex;
+        const marker = `.x-default-marker${pseudo}`;
+        const condition =
+          kind === 'ancestor'
+            ? `:where(${marker} .${className})`
+            : kind === 'siblingBefore'
+              ? `:where(${marker} ~ .${className})`
+              : `:where(${marker} ~ .${className}, :has(~ ${marker}))`;
+
+        expect(ltr).toBe(`.${className}.${className}${condition}{color:red}`);
+        expect(priority).toBe(3040);
+      }
+    });
+
     test('keeps a * inside the pseudo', () => {
       expect(
         rulesFor(`{
