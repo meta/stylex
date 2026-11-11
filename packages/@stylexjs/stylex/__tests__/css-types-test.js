@@ -389,7 +389,6 @@ const NO_GRAMMAR = new Set([
   'motionOffset',
   'motionPath',
   'motionRotation',
-  'overflowBlockX',
   'src',
   'start',
   'textFillColor',
@@ -425,8 +424,6 @@ const KEPT_KEYWORDS = {
   // The one case where the grammar is stricter and correct: the spec excludes
   // `hidden` from `outline-style`. Kept because removing it would break code.
   outlineStyle: ['hidden'],
-  // CSS 2.1 allowed `invert`; the current spec is `auto | <color>`.
-  outlineColor: ['invert'],
   // `-webkit-appearance` never standardised `auto`, but it is widely written.
   WebkitAppearance: ['auto'],
   // `mask-origin` narrowed from `<geometry-box>` to `<coord-box>`, dropping
@@ -482,7 +479,6 @@ const NOT_TYPED = new Set([
   // awaiting exactly this, and `overflowInline` is the logical counterpart of
   // `overflowBlock`, which is typed.
   'fieldSizing',
-  'overflowInline',
   'textWrapMode',
   'textWrapStyle',
   'transitionBehavior',
@@ -540,19 +536,6 @@ const INCOMPLETE_UNIONS = {
   backgroundClip: ['border-area'],
   breakAfter: ['all', 'always'],
   breakBefore: ['all', 'always'],
-  display: [
-    '-moz-box',
-    '-moz-inline-box',
-    '-moz-inline-stack',
-    '-ms-grid',
-    '-ms-inline-flexbox',
-    '-ms-inline-grid',
-    '-webkit-flex',
-    '-webkit-inline-box',
-    '-webkit-inline-flex',
-    'flow',
-    'table-caption',
-  ],
   fontSizeAdjust: [
     'cap-height',
     'ch-width',
@@ -566,7 +549,6 @@ const INCOMPLETE_UNIONS = {
   justifySelf: ['anchor-center'],
   lineBreak: ['anywhere'],
   marginTrim: ['all', 'in-flow'],
-  mixBlendMode: ['plus-darker', 'plus-lighter'],
   overflow: [
     '-moz-hidden-unscrollable',
     '-moz-scrollbars-horizontal',
@@ -575,6 +557,13 @@ const INCOMPLETE_UNIONS = {
     'overlay',
   ],
   overflowBlock: [
+    '-moz-hidden-unscrollable',
+    '-moz-scrollbars-horizontal',
+    '-moz-scrollbars-none',
+    '-moz-scrollbars-vertical',
+    'overlay',
+  ],
+  overflowInline: [
     '-moz-hidden-unscrollable',
     '-moz-scrollbars-horizontal',
     '-moz-scrollbars-none',

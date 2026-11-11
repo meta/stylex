@@ -296,7 +296,18 @@ type display =
   | 'ruby-text'
   | 'ruby-base-container'
   | 'ruby-text-container'
-  | 'contents';
+  | 'contents'
+  | 'flow'
+  | 'table-caption'
+  | '-moz-box'
+  | '-moz-inline-box'
+  | '-moz-inline-stack'
+  | '-ms-grid'
+  | '-ms-inline-flexbox'
+  | '-ms-inline-grid'
+  | '-webkit-flex'
+  | '-webkit-inline-box'
+  | '-webkit-inline-flex';
 type displayInside = 'auto' | 'block' | 'table' | 'flex' | 'grid' | 'ruby';
 type displayList = 'none' | 'list-item';
 type displayOutside =
@@ -546,7 +557,7 @@ type minWidth =
   | 'min-content'
   | 'fit-content'
   | 'fill-available';
-type mixBlendMode = blendMode;
+type mixBlendMode = blendMode | 'plus-darker' | 'plus-lighter';
 type motion = motionPath | motionOffset | motionRotation;
 type motionOffset = lengthPercentage;
 type motionPath = string | geometryBox | 'none';
@@ -562,7 +573,7 @@ type opacity = number | string;
 type order = number | string;
 type orphans = number | string;
 type outline = string;
-type outlineColor = color | 'invert';
+type outlineColor = color;
 type outlineOffset = number | string;
 type outlineStyle = 'auto' | brStyle;
 type outlineWidth = borderWidth;
@@ -1395,7 +1406,7 @@ export type CSSProperties = Readonly<{
 
   overflow?: all | overflow,
   overflowBlock?: all | overflowY,
-  overflowBlockX?: all | overflowX,
+  overflowInline?: all | overflowX,
   overflowX?: all | overflowX,
   overflowY?: all | overflowY,
 
