@@ -8255,7 +8255,7 @@ css-select@^5.1.0:
     domutils "^3.0.1"
     nth-check "^2.0.1"
 
-css-tree@3.2.1:
+css-tree@3.2.1, css-tree@^3.2.1:
   version "3.2.1"
   resolved "https://registry.yarnpkg.com/css-tree/-/css-tree-3.2.1.tgz#86cac7011561272b30e6b1e042ba6ce047aa7518"
   integrity sha512-X7sjQzceUhu1u7Y/ylrRZFU2FS6LRiFVp6rKLPg23y3x3c3DOKAwuXGDp+PAGjh6CSnCjYeAul8pcT8bAl+lSA==
@@ -18068,6 +18068,11 @@ web-ext@10.5.0:
     watchpack "2.5.2"
     yargs "17.7.2"
     zip-dir "2.0.0"
+
+web-features@3.37.0:
+  version "3.37.0"
+  resolved "https://registry.npmjs.org/web-features/-/web-features-3.37.0.tgz#cd3348a27e4b941849aeb0fe875e336f78d03ce8"
+  integrity sha512-47x5zchtpsvvH/EEQ0h3d3E9kZyFxFyk6LkmYHXDZjLF0RAa3OV2s8dMRqphp/PTxxrd/iZwz37dte6xWgV7mQ==
 
 webdriver-bidi-protocol@0.2.11:
   version "0.2.11"

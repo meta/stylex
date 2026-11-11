@@ -43,6 +43,7 @@
     "@babel/cli": "^7.26.4",
     "@babel/core": "^7.26.8",
     "@babel/eslint-parser": "^7.26.8",
+    "@babel/parser": "^7.29.0",
     "@babel/plugin-syntax-flow": "^7.26.0",
     "@babel/preset-env": "^7.26.8",
     "@babel/preset-flow": "^7.25.9",
@@ -57,8 +58,10 @@
     "@rollup/plugin-replace": "^6.0.1",
     "babel-plugin-syntax-hermes-parser": "^0.36.1",
     "cross-env": "^10.1.0",
+    "css-tree": "^3.2.1",
     "rollup": "^4.59.0",
-    "scripts": "0.19.1"
+    "scripts": "0.19.1",
+    "web-features": "3.37.0"
   },
   "files": [
     "lib/*"
