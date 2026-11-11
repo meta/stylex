@@ -540,17 +540,6 @@ const INCOMPLETE_UNIONS = {
   backgroundClip: ['border-area'],
   breakAfter: ['all', 'always'],
   breakBefore: ['all', 'always'],
-  // StyleX has `-webkit-grab` and `-webkit-grabbing` but not the `-moz-`
-  // equivalents or the zoom variants. `hand` is the pre-standard IE spelling.
-  cursor: [
-    '-moz-grab',
-    '-moz-grabbing',
-    '-moz-zoom-in',
-    '-moz-zoom-out',
-    '-webkit-zoom-in',
-    '-webkit-zoom-out',
-    'hand',
-  ],
   display: [
     '-moz-box',
     '-moz-inline-box',
@@ -684,9 +673,6 @@ const INCOMPLETE_UNIONS = {
  * which covers the common case but not `calc()`, `var()`, or any unit.
  */
 const CLOSED_DESPITE_GRAMMAR = new Set([
-  // `[ <url> [ <x> <y> ]? , ]*` -- custom cursor images cannot be written.
-  // https://github.com/facebook/stylex/issues/1463
-  'cursor',
   // `[ light | dark | <custom-ident> ]+` -- custom scheme names.
   'colorScheme',
   // `oblique <angle>` -- `oblique 14deg` cannot be written.

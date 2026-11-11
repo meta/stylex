@@ -48,7 +48,15 @@ type CSSCursor =
   | 'grab'
   | 'grabbing'
   | '-webkit-grab'
-  | '-webkit-grabbing';
+  | '-webkit-grabbing'
+  | 'hand'
+  | '-moz-grab'
+  | '-moz-grabbing'
+  | '-moz-zoom-in'
+  | '-moz-zoom-out'
+  | '-webkit-zoom-in'
+  | '-webkit-zoom-out'
+  | string;
 
 type alignContent =
   | 'center'
