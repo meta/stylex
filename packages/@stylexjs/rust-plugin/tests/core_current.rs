@@ -973,6 +973,35 @@ fn width_order_is_total_and_context_aware() {
 }
 
 #[test]
+fn malformed_media_preludes_sort_like_babel_without_panicking() {
+    let preludes = [
+        "@media (min-width: 100px) and and (max-width: 200px)",
+        "@media (min-width: 300px) or or (max-width: 400px)",
+        "@media (min-width: 500px),, (max-width: 600px)",
+        "@media (min-width: 700px)",
+    ];
+    let rules = preludes
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            RuleEntry(
+                format!("x{i}"),
+                RuleFields {
+                    ltr: format!("{p}{{.x{i}{{width:{}px}}}}", 100 - i),
+                    ..Default::default()
+                },
+                4000.0,
+            )
+        })
+        .collect::<Vec<_>>();
+    let expected = oracle(&[json!({"op":"process","rules":rules,"options":{}})]).remove(0);
+    assert_eq!(
+        process_stylex_rules_checked(&rules, None).unwrap(),
+        expected["value"].as_str().unwrap()
+    );
+}
+
+#[test]
 fn constant_cycles_return_errors_not_success() {
     let rules = json!([["a",{"ltr":"","constKey":"a","constVal":"var(--b)"},0],["b",{"ltr":"","constKey":"b","constVal":"var(--a)"},0]]);
     let expected = oracle(&[json!({"op":"process","rules":rules,"options":{}})]).remove(0);

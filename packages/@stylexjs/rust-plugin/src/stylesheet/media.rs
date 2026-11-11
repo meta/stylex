@@ -72,7 +72,8 @@ fn split_top<'a>(input: &'a str, separator: &str) -> Vec<&'a str> {
         } else if c == ')' {
             depth -= 1;
         }
-        if depth == 0 && input[i..].starts_with(separator) {
+        // A match that overlaps the previous separator (`a and and b`) is not a new split.
+        if depth == 0 && i >= start && input[i..].starts_with(separator) {
             out.push(input[start..i].trim());
             start = i + separator.len();
         }
