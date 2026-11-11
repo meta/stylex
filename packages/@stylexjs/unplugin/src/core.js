@@ -400,6 +400,21 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
     } catch {}
   }
 
+  // Drop a module's previously extracted rules from both in-memory stores
+  // (and disk, when persistence is on). Used when Babel reports no StyleX
+  // output *and* when the file no longer imports StyleX at all — the latter
+  // used to early-return from `transform` and leave stale CSS behind.
+  // https://github.com/facebook/stylex/issues/2015
+  async function clearCollectedRulesForId(id) {
+    const shared = sharedStore;
+    const hadRules = stylexRulesById.delete(id);
+    const hadSharedRules = shared?.rulesById.delete(id);
+    if (shared && (hadRules || hadSharedRules)) {
+      shared.version++;
+    }
+    await persistRulesToDisk(id, []);
+  }
+
   // No rollup-style virtual module normalize for webpack/rspack stability
 
   const plugin = {
@@ -431,7 +446,10 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
     async transform(code, id) {
       // Only handle JS-like files; avoid parsing CSS/JSON/etc
       if (!JS_LIKE_RE.test(id) && !SVELTE_LIKE_RE.test(id)) return null;
-      if (!shouldHandle(code)) return null;
+      if (!shouldHandle(code)) {
+        await clearCollectedRulesForId(id);
+        return null;
+      }
 
       // Extract the pure filename by removing everything after '?' (e.g., handling Vite's '?v=' cache busting).
       const dir = path.dirname(id);
@@ -454,12 +472,7 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
           }
           await persistRulesToDisk(id, metadata.stylex);
         } else {
-          stylexRulesById.delete(id);
-          if (shared?.rulesById.has(id)) {
-            shared.rulesById.delete(id);
-            shared.version++;
-          }
-          await persistRulesToDisk(id, []);
+          await clearCollectedRulesForId(id);
         }
       }
 

@@ -65,6 +65,25 @@ describe('production CSS isolation', () => {
     },
   );
 
+  test.each(['vite', 'rollup'])(
+    '%s keeps interleaved application builds isolated',
+    async (framework) => {
+      const first = unplugin[framework]({ dev: false });
+      const second = unplugin[framework]({ dev: false });
+      first.configResolved?.({ command: 'build' });
+      second.configResolved?.({ command: 'build' });
+      first.buildStart();
+      second.buildStart();
+      await first.transform(FIRST_STYLE, '/virtual/first.js');
+      await second.transform(SECOND_STYLE, '/virtual/second.js');
+
+      expect(first.__stylexCollectCss()).toContain('271828');
+      expect(first.__stylexCollectCss()).not.toContain('314159');
+      expect(second.__stylexCollectCss()).toContain('314159');
+      expect(second.__stylexCollectCss()).not.toContain('271828');
+    },
+  );
+
   test('Vite development client and SSR instances share their CSS', async () => {
     const client = unplugin.vite({ dev: true });
     client.configResolved({ command: 'serve' });
@@ -185,4 +204,86 @@ describe('production CSS isolation', () => {
     expect(css).toContain('314159');
     expect(css).not.toContain('271828');
   });
+
+  test.each([
+    'export const styles = null;',
+    "import * as stylex from '@stylexjs/stylex'; export const styles = null;",
+  ])(
+    'production cleanup preserves active development rules: %s',
+    async (code) => {
+      const development = unplugin.vite({ dev: true });
+      development.configResolved({ command: 'serve' });
+      development.buildStart();
+      await development.transform(FIRST_STYLE, '/virtual/shared.js');
+      const observer = unplugin.vite({ dev: true });
+      observer.configResolved({ command: 'serve' });
+      observer.buildStart();
+      expect(observer.__stylexCollectCss()).toContain('271828');
+
+      const production = unplugin.vite({ dev: false });
+      production.configResolved({ command: 'build' });
+      production.buildStart();
+      await production.transform(SECOND_STYLE, '/virtual/shared.js');
+      await production.transform(code, '/virtual/shared.js');
+
+      expect(production.__stylexCollectCss()).toBe('');
+      expect(development.__stylexCollectCss()).toContain('271828');
+      expect(observer.__stylexCollectCss()).toContain('271828');
+    },
+  );
+
+  test.each([
+    'export const styles = null;',
+    "import * as stylex from '@stylexjs/stylex'; export const styles = null;",
+  ])(
+    'development cleanup clears rules across Vite instances: %s',
+    async (code) => {
+      const client = unplugin.vite({ dev: true });
+      client.configResolved({ command: 'serve' });
+      client.buildStart();
+      await client.transform(FIRST_STYLE, '/virtual/shared.js');
+
+      const server = unplugin.vite({ dev: true });
+      server.configResolved({ command: 'serve' });
+      server.buildStart();
+      expect(server.__stylexCollectCss()).toContain('271828');
+      const shared = server.__stylexGetSharedStore();
+      const version = shared.version;
+      await client.transform(code, '/virtual/shared.js');
+
+      expect(client.__stylexCollectCss()).toBe('');
+      expect(server.__stylexCollectCss()).toBe('');
+      expect(shared.version).toBeGreaterThan(version);
+    },
+  );
+
+  test.each([
+    'webpack',
+    'rspack',
+    'esbuild',
+    'farm',
+    'unloader',
+    'rolldown',
+    'bun',
+  ])(
+    '%s core stores isolate builds and clear removed imports',
+    async (framework) => {
+      const first = unplugin.raw({ dev: false }, { framework });
+      first.buildStart();
+      await first.transform(FIRST_STYLE, '/virtual/first.js');
+
+      const second = unplugin.raw({ dev: false }, { framework });
+      second.buildStart();
+      await second.transform(SECOND_STYLE, '/virtual/second.js');
+      expect(second.__stylexCollectCss()).toContain('314159');
+      expect(second.__stylexCollectCss()).not.toContain('271828');
+
+      await second.transform(
+        'export const styles = null;',
+        '/virtual/second.js',
+      );
+      expect(second.__stylexCollectCss()).toBe('');
+      expect(first.__stylexCollectCss()).toContain('271828');
+    },
+  );
 });
