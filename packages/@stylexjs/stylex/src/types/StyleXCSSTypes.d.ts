@@ -116,7 +116,7 @@ type alignSelf =
   | 'safe center'
   | 'unsafe center'
   | all;
-type all = null | 'initial' | 'inherit' | 'unset';
+type all = null | 'initial' | 'inherit' | 'unset' | 'revert' | 'revert-layer';
 type animationDelay = time;
 type animationDirection = singleAnimationDirection;
 type animationDuration = time;
@@ -973,13 +973,13 @@ export type CSSProperties = Readonly<{
   WebkitTextStrokeWidth?: all | number | (string & {});
   WebkitTextStrokeColor?: all | color;
   WebkitBackgroundClip?:
-    | null
+    | all
     | 'border-box'
     | 'padding-box'
     | 'content-box'
     | 'text';
   WebkitBoxOrient?:
-    | null
+    | all
     | 'vertical'
     | 'horizontal'
     | 'inline-axis'
@@ -1129,7 +1129,7 @@ export type CSSProperties = Readonly<{
   clipRule?: all | clipRule;
   color?: all | color;
   colorScheme?:
-    | null
+    | all
     | 'normal'
     | 'light'
     | 'dark'
@@ -1275,7 +1275,7 @@ export type CSSProperties = Readonly<{
   marginRight?: all | marginRight;
   marginTop?: all | marginTop;
   marginTrim?:
-    | null
+    | all
     | 'none'
     | 'block'
     | 'block-start'
@@ -1364,7 +1364,7 @@ export type CSSProperties = Readonly<{
   pageBreakBefore?: all | pageBreakBefore;
   pageBreakInside?: all | pageBreakInside;
   paintOrder?:
-    | null
+    | all
     | 'normal'
     | 'stroke'
     | 'fill'
@@ -1466,7 +1466,7 @@ export type CSSProperties = Readonly<{
   textEmphasisStyle?: all | textEmphasisStyle;
   textIndent?: all | textIndent;
   textJustify?:
-    | null
+    | all
     | 'none'
     | 'auto'
     | 'inter-word'

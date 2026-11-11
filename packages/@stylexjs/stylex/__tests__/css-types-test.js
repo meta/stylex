@@ -34,23 +34,12 @@ const FLOW_FILE = path.join(TYPES_DIR, 'StyleXCSSTypes.js');
 const TS_FILE = path.join(TYPES_DIR, 'StyleXCSSTypes.d.ts');
 
 /** CSS-wide keywords, accepted by every property and never in a grammar. */
-const GLOBAL_KEYWORDS = new Set(['inherit', 'initial', 'unset']);
-
-/**
- * Properties that do not accept the CSS-wide keywords at all.
- *
- * Every property is meant to compose the `all` alias. These six are instead
- * written `null | 'a' | 'b'`, which drops `inherit`, `initial` and `unset`.
- * They are also the only properties in the file with no named type alias --
- * they inline their union at the property, which is what hid the slip.
- */
-const NO_GLOBAL_KEYWORDS = new Set([
-  'colorScheme',
-  'marginTrim',
-  'paintOrder',
-  'textJustify',
-  'WebkitBackgroundClip',
-  'WebkitBoxOrient',
+const GLOBAL_KEYWORDS = new Set([
+  'inherit',
+  'initial',
+  'unset',
+  'revert',
+  'revert-layer',
 ]);
 
 /* ------------------------------------------------------------------ *
@@ -739,13 +728,11 @@ describe('CSSProperties', () => {
     // `all | 'a' | 'b'` silently rejects them.
     const problems = [];
     for (const [name, { literals }] of Object.entries(readTypes(FLOW_FILE))) {
-      if (NO_GLOBAL_KEYWORDS.has(name)) continue;
       const missing = [...GLOBAL_KEYWORDS].filter((k) => !literals.includes(k));
       if (missing.length) {
         problems.push(
           `${name}: does not accept ${missing.map((k) => `'${k}'`).join(', ')}. ` +
-            'Either compose the `all` alias, or add it to NO_GLOBAL_KEYWORDS ' +
-            'with a reason.',
+            'Every property should compose the `all` alias.',
         );
       }
     }
