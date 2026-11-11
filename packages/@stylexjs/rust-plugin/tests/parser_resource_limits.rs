@@ -357,6 +357,32 @@ fn mixed_recursion_and_expression_resource_limits_are_bounded() {
 }
 
 #[test]
+fn operator_chains_try_blocks_and_switches_keep_their_budgets() {
+    on_driver_stack(|| {
+        for source in [
+            // Conditional and assignment chains use the chain budget.
+            format!("export const x={}c;", "a?b:".repeat(1500)),
+            format!("{}=1;", vec!["a"; 1500].join("=")),
+            // A try block counts once, like any other block.
+            format!("{}{}", "try{}catch(e){".repeat(6000), "}".repeat(6000)),
+        ] {
+            assert!(parse(&source, "chains.js", false).is_ok());
+        }
+        assert_resource_rejected(format!(
+            "export const x={}c;",
+            "a?b:".repeat(MAX_SYNTAX_COMPLEXITY + 100)
+        ));
+        // A switch counts twice: the statement and its body.
+        let switches = MAX_STATEMENT_DEPTH / 2 + 100;
+        assert_resource_rejected(format!(
+            "{}{}",
+            "switch(a){case 1:".repeat(switches),
+            "}".repeat(switches)
+        ));
+    });
+}
+
+#[test]
 fn shallow_statement_lists_and_keyword_properties_do_not_accumulate() {
     on_driver_stack(|| {
         for source in [

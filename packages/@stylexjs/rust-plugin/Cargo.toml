@@ -67,9 +67,6 @@ napi-build = { version = "2.3.0", optional = true }
 [dev-dependencies]
 pretty_assertions = "1.4.1"
 
-[patch.crates-io]
-swc_ecma_parser = { path = "vendor/swc_ecma_parser" }
-
 # The Node addon is built as a cdylib-only final artifact (scripts/build.cjs:
 # `cargo rustc --crate-type cdylib`), which is what lets fat LTO run: rustc
 # performs LTO only for a final artifact, and the package's `rlib` crate type
@@ -144,16 +141,16 @@ smallvec = { version = "1.15.1" }
 # reason: a recursive walk over a nested expression must not be bounded by the
 # thread's stack. Named here so the evaluator can depend on it directly.
 stacker = "0.1.24"
-swc_compiler_base = { version = "65.0.0" }
+swc_compiler_base = { version = "67.0.0" }
 swc_config = { version = "6.0.0" }
-swc_core = { version = "81.0.0" }
-swc_ecma_parser = { version = "45.1.1" }
+swc_core = { version = "84.0.3" }
+swc_ecma_parser = { version = "47.0.1" }
 url = "2.5.8"
 # The Node addon's global allocator (root `node` feature): mimalloc where SWC's
 # own Node bindings use it, the system allocator elsewhere.
 swc_malloc = { version = "1.2.5" }
 swc_sourcemap = { version = "10.0.2" }
-testing = "27.0.0"
+testing = "28.0.1"
 thiserror = "2.0.18"
 # The structural key's hasher. 128-bit output in one pass, where two salted
 # `DefaultHasher` states cost two -- see `stylex-utils/src/hash.rs`.

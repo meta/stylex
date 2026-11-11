@@ -35,7 +35,7 @@ pub(crate) struct ParsedModule {
     pub module: Module,
 }
 
-fn parse_file<T>(
+fn parse_file<T: parser_limits::Parsed>(
     file: &SourceFile,
     comments: &SingleThreadedComments,
     syntax: Syntax,

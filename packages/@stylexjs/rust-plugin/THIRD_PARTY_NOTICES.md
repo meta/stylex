@@ -12,8 +12,6 @@ text came from.
   the MIT license: see `crates/LICENSE` (license text and copyright),
   `crates/NOTICE.md` (attribution) and `crates/PROVENANCE.md`
   (exact source and every local change).
-- `vendor/swc_ecma_parser` is the published `swc_ecma_parser` 45.1.6 crate with
-  the patches described in `vendor/README.md` (Apache-2.0).
 - On Windows, macOS and 64-bit Linux (GNU) the addon uses mimalloc as its memory
   allocator through `swc_malloc`; `libmimalloc-sys` compiles Microsoft's mimalloc
   C sources (MIT). On 32-bit ARM Linux (GNU), `swc_malloc` selects jemalloc
@@ -52,8 +50,8 @@ licenses.
 | cbor4ii | 1.2.2 | MIT | crates.io |
 | cfg-if | 1.0.5 | MIT OR Apache-2.0 | crates.io |
 | colored | 3.1.1 | MPL-2.0 | crates.io |
-| compact_str | 0.10.0 | MIT | crates.io |
 | compact_str | 0.7.1 | MIT | crates.io |
+| compact_str | 0.10.0 | MIT | crates.io |
 | concurrent_lru | 0.2.0 | MIT | crates.io |
 | convert_case | 0.10.0 | MIT | crates.io |
 | convert_case | 0.12.0 | MIT | crates.io |
@@ -109,7 +107,7 @@ licenses.
 | hashbrown | 0.17.1 | MIT OR Apache-2.0 | crates.io |
 | heck | 0.5.0 | MIT OR Apache-2.0 | crates.io |
 | hex | 0.4.3 | MIT OR Apache-2.0 | crates.io |
-| hstr | 4.0.0 | Apache-2.0 | crates.io |
+| hstr | 4.0.3 | Apache-2.0 | crates.io |
 | humantime | 2.1.0 | MIT/Apache-2.0 | crates.io |
 | icu_collator | 2.3.1 | Unicode-3.0 | crates.io |
 | icu_collator_data | 2.3.0 | Unicode-3.0 | crates.io |
@@ -196,7 +194,7 @@ licenses.
 | regex-syntax | 0.8.11 | MIT OR Apache-2.0 | crates.io |
 | regress | 0.11.1 | MIT OR Apache-2.0 | crates.io |
 | regress | 0.12.0 | MIT OR Apache-2.0 | crates.io |
-| relative-path | 1.9.3 | MIT OR Apache-2.0 | crates.io |
+| relative-path | 2.0.3 | MIT OR Apache-2.0 | crates.io |
 | rustc-hash | 2.1.3 | Apache-2.0 OR MIT | crates.io |
 | rustix | 1.1.4 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
 | ryu | 1.0.23 | Apache-2.0 OR BSL-1.0 | crates.io |
@@ -213,7 +211,6 @@ licenses.
 | sharded-slab | 0.1.7 | MIT | crates.io |
 | simd-json | 0.18.1 | Apache-2.0 OR MIT | crates.io |
 | simdutf8 | 0.1.5 | MIT OR Apache-2.0 | crates.io |
-| siphasher | 0.3.11 | MIT/Apache-2.0 | crates.io |
 | siphasher | 1.0.4 | MIT OR Apache-2.0 | crates.io |
 | slab | 0.4.12 | MIT | crates.io |
 | smallvec | 1.16.4 | MIT OR Apache-2.0 | crates.io |
@@ -241,32 +238,32 @@ licenses.
 | stylex_transform | 0.19.2 | MIT | vendored (crates/) |
 | stylex_types | 0.19.2 | MIT | vendored (crates/) |
 | stylex_utils | 0.19.2 | MIT | vendored (crates/) |
-| swc_allocator | 5.0.0 | Apache-2.0 | crates.io |
-| swc_atoms | 10.0.0 | Apache-2.0 | crates.io |
-| swc_common | 26.0.0 | Apache-2.0 | crates.io |
-| swc_compiler_base | 65.0.0 | Apache-2.0 | crates.io |
-| swc_config | 6.0.0 | Apache-2.0 | crates.io |
-| swc_core | 81.0.2 | Apache-2.0 | crates.io |
-| swc_ecma_ast | 29.0.2 | Apache-2.0 | crates.io |
-| swc_ecma_codegen | 32.0.3 | Apache-2.0 | crates.io |
-| swc_ecma_hooks | 1.0.0 | Apache-2.0 | crates.io |
-| swc_ecma_minifier | 62.0.1 | Apache-2.0 | crates.io |
-| swc_ecma_parser | 45.1.6 | Apache-2.0 | vendored (vendor/) |
-| swc_ecma_testing | 27.0.0 | Apache-2.0 | crates.io |
-| swc_ecma_transforms_base | 49.0.1 | Apache-2.0 | crates.io |
-| swc_ecma_transforms_optimization | 52.0.2 | Apache-2.0 | crates.io |
-| swc_ecma_transforms_react | 55.0.1 | Apache-2.0 | crates.io |
-| swc_ecma_transforms_testing | 53.0.0 | Apache-2.0 | crates.io |
-| swc_ecma_transforms_typescript | 55.0.4 | Apache-2.0 | crates.io |
-| swc_ecma_utils | 35.0.2 | Apache-2.0 | crates.io |
-| swc_ecma_visit | 29.0.0 | Apache-2.0 | crates.io |
-| swc_error_reporters | 28.0.0 | Apache-2.0 | crates.io |
+| swc_allocator | 5.0.1 | Apache-2.0 | crates.io |
+| swc_atoms | 10.0.1 | Apache-2.0 | crates.io |
+| swc_common | 27.0.0 | Apache-2.0 | crates.io |
+| swc_compiler_base | 67.0.0 | Apache-2.0 | crates.io |
+| swc_config | 6.0.1 | Apache-2.0 | crates.io |
+| swc_core | 84.0.3 | Apache-2.0 | crates.io |
+| swc_ecma_ast | 30.0.2 | Apache-2.0 | crates.io |
+| swc_ecma_codegen | 33.0.0 | Apache-2.0 | crates.io |
+| swc_ecma_hooks | 2.0.0 | Apache-2.0 | crates.io |
+| swc_ecma_minifier | 64.0.4 | Apache-2.0 | crates.io |
+| swc_ecma_parser | 47.0.1 | Apache-2.0 | crates.io |
+| swc_ecma_testing | 28.0.0 | Apache-2.0 | crates.io |
+| swc_ecma_transforms_base | 51.0.1 | Apache-2.0 | crates.io |
+| swc_ecma_transforms_optimization | 54.0.1 | Apache-2.0 | crates.io |
+| swc_ecma_transforms_react | 57.0.2 | Apache-2.0 | crates.io |
+| swc_ecma_transforms_testing | 55.1.0 | Apache-2.0 | crates.io |
+| swc_ecma_transforms_typescript | 57.0.3 | Apache-2.0 | crates.io |
+| swc_ecma_utils | 36.1.0 | Apache-2.0 | crates.io |
+| swc_ecma_visit | 30.0.0 | Apache-2.0 | crates.io |
+| swc_error_reporters | 29.0.0 | Apache-2.0 | crates.io |
 | swc_macros_common | 1.0.1 | Apache-2.0 | crates.io |
 | swc_malloc | 1.2.5 | Apache-2.0 | crates.io |
 | swc_plugin | 1.0.1 | Apache-2.0 | crates.io |
-| swc_plugin_proxy | 30.0.0 | Apache-2.0 | crates.io |
+| swc_plugin_proxy | 31.0.0 | Apache-2.0 | crates.io |
 | swc_sourcemap | 10.0.3 | BSD-3-Clause | crates.io |
-| swc_transform_common | 20.0.0 | Apache-2.0 | crates.io |
+| swc_transform_common | 21.0.0 | Apache-2.0 | crates.io |
 | swc_visit | 2.0.2 | Apache-2.0 | crates.io |
 | syn | 2.0.119 | MIT OR Apache-2.0 | crates.io |
 | syn | 3.0.9 | MIT OR Apache-2.0 | crates.io |
@@ -274,7 +271,7 @@ licenses.
 | tap | 1.0.1 | MIT | crates.io |
 | tempfile | 3.21.0 | MIT OR Apache-2.0 | crates.io |
 | termcolor | 1.4.1 | Unlicense OR MIT | crates.io |
-| testing | 27.0.0 | Apache-2.0 | crates.io |
+| testing | 28.0.1 | Apache-2.0 | crates.io |
 | textwrap | 0.16.2 | MIT | crates.io |
 | thiserror | 1.0.69 | MIT OR Apache-2.0 | crates.io |
 | thiserror | 2.0.21 | MIT OR Apache-2.0 | crates.io |
@@ -286,8 +283,8 @@ licenses.
 | tracing-subscriber | 0.3.20 | MIT | crates.io |
 | triomphe | 0.1.17 | MIT OR Apache-2.0 | crates.io |
 | typenum | 1.19.0 | MIT OR Apache-2.0 | crates.io |
-| unicode-id-start | 1.5.0 | AND Unicode-3.0 | crates.io |
-| unicode-ident | 1.0.27 | AND Unicode-3.0 | crates.io |
+| unicode-id-start | 1.5.0 | (MIT OR Apache-2.0) AND Unicode-3.0 | crates.io |
+| unicode-ident | 1.0.27 | (MIT OR Apache-2.0) AND Unicode-3.0 | crates.io |
 | unicode-linebreak | 0.1.5 | Apache-2.0 | crates.io |
 | unicode-segmentation | 1.13.3 | MIT OR Apache-2.0 | crates.io |
 | unicode-width | 0.1.14 | MIT OR Apache-2.0 | crates.io |

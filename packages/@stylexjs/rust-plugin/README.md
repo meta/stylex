@@ -59,5 +59,4 @@ npm run test:parity --workspace @stylexjs/rust-plugin -- babel  # reference run 
 npm run bench --workspace @stylexjs/rust-plugin          # whole-file timings against Babel
 ```
 
-- `vendor/README.md`: the patched `swc_ecma_parser`.
 - `THIRD_PARTY_NOTICES.md`: licenses of the native addon's dependencies.

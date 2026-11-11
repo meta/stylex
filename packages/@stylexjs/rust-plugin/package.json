@@ -55,7 +55,6 @@
     "crates/LICENSE",
     "crates/NOTICE.md",
     "crates/PROVENANCE.md",
-    "vendor/README.md",
     "RUST_DEPENDENCY_LICENSES.md",
     "LICENSE_PROVENANCE.json"
   ],

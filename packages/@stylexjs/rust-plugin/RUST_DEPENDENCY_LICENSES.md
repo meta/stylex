@@ -104,7 +104,7 @@ or the Apache-2.0 appendix template appear once; each package's copyright lines 
 | hermit-abi 0.4.0 | MIT OR Apache-2.0 | fe2a9817, 59d8f0ba |
 | hermit-abi 0.5.3 | MIT OR Apache-2.0 | fe2a9817, 59d8f0ba |
 | hex 0.4.3 | MIT OR Apache-2.0 | fe2a9817, 59d8f0ba |
-| hstr 4.0.0 | Apache-2.0 | 59d8f0ba |
+| hstr 4.0.3 | Apache-2.0 | 59d8f0ba |
 | humantime 2.1.0 | MIT/Apache-2.0 | 59d8f0ba, fa58f7ee |
 | icu_collator 2.3.1 | Unicode-3.0 | 4bea89d5 |
 | icu_collator_data 2.3.0 | Unicode-3.0 | 4bea89d5 |
@@ -201,7 +201,7 @@ or the Apache-2.0 appendix template appear once; each package's copyright lines 
 | regex-syntax 0.8.11 | MIT OR Apache-2.0 | fe2a9817, 59d8f0ba, 71f2cc72 |
 | regress 0.11.1 | MIT OR Apache-2.0 | fe2a9817, 59d8f0ba |
 | regress 0.12.0 | MIT OR Apache-2.0 | fe2a9817, 59d8f0ba |
-| relative-path 1.9.3 | MIT OR Apache-2.0 | 59d8f0ba |
+| relative-path 2.0.3 | MIT OR Apache-2.0 | fe2a9817, 59d8f0ba |
 | rustc-hash 2.1.3 | Apache-2.0 OR MIT | fe2a9817, 59d8f0ba |
 | rustix 1.1.4 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | fe2a9817, 59d8f0ba, 68440691, 175bdea6 |
 | rustversion 1.0.23 | MIT OR Apache-2.0 | fe2a9817, 59d8f0ba |
@@ -222,7 +222,6 @@ or the Apache-2.0 appendix template appear once; each package's copyright lines 
 | simd-adler32 0.3.8 | MIT | fe2a9817 |
 | simd-json 0.18.1 | Apache-2.0 OR MIT | fe2a9817, 59d8f0ba |
 | simdutf8 0.1.5 | MIT OR Apache-2.0 | fe2a9817, 59d8f0ba |
-| siphasher 0.3.11 | MIT/Apache-2.0 | e1c73bd2 |
 | siphasher 1.0.4 | MIT OR Apache-2.0 | fe2a9817, 59d8f0ba, e1c73bd2 |
 | slab 0.4.12 | MIT | fe2a9817 |
 | smallvec 1.16.4 | MIT OR Apache-2.0 | fe2a9817, 59d8f0ba |
@@ -252,36 +251,36 @@ or the Apache-2.0 appendix template appear once; each package's copyright lines 
 | stylex_transform 0.19.2 | MIT | fe2a9817, d89f3ef2 |
 | stylex_types 0.19.2 | MIT | fe2a9817, d89f3ef2 |
 | stylex_utils 0.19.2 | MIT | fe2a9817, d89f3ef2 |
-| swc_allocator 5.0.0 | Apache-2.0 | 59d8f0ba |
-| swc_atoms 10.0.0 | Apache-2.0 | 59d8f0ba |
-| swc_common 26.0.0 | Apache-2.0 | 59d8f0ba |
-| swc_compiler_base 65.0.0 | Apache-2.0 | 59d8f0ba |
-| swc_config 6.0.0 | Apache-2.0 | 59d8f0ba |
+| swc_allocator 5.0.1 | Apache-2.0 | 59d8f0ba |
+| swc_atoms 10.0.1 | Apache-2.0 | 59d8f0ba |
+| swc_common 27.0.0 | Apache-2.0 | 59d8f0ba |
+| swc_compiler_base 67.0.0 | Apache-2.0 | 59d8f0ba |
+| swc_config 6.0.1 | Apache-2.0 | 59d8f0ba |
 | swc_config_macro 1.0.1 | Apache-2.0 | 59d8f0ba |
-| swc_core 81.0.2 | Apache-2.0 | 59d8f0ba |
-| swc_ecma_ast 29.0.2 | Apache-2.0 | 59d8f0ba |
-| swc_ecma_codegen 32.0.3 | Apache-2.0 | 59d8f0ba |
+| swc_core 84.0.3 | Apache-2.0 | 59d8f0ba |
+| swc_ecma_ast 30.0.2 | Apache-2.0 | 59d8f0ba |
+| swc_ecma_codegen 33.0.0 | Apache-2.0 | 59d8f0ba |
 | swc_ecma_codegen_macros 2.0.2 | Apache-2.0 | 59d8f0ba |
-| swc_ecma_hooks 1.0.0 | Apache-2.0 | 59d8f0ba |
-| swc_ecma_minifier 62.0.1 | Apache-2.0 | 59d8f0ba |
-| swc_ecma_parser 45.1.6 | Apache-2.0 | 59d8f0ba |
-| swc_ecma_testing 27.0.0 | Apache-2.0 | 59d8f0ba |
-| swc_ecma_transforms_base 49.0.1 | Apache-2.0 | 59d8f0ba |
-| swc_ecma_transforms_optimization 52.0.2 | Apache-2.0 | 59d8f0ba |
-| swc_ecma_transforms_react 55.0.1 | Apache-2.0 | 59d8f0ba |
-| swc_ecma_transforms_testing 53.0.0 | Apache-2.0 | 59d8f0ba |
-| swc_ecma_transforms_typescript 55.0.4 | Apache-2.0 | 59d8f0ba |
-| swc_ecma_utils 35.0.2 | Apache-2.0 | 59d8f0ba |
-| swc_ecma_visit 29.0.0 | Apache-2.0 | 59d8f0ba |
+| swc_ecma_hooks 2.0.0 | Apache-2.0 | 59d8f0ba |
+| swc_ecma_minifier 64.0.4 | Apache-2.0 | 59d8f0ba |
+| swc_ecma_parser 47.0.1 | Apache-2.0 | 59d8f0ba |
+| swc_ecma_testing 28.0.0 | Apache-2.0 | 59d8f0ba |
+| swc_ecma_transforms_base 51.0.1 | Apache-2.0 | 59d8f0ba |
+| swc_ecma_transforms_optimization 54.0.1 | Apache-2.0 | 59d8f0ba |
+| swc_ecma_transforms_react 57.0.2 | Apache-2.0 | 59d8f0ba |
+| swc_ecma_transforms_testing 55.1.0 | Apache-2.0 | 59d8f0ba |
+| swc_ecma_transforms_typescript 57.0.3 | Apache-2.0 | 59d8f0ba |
+| swc_ecma_utils 36.1.0 | Apache-2.0 | 59d8f0ba |
+| swc_ecma_visit 30.0.0 | Apache-2.0 | 59d8f0ba |
 | swc_eq_ignore_macros 1.0.1 | Apache-2.0 | 59d8f0ba |
-| swc_error_reporters 28.0.0 | Apache-2.0 | 59d8f0ba |
+| swc_error_reporters 29.0.0 | Apache-2.0 | 59d8f0ba |
 | swc_macros_common 1.0.1 | Apache-2.0 | 59d8f0ba |
 | swc_malloc 1.2.5 | Apache-2.0 | 59d8f0ba |
 | swc_plugin 1.0.1 | Apache-2.0 | 59d8f0ba |
 | swc_plugin_macro 2.0.0 | Apache-2.0 | 59d8f0ba |
-| swc_plugin_proxy 30.0.0 | Apache-2.0 | 59d8f0ba |
+| swc_plugin_proxy 31.0.0 | Apache-2.0 | 59d8f0ba |
 | swc_sourcemap 10.0.3 | BSD-3-Clause | 8a355c16 |
-| swc_transform_common 20.0.0 | Apache-2.0 | 59d8f0ba |
+| swc_transform_common 21.0.0 | Apache-2.0 | 59d8f0ba |
 | swc_visit 2.0.2 | Apache-2.0 | 59d8f0ba |
 | syn 2.0.119 | MIT OR Apache-2.0 | fe2a9817, 59d8f0ba |
 | syn 3.0.9 | MIT OR Apache-2.0 | fe2a9817, 59d8f0ba |
@@ -289,8 +288,8 @@ or the Apache-2.0 appendix template appear once; each package's copyright lines 
 | tap 1.0.1 | MIT | fe2a9817 |
 | tempfile 3.21.0 | MIT OR Apache-2.0 | fe2a9817, 59d8f0ba |
 | termcolor 1.4.1 | Unlicense OR MIT | fe2a9817, 2069c208, 7e7a2c78 |
-| testing 27.0.0 | Apache-2.0 | 59d8f0ba |
-| testing_macros 1.0.2 | Apache-2.0 | 59d8f0ba |
+| testing 28.0.1 | Apache-2.0 | 59d8f0ba |
+| testing_macros 2.0.0 | Apache-2.0 | 59d8f0ba |
 | textwrap 0.16.2 | MIT | fe2a9817 |
 | thiserror 1.0.69 | MIT OR Apache-2.0 | fe2a9817, 59d8f0ba |
 | thiserror 2.0.21 | MIT OR Apache-2.0 | fe2a9817, 59d8f0ba |
@@ -369,7 +368,7 @@ or the Apache-2.0 appendix template appear once; each package's copyright lines 
 
 ## Text fe2a9817
 
-Packages: adler2 2.0.0, ahash 0.8.12, aho-corasick 1.1.5, allocator-api2 0.2.21, ansi_term 0.12.1, anyhow 1.0.104, arrayvec 0.7.8, ascii 1.1.0, base64 0.22.1, bit-set 0.8.0, bit-vec 0.8.0, bitflags 2.13.2, bitvec 1.1.1, block-buffer 0.10.4, bstr 1.12.1, bumpalo 3.20.3, byteorder 1.5.0, bytes 1.12.1, camino 1.1.11, cargo_metadata 0.18.1, cargo-platform 0.1.9, castaway 0.2.4, cbor4ii 1.2.2, cfg-if 1.0.5, compact_str 0.10.0, compact_str 0.7.1, concurrent_lru 0.2.0, convert_case 0.10.0, convert_case 0.12.0, cpufeatures 0.2.17, crc32fast 1.5.0, crossbeam-utils 0.8.21, crypto-common 0.1.6, ctor 1.0.13, darling 0.20.11, darling_core 0.20.11, darling_macro 0.20.11, dashmap 6.2.1, data-encoding 2.11.1, derive_builder 0.20.2, derive_builder_core 0.20.2, derive_builder_macro 0.20.2, derive_more 2.1.1, derive_more-impl 2.1.1, diff 0.1.13, difference 2.0.0, digest 0.10.7, displaydoc 0.2.7, dtoa 1.0.10, either 1.19.0, endian-type 0.2.0, env_logger 0.10.2, equivalent 1.0.3, errno 0.3.14, fancy-regex 0.19.2, fastrand 2.3.0, fixedbitset 0.5.7, flate2 1.1.5, float-cmp 0.10.0, fnv 1.0.7, form_urlencoded 1.2.2, funty 2.0.0, futures 0.3.34, futures-channel 0.3.34, futures-core 0.3.34, futures-executor 0.3.34, futures-io 0.3.34, futures-macro 0.3.34, futures-sink 0.3.34, futures-task 0.3.34, futures-util 0.3.34, generic-array 0.14.9, getrandom 0.3.4, glob 0.3.4, globset 0.4.18, halfbrown 0.4.0, hashbrown 0.14.5, hashbrown 0.16.1, hashbrown 0.17.1, heck 0.5.0, hermit-abi 0.4.0, hermit-abi 0.5.3, hex 0.4.3, ident_case 1.0.1, idna 1.1.0, idna_adapter 1.2.2, if_chain 1.0.3, indexmap 2.14.2, is-terminal 0.4.15, itoa 1.0.18, json-strip-comments 3.1.0, lazy_static 1.5.0, libc 0.2.191, libmimalloc-sys 0.1.49, link-section 0.19.3, linktime-proc-macro 0.2.3, linux-raw-sys 0.12.1, lock_api 0.4.14, log 0.4.34, matchers 0.2.0, memchr 2.8.3, mimalloc 0.1.52, miniz_oxide 0.8.5, new_debug_unreachable 1.0.6, nibble_vec 0.1.0, nohash-hasher 0.2.0, nu-ansi-term 0.50.1, num_cpus 1.17.0, num-bigint 0.4.8, num-integer 0.1.47, num-traits 0.2.19, once_cell 1.21.4, outref 0.5.2, owo-colors 4.2.2, package-json 0.5.0, parking_lot 0.12.5, parking_lot_core 0.9.12, pathdiff 0.2.3, percent-encoding 2.3.2, petgraph 0.7.1, phf 0.11.3, phf 0.14.0, phf_generator 0.11.3, phf_generator 0.14.0, phf_macros 0.11.3, phf_macros 0.14.0, phf_shared 0.11.3, phf_shared 0.14.0, pin-project-lite 0.2.17, postcss_value_parser 0.19.2, pretty_assertions 1.4.1, pretty_env_logger 0.5.0, proc-macro2 1.0.107, psm 0.1.32, quote 1.0.47, radium 0.7.0, radix_trie 0.3.0, rand 0.8.8, rand_core 0.6.4, redox_syscall 0.5.18, ref-cast 1.0.25, ref-cast-impl 1.0.25, regex 1.13.1, regex-automata 0.4.18, regex-syntax 0.8.11, regress 0.11.1, regress 0.12.0, rustc-hash 2.1.3, rustix 1.1.4, rustversion 1.0.23, scoped-tls 1.0.1, scopeguard 1.2.0, semver 1.0.28, seq-macro 0.3.6, serde 1.0.229, serde_core 1.0.229, serde_derive 1.0.229, serde_json 1.0.154, sha1 0.10.6, sha2 0.10.9, sharded-slab 0.1.7, simd-adler32 0.3.8, simd-json 0.18.1, simdutf8 0.1.5, siphasher 1.0.4, slab 0.4.12, smallvec 1.16.4, stable_deref_trait 1.2.1, stacker 0.1.25, static_assertions 1.1.0, strsim 0.11.1, stylex_ast 0.19.2, stylex_atoms 0.19.2, stylex_constants 0.19.2, stylex_css 0.19.2, stylex_css_parser 0.19.2, stylex_diagnostics 0.19.2, stylex_enums 0.19.2, stylex_evaluator 0.19.2, stylex_js 0.19.2, stylex_macros 0.19.2, stylex_nested_config 0.19.2, stylex_path_resolver 0.19.2, stylex_regex 0.19.2, stylex_rust_compiler 0.19.1, stylex_state 0.19.2, stylex_state_index 0.19.2, stylex_structures 0.19.2, stylex_styleq 0.19.2, stylex_transform 0.19.2, stylex_types 0.19.2, stylex_utils 0.19.2, syn 2.0.119, syn 3.0.9, synstructure 0.14.0, tap 1.0.1, tempfile 3.21.0, termcolor 1.4.1, textwrap 0.16.2, thiserror 1.0.69, thiserror 2.0.21, thiserror-impl 1.0.69, thiserror-impl 2.0.21, thread_local 1.1.9, tikv-jemalloc-sys 0.5.4+5.3.0-patched, tikv-jemallocator 0.5.4, tracing 0.1.44, tracing-attributes 0.1.31, tracing-core 0.1.36, tracing-log 0.2.0, tracing-subscriber 0.3.20, triomphe 0.1.17, typenum 1.19.0, unicode-id-start 1.5.0, unicode-ident 1.0.27, unicode-segmentation 1.13.3, unicode-width 0.1.14, unicode-width 0.2.3, unicode-xid 0.2.6, url 2.5.8, utf_types 1.0.0, utf16_iter 1.1.0, utf8_iter 1.1.0, uuid 1.29.0, value-trait 0.12.1, winapi 0.3.9, winapi-util 0.1.11, wit-bindgen 0.46.0, write16 1.0.0, wyz 0.5.1, yansi 1.0.1, zerocopy 0.8.63, zerocopy-derive 0.8.63, zmij 1.0.23, base64-simd 0.8.0, fast-glob 1.0.0, nodejs-built-in-modules 1.0.0, oxc_resolver 11.24.3, vsimd 0.8.0
+Packages: adler2 2.0.0, ahash 0.8.12, aho-corasick 1.1.5, allocator-api2 0.2.21, ansi_term 0.12.1, anyhow 1.0.104, arrayvec 0.7.8, ascii 1.1.0, base64 0.22.1, bit-set 0.8.0, bit-vec 0.8.0, bitflags 2.13.2, bitvec 1.1.1, block-buffer 0.10.4, bstr 1.12.1, bumpalo 3.20.3, byteorder 1.5.0, bytes 1.12.1, camino 1.1.11, cargo_metadata 0.18.1, cargo-platform 0.1.9, castaway 0.2.4, cbor4ii 1.2.2, cfg-if 1.0.5, compact_str 0.10.0, compact_str 0.7.1, concurrent_lru 0.2.0, convert_case 0.10.0, convert_case 0.12.0, cpufeatures 0.2.17, crc32fast 1.5.0, crossbeam-utils 0.8.21, crypto-common 0.1.6, ctor 1.0.13, darling 0.20.11, darling_core 0.20.11, darling_macro 0.20.11, dashmap 6.2.1, data-encoding 2.11.1, derive_builder 0.20.2, derive_builder_core 0.20.2, derive_builder_macro 0.20.2, derive_more 2.1.1, derive_more-impl 2.1.1, diff 0.1.13, difference 2.0.0, digest 0.10.7, displaydoc 0.2.7, dtoa 1.0.10, either 1.19.0, endian-type 0.2.0, env_logger 0.10.2, equivalent 1.0.3, errno 0.3.14, fancy-regex 0.19.2, fastrand 2.3.0, fixedbitset 0.5.7, flate2 1.1.5, float-cmp 0.10.0, fnv 1.0.7, form_urlencoded 1.2.2, funty 2.0.0, futures 0.3.34, futures-channel 0.3.34, futures-core 0.3.34, futures-executor 0.3.34, futures-io 0.3.34, futures-macro 0.3.34, futures-sink 0.3.34, futures-task 0.3.34, futures-util 0.3.34, generic-array 0.14.9, getrandom 0.3.4, glob 0.3.4, globset 0.4.18, halfbrown 0.4.0, hashbrown 0.14.5, hashbrown 0.16.1, hashbrown 0.17.1, heck 0.5.0, hermit-abi 0.4.0, hermit-abi 0.5.3, hex 0.4.3, ident_case 1.0.1, idna 1.1.0, idna_adapter 1.2.2, if_chain 1.0.3, indexmap 2.14.2, is-terminal 0.4.15, itoa 1.0.18, json-strip-comments 3.1.0, lazy_static 1.5.0, libc 0.2.191, libmimalloc-sys 0.1.49, link-section 0.19.3, linktime-proc-macro 0.2.3, linux-raw-sys 0.12.1, lock_api 0.4.14, log 0.4.34, matchers 0.2.0, memchr 2.8.3, mimalloc 0.1.52, miniz_oxide 0.8.5, new_debug_unreachable 1.0.6, nibble_vec 0.1.0, nohash-hasher 0.2.0, nu-ansi-term 0.50.1, num_cpus 1.17.0, num-bigint 0.4.8, num-integer 0.1.47, num-traits 0.2.19, once_cell 1.21.4, outref 0.5.2, owo-colors 4.2.2, package-json 0.5.0, parking_lot 0.12.5, parking_lot_core 0.9.12, pathdiff 0.2.3, percent-encoding 2.3.2, petgraph 0.7.1, phf 0.11.3, phf 0.14.0, phf_generator 0.11.3, phf_generator 0.14.0, phf_macros 0.11.3, phf_macros 0.14.0, phf_shared 0.11.3, phf_shared 0.14.0, pin-project-lite 0.2.17, postcss_value_parser 0.19.2, pretty_assertions 1.4.1, pretty_env_logger 0.5.0, proc-macro2 1.0.107, psm 0.1.32, quote 1.0.47, radium 0.7.0, radix_trie 0.3.0, rand 0.8.8, rand_core 0.6.4, redox_syscall 0.5.18, ref-cast 1.0.25, ref-cast-impl 1.0.25, regex 1.13.1, regex-automata 0.4.18, regex-syntax 0.8.11, regress 0.11.1, regress 0.12.0, relative-path 2.0.3, rustc-hash 2.1.3, rustix 1.1.4, rustversion 1.0.23, scoped-tls 1.0.1, scopeguard 1.2.0, semver 1.0.28, seq-macro 0.3.6, serde 1.0.229, serde_core 1.0.229, serde_derive 1.0.229, serde_json 1.0.154, sha1 0.10.6, sha2 0.10.9, sharded-slab 0.1.7, simd-adler32 0.3.8, simd-json 0.18.1, simdutf8 0.1.5, siphasher 1.0.4, slab 0.4.12, smallvec 1.16.4, stable_deref_trait 1.2.1, stacker 0.1.25, static_assertions 1.1.0, strsim 0.11.1, stylex_ast 0.19.2, stylex_atoms 0.19.2, stylex_constants 0.19.2, stylex_css 0.19.2, stylex_css_parser 0.19.2, stylex_diagnostics 0.19.2, stylex_enums 0.19.2, stylex_evaluator 0.19.2, stylex_js 0.19.2, stylex_macros 0.19.2, stylex_nested_config 0.19.2, stylex_path_resolver 0.19.2, stylex_regex 0.19.2, stylex_rust_compiler 0.19.1, stylex_state 0.19.2, stylex_state_index 0.19.2, stylex_structures 0.19.2, stylex_styleq 0.19.2, stylex_transform 0.19.2, stylex_types 0.19.2, stylex_utils 0.19.2, syn 2.0.119, syn 3.0.9, synstructure 0.14.0, tap 1.0.1, tempfile 3.21.0, termcolor 1.4.1, textwrap 0.16.2, thiserror 1.0.69, thiserror 2.0.21, thiserror-impl 1.0.69, thiserror-impl 2.0.21, thread_local 1.1.9, tikv-jemalloc-sys 0.5.4+5.3.0-patched, tikv-jemallocator 0.5.4, tracing 0.1.44, tracing-attributes 0.1.31, tracing-core 0.1.36, tracing-log 0.2.0, tracing-subscriber 0.3.20, triomphe 0.1.17, typenum 1.19.0, unicode-id-start 1.5.0, unicode-ident 1.0.27, unicode-segmentation 1.13.3, unicode-width 0.1.14, unicode-width 0.2.3, unicode-xid 0.2.6, url 2.5.8, utf_types 1.0.0, utf16_iter 1.1.0, utf8_iter 1.1.0, uuid 1.29.0, value-trait 0.12.1, winapi 0.3.9, winapi-util 0.1.11, wit-bindgen 0.46.0, write16 1.0.0, wyz 0.5.1, yansi 1.0.1, zerocopy 0.8.63, zerocopy-derive 0.8.63, zmij 1.0.23, base64-simd 0.8.0, fast-glob 1.0.0, nodejs-built-in-modules 1.0.0, oxc_resolver 11.24.3, vsimd 0.8.0
 
 Permission is hereby granted, free of charge, to any
 person obtaining a copy of this software and associated
@@ -415,7 +414,7 @@ base64-simd 0.8.0, vsimd 0.8.0:
   Copyright (c) 2021 Nugine
 bit-set 0.8.0, bit-vec 0.8.0:
   Copyright (c) 2023 The Rust Project Developers
-bitflags 2.13.2, glob 0.3.4, log 0.4.34, num-bigint 0.4.8, num-integer 0.1.47, num-traits 0.2.19, regex 1.13.1, regex-automata 0.4.18, regex-syntax 0.8.11:
+bitflags 2.13.2, glob 0.3.4, log 0.4.34, num-bigint 0.4.8, num-integer 0.1.47, num-traits 0.2.19, regex 1.13.1, regex-automata 0.4.18, regex-syntax 0.8.11, relative-path 2.0.3:
   Copyright (c) 2014 The Rust Project Developers
 bitvec 1.1.1, wyz 0.5.1:
   Copyright (c) 2018 myrrlyn (Alexander Payne)
@@ -632,7 +631,7 @@ zerocopy 0.8.63, zerocopy-derive 0.8.63:
 
 ## Text 59d8f0ba
 
-Packages: adler2 2.0.0, ahash 0.8.12, allocator-api2 0.2.21, anyhow 1.0.104, arrayvec 0.7.8, ascii 1.1.0, base64 0.22.1, bit-set 0.8.0, bit-vec 0.8.0, bitflags 2.13.2, block-buffer 0.10.4, bstr 1.12.1, bumpalo 3.20.3, camino 1.1.11, cargo-platform 0.1.9, cfg-if 1.0.5, cpufeatures 0.2.17, crc32fast 1.5.0, crossbeam-utils 0.8.21, crypto-common 0.1.6, ctor 1.0.13, debugid 0.8.0, derive_builder 0.20.2, derive_builder_core 0.20.2, derive_builder_macro 0.20.2, diff 0.1.13, digest 0.10.7, displaydoc 0.2.7, dragonbox_ecma 0.1.12, dtoa 1.0.10, either 1.19.0, env_logger 0.10.2, equivalent 1.0.3, errno 0.3.14, fastrand 2.3.0, fixedbitset 0.5.7, flate2 1.1.5, fnv 1.0.7, form_urlencoded 1.2.2, futures 0.3.34, futures-channel 0.3.34, futures-core 0.3.34, futures-executor 0.3.34, futures-io 0.3.34, futures-macro 0.3.34, futures-sink 0.3.34, futures-task 0.3.34, futures-util 0.3.34, getrandom 0.3.4, glob 0.3.4, halfbrown 0.4.0, hashbrown 0.14.5, hashbrown 0.16.1, hashbrown 0.17.1, heck 0.5.0, hermit-abi 0.4.0, hermit-abi 0.5.3, hex 0.4.3, hstr 4.0.0, humantime 2.1.0, idna 1.1.0, idna_adapter 1.2.2, if_chain 1.0.3, indexmap 2.14.2, is-macro 0.3.8, itoa 1.0.18, lazy_static 1.5.0, libc 0.2.191, link-section 0.19.3, linktime-proc-macro 0.2.3, linux-raw-sys 0.12.1, lock_api 0.4.14, log 0.4.34, miette 7.6.0, miette-derive 7.6.0, miniz_oxide 0.8.5, nohash-hasher 0.2.0, num_cpus 1.17.0, num-bigint 0.4.8, num-integer 0.1.47, num-traits 0.2.19, once_cell 1.21.4, par-iter 2.0.0, parking_lot 0.12.5, parking_lot_core 0.9.12, pathdiff 0.2.3, percent-encoding 2.3.2, petgraph 0.7.1, pin-project-lite 0.2.17, pretty_assertions 1.4.1, pretty_env_logger 0.5.0, proc-macro2 1.0.107, psm 0.1.32, quote 1.0.47, radix_fmt 1.0.0, rand 0.8.8, rand_core 0.6.4, ref-cast 1.0.25, ref-cast-impl 1.0.25, regex 1.13.1, regex-automata 0.4.18, regex-syntax 0.8.11, regress 0.11.1, regress 0.12.0, rustc-hash 2.1.3, rustix 1.1.4, rustversion 1.0.23, ryu 1.0.23, ryu-js 1.0.3, scoped-tls 1.0.1, scopeguard 1.2.0, semver 1.0.28, seq-macro 0.3.6, serde 1.0.229, serde_core 1.0.229, serde_derive 1.0.229, serde_json 1.0.154, sha1 0.10.6, sha2 0.10.9, simd-json 0.18.1, simdutf8 0.1.5, siphasher 1.0.4, smallvec 1.16.4, stable_deref_trait 1.2.1, stacker 0.1.25, static_assertions 1.1.0, syn 2.0.119, syn 3.0.9, tempfile 3.21.0, thiserror 1.0.69, thiserror 2.0.21, thiserror-impl 1.0.69, thiserror-impl 2.0.21, thread_local 1.1.9, tikv-jemalloc-sys 0.5.4+5.3.0-patched, tikv-jemallocator 0.5.4, triomphe 0.1.17, typenum 1.19.0, unicode-id-start 1.5.0, unicode-ident 1.0.27, unicode-linebreak 0.1.5, unicode-segmentation 1.13.3, unicode-width 0.1.14, unicode-width 0.2.3, unicode-xid 0.2.6, url 2.5.8, utf_types 1.0.0, utf16_iter 1.1.0, utf8_iter 1.1.0, uuid 1.29.0, value-trait 0.12.1, winapi 0.3.9, windows 0.62.2, windows_aarch64_gnullvm 0.52.6, windows_aarch64_msvc 0.52.6, windows_i686_gnu 0.52.6, windows_i686_gnullvm 0.52.6, windows_i686_msvc 0.52.6, windows_x86_64_gnu 0.52.6, windows_x86_64_gnullvm 0.52.6, windows_x86_64_msvc 0.52.6, windows-collections 0.3.2, windows-core 0.62.2, windows-future 0.3.2, windows-implement 0.60.2, windows-interface 0.59.3, windows-link 0.2.1, windows-numerics 0.3.1, windows-result 0.4.1, windows-strings 0.5.1, windows-sys 0.52.0, windows-sys 0.59.0, windows-sys 0.61.2, windows-targets 0.52.6, windows-threading 0.2.1, wit-bindgen 0.46.0, write16 1.0.0, yansi 1.0.1, zerocopy 0.8.63, zerocopy-derive 0.8.63, ast_node 7.0.0, better_scoped_tls 1.0.1, bytes-str 0.2.9, from_variant 3.0.0, murmur2 0.1.0, par-core 2.0.0, r-efi 5.3.0, relative-path 1.9.3, self_cell 1.2.1, string_enum 1.0.2, swc_allocator 5.0.0, swc_atoms 10.0.0, swc_common 26.0.0, swc_compiler_base 65.0.0, swc_config 6.0.0, swc_config_macro 1.0.1, swc_core 81.0.2, swc_ecma_ast 29.0.2, swc_ecma_codegen 32.0.3, swc_ecma_codegen_macros 2.0.2, swc_ecma_hooks 1.0.0, swc_ecma_minifier 62.0.1, swc_ecma_parser 45.1.6, swc_ecma_testing 27.0.0, swc_ecma_transforms_base 49.0.1, swc_ecma_transforms_optimization 52.0.2, swc_ecma_transforms_react 55.0.1, swc_ecma_transforms_testing 53.0.0, swc_ecma_transforms_typescript 55.0.4, swc_ecma_utils 35.0.2, swc_ecma_visit 29.0.0, swc_eq_ignore_macros 1.0.1, swc_error_reporters 28.0.0, swc_macros_common 1.0.1, swc_malloc 1.2.5, swc_plugin 1.0.1, swc_plugin_macro 2.0.0, swc_plugin_proxy 30.0.0, swc_transform_common 20.0.0, swc_visit 2.0.2, testing 27.0.0, testing_macros 1.0.2, wasip2 1.0.1+wasi-0.2.4, winapi-i686-pc-windows-gnu 0.4.0, winapi-x86_64-pc-windows-gnu 0.4.0
+Packages: adler2 2.0.0, ahash 0.8.12, allocator-api2 0.2.21, anyhow 1.0.104, arrayvec 0.7.8, ascii 1.1.0, base64 0.22.1, bit-set 0.8.0, bit-vec 0.8.0, bitflags 2.13.2, block-buffer 0.10.4, bstr 1.12.1, bumpalo 3.20.3, camino 1.1.11, cargo-platform 0.1.9, cfg-if 1.0.5, cpufeatures 0.2.17, crc32fast 1.5.0, crossbeam-utils 0.8.21, crypto-common 0.1.6, ctor 1.0.13, debugid 0.8.0, derive_builder 0.20.2, derive_builder_core 0.20.2, derive_builder_macro 0.20.2, diff 0.1.13, digest 0.10.7, displaydoc 0.2.7, dragonbox_ecma 0.1.12, dtoa 1.0.10, either 1.19.0, env_logger 0.10.2, equivalent 1.0.3, errno 0.3.14, fastrand 2.3.0, fixedbitset 0.5.7, flate2 1.1.5, fnv 1.0.7, form_urlencoded 1.2.2, futures 0.3.34, futures-channel 0.3.34, futures-core 0.3.34, futures-executor 0.3.34, futures-io 0.3.34, futures-macro 0.3.34, futures-sink 0.3.34, futures-task 0.3.34, futures-util 0.3.34, getrandom 0.3.4, glob 0.3.4, halfbrown 0.4.0, hashbrown 0.14.5, hashbrown 0.16.1, hashbrown 0.17.1, heck 0.5.0, hermit-abi 0.4.0, hermit-abi 0.5.3, hex 0.4.3, hstr 4.0.3, humantime 2.1.0, idna 1.1.0, idna_adapter 1.2.2, if_chain 1.0.3, indexmap 2.14.2, is-macro 0.3.8, itoa 1.0.18, lazy_static 1.5.0, libc 0.2.191, link-section 0.19.3, linktime-proc-macro 0.2.3, linux-raw-sys 0.12.1, lock_api 0.4.14, log 0.4.34, miette 7.6.0, miette-derive 7.6.0, miniz_oxide 0.8.5, nohash-hasher 0.2.0, num_cpus 1.17.0, num-bigint 0.4.8, num-integer 0.1.47, num-traits 0.2.19, once_cell 1.21.4, par-iter 2.0.0, parking_lot 0.12.5, parking_lot_core 0.9.12, pathdiff 0.2.3, percent-encoding 2.3.2, petgraph 0.7.1, pin-project-lite 0.2.17, pretty_assertions 1.4.1, pretty_env_logger 0.5.0, proc-macro2 1.0.107, psm 0.1.32, quote 1.0.47, radix_fmt 1.0.0, rand 0.8.8, rand_core 0.6.4, ref-cast 1.0.25, ref-cast-impl 1.0.25, regex 1.13.1, regex-automata 0.4.18, regex-syntax 0.8.11, regress 0.11.1, regress 0.12.0, relative-path 2.0.3, rustc-hash 2.1.3, rustix 1.1.4, rustversion 1.0.23, ryu 1.0.23, ryu-js 1.0.3, scoped-tls 1.0.1, scopeguard 1.2.0, semver 1.0.28, seq-macro 0.3.6, serde 1.0.229, serde_core 1.0.229, serde_derive 1.0.229, serde_json 1.0.154, sha1 0.10.6, sha2 0.10.9, simd-json 0.18.1, simdutf8 0.1.5, siphasher 1.0.4, smallvec 1.16.4, stable_deref_trait 1.2.1, stacker 0.1.25, static_assertions 1.1.0, syn 2.0.119, syn 3.0.9, tempfile 3.21.0, thiserror 1.0.69, thiserror 2.0.21, thiserror-impl 1.0.69, thiserror-impl 2.0.21, thread_local 1.1.9, tikv-jemalloc-sys 0.5.4+5.3.0-patched, tikv-jemallocator 0.5.4, triomphe 0.1.17, typenum 1.19.0, unicode-id-start 1.5.0, unicode-ident 1.0.27, unicode-linebreak 0.1.5, unicode-segmentation 1.13.3, unicode-width 0.1.14, unicode-width 0.2.3, unicode-xid 0.2.6, url 2.5.8, utf_types 1.0.0, utf16_iter 1.1.0, utf8_iter 1.1.0, uuid 1.29.0, value-trait 0.12.1, winapi 0.3.9, windows 0.62.2, windows_aarch64_gnullvm 0.52.6, windows_aarch64_msvc 0.52.6, windows_i686_gnu 0.52.6, windows_i686_gnullvm 0.52.6, windows_i686_msvc 0.52.6, windows_x86_64_gnu 0.52.6, windows_x86_64_gnullvm 0.52.6, windows_x86_64_msvc 0.52.6, windows-collections 0.3.2, windows-core 0.62.2, windows-future 0.3.2, windows-implement 0.60.2, windows-interface 0.59.3, windows-link 0.2.1, windows-numerics 0.3.1, windows-result 0.4.1, windows-strings 0.5.1, windows-sys 0.52.0, windows-sys 0.59.0, windows-sys 0.61.2, windows-targets 0.52.6, windows-threading 0.2.1, wit-bindgen 0.46.0, write16 1.0.0, yansi 1.0.1, zerocopy 0.8.63, zerocopy-derive 0.8.63, ast_node 7.0.0, better_scoped_tls 1.0.1, bytes-str 0.2.9, from_variant 3.0.0, murmur2 0.1.0, par-core 2.0.0, r-efi 5.3.0, self_cell 1.2.1, string_enum 1.0.2, swc_allocator 5.0.1, swc_atoms 10.0.1, swc_common 27.0.0, swc_compiler_base 67.0.0, swc_config 6.0.1, swc_config_macro 1.0.1, swc_core 84.0.3, swc_ecma_ast 30.0.2, swc_ecma_codegen 33.0.0, swc_ecma_codegen_macros 2.0.2, swc_ecma_hooks 2.0.0, swc_ecma_minifier 64.0.4, swc_ecma_parser 47.0.1, swc_ecma_testing 28.0.0, swc_ecma_transforms_base 51.0.1, swc_ecma_transforms_optimization 54.0.1, swc_ecma_transforms_react 57.0.2, swc_ecma_transforms_testing 55.1.0, swc_ecma_transforms_typescript 57.0.3, swc_ecma_utils 36.1.0, swc_ecma_visit 30.0.0, swc_eq_ignore_macros 1.0.1, swc_error_reporters 29.0.0, swc_macros_common 1.0.1, swc_malloc 1.2.5, swc_plugin 1.0.1, swc_plugin_macro 2.0.0, swc_plugin_proxy 31.0.0, swc_transform_common 21.0.0, swc_visit 2.0.2, testing 28.0.1, testing_macros 2.0.0, wasip2 1.0.1+wasi-0.2.4, winapi-i686-pc-windows-gnu 0.4.0, winapi-x86_64-pc-windows-gnu 0.4.0
 
                               Apache License
                         Version 2.0, January 2004
@@ -839,7 +838,7 @@ limitations under the License.
 Copyright notices:
 
 ```text
-ast_node 7.0.0, better_scoped_tls 1.0.1, from_variant 3.0.0, murmur2 0.1.0, r-efi 5.3.0, string_enum 1.0.2, swc_allocator 5.0.0, swc_atoms 10.0.0, swc_common 26.0.0, swc_compiler_base 65.0.0, swc_config 6.0.0, swc_config_macro 1.0.1, swc_core 81.0.2, swc_ecma_ast 29.0.2, swc_ecma_codegen 32.0.3, swc_ecma_codegen_macros 2.0.2, swc_ecma_hooks 1.0.0, swc_ecma_minifier 62.0.1, swc_ecma_parser 45.1.6, swc_ecma_testing 27.0.0, swc_ecma_transforms_base 49.0.1, swc_ecma_transforms_optimization 52.0.2, swc_ecma_transforms_react 55.0.1, swc_ecma_transforms_testing 53.0.0, swc_ecma_transforms_typescript 55.0.4, swc_ecma_utils 35.0.2, swc_ecma_visit 29.0.0, swc_eq_ignore_macros 1.0.1, swc_error_reporters 28.0.0, swc_macros_common 1.0.1, swc_malloc 1.2.5, swc_plugin 1.0.1, swc_plugin_macro 2.0.0, swc_plugin_proxy 30.0.0, swc_transform_common 20.0.0, swc_visit 2.0.2, testing 27.0.0, testing_macros 1.0.2:
+ast_node 7.0.0, better_scoped_tls 1.0.1, from_variant 3.0.0, murmur2 0.1.0, r-efi 5.3.0, string_enum 1.0.2, swc_allocator 5.0.1, swc_atoms 10.0.1, swc_common 27.0.0, swc_compiler_base 67.0.0, swc_config 6.0.1, swc_config_macro 1.0.1, swc_core 84.0.3, swc_ecma_ast 30.0.2, swc_ecma_codegen 33.0.0, swc_ecma_codegen_macros 2.0.2, swc_ecma_hooks 2.0.0, swc_ecma_minifier 64.0.4, swc_ecma_parser 47.0.1, swc_ecma_testing 28.0.0, swc_ecma_transforms_base 51.0.1, swc_ecma_transforms_optimization 54.0.1, swc_ecma_transforms_react 57.0.2, swc_ecma_transforms_testing 55.1.0, swc_ecma_transforms_typescript 57.0.3, swc_ecma_utils 36.1.0, swc_ecma_visit 30.0.0, swc_eq_ignore_macros 1.0.1, swc_error_reporters 29.0.0, swc_macros_common 1.0.1, swc_malloc 1.2.5, swc_plugin 1.0.1, swc_plugin_macro 2.0.0, swc_plugin_proxy 31.0.0, swc_transform_common 21.0.0, swc_visit 2.0.2, testing 28.0.1, testing_macros 2.0.0:
   Copyright 2024 SWC contributors.
 futures 0.3.34, futures-channel 0.3.34, futures-core 0.3.34, futures-executor 0.3.34, futures-io 0.3.34, futures-macro 0.3.34, futures-sink 0.3.34, futures-task 0.3.34, futures-util 0.3.34:
   Copyright (c) 2016 Alex Crichton
@@ -1668,26 +1667,6 @@ unicode-id-start 1.5.0, unicode-ident 1.0.27:
   Copyright © 1991-2023 Unicode, Inc.
 ```
 
-## Text e1c73bd2
-
-Packages: siphasher 0.3.11, siphasher 1.0.4
-
-Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-<LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-option.
-
-Copyright notices:
-
-```text
-siphasher 0.3.11:
-  Copyright 2012-2016 The Rust Project Developers.
-  Copyright 2016-2023 Frank Denis.
-siphasher 1.0.4:
-  Copyright 2012-2016 The Rust Project Developers.
-  Copyright 2016-2026 Frank Denis.
-```
-
 ## Text fbe36b2f
 
 Packages: rand 0.8.8, rand_core 0.6.4
@@ -2291,6 +2270,23 @@ Copyright notices:
 ```text
 is-terminal 0.4.15:
   Copyright (c) 2015-2019 Doug Tangren
+```
+
+## Text e1c73bd2
+
+Packages: siphasher 1.0.4
+
+Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+<LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+option.
+
+Copyright notices:
+
+```text
+siphasher 1.0.4:
+  Copyright 2012-2016 The Rust Project Developers.
+  Copyright 2016-2026 Frank Denis.
 ```
 
 ## Text fa58f7ee

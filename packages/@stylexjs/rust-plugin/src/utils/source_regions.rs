@@ -22,6 +22,11 @@ mod tests {
             substitute_source_placeholders(code, prefix, &replacements).unwrap(),
             baseline
         );
+        let arrow = format!("const f=<{prefix}0__, >()=>{{{prefix}1__;return 1;}}");
+        assert_eq!(
+            substitute_source_placeholders(arrow, prefix, &replacements).unwrap(),
+            "const f=<T: ?number>()=>{type Props={|+value:?number|};return 1;}"
+        );
     }
     #[test]
     fn batched_placeholder_splicing_is_byte_identical_to_ordered_replacements() {
@@ -387,6 +392,22 @@ fn substitute_source_placeholders(
 ) -> Result<String> {
     if replacements.is_empty() {
         return Ok(code);
+    }
+    // SWC prints an arrow's lone unconstrained type parameter as `<T, >`, so it can't read as JSX.
+    for (marker, _) in replacements {
+        if let Some(name) = marker.strip_prefix('<').and_then(|m| m.strip_suffix('>')) {
+            let open = format!("<{name},");
+            while let Some(start) = code.find(&open) {
+                let rest = &code[start + open.len()..];
+                let Some(close) = rest.find(|c: char| !c.is_whitespace()) else {
+                    break;
+                };
+                if !rest[close..].starts_with('>') {
+                    break;
+                }
+                code.replace_range(start..start + open.len() + close + 1, marker);
+            }
+        }
     }
     if let [(marker, source)] = replacements {
         let mut matches = code.match_indices(marker);

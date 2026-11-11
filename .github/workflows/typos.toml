@@ -7,7 +7,6 @@ extend-exclude = [
   # Fixture data has lots of typos
   "packages/benchmarks/**/fixtures/",
   # Vendored third-party crate
-  "packages/@stylexjs/rust-plugin/vendor/",
   # Vendored StyleX SWC crates: upstream identifiers and test data
   "packages/@stylexjs/rust-plugin/crates/",
   # Third-party crate names and verbatim license texts
