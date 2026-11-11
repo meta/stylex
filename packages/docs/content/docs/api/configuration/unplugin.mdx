@@ -182,6 +182,7 @@ The unplugin adds:
 - `legacyDisableLayers` (`boolean`): disable layer usage when emitting CSS
   (legacy behavior).
 - `lightningcssOptions` (`object`): passthrough options for `lightningcss`.
+  `minify` overrides the default from Vite's `build.cssMinify` or `NODE_ENV === 'production'` for other bundlers.
 - `cssInjectionTarget` (`(fileName: string) => boolean`): pick which emitted CSS
   asset to append to. Defaults to preferring `index.css`/`style.css` or the
   first CSS asset; falls back to creating `stylex.css` if none exist.

@@ -514,6 +514,121 @@ export const styles = stylex.create({
     });
   });
 
+  describe('CSS minification', () => {
+    const SOURCE = `
+      import * as stylex from '@stylexjs/stylex';
+      const styles = stylex.create({ foo: { color: 'red' } });
+      export default styles;
+    `;
+
+    async function generateCss(options, nodeEnv, viteConfig) {
+      const previous = process.env.NODE_ENV;
+      process.env.NODE_ENV = nodeEnv;
+      try {
+        const pluginOptions = {
+          runtimeInjection: false,
+          useCSSLayers: true,
+          ...options,
+        };
+        const plugin = viteConfig
+          ? unplugin.vite(pluginOptions)
+          : unplugin.rollup(pluginOptions);
+        if (viteConfig) {
+          plugin.configResolved(viteConfig);
+        }
+        plugin.buildStart();
+        await plugin.transform(SOURCE, '/virtual/minify.js');
+        const bundle = {
+          'assets/index.css': {
+            type: 'asset',
+            fileName: 'assets/index.css',
+            source: 'body{margin:0}',
+          },
+        };
+        plugin.generateBundle.call(
+          { emitFile: () => 'ref', getFileName: () => 'assets/index.css' },
+          {},
+          bundle,
+        );
+        return bundle['assets/index.css'].source;
+      } finally {
+        process.env.NODE_ENV = previous;
+      }
+    }
+
+    test('minifies when NODE_ENV is production', async () => {
+      const css = await generateCss({}, 'production');
+      expect(css).toMatch(/@layer priority\d\{/);
+      expect(css).toContain('color:red');
+    });
+
+    test('stays readable outside production', async () => {
+      const css = await generateCss({}, 'development');
+      expect(css).toMatch(/@layer priority\d \{/);
+      expect(css).toContain('color: red;');
+    });
+
+    test('lightningcssOptions.minify overrides NODE_ENV', async () => {
+      expect(
+        await generateCss(
+          { lightningcssOptions: { minify: false } },
+          'production',
+        ),
+      ).toContain('color: red;');
+      expect(
+        await generateCss(
+          { lightningcssOptions: { minify: true } },
+          'development',
+        ),
+      ).toContain('color:red');
+    });
+
+    test.each([true, 'esbuild'])(
+      'minifies the Vite build when cssMinify is %s',
+      async (cssMinify) => {
+        const css = await generateCss({}, 'development', {
+          command: 'build',
+          build: { cssMinify },
+        });
+        expect(css).toMatch(/@layer priority\d\{/);
+        expect(css).toContain('color:red');
+      },
+    );
+
+    test('keeps the Vite build readable when cssMinify is false', async () => {
+      const css = await generateCss({}, 'production', {
+        command: 'build',
+        build: { cssMinify: false },
+      });
+      expect(css).toMatch(/@layer priority\d \{/);
+      expect(css).toContain('color: red;');
+    });
+
+    test.each([
+      [true, false],
+      [false, true],
+    ])(
+      'lightningcssOptions.minify overrides Vite cssMinify %s',
+      async (cssMinify, minify) => {
+        const css = await generateCss(
+          { lightningcssOptions: { minify } },
+          'production',
+          { command: 'build', build: { cssMinify } },
+        );
+        expect(css).toContain(minify ? 'color:red' : 'color: red;');
+      },
+    );
+
+    test('keeps the Vite serve path readable even in production', async () => {
+      const css = await generateCss({}, 'production', {
+        command: 'serve',
+        build: { cssMinify: true },
+      });
+      expect(css).toMatch(/@layer priority\d \{/);
+      expect(css).toContain('color: red;');
+    });
+  });
+
   // Regression: https://github.com/facebook/stylex/issues/1836
   // The Vite adapter's shared-store polling timer must never keep the process
   // alive. Vitest's Vite server has no `httpServer`, so the `close` cleanup is

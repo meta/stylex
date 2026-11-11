@@ -143,6 +143,7 @@ esbuild.build({
 - `unstable_moduleResolution`: forwarded to the StyleX Babel plugin.
 - `lightningcssOptions`: pass-through options for `lightningcss`. Can override
   `targets`, `exclude`, etc. See [Browserslist & CSS lowering](#browserslist--css-lowering).
+  `minify` overrides the default from Vite's `build.cssMinify` or `NODE_ENV === 'production'` for other bundlers.
 - `cssInjectionTarget`: `(fileName: string) => boolean` to pick a CSS asset to
   append to. Defaults to `index.css`, `style.css`, or the first `.css` asset.
 - `externalPackages`: package names inside `node_modules` that should be treated
