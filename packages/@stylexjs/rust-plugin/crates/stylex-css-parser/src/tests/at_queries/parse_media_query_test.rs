@@ -275,10 +275,10 @@ mod style_value_parser_at_queries {
         assert_eq!(parsed.to_string(), "@media not screen");
       }
 
-      /// `not only <type>` parses and prints without `only`, as upstream 0.19.0 does
-      /// (`@media not only screen` prints `@media not screen`).
+      /// `not only <type>` parses as upstream does: alone it prints `not screen`, and before a
+      /// condition the whole query is negated and keeps the `only` (#2001).
       #[test]
-      fn media_accepts_not_only_and_drops_the_only() {
+      fn media_accepts_not_only() {
         let parsed = MediaQuery::parser()
           .parse_to_end("@media not only screen")
           .expect("`not only screen` is a query the reference implementation compiles");
@@ -291,7 +291,7 @@ mod style_value_parser_at_queries {
 
         assert_eq!(
           with_condition.to_string(),
-          "@media print and (min-width: 100px)"
+          "@media not only screen and (min-width: 100px)"
         );
       }
 
@@ -317,17 +317,8 @@ mod style_value_parser_at_queries {
           .parse_to_end("@media not all and (monochrome)")
           .unwrap();
 
-        // Current-main #1888 resolves an impossible media type to NEVER.
-        match &parsed.queries {
-          crate::at_queries::media_query::MediaQueryRule::MediaKeyword(keyword) => {
-            assert_eq!(keyword.key, "all");
-            assert!(keyword.not);
-            assert!(!keyword.only);
-          },
-          other => panic!("Expected NEVER media keyword, got {other:?}"),
-        }
-
-        assert_eq!(parsed.to_string(), "@media not all");
+        assert_leading_not_all(&parsed.queries, &["(monochrome)"]);
+        assert_eq!(parsed.to_string(), "@media not all and (monochrome)");
       }
     }
 
@@ -1371,17 +1362,8 @@ mod style_value_parser_at_queries {
         let input = "@media not all and (monochrome)";
         let parsed = MediaQuery::parser().parse_to_end(input).unwrap();
 
-        // Current-main #1888 resolves an impossible media type to NEVER.
-        match &parsed.queries {
-          crate::at_queries::media_query::MediaQueryRule::MediaKeyword(keyword) => {
-            assert_eq!(keyword.key, "all");
-            assert!(keyword.not);
-            assert!(!keyword.only);
-          },
-          other => panic!("Expected NEVER media keyword, got {other:?}"),
-        }
-
-        assert_eq!(parsed.to_string(), "@media not all");
+        assert_leading_not_all(&parsed.queries, &["(monochrome)"]);
+        assert_eq!(parsed.to_string(), "@media not all and (monochrome)");
       }
 
       #[test]
@@ -2655,17 +2637,11 @@ mod style_value_parser_at_queries {
         let input = "@media not all and (monochrome) and (min-width: 600px)";
         let parsed = MediaQuery::parser().parse_to_end(input).unwrap();
 
-        // Current-main #1888 resolves an impossible media type to NEVER.
-        match &parsed.queries {
-          crate::at_queries::media_query::MediaQueryRule::MediaKeyword(keyword) => {
-            assert_eq!(keyword.key, "all");
-            assert!(keyword.not);
-            assert!(!keyword.only);
-          },
-          other => panic!("Expected NEVER media keyword, got {other:?}"),
-        }
-
-        assert_eq!(parsed.to_string(), "@media not all");
+        assert_leading_not_all(&parsed.queries, &["(monochrome)", "(min-width: 600px)"]);
+        assert_eq!(
+          parsed.to_string(),
+          "@media not all and (monochrome) and (min-width: 600px)"
+        );
       }
 
       #[test]
@@ -5345,4 +5321,29 @@ mod style_value_parser_at_queries {
       );
     }
   }
+}
+
+/// A query written `not all and ...`: upstream (#2001) negates the whole query, with `all` and
+/// the conditions under one `and`.
+fn assert_leading_not_all(
+  queries: &crate::at_queries::media_query::MediaQueryRule,
+  conditions: &[&str],
+) {
+  use crate::at_queries::media_query::MediaQueryRule;
+  let MediaQueryRule::Not(not) = queries else {
+    panic!("expected a negated query, got {queries:?}");
+  };
+  let MediaQueryRule::And(and) = not.rule.as_ref() else {
+    panic!("expected an `and` under the `not`, got {:?}", not.rule);
+  };
+  match &and.rules[0] {
+    MediaQueryRule::MediaKeyword(keyword) => {
+      assert_eq!(keyword.key, "all");
+      assert!(!keyword.not);
+      assert!(!keyword.only);
+    },
+    other => panic!("expected the media type first, got {other:?}"),
+  }
+  let rest: Vec<String> = and.rules[1..].iter().map(ToString::to_string).collect();
+  assert_eq!(rest, conditions);
 }

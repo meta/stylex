@@ -116,7 +116,7 @@ pub(crate) fn parse(input: &str) -> Result<Query, String> {
     if depth != 0 {
         return Err("Invalid media query syntax.".to_owned());
     }
-    parse_expr(input).map(|q| resolve_types(normalize(q)))
+    parse_expr(input).map(|q| resolve_types(normalize(q), true))
 }
 fn parse_expr(input: &str) -> Result<Query, String> {
     let input = input.trim();
@@ -128,19 +128,30 @@ fn parse_expr(input: &str) -> Result<Query, String> {
                 .into_iter()
                 .map(parse_expr)
                 .collect::<Result<Vec<_>, _>>()?;
-            return Ok(if sep == " and " {
-                Query::And(queries)
-            } else {
-                Query::Or(queries)
-            });
+            if sep != " and " {
+                return Ok(Query::Or(queries));
+            }
+            let mut queries = queries;
+            // A leading `not` on a media type negates the whole query (#2001).
+            if let Query::Type { not, .. } = &mut queries[0] {
+                if *not {
+                    *not = false;
+                    return Ok(Query::Not(Box::new(Query::And(queries))));
+                }
+            }
+            return Ok(Query::And(queries));
         }
     }
     if let Some(rest) = input.strip_prefix("not ") {
-        if matches!(rest, "screen" | "print" | "all") {
+        let (only, key) = match rest.strip_prefix("only ") {
+            Some(key) => (true, key),
+            None => (false, rest),
+        };
+        if matches!(key, "screen" | "print" | "all") {
             return Ok(Query::Type {
-                key: rest.to_owned(),
+                key: key.to_owned(),
                 not: true,
-                only: false,
+                only,
             });
         }
         return Ok(Query::Not(Box::new(parse_expr(rest)?)));
@@ -403,7 +414,23 @@ fn requirement(q: &Query) -> Option<&str> {
         _ => None,
     }
 }
-fn resolve_types(q: Query) -> Query {
+/// `not <type> and <condition>` with no other media type, which keeps its leading `not`.
+fn is_leading_not(q: &Query) -> bool {
+    match q {
+        Query::Not(inner) => match &**inner {
+            Query::And(rules) => match rules.split_first() {
+                Some((Query::Type { not: false, .. }, rest)) => !rest.iter().any(contains_type),
+                _ => false,
+            },
+            _ => false,
+        },
+        _ => false,
+    }
+}
+fn resolve_types(q: Query, query_list: bool) -> Query {
+    if query_list && is_leading_not(&q) {
+        return q;
+    }
     if !contains_type(&q) {
         return q;
     }
@@ -411,7 +438,7 @@ fn resolve_types(q: Query) -> Query {
         Query::Or(queries) => {
             let mut flat = Vec::new();
             for q in queries {
-                match resolve_types(q) {
+                match resolve_types(q, query_list) {
                     Query::Or(q) => flat.extend(q),
                     q => flat.push(q),
                 }
@@ -428,29 +455,38 @@ fn resolve_types(q: Query) -> Query {
             }
         }
         Query::And(queries) => {
-            let resolved: Vec<_> = queries.into_iter().map(resolve_types).collect();
+            let mut resolved = Vec::with_capacity(queries.len());
+            for q in queries {
+                match resolve_types(q, false) {
+                    Query::And(q) => resolved.extend(q),
+                    q => resolved.push(q),
+                }
+            }
             if let Some(i) = resolved.iter().position(|q| matches!(q, Query::Or(_))) {
                 let Query::Or(branches) = &resolved[i] else {
                     unreachable!()
                 };
-                return resolve_types(Query::Or(
-                    branches
-                        .iter()
-                        .map(|q| {
-                            Query::And(
-                                std::iter::once(q.clone())
-                                    .chain(
-                                        resolved
-                                            .iter()
-                                            .enumerate()
-                                            .filter(|(j, _)| *j != i)
-                                            .map(|(_, q)| q.clone()),
-                                    )
-                                    .collect(),
-                            )
-                        })
-                        .collect(),
-                ));
+                return resolve_types(
+                    Query::Or(
+                        branches
+                            .iter()
+                            .map(|q| {
+                                Query::And(
+                                    std::iter::once(q.clone())
+                                        .chain(
+                                            resolved
+                                                .iter()
+                                                .enumerate()
+                                                .filter(|(j, _)| *j != i)
+                                                .map(|(_, q)| q.clone()),
+                                        )
+                                        .collect(),
+                                )
+                            })
+                            .collect(),
+                    ),
+                    false,
+                );
             }
             let mut ty = "all".to_owned();
             let mut anchor = None;
@@ -501,18 +537,12 @@ fn resolve_types(q: Query) -> Query {
                 _ => Query::And(rest),
             }
         }
-        Query::Not(inner) => {
-            let inner = resolve_types(*inner);
-            match inner {
-                Query::Type { key, not, only } => Query::Type {
-                    key,
-                    not: !not,
-                    only,
-                },
-                Query::And(_) | Query::Or(_) => resolve_types(negate(inner)),
-                q => Query::Not(Box::new(q)),
+        Query::Not(inner) => match *inner {
+            inner @ (Query::Type { .. } | Query::And(_) | Query::Or(_)) => {
+                resolve_types(negate(inner), false)
             }
-        }
+            q => Query::Not(Box::new(resolve_types(q, false))),
+        },
         q => q,
     }
 }

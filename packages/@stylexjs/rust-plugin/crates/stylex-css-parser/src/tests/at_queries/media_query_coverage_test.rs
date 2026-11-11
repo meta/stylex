@@ -1051,8 +1051,8 @@ fn parser_at_keyword_wrong_then_falls_back() {
 }
 
 #[test]
-fn not_only_combined_in_keyword_parser_drops_the_only() {
-  // Both modifiers are optional, as upstream; the serializer prints `not` and drops `only`.
+fn not_only_combined_in_keyword_parser_keeps_both_flags() {
+  // Both modifiers are optional and kept, as upstream; the serializer prints only the `not`.
   let parsed = MediaQuery::parser()
     .parse_to_end("@media not only screen")
     .expect("both modifiers together are a query the reference implementation compiles");
@@ -1060,7 +1060,7 @@ fn not_only_combined_in_keyword_parser_drops_the_only() {
   match &parsed.queries {
     MediaQueryRule::MediaKeyword(keyword) => {
       assert!(keyword.not);
-      assert!(!keyword.only);
+      assert!(keyword.only);
     },
     other => panic!("Expected a media keyword rule, got {other:?}"),
   }

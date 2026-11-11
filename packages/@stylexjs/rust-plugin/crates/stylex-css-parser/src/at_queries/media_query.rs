@@ -375,6 +375,12 @@ impl MediaQuery {
           format!("({}: {})", pair.key, to_js_string(*n))
         },
       },
+      MediaQueryRule::Not(not_rule) if is_top_level && super::media_types::is_leading_not(queries) => {
+        format!(
+          "not {}",
+          MediaQuery::format_queries(not_rule.rule.as_ref(), false)
+        )
+      },
       MediaQueryRule::Not(not_rule) => match not_rule.rule.as_ref() {
         MediaQueryRule::And(_) | MediaQueryRule::Or(_) | MediaQueryRule::Not(_) => {
           format!(
@@ -390,10 +396,16 @@ impl MediaQuery {
         },
       },
       MediaQueryRule::And(and_rules) => {
+        // An `or` inside an `and` keeps its parentheses.
         let rule_strings: Vec<String> = and_rules
           .rules
           .iter()
-          .map(|rule| MediaQuery::format_queries(rule, false))
+          .map(|rule| match rule {
+            MediaQueryRule::Or(or) if and_rules.rules.len() > 1 && or.rules.len() > 1 => {
+              format!("({})", MediaQuery::format_queries(rule, false))
+            },
+            _ => MediaQuery::format_queries(rule, false),
+          })
           .collect();
         rule_strings.join(" and ")
       },
@@ -424,7 +436,7 @@ impl MediaQuery {
                 rule_string
               }
             },
-            _ => MediaQuery::format_queries(rule, false),
+            _ => MediaQuery::format_queries(rule, is_top_level),
           })
           .collect();
 
@@ -959,11 +971,8 @@ fn media_keyword_parser() -> TokenParser<MediaQueryRule> {
         skip_whitespace(tokens);
       }
 
-      // Matches upstream: `not only screen` parses and prints as `not screen`;
+      // As upstream, `not only screen` keeps both flags and prints as `not screen`;
       // `(not only screen)` and `only not screen` stay refused.
-      if not_value {
-        only_value = false;
-      }
 
       let media_type = (basic_media_type_parser().run)(tokens)?;
 
@@ -1896,7 +1905,16 @@ fn parse_and_list(tokens: &mut TokenList) -> Result<AndList, CssParseError> {
   }
 
   Ok(AndList {
-    rule: collapse_single_rule(rules, |rules| {
+    rule: collapse_single_rule(rules, |mut rules| {
+      // A leading `not` on a media type negates the whole query, as upstream does (#2001).
+      if let MediaQueryRule::MediaKeyword(first) = &mut rules[0]
+        && first.not
+      {
+        first.not = false;
+        return MediaQueryRule::Not(MediaNotRule::new(MediaQueryRule::And(
+          MediaAndRules::new(rules),
+        )));
+      }
       MediaQueryRule::And(MediaAndRules::new(rules))
     }),
     combinability: Combinability {

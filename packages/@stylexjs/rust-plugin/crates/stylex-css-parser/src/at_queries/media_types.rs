@@ -1,5 +1,5 @@
-//! Current StyleX media-type resolution (#1888). Runs after interval normalization.
-//! Source: meta/stylex style-value-parser/at-queries/media-query.js (3e33a25).
+//! Current StyleX media-type resolution (#1888, #2001). Runs after interval normalization.
+//! Source: meta/stylex style-value-parser/at-queries/media-query.js (acc64442).
 use super::media_query::{MediaAndRules, MediaKeyword, MediaNotRule, MediaOrRules, MediaQueryRule};
 
 fn keyword(key: &str, not: bool) -> MediaQueryRule {
@@ -58,7 +58,32 @@ fn negate(rule: MediaQueryRule) -> MediaQueryRule {
   }
 }
 
+/// A query of the form `not <type> and <condition>` with no other media type, which CSS
+/// spells with a leading `not` and which resolution keeps as written.
+pub(super) fn is_leading_not(rule: &MediaQueryRule) -> bool {
+  let MediaQueryRule::Not(value) = rule else {
+    return false;
+  };
+  let MediaQueryRule::And(and) = value.rule.as_ref() else {
+    return false;
+  };
+  match and.rules.split_first() {
+    Some((MediaQueryRule::MediaKeyword(first), rest)) => {
+      !first.not && !rest.iter().any(contains_type)
+    },
+    _ => false,
+  }
+}
+
+/// Resolves the media types of a whole query list.
 pub(super) fn resolve(rule: MediaQueryRule) -> MediaQueryRule {
+  resolve_rule(rule, true)
+}
+
+fn resolve_rule(rule: MediaQueryRule, query_list: bool) -> MediaQueryRule {
+  if query_list && is_leading_not(&rule) {
+    return rule;
+  }
   // Media-type-free ASTs retain their exact normalized shape and ordering.
   if !contains_type(&rule) {
     return rule;
@@ -67,7 +92,7 @@ pub(super) fn resolve(rule: MediaQueryRule) -> MediaQueryRule {
     MediaQueryRule::Or(value) => {
       let mut rules = Vec::new();
       for child in value.rules {
-        match resolve(child) {
+        match resolve_rule(child, query_list) {
           MediaQueryRule::Or(value) => {
             rules.extend(value.rules.into_iter().filter(|rule| !never(rule)))
           },
@@ -85,7 +110,13 @@ pub(super) fn resolve(rule: MediaQueryRule) -> MediaQueryRule {
       }
     },
     MediaQueryRule::And(value) => {
-      let mut resolved: Vec<_> = value.rules.into_iter().map(resolve).collect();
+      let mut resolved = Vec::with_capacity(value.rules.len());
+      for rule in value.rules {
+        match resolve_rule(rule, false) {
+          MediaQueryRule::And(inner) => resolved.extend(inner.rules),
+          rule => resolved.push(rule),
+        }
+      }
       if let Some(index) = resolved
         .iter()
         .position(|rule| matches!(rule, MediaQueryRule::Or(_)))
@@ -93,7 +124,7 @@ pub(super) fn resolve(rule: MediaQueryRule) -> MediaQueryRule {
         let MediaQueryRule::Or(branches) = resolved.remove(index) else {
           unreachable!()
         };
-        return resolve(MediaQueryRule::Or(MediaOrRules::new(
+        return resolve_rule(MediaQueryRule::Or(MediaOrRules::new(
           branches
             .rules
             .into_iter()
@@ -105,7 +136,7 @@ pub(super) fn resolve(rule: MediaQueryRule) -> MediaQueryRule {
               ))
             })
             .collect(),
-        )));
+        )), false);
       }
       let mut media_type = "all".to_owned();
       let mut anchor = None;
@@ -144,16 +175,11 @@ pub(super) fn resolve(rule: MediaQueryRule) -> MediaQueryRule {
         _ => MediaQueryRule::And(MediaAndRules::new(others)),
       }
     },
-    MediaQueryRule::Not(value) => {
-      let inner = resolve(*value.rule);
-      match inner {
-        MediaQueryRule::MediaKeyword(mut value) => {
-          value.not = !value.not;
-          resolve(MediaQueryRule::MediaKeyword(value))
-        },
-        MediaQueryRule::And(_) | MediaQueryRule::Or(_) => resolve(negate(inner)),
-        value => MediaQueryRule::Not(MediaNotRule::new(value)),
-      }
+    MediaQueryRule::Not(value) => match *value.rule {
+      inner @ (MediaQueryRule::MediaKeyword(_) | MediaQueryRule::And(_) | MediaQueryRule::Or(_)) => {
+        resolve_rule(negate(inner), false)
+      },
+      inner => MediaQueryRule::Not(MediaNotRule::new(resolve_rule(inner, false))),
     },
     value => value,
   }
