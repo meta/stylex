@@ -85,32 +85,108 @@ function getAssetBaseName(asset) {
   return fallback || 'stylex.css';
 }
 
-function replaceBundleReferences(bundle, oldFileName, newFileName) {
-  for (const item of Object.values(bundle)) {
+const HTML_ASSET_RE = /\.html?$/i;
+const VITE_MANIFEST_RE = /(?:^|\/)\.vite\/(?:ssr-)?manifest\.json$/;
+const VITE_MAP_DEPS_RE =
+  /(?:^|[\r\n;])\s*(?:const|let|var)\s+__vite__mapDeps\s*=[^;\r\n]+/g;
+
+function replaceAllOccurrences(text, search, replacement) {
+  return text.includes(search) ? text.split(search).join(replacement) : text;
+}
+
+function replaceInMetadataList(container, key, oldValue, newValue) {
+  const collection = container?.[key];
+  if (collection instanceof Set) {
+    if (!collection.has(oldValue)) return false;
+    collection.delete(oldValue);
+    collection.add(newValue);
+    return true;
+  }
+  if (Array.isArray(collection)) {
+    let changed = false;
+    const next = collection.map((name) => {
+      if (name !== oldValue) return name;
+      changed = true;
+      return newValue;
+    });
+    if (changed) {
+      container[key] = next;
+    }
+    return changed;
+  }
+  return false;
+}
+
+function replaceMapDepsReferences(code, oldFileName, newFileName) {
+  return code.replace(VITE_MAP_DEPS_RE, (statement) =>
+    replaceAllOccurrences(statement, oldFileName, newFileName),
+  );
+}
+
+function shouldRewriteAssetReferences(fileName) {
+  return (
+    typeof fileName === 'string' &&
+    (HTML_ASSET_RE.test(fileName) || VITE_MANIFEST_RE.test(fileName))
+  );
+}
+
+function replaceBundleReferences(bundle, oldFileName, newFileName, options) {
+  const entries = Object.values(bundle);
+  const isViteBundle =
+    Boolean(options?.isVite) ||
+    entries.some((item) => item?.type === 'chunk' && item.viteMetadata != null);
+
+  for (const item of entries) {
     if (!item) continue;
     if (item.type === 'chunk') {
+      const hasCssRef = replaceInMetadataList(
+        item.viteMetadata,
+        'importedCss',
+        oldFileName,
+        newFileName,
+      );
+      const hasAssetRef = replaceInMetadataList(
+        item.viteMetadata,
+        'importedAssets',
+        oldFileName,
+        newFileName,
+      );
       if (typeof item.code === 'string' && item.code.includes(oldFileName)) {
-        item.code = item.code.split(oldFileName).join(newFileName);
+        if (!isViteBundle || hasCssRef || hasAssetRef) {
+          item.code = replaceAllOccurrences(
+            item.code,
+            oldFileName,
+            newFileName,
+          );
+        } else {
+          item.code = replaceMapDepsReferences(
+            item.code,
+            oldFileName,
+            newFileName,
+          );
+        }
       }
-      const importedCss = item.viteMetadata?.importedCss;
-      if (importedCss instanceof Set && importedCss.has(oldFileName)) {
-        importedCss.delete(oldFileName);
-        importedCss.add(newFileName);
-      } else if (Array.isArray(importedCss)) {
-        const next = importedCss.map((name) =>
-          name === oldFileName ? newFileName : name,
-        );
-        item.viteMetadata.importedCss = next;
-      }
-    } else if (item.type === 'asset' && typeof item.source === 'string') {
-      if (item.source.includes(oldFileName)) {
-        item.source = item.source.split(oldFileName).join(newFileName);
-      }
+    } else if (
+      item.type === 'asset' &&
+      typeof item.source === 'string' &&
+      shouldRewriteAssetReferences(item.fileName)
+    ) {
+      item.source = replaceAllOccurrences(
+        item.source,
+        oldFileName,
+        newFileName,
+      );
     }
   }
 }
 
-export function replaceCssAssetWithHashedCopy(ctx, bundle, asset, nextSource) {
+export function replaceCssAssetWithHashedCopy(
+  ctx,
+  bundle,
+  asset,
+  nextSource,
+  options,
+) {
   const baseName = getAssetBaseName(asset);
   const referenceId = ctx.emitFile({
     type: 'asset',
@@ -123,7 +199,7 @@ export function replaceCssAssetWithHashedCopy(ctx, bundle, asset, nextSource) {
     asset.source = nextSource;
     return;
   }
-  replaceBundleReferences(bundle, oldFileName, nextFileName);
+  replaceBundleReferences(bundle, oldFileName, nextFileName, options);
   delete bundle[oldFileName];
 }
 

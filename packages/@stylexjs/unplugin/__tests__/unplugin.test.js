@@ -582,4 +582,185 @@ export const styles = stylex.create({
       }
     });
   });
+
+  // Regression: https://github.com/facebook/stylex/issues/2007
+  // Renaming a CSS asset must only rewrite real references in the current
+  // bundle (metadata, ?url assets, __vite__mapDeps, HTML, Vite manifests) and
+  // never embedded client manifests inside SSR chunks or unrelated assets.
+  describe('Vite scoped CSS bundle reference rewrites (#2007)', () => {
+    function createGenerateBundleContext(bundle, hash = 'DGqKH74X') {
+      const emitted = {};
+      return {
+        emitted,
+        emitFile(file) {
+          const id = 'ref_1';
+          const dot = file.name.lastIndexOf('.');
+          const base = dot === -1 ? file.name : file.name.slice(0, dot);
+          const ext = dot === -1 ? '' : file.name.slice(dot);
+          const fileName = `assets/${base}-${hash}${ext}`;
+          emitted[id] = fileName;
+          bundle[fileName] = {
+            type: 'asset',
+            fileName,
+            source: file.source,
+          };
+          return id;
+        },
+        getFileName(id) {
+          return emitted[id];
+        },
+      };
+    }
+
+    test('rewrites real bundle references without mutating embedded manifests or unrelated assets', async () => {
+      const plugin = unplugin.vite({
+        useCSSLayers: false,
+        lightningcssOptions: { minify: false },
+      });
+      await plugin.transform(
+        `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({ root: { color: 'red' } });
+        export const cls = stylex.props(styles.root).className;
+        `,
+        path.resolve(__dirname, 'src/route.js'),
+      );
+
+      const oldCss = 'assets/route-B1tZxGiP.css';
+      const newCss = 'assets/route-DGqKH74X.css';
+      const bundle = {
+        [oldCss]: {
+          type: 'asset',
+          fileName: oldCss,
+          source: '.route{margin:0}',
+        },
+        'assets/route.js': {
+          type: 'chunk',
+          fileName: 'assets/route.js',
+          code: 'export const cls = "x";',
+          viteMetadata: {
+            importedCss: new Set([oldCss]),
+            importedAssets: new Set(),
+          },
+        },
+        'assets/url-importer.js': {
+          type: 'chunk',
+          fileName: 'assets/url-importer.js',
+          code: `export const href = "/${oldCss}";`,
+          viteMetadata: {
+            importedCss: new Set(),
+            importedAssets: new Set([oldCss]),
+          },
+        },
+        'assets/entry-client.js': {
+          type: 'chunk',
+          fileName: 'assets/entry-client.js',
+          code:
+            `const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/route.js","${oldCss}"])))=>i.map(i=>d[i]);\n` +
+            `export const note = "${oldCss}";`,
+          viteMetadata: {
+            importedCss: new Set(),
+            importedAssets: new Set(),
+          },
+        },
+        'entry-server.mjs': {
+          type: 'chunk',
+          fileName: 'entry-server.mjs',
+          code: `const manifest = {"src/route.js":{"css":["${oldCss}"]}}; export { manifest };`,
+          viteMetadata: {
+            importedCss: new Set(),
+            importedAssets: new Set(),
+          },
+        },
+        'index.html': {
+          type: 'asset',
+          fileName: 'index.html',
+          source: `<link rel="stylesheet" href="/${oldCss}">`,
+        },
+        '.vite/manifest.json': {
+          type: 'asset',
+          fileName: '.vite/manifest.json',
+          source: `{"src/route.js":{"css":["${oldCss}"]}}`,
+        },
+        'client-manifest.json': {
+          type: 'asset',
+          fileName: 'client-manifest.json',
+          source: `{"src/route.js":{"css":["${oldCss}"]}}`,
+        },
+      };
+
+      const ctx = createGenerateBundleContext(bundle);
+      plugin.generateBundle.call(ctx, {}, bundle);
+
+      expect(bundle[oldCss]).toBeUndefined();
+      expect(bundle[newCss]).toBeDefined();
+      expect(
+        bundle['assets/route.js'].viteMetadata.importedCss.has(newCss),
+      ).toBe(true);
+      expect(
+        bundle['assets/route.js'].viteMetadata.importedCss.has(oldCss),
+      ).toBe(false);
+      expect(
+        bundle['assets/url-importer.js'].viteMetadata.importedAssets.has(
+          newCss,
+        ),
+      ).toBe(true);
+      expect(bundle['assets/url-importer.js'].code).toBe(
+        `export const href = "/${newCss}";`,
+      );
+      expect(bundle['assets/entry-client.js'].code).toBe(
+        `const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/route.js","${newCss}"])))=>i.map(i=>d[i]);\n` +
+          `export const note = "${oldCss}";`,
+      );
+      expect(bundle['entry-server.mjs'].code).toContain(oldCss);
+      expect(bundle['entry-server.mjs'].code).not.toContain(newCss);
+      expect(bundle['index.html'].source).toContain(newCss);
+      expect(bundle['.vite/manifest.json'].source).toContain(newCss);
+      expect(bundle['client-manifest.json'].source).toContain(oldCss);
+      expect(bundle['client-manifest.json'].source).not.toContain(newCss);
+    });
+
+    test('preserves Rollup chunk rewrites while skipping non-manifest JSON assets', async () => {
+      const plugin = unplugin.rollup({
+        useCSSLayers: false,
+        lightningcssOptions: { minify: false },
+      });
+      await plugin.transform(
+        `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({ root: { color: 'blue' } });
+        export const cls = stylex.props(styles.root).className;
+        `,
+        path.resolve(__dirname, 'src/rollup-entry.js'),
+      );
+
+      const oldCss = 'assets/index-abc12345.css';
+      const newCss = 'assets/index-DGqKH74X.css';
+      const bundle = {
+        [oldCss]: {
+          type: 'asset',
+          fileName: oldCss,
+          source: 'body{margin:0}',
+        },
+        'index.js': {
+          type: 'chunk',
+          fileName: 'index.js',
+          code: `import "./${oldCss}";`,
+        },
+        'server-manifest.json': {
+          type: 'asset',
+          fileName: 'server-manifest.json',
+          source: `{"css":["${oldCss}"]}`,
+        },
+      };
+
+      const ctx = createGenerateBundleContext(bundle);
+      plugin.generateBundle.call(ctx, {}, bundle);
+
+      expect(bundle['index.js'].code).toBe(`import "./${newCss}";`);
+      expect(bundle['server-manifest.json'].source).toBe(
+        `{"css":["${oldCss}"]}`,
+      );
+    });
+  });
 });
