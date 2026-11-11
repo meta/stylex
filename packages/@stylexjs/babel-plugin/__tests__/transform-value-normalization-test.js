@@ -198,7 +198,7 @@ describe('@stylexjs/babel-plugin', () => {
           const styles = stylex.create({
             x: { transitionDuration: '0MS' },
             y: { animationDelay: '0S' },
-            z: { transform: '0DEG' },
+            z: { transform: 'rotate(0DEG)' },
             w: { gridTemplateColumns: '0FR 1fr' }
           });
         `),
@@ -215,7 +215,7 @@ describe('@stylexjs/babel-plugin', () => {
           priority: 3000
         });
         _inject2({
-          ltr: ".x1jpfit1{transform:0deg}",
+          ltr: ".x7p49u4{transform:rotate(0deg)}",
           priority: 3000
         });
         _inject2({
