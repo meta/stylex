@@ -30,7 +30,7 @@ export default function normalizeLeadingZero(
       return;
     }
     const dimension = parser.unit(node.value);
-    if (value < 1 && value >= 0) {
+    if (Math.abs(value) < 1) {
       node.value =
         value.toString().replace('0.', '.') + (dimension ? dimension.unit : '');
     }
