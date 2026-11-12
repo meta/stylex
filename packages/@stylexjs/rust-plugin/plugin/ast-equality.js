@@ -139,7 +139,9 @@ function equalTrees(a, b, comments, opaque = null) {
   return true;
 }
 
-// Compact exact records of a subtree's structure, as `equalTrees` compares it.
+// Compact records of a subtree's structure, as `equalTrees` compares it, except that type-only
+// syntax is left out: the TypeScript and Flow plugins strip `as const`, `satisfies T` and
+// annotations in the same pass, which changes no value StyleX reads.
 // Scalars are a numeric tag then the value, so they never align with a type.
 const ABSENT = 0;
 const SCALAR = 1;
@@ -147,7 +149,38 @@ const OBJECT = 2;
 // Matches any subtree: used for definitions StyleX replaces at their visit.
 const OPAQUE = 3;
 
+// Expressions whose value is their operand's.
+const TYPE_WRAPPERS = new Set([
+  'TSAsExpression',
+  'TSSatisfiesExpression',
+  'TSNonNullExpression',
+  'TSTypeAssertion',
+  'TSInstantiationExpression',
+  'TypeCastExpression',
+  'ParenthesizedExpression',
+]);
+// Fields that hold only types.
+const TYPE_FIELDS = new Set([
+  'typeAnnotation',
+  'typeParameters',
+  'typeArguments',
+  'returnType',
+  'predicate',
+]);
+function valueNode(node) {
+  while (isNode(node) && TYPE_WRAPPERS.has(node.type)) node = node.expression;
+  return node;
+}
+function valueFieldsOf(node) {
+  return fieldsOf(node).filter((field) => !TYPE_FIELDS.has(field));
+}
+
 function shapeRecord(node, record = [], opaque = null) {
+  if (opaque != null && opaque.has(node)) {
+    record.push(OPAQUE);
+    return record;
+  }
+  node = valueNode(node);
   if (!isNode(node)) {
     recordScalar(node, record);
     return record;
@@ -157,7 +190,7 @@ function shapeRecord(node, record = [], opaque = null) {
     return record;
   }
   record.push(node.type);
-  for (const field of fieldsOf(node)) {
+  for (const field of valueFieldsOf(node)) {
     const value = node[field];
     if (Array.isArray(value)) {
       record.push(value.length);
@@ -306,9 +339,10 @@ function matchesShapeRecord(node, record) {
       index++;
       return true;
     }
+    current = valueNode(current);
     if (!isNode(current)) return scalar(current);
     if (record[index++] !== current.type) return false;
-    for (const field of fieldsOf(current)) {
+    for (const field of valueFieldsOf(current)) {
       const value = current[field];
       if (Array.isArray(value)) {
         if (record[index++] !== value.length) return false;

@@ -2096,6 +2096,39 @@ export const C = () => <div {...stylex.props(anim.a)} />;
   }
 });
 
+// The TypeScript preset strips `as const`, `satisfies` and annotations in the same pass.
+test('type-only syntax stripped after a consumer was lowered is not a rewrite', () => {
+  const source = `import * as stylex from '@stylexjs/stylex';
+export function C() { return <div {...stylex.props(s.a)} />; }
+const MOBILE = '@media (max-width: 700px)' as const;
+const PAD: number = 4;
+const COLOR = 'red' satisfies string;
+const s = stylex.create({ a: { color: COLOR, padding: { [MOBILE]: PAD, default: 8 } } });
+`;
+  const result = babel.transformSync(source, {
+    filename: '/x/page.tsx',
+    babelrc: false,
+    configFile: false,
+    presets: [
+      [
+        require.resolve('@babel/preset-typescript'),
+        { isTSX: true, allExtensions: true },
+      ],
+      require.resolve('@babel/preset-react'),
+    ],
+    plugins: [[plugin, {}]],
+  });
+  assert.deepEqual(
+    result.metadata.stylex.map(([, rule]) => rule.ltr),
+    [
+      '.x1e2nbdu{color:red}',
+      '.xe8ttls{padding:8px}',
+      '@media (max-width: 700px){.x1o9qr88.x1o9qr88{padding:4px}}',
+    ],
+  );
+  assert.ok(result.code.includes('className: "x1e2nbdu xe8ttls x1o9qr88"'));
+});
+
 // A lowered consumer cannot be recompiled, and stale class names would lack CSS.
 test('a definition rewritten after its consumer was lowered fails the build', () => {
   const t = babel.types;
