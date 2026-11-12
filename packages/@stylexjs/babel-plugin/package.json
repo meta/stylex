@@ -7,7 +7,8 @@
   "types": "./lib/index.d.ts",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/facebook/stylex.git"
+    "url": "git+https://github.com/meta/stylex.git",
+    "directory": "packages/@stylexjs/babel-plugin"
   },
   "license": "MIT",
   "scripts": {
