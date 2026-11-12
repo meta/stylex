@@ -177,19 +177,44 @@ fn value_text(value: &Value) -> String {
         value => value.to_string(),
     }
 }
+/// A `--<key>` custom property name, up to the first CSS delimiter. The whitespace class is
+/// JavaScript's `\\s`, as in Babel's `CUSTOM_PROPERTY_KEY`.
+const CUSTOM_PROPERTY_KEY: &str = r#"--[^\t\n\x0B\x0C\r \x{A0}\x{1680}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}\x{FEFF},:;)(}{'"]+"#;
+fn var_usage_pattern() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    // `var(--key, fallback)` is not matched, so those stay overridable.
+    RE.get_or_init(|| Regex::new(&format!(r"var\({CUSTOM_PROPERTY_KEY}\)")).unwrap())
+}
+fn override_key_pattern() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(&format!("({CUSTOM_PROPERTY_KEY}):")).unwrap())
+}
+/// Substitutes only the constants a rule references. Constants are already resolved, so one
+/// pass is enough. A `--key:` override (#1219) is rewritten to the variable its constant
+/// aliases, one step per declaration, so rewrites cannot cascade.
 fn replace_constants(input: &str, constants: &IndexMap<String, Value>) -> String {
-    let mut output = input.to_owned();
-    for (name, value) in constants {
-        let replacement = value_text(value);
-        output = output.replace(name, &replacement);
-        if replacement.starts_with("var(") && replacement.ends_with(')') {
+    if constants.is_empty() || !input.contains("--") {
+        return input.to_owned();
+    }
+    let values = var_usage_pattern().replace_all(input, |captures: &regex::Captures| {
+        constants
+            .get(&captures[0])
+            .map_or_else(|| captures[0].to_owned(), value_text)
+    });
+    override_key_pattern()
+        .replace_all(&values, |captures: &regex::Captures| {
+            let Some(value) = constants.get(&format!("var({})", &captures[1])) else {
+                return captures[0].to_owned();
+            };
+            let replacement = value_text(value);
+            if !(replacement.starts_with("var(") && replacement.ends_with(')')) {
+                return captures[0].to_owned();
+            }
             let inside = replacement[4..replacement.len() - 1].trim();
             let target = inside.split(',').next().unwrap_or(inside).trim();
-            let old = &name[4..name.len() - 1];
-            output = output.replace(&format!("{old}:"), &format!("{target}:"));
-        }
-    }
-    output
+            format!("{target}:")
+        })
+        .into_owned()
 }
 fn adjust_priority(input: &str, priority: f64, constants: &IndexMap<String, Value>) -> f64 {
     let mut adjusted = priority;
@@ -299,4 +324,63 @@ pub(crate) fn locale_compare(a: &str, b: &str) -> Ordering {
                 .expect("compiled English collation data")
         })
         .compare(a, b)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn constants(entries: &[(&str, &str)]) -> IndexMap<String, Value> {
+        let raw: IndexMap<String, Value> = entries
+            .iter()
+            .map(|(key, value)| (format!("var(--{key})"), json!(value)))
+            .collect();
+        raw.iter()
+            .map(|(key, value)| {
+                let value = resolve(value, &raw, &mut HashSet::new()).unwrap();
+                (key.clone(), value)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn override_keys_resolve_one_step_in_any_constant_order() {
+        let blue = ("blue500", "#3b82f6");
+        let brand = ("brandPrimary", "var(--blue500, #3b82f6)");
+        let primary = ("primary", "var(--brandPrimary, #3b82f6)");
+        for order in [[blue, brand, primary], [primary, brand, blue]] {
+            assert_eq!(
+                replace_constants(".cls{--primary:transparent}", &constants(&order)),
+                ".cls{--brandPrimary:transparent}"
+            );
+        }
+        let chain = constants(&[
+            ("primary", "var(--brandPrimary, 0)"),
+            ("brandPrimary", "var(--blue500, 0)"),
+            ("blue500", "z"),
+        ]);
+        assert_eq!(
+            replace_constants(".x{--primary:red;--brandPrimary:blue}", &chain),
+            ".x{--brandPrimary:red;--blue500:blue}"
+        );
+        assert_eq!(
+            replace_constants(".x{--brandPrimary:blue;--primary:red}", &chain),
+            ".x{--blue500:blue;--brandPrimary:red}"
+        );
+    }
+
+    #[test]
+    fn non_ascii_keys_substitute_but_their_alias_chains_stop_after_one_step() {
+        let terminal = constants(&[("café", "red")]);
+        assert_eq!(
+            replace_constants(".x1{color:var(--café)}", &terminal),
+            ".x1{color:red}"
+        );
+        let chain = constants(&[("a", "var(--café)"), ("café", "red")]);
+        assert_eq!(
+            replace_constants(".x1{color:var(--a)}", &chain),
+            ".x1{color:var(--café)}"
+        );
+    }
 }
