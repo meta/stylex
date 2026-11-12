@@ -1,7 +1,7 @@
 {
   "private": true,
   "name": "example-storybook",
-  "version": "0.19.1",
+  "version": "0.19.2",
   "scripts": {
     "example:dev": "storybook dev -p 6006 --no-open",
     "storybook": "storybook dev -p 6006 --no-open",
@@ -16,10 +16,10 @@
     "@storybook/addon-links": "^9.1.7",
     "@storybook/addon-vitest": "^9.1.21",
     "@storybook/react-vite": "^9.1.7",
-    "@stylexjs/babel-plugin": "0.19.1",
-    "@stylexjs/eslint-plugin": "0.19.1",
-    "@stylexjs/postcss-plugin": "0.19.1",
-    "@stylexjs/stylex": "0.19.1",
+    "@stylexjs/babel-plugin": "0.19.2",
+    "@stylexjs/eslint-plugin": "0.19.2",
+    "@stylexjs/postcss-plugin": "0.19.2",
+    "@stylexjs/stylex": "0.19.2",
     "@typescript-eslint/eslint-plugin": "^8.44.0",
     "@typescript-eslint/parser": "^8.44.0",
     "@vitejs/plugin-react": "^5.0.3",
