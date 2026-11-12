@@ -80,7 +80,7 @@
     "test": "jest"
   },
   "peerDependencies": {
-    "unplugin": "^2.3.11"
+    "unplugin": "^2.3.11 || ^3.0.0"
   },
   "dependencies": {
     "@babel/core": "^7.26.8",
