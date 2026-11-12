@@ -173,6 +173,58 @@ eslintTester.run('stylex-no-unused', rule.default, {
     `,
     },
     {
+      // styles named export specifier
+      code: `
+      import * as stylex from '@stylexjs/stylex';
+      const styles = stylex.create({
+        main: {
+          display: 'flex',
+        },
+        dynamic: (color) => ({
+          backgroundColor: color,
+        })
+      });
+      export { styles };
+    `,
+    },
+    {
+      // styles renamed export specifier
+      code: `
+      import * as stylex from '@stylexjs/stylex';
+      const styles = stylex.create({
+        main: {
+          display: 'flex',
+        },
+      });
+      export { styles as sharedStyles };
+    `,
+    },
+    {
+      // styles export specifier alongside other exports
+      code: `
+      import * as stylex from '@stylexjs/stylex';
+      const styles = stylex.create({
+        main: {
+          display: 'flex',
+        },
+      });
+      const theme = 'dark';
+      export { theme, styles };
+    `,
+    },
+    {
+      // styles named default export specifier
+      code: `
+      import * as stylex from '@stylexjs/stylex';
+      const styles = stylex.create({
+        main: {
+          display: 'flex',
+        },
+      });
+      export { styles as default };
+    `,
+    },
+    {
       // styles named default inline export
       code: `
       import * as stylex from '@stylexjs/stylex';
@@ -422,6 +474,180 @@ eslintTester.run('stylex-no-unused', rule.default, {
         export default function Component() {
           return <div {...css.props(styles.main)} />;
         }
+      `,
+      errors: [
+        {
+          message: 'Unused style detected: styles.unused',
+        },
+      ],
+    },
+    {
+      // re-export of another module's binding does not exempt local styles
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          main: {
+            color: 'red',
+          },
+          unused: {
+            fontSize: '16px',
+          },
+        });
+        export { styles } from './other-styles';
+        export default function Component() {
+          return <div {...stylex.props(styles.main)} />;
+        }
+      `,
+      output: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          main: {
+            color: 'red',
+          },
+        });
+        export { styles } from './other-styles';
+        export default function Component() {
+          return <div {...stylex.props(styles.main)} />;
+        }
+      `,
+      errors: [
+        {
+          message: 'Unused style detected: styles.unused',
+        },
+      ],
+    },
+    {
+      // type-only export does not export the styles object itself
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          main: {
+            color: 'red',
+          },
+          unused: {
+            fontSize: '16px',
+          },
+        });
+        export type { styles };
+        export default function Component() {
+          return <div {...stylex.props(styles.main)} />;
+        }
+      `,
+      output: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          main: {
+            color: 'red',
+          },
+        });
+        export type { styles };
+        export default function Component() {
+          return <div {...stylex.props(styles.main)} />;
+        }
+      `,
+      errors: [
+        {
+          message: 'Unused style detected: styles.unused',
+        },
+      ],
+    },
+  ],
+});
+
+// `export { type styles }` is TypeScript-only syntax, so the inline type
+// specifier cases need the TypeScript parser.
+const tsEslintTester = new ESLintTester({
+  parser: require.resolve('@typescript-eslint/parser'),
+  parserOptions: {
+    ecmaVersion: 6,
+    sourceType: 'module',
+  },
+});
+
+tsEslintTester.run('stylex-no-unused (typescript)', rule.default, {
+  valid: [
+    {
+      // styles named export specifier
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          main: {
+            display: 'flex',
+          },
+        });
+        export { styles };
+      `,
+    },
+    {
+      // value export specifier alongside an inline type export specifier
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        type Theme = 'dark';
+        const styles = stylex.create({
+          main: {
+            display: 'flex',
+          },
+        });
+        export { type Theme, styles };
+      `,
+    },
+  ],
+  invalid: [
+    {
+      // inline type export specifier does not exempt local styles
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          main: {
+            color: 'red',
+          },
+          unused: {
+            fontSize: '16px',
+          },
+        });
+        export { type styles };
+        stylex.props(styles.main);
+      `,
+      output: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          main: {
+            color: 'red',
+          },
+        });
+        export { type styles };
+        stylex.props(styles.main);
+      `,
+      errors: [
+        {
+          message: 'Unused style detected: styles.unused',
+        },
+      ],
+    },
+    {
+      // type-only export does not exempt local styles
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          main: {
+            color: 'red',
+          },
+          unused: {
+            fontSize: '16px',
+          },
+        });
+        export type { styles };
+        stylex.props(styles.main);
+      `,
+      output: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          main: {
+            color: 'red',
+          },
+        });
+        export type { styles };
+        stylex.props(styles.main);
       `,
       errors: [
         {
