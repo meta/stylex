@@ -106,6 +106,42 @@ describe('inject', () => {
       );
     });
 
+    test('substitutes constants inside calc() expressions', () => {
+      inject({ ltr: '', priority: 0, constKey: 'xcalca1', constVal: 26 });
+      inject({ ltr: '', priority: 0, constKey: 'xcalcb2', constVal: 14 });
+
+      const cssText =
+        '.calc { z-index: calc(var(--xcalca1) + var(--xcalcb2)) }';
+      const result = inject({ ltr: cssText, priority: 1000 });
+
+      expect(result).toMatchInlineSnapshot(
+        '".calc:not(#\\#){ z-index: calc(26 + 14) }"',
+      );
+    });
+
+    test('substitutes unit constants inside calc() expressions', () => {
+      inject({ ltr: '', priority: 0, constKey: 'xcalcpx1', constVal: '16px' });
+
+      const cssText = '.calcpx { padding: calc(var(--xcalcpx1) * 2) }';
+      const result = inject({ ltr: cssText, priority: 1000 });
+
+      expect(result).toMatchInlineSnapshot(
+        '".calcpx:not(#\\#){ padding: calc(16px * 2) }"',
+      );
+    });
+
+    test('leaves unresolved var() inside calc() intact', () => {
+      inject({ ltr: '', priority: 0, constKey: 'xcalcc3', constVal: 26 });
+
+      const cssText =
+        '.calcvar { margin: calc(var(--xcalcc3) * var(--xunresolved)) }';
+      const result = inject({ ltr: cssText, priority: 1000 });
+
+      expect(result).toMatchInlineSnapshot(
+        '".calcvar:not(#\\#){ margin: calc(26 * var(--xunresolved)) }"',
+      );
+    });
+
     test('leaves unreferenced constants unchanged in CSS', () => {
       inject({ ltr: '', priority: 0, constKey: 'xunused', constVal: 'purple' });
 

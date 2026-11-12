@@ -19,6 +19,7 @@ export function validateNamespace(
   }
   const ns: { +[string]: mixed } = namespace;
   for (const key in ns) {
+    validateStyleKey(key);
     const val = ns[key];
     if (val === null || typeof val === 'string' || typeof val === 'number') {
       continue;
@@ -57,6 +58,7 @@ function validateConditionalStyles(
   conditions: $ReadOnlyArray<string> = [],
 ): void {
   for (const key in val) {
+    validateStyleKey(key);
     const v = val[key];
     if (
       !(
@@ -92,5 +94,13 @@ function validateConditionalStyles(
       continue;
     }
     throw new Error(messages.ILLEGAL_PROP_VALUE);
+  }
+}
+
+// This policy applies only to keys consumed as CSS, never to intermediate
+// JavaScript objects evaluated while constructing a style value.
+export function validateStyleKey(key: string): void {
+  if (key.startsWith('calc(')) {
+    throw new Error(messages.INVALID_CALC_KEY);
   }
 }

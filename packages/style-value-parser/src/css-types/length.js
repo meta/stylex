@@ -9,9 +9,30 @@
 
 import { TokenParser } from '../token-parser';
 
-export const UNITS_BASED_ON_FONT = ['ch', 'em', 'ex', 'ic', 'lh', 'rem', 'rlh'];
+export const UNITS_BASED_ON_FONT = [
+  'em',
+  'rem',
+  'ex',
+  'rex',
+  'ch',
+  'rch',
+  'cap',
+  'rcap',
+  'ic',
+  'ric',
+  'lh',
+  'rlh',
+];
 
 export const UNITS_BASED_ON_VIEWPORT = [
+  'vb',
+  'vi',
+  'svb',
+  'svi',
+  'lvb',
+  'lvi',
+  'dvb',
+  'dvi',
   'vh',
   'svh',
   'lvh',
@@ -45,7 +66,8 @@ export const UNITS_BASED_ON_ABSOLUTE_UNITS = [
   'mm',
   'in',
   'pt',
-  // 'pc',
+  'pc',
+  'q',
 ];
 export class Length {
   +value: number;
@@ -75,7 +97,7 @@ export class Length {
         (
           tuple: $ReadOnly<[number, string]>,
         ): implies tuple is $ReadOnly<[number, string]> =>
-          Length.UNITS.includes(tuple[1]),
+          Length.UNITS.includes(tuple[1].toLowerCase()),
       )
       .map(([value, unit]): Length => new Length(value, unit));
 

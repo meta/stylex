@@ -45,11 +45,22 @@ describe('Test CSS Type: <length>', () => {
     expect(Length.parser.parse('10mm')).toEqual(new Length(10, 'mm'));
     expect(Length.parser.parse('1in')).toEqual(new Length(1, 'in'));
     expect(Length.parser.parse('12pt')).toEqual(new Length(12, 'pt'));
+    expect(Length.parser.parse('2pc')).toEqual(new Length(2, 'pc'));
+    expect(Length.parser.parse('2q')).toEqual(new Length(2, 'q'));
+  });
+
+  test('parses root-relative lengths case-insensitively', () => {
+    expect(Length.parser.parseToEnd('2rcap')).toEqual(new Length(2, 'rcap'));
+    expect(Length.parser.parseToEnd('2RCAP')).toEqual(new Length(2, 'RCAP'));
+  });
+
+  test('parses logical and minimum viewport units', () => {
+    expect(Length.parser.parseToEnd('2dvb')).toEqual(new Length(2, 'dvb'));
+    expect(Length.parser.parseToEnd('2svmin')).toEqual(new Length(2, 'svmin'));
   });
 
   test('rejects invalid units', () => {
     expect(() => Length.parser.parseToEnd('10abc')).toThrow();
-    expect(() => Length.parser.parseToEnd('20pc')).toThrow();
     expect(() => Length.parser.parseToEnd('30')).toThrow();
     expect(() => Length.parser.parseToEnd('xyz')).toThrow();
   });

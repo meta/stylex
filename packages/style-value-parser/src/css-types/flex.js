@@ -18,9 +18,10 @@ export class Flex {
   toString(): string {
     return `${this.fraction}fr`;
   }
+  static UNITS: $ReadOnlyArray<string> = ['fr'];
   static get parser(): TokenParser<Flex> {
     return TokenParser.tokens.Dimension.map((dim) =>
-      dim[4].unit === 'fr' && dim[4].signCharacter !== '-'
+      Flex.UNITS.includes(dim[4].unit) && dim[4].signCharacter !== '-'
         ? dim[4].value
         : null,
     )

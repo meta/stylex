@@ -21,14 +21,11 @@ export class Angle {
   toString(): string {
     return `${this.value}${this.unit}`;
   }
+  static UNITS: $ReadOnlyArray<string> = ['deg', 'grad', 'rad', 'turn'];
   static get parser(): TokenParser<Angle> {
     const withUnit = TokenParser.tokens.Dimension.map((v) => v[4])
-      .where(
-        (v: TokenDimension[4]): implies v is TokenDimension[4] =>
-          v.unit === 'deg' ||
-          v.unit === 'grad' ||
-          v.unit === 'rad' ||
-          v.unit === 'turn',
+      .where((v: TokenDimension[4]): implies v is TokenDimension[4] =>
+        Angle.UNITS.includes(v.unit),
       )
       .map((v) => new Angle(v.value, v.unit));
 
