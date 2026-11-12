@@ -14,6 +14,12 @@ import type { CliConfig, TransformConfig } from '../src/config';
 import { compileDirectory } from '../src/transform';
 import * as cacheModule from '../src/cache';
 import { getDefaultCachePath, findProjectRoot } from '../src/cache';
+import {
+  copyNodeModules,
+  clearInputModuleDir,
+  COMPILED_MODULES_DIR_NAME,
+} from '../src/modules';
+import * as modulesModule from '../src/modules';
 
 const fs = require('node:fs').promises;
 import { isDir, getRelativePath } from '../src/files';
@@ -538,5 +544,154 @@ describe('findProjectRoot', () => {
 
     const detectedRoot = await findProjectRoot(nestedDir);
     expect(detectedRoot).toBe(rootDir);
+  });
+});
+
+describe('copyNodeModules preserves all configured modules', () => {
+  const tempDir = path.resolve('./temp_modules_test');
+  const inputDir = path.join(tempDir, 'input');
+  const outputDir = path.join(tempDir, 'output');
+  const fakeModuleA = path.join(tempDir, 'node_modules', 'module-a');
+  const fakeModuleB = path.join(tempDir, 'node_modules', 'module-b');
+
+  let findModuleDirSpy;
+
+  beforeAll(async () => {
+    await fs.mkdir(fakeModuleA, { recursive: true });
+    await fs.writeFile(
+      path.join(fakeModuleA, 'index.js'),
+      'export const a = 1;',
+    );
+    await fs.mkdir(fakeModuleB, { recursive: true });
+    await fs.writeFile(
+      path.join(fakeModuleB, 'index.js'),
+      'export const b = 2;',
+    );
+    await fs.mkdir(inputDir, { recursive: true });
+    await fs.mkdir(outputDir, { recursive: true });
+  });
+
+  beforeEach(() => {
+    findModuleDirSpy = jest
+      .spyOn(modulesModule, 'findModuleDir')
+      .mockImplementation((moduleName: string) => {
+        if (moduleName === 'module-a') return fakeModuleA;
+        if (moduleName === 'module-b') return fakeModuleB;
+        return undefined;
+      });
+  });
+
+  afterEach(() => {
+    findModuleDirSpy.mockRestore();
+  });
+
+  afterAll(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  test('all modules exist after copyNodeModules with multiple modules', async () => {
+    const config: TransformConfig = {
+      input: inputDir,
+      output: outputDir,
+      styleXBundleName: 'stylex_bundle.css',
+      modules_EXPERIMENTAL: ['module-a', 'module-b'],
+      watch: false,
+      babelPresets: [],
+      state: {
+        compiledCSSDir: null,
+        compiledNodeModuleDir: null,
+        compiledJS: new Map(),
+        styleXRules: new Map(),
+        copiedNodeModules: false,
+      },
+    };
+
+    const result = copyNodeModules(config);
+    expect(result).toBe(true);
+
+    const compiledDir = path.join(inputDir, COMPILED_MODULES_DIR_NAME);
+    expect(
+      await fs
+        .access(path.join(compiledDir, 'module-a'))
+        .then(() => true)
+        .catch(() => false),
+    ).toBe(true);
+    expect(
+      await fs
+        .access(path.join(compiledDir, 'module-b'))
+        .then(() => true)
+        .catch(() => false),
+    ).toBe(true);
+    expect(
+      await fs
+        .access(path.join(compiledDir, 'module-a', 'index.js'))
+        .then(() => true)
+        .catch(() => false),
+    ).toBe(true);
+    expect(
+      await fs
+        .access(path.join(compiledDir, 'module-b', 'index.js'))
+        .then(() => true)
+        .catch(() => false),
+    ).toBe(true);
+
+    clearInputModuleDir(config);
+  });
+
+  test('returns false when modules_EXPERIMENTAL is empty', () => {
+    const config: TransformConfig = {
+      input: inputDir,
+      output: outputDir,
+      styleXBundleName: 'stylex_bundle.css',
+      modules_EXPERIMENTAL: [],
+      watch: false,
+      babelPresets: [],
+      state: {
+        compiledCSSDir: null,
+        compiledNodeModuleDir: null,
+        compiledJS: new Map(),
+        styleXRules: new Map(),
+        copiedNodeModules: false,
+      },
+    };
+
+    expect(copyNodeModules(config)).toBe(false);
+  });
+
+  test('single module is copied correctly', async () => {
+    const config: TransformConfig = {
+      input: inputDir,
+      output: outputDir,
+      styleXBundleName: 'stylex_bundle.css',
+      modules_EXPERIMENTAL: ['module-a'],
+      watch: false,
+      babelPresets: [],
+      state: {
+        compiledCSSDir: null,
+        compiledNodeModuleDir: null,
+        compiledJS: new Map(),
+        styleXRules: new Map(),
+        copiedNodeModules: false,
+      },
+    };
+
+    const result = copyNodeModules(config);
+    expect(result).toBe(true);
+
+    const compiledDir = path.join(inputDir, COMPILED_MODULES_DIR_NAME);
+    expect(
+      await fs
+        .access(path.join(compiledDir, 'module-a'))
+        .then(() => true)
+        .catch(() => false),
+    ).toBe(true);
+    expect(
+      await fs
+        .access(path.join(compiledDir, 'module-a', 'index.js'))
+        .then(() => true)
+        .catch(() => false),
+    ).toBe(true);
+
+    clearInputModuleDir(config);
   });
 });

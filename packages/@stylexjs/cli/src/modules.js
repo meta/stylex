@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import { createRequire } from 'module';
 import path from 'node:path';
 
-const COMPILED_MODULES_DIR_NAME = 'stylex_compiled_modules';
+export const COMPILED_MODULES_DIR_NAME = 'stylex_compiled_modules';
 
 export function copyNodeModules(config: TransformConfig): boolean {
   if (config.modules_EXPERIMENTAL === undefined) {
@@ -73,10 +73,6 @@ export function fetchModule(
   const compiledModuleDir = path.join(config.input, COMPILED_MODULES_DIR_NAME);
   const moduleName = Array.isArray(module) ? module[0] : module;
   const moduleDir = findModuleDir(moduleName, config);
-  fs.rmSync(compiledModuleDir, {
-    recursive: true,
-    force: true,
-  });
   // $FlowFixMe[prop-missing]
   fs.cpSync(moduleDir, path.join(compiledModuleDir, moduleName), {
     force: true,
