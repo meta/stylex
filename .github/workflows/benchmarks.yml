@@ -24,7 +24,7 @@ jobs:
         git checkout -f ${{ github.event.pull_request.base.sha }}
         git clean -fdx
         yarn install --frozen-lockfile --silent
-        if yarn workspace benchmarks run perf -- -o ${{ env.BASE_JSON }}; then
+        if yarn workspace benchmarks run perf -o ${{ env.BASE_JSON }}; then
           echo "Ran successfully on base branch"
         else
           echo "{}" > ${{ env.BASE_JSON }}  # Empty JSON as default
@@ -35,16 +35,18 @@ jobs:
         git checkout -f ${{ github.event.pull_request.head.sha }}
         git clean -fdx
         yarn install --frozen-lockfile --silent
-        yarn workspace benchmarks run perf -- -o ${{ env.PATCH_JSON }}
+        yarn workspace benchmarks run perf -o ${{ env.PATCH_JSON }}
         echo "Ran successfully on patch branch"
     - name: 'Collect results'
       id: collect
       run: |
         echo "table<<EOF" >> $GITHUB_OUTPUT
-        yarn workspace benchmarks run compare -- ${{ env.BASE_JSON }} ${{ env.PATCH_JSON }} >> markdown
+        yarn -s workspace benchmarks run -s compare ${{ env.BASE_JSON }} ${{ env.PATCH_JSON }} >> markdown
         cat markdown >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
+        cat markdown >> $GITHUB_STEP_SUMMARY
     - name: 'Post comment'
+      if: github.event.pull_request.head.repo.full_name == github.repository
       uses: edumserrano/find-create-or-update-comment@v3
       with:
         issue-number: ${{ github.event.pull_request.number }}
@@ -78,7 +80,7 @@ jobs:
         git checkout -f ${{ github.event.pull_request.base.sha }}
         git clean -fdx
         yarn install --frozen-lockfile --silent
-        if yarn workspace benchmarks run size -- -o ${{ env.BASE_JSON }}; then
+        if yarn workspace benchmarks run size -o ${{ env.BASE_JSON }}; then
           echo "Ran successfully on base branch"
         else
           echo "{}" > ${{ env.BASE_JSON }}  # Empty JSON as default
@@ -89,16 +91,18 @@ jobs:
         git checkout -f ${{ github.event.pull_request.head.sha }}
         git clean -fdx
         yarn install --frozen-lockfile --silent
-        yarn workspace benchmarks run size -- -o ${{ env.PATCH_JSON }}
+        yarn workspace benchmarks run size -o ${{ env.PATCH_JSON }}
         echo "Ran successfully on patch branch"
     - name: 'Collect results'
       id: collect
       run: |
         echo "table<<EOF" >> $GITHUB_OUTPUT
-        yarn workspace benchmarks run compare -- ${{ env.BASE_JSON }} ${{ env.PATCH_JSON }} >> markdown
+        yarn -s workspace benchmarks run -s compare ${{ env.BASE_JSON }} ${{ env.PATCH_JSON }} >> markdown
         cat markdown >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
+        cat markdown >> $GITHUB_STEP_SUMMARY
     - name: 'Post comment'
+      if: github.event.pull_request.head.repo.full_name == github.repository
       uses: edumserrano/find-create-or-update-comment@v3
       with:
         issue-number: ${{ github.event.pull_request.number }}
