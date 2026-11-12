@@ -2614,6 +2614,7 @@ dependencies = [
  "stacker",
  "stylex_constants",
  "stylex_css",
+ "stylex_css_parser",
  "stylex_diagnostics",
  "stylex_enums",
  "stylex_evaluator",

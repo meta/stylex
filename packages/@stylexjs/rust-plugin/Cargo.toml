@@ -49,6 +49,7 @@ stylex_enums = { path = "crates/stylex-enums" }
 stylex_macros = { path = "crates/stylex-macros" }
 stylex_constants = { path = "crates/stylex-constants" }
 stylex_css = { path = "crates/stylex-css" }
+stylex_css_parser = { path = "crates/stylex-css-parser" }
 stylex_evaluator = { path = "crates/stylex-evaluator" }
 stylex_diagnostics = { path = "crates/stylex-diagnostics" }
 rustc-hash = { workspace = true }
