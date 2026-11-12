@@ -1,10 +1,11 @@
 {
   "name": "@stylexjs/shared",
-  "version": "0.19.1",
+  "version": "0.19.2",
   "main": "lib/index.js",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/facebook/stylex.git"
+    "url": "git+https://github.com/meta/stylex.git",
+    "directory": "packages/@stylexjs/shared"
   },
   "license": "MIT",
   "scripts": {

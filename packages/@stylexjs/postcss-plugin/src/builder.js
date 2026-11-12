@@ -198,10 +198,20 @@ function createBuilder() {
         const filePath = path.resolve(cwd, file);
         const contents = fs.readFileSync(filePath, 'utf-8');
         if (bundler.shouldTransform(contents, { importSources })) {
-          await bundler.transform(filePath, contents, babelConfig, {
-            isDev,
-            shouldSkipTransformError,
-          });
+          const result = await bundler.transform(
+            filePath,
+            contents,
+            babelConfig,
+            {
+              isDev,
+              shouldSkipTransformError,
+            },
+          );
+          if (result == null) {
+            return;
+          }
+        } else {
+          bundler.remove(filePath);
         }
         fileModifiedMap.set(file, mtimeMs);
       }),

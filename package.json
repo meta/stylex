@@ -40,7 +40,7 @@
     "eslint-plugin-react": "^7.37.1",
     "flow-bin": "^0.314.0",
     "flow-typed": "^4.1.1",
-    "glob": "^10.5.0",
+    "glob": "^14.0.2",
     "hermes-eslint": "^0.36.1",
     "husky": "^8.0.0",
     "jest": "^30.2.0",
