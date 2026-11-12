@@ -8,6 +8,7 @@
  */
 
 import enforceExtension from './stylex-enforce-extension';
+import enforceModuleScope from './stylex-enforce-module-scope';
 import noLegacyContextualStyles from './stylex-no-legacy-contextual-styles';
 import noLookaheadSelectors from './stylex-no-lookahead-selectors';
 import noNonStandardStyles from './stylex-no-nonstandard-styles';
@@ -19,6 +20,7 @@ import validStyles from './stylex-valid-styles';
 
 const rules: {
   'enforce-extension': typeof enforceExtension,
+  'enforce-module-scope': typeof enforceModuleScope,
   'no-legacy-contextual-styles': typeof noLegacyContextualStyles,
   'no-lookahead-selectors': typeof noLookaheadSelectors,
   'no-nonstandard-styles': typeof noNonStandardStyles,
@@ -29,6 +31,7 @@ const rules: {
   'valid-styles': typeof validStyles,
 } = {
   'enforce-extension': enforceExtension,
+  'enforce-module-scope': enforceModuleScope,
   'no-legacy-contextual-styles': noLegacyContextualStyles,
   'no-lookahead-selectors': noLookaheadSelectors,
   'no-nonstandard-styles': noNonStandardStyles,
