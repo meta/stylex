@@ -1,0 +1,16 @@
+{
+  "entry": "input.js",
+  "error": {
+    "message": "<FIXTURE_ROOT>/input.js: Unable to generate hash for defineVars(). Check that the file has a valid extension and that unstable_moduleResolution is configured.",
+    "name": "Error"
+  },
+  "errors": [],
+  "fixtureName": "define-vars-theme",
+  "pluginOptions": {},
+  "processOptions": {
+    "enableLTRRTLComments": false,
+    "useLayers": false
+  },
+  "status": "error",
+  "warnings": []
+}
