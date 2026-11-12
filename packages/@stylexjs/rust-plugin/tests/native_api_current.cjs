@@ -975,6 +975,33 @@ test('defineConsts accepts -0, NaN and Infinity as Babel does', () => {
   }
 });
 
+test('defineVars with no rules and its errors match Babel', () => {
+  const { runEngine } = require('./support/babel_errors.cjs');
+  const filename = appFile('tokens.stylex.js');
+  const options = {
+    unstable_moduleResolution: { type: 'commonJS', rootDir: path.dirname(filename) },
+  };
+  const outcome = (engine, source) => {
+    try {
+      const result = runEngine(engine, source, filename, options);
+      return { css: processStylexRules(result.metadata.stylex, {}) };
+    } catch (error) {
+      return { error: String(error.message).split('\n')[0] };
+    }
+  };
+  for (const body of [
+    // Every variable is null, so defineVars emits no rule; createTheme still reads the group.
+    "export const vars = stylex.defineVars({ a: null });\nexport const theme = stylex.createTheme(vars, { a: '16px' });",
+    'export const vars = stylex.defineVars({});\nexport const theme = stylex.createTheme(vars, {});',
+    "export const vars = stylex.defineVars({ a: ['red', 'blue'] });",
+  ]) {
+    const source = `${header}${body}\n`;
+    const expected = outcome('babel', source);
+    for (const engine of ['direct', 'facade'])
+      assert.deepEqual(outcome(engine, source), expected, `${engine}: ${body}`);
+  }
+});
+
 test('option diagnostics are reported for every file, as Babel does', () => {
   const { runEngine } = require('./support/babel_errors.cjs');
   const files = [

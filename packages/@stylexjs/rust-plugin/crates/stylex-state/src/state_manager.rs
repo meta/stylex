@@ -2157,6 +2157,12 @@ impl StateManager {
     self.update_references(call, ast, key_of);
   }
 
+  /// Points the call site at `ast` without filing styles: a call that compiled to no rules
+  /// (`defineVars({ a: null })`) is still read by later calls in the file (`createTheme`).
+  pub fn record_compiled_call(&mut self, call: &CallExpr, ast: &Expr) {
+    self.update_references(call, ast, || stable_hash_unspanned_call(call));
+  }
+
   /// Registers injected styles produced by the atoms transform.
   pub fn register_atom_styles(&mut self, style: &InjectableStylesMap) {
     if style.is_empty() {

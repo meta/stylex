@@ -143,9 +143,13 @@ where
 
       let result_ast = convert_values_to_ast(&variables_obj);
 
-      self
-        .state
-        .register_styles(call, &injected_styles, &result_ast, None);
+      if injected_styles.is_empty() {
+        self.state.record_compiled_call(call, &result_ast);
+      } else {
+        self
+          .state
+          .register_styles(call, &injected_styles, &result_ast, None);
+      }
 
       Some(result_ast)
     } else {

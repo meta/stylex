@@ -94,7 +94,8 @@ pub(crate) fn collect_vars_by_at_rules(
 
   match value {
     Expr::Array(_) => stylex_panic!(
-      "Array values are not supported in defineVars(). Use a string, number, or nested object."
+      // Babel's wording (stylex-vars-utils.js).
+      "Array is not supported in defineVars"
     ),
     Expr::Lit(lit) => {
       if let Lit::Null(_) = lit {
