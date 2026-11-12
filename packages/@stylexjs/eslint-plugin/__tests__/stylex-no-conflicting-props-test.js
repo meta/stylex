@@ -55,6 +55,22 @@ eslintTester.run('stylex-no-conflicting-props', rule.default, {
     {
       code: `
         import * as stylex from '@stylexjs/stylex';
+        function Component() {
+          return <div sx className="foo" />;
+        }
+      `,
+    },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        function Component() {
+          return <div sx="foo" className="foo" />;
+        }
+      `,
+    },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
         const styles = stylex.create({
           main: { color: 'red' },
         });
@@ -106,6 +122,40 @@ eslintTester.run('stylex-no-conflicting-props', rule.default, {
         });
         function Component() {
           return <div {...css.props(styles.main)} />;
+        }
+      `,
+    },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          main: { color: 'red' },
+        });
+        function Component() {
+          return <div sx={styles.main} data-testid="x" />;
+        }
+      `,
+    },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          main: { color: 'red' },
+        });
+        function Component() {
+          return <CustomComponent sx={styles.main} className="foo" />;
+        }
+      `,
+    },
+    {
+      options: [{ sxPropName: false }],
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          main: { color: 'red' },
+        });
+        function Component() {
+          return <div sx={styles.main} className="foo" />;
         }
       `,
     },
@@ -301,6 +351,92 @@ eslintTester.run('stylex-no-conflicting-props', rule.default, {
         {
           message:
             'The `style` prop should not be used when spreading `stylex.props()` to avoid conflicts.',
+        },
+      ],
+    },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          main: { color: 'red' },
+        });
+        function Component() {
+          return <div sx={styles.main} className="foo" />;
+        }
+      `,
+      errors: [
+        {
+          message:
+            'The `className` prop should not be used with the `sx` StyleX prop to avoid conflicts.',
+        },
+      ],
+    },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          main: { color: 'red' },
+        });
+        function Component() {
+          return <div className="foo" sx={styles.main} />;
+        }
+      `,
+      errors: [
+        {
+          message:
+            'The `className` prop should not be used with the `sx` StyleX prop to avoid conflicts.',
+        },
+      ],
+    },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          main: { color: 'red' },
+        });
+        function Component() {
+          return <div sx={styles.main} style={{ margin: 10 }} />;
+        }
+      `,
+      errors: [
+        {
+          message:
+            'The `style` prop should not be used with the `sx` StyleX prop to avoid conflicts.',
+        },
+      ],
+    },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          main: { color: 'red' },
+        });
+        function Component() {
+          return <div sx={styles.main} {...{ className: 'foo' }} />;
+        }
+      `,
+      errors: [
+        {
+          message:
+            'The `className` prop should not be used with the `sx` StyleX prop to avoid conflicts.',
+        },
+      ],
+    },
+    {
+      options: [{ sxPropName: 'css' }],
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          main: { color: 'red' },
+        });
+        function Component() {
+          return <div css={styles.main} className="foo" />;
+        }
+      `,
+      errors: [
+        {
+          message:
+            'The `className` prop should not be used with the `css` StyleX prop to avoid conflicts.',
         },
       ],
     },
