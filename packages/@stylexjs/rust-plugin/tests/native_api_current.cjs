@@ -932,6 +932,42 @@ test('rewriteAliases resolves a relative import through a symlinked directory as
   }
 });
 
+test('option diagnostics are reported for every file, as Babel does', () => {
+  const { runEngine } = require('./support/babel_errors.cjs');
+  const files = [
+    'export const value = 1;\n',
+    `${header}export const s = stylex.create({ a: { color: 'red' } });\n`,
+    'export const again = 2;\n',
+  ];
+  const capture = (engine, options) => {
+    const calls = [];
+    const { error, warn } = console;
+    console.error = (...args) => calls.push(['error', ...args]);
+    console.warn = (...args) => calls.push(['warn', ...args]);
+    try {
+      // One options object for every file, as a bundler passes it.
+      for (const code of files)
+        runEngine(engine, code, appFile('options.js'), options);
+    } finally {
+      console.error = error;
+      console.warn = warn;
+    }
+    return calls;
+  };
+  for (const options of [
+    {},
+    { enableFontSizePxToRem: 'true' },
+    { dev: 1, classNamePrefix: 3 },
+    { styleResolution: 'bogus', rewriteAliases: 'yes' },
+  ]) {
+    const expected = capture('babel', options);
+    const label = JSON.stringify(options);
+    if (Object.keys(options).length > 0)
+      assert.equal(expected.length > files.length - 1, true, label);
+    assert.deepEqual(capture('facade', options), expected, label);
+  }
+});
+
 test('rewriteAliases rewrites theme imports exactly as Babel does', () => {
   const { runEngine } = require('./support/babel_errors.cjs');
   const fixture = themeFixture();
@@ -992,21 +1028,27 @@ test('rewriteAliases rewrites theme imports exactly as Babel does', () => {
             },
             rewriteAliases: rewrite,
           };
-          const code = `${header}${source}\n`;
-          const expected = run('babel', code, filename, options);
-          const label = `${resolution.type} ${filename ?? 'unnamed'} ${rewrite} ${source}`;
-          assert.deepEqual(
-            run('direct', code, filename, options),
-            expected,
-            label,
-          );
-          assert.deepEqual(
-            run('facade', code, filename, options),
-            expected,
-            label,
-          );
-          if (!expected.error && expected.some((s) => /"\.\.?\//.test(s))) {
-            rewritten++;
+          // With and without StyleX: Babel rewrites theme imports either way.
+          for (const prefix of [header, '']) {
+            const code = `${prefix}${source}\n`;
+            const expected = run('babel', code, filename, options);
+            const label = `${resolution.type} ${filename ?? 'unnamed'} ${rewrite} ${prefix === '' ? 'no-stylex ' : ''}${source}`;
+            assert.deepEqual(
+              run('direct', code, filename, options),
+              expected,
+              label,
+            );
+            assert.deepEqual(
+              run('facade', code, filename, options),
+              expected,
+              label,
+            );
+            if (
+              !expected.error &&
+              expected.some((s) => /"\.\.?\//.test(s))
+            ) {
+              rewritten++;
+            }
           }
         }
       }

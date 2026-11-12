@@ -130,16 +130,24 @@ pub(crate) fn isolated<R>(work: impl FnOnce() -> R) -> R {
     })
 }
 
+/// Whether an import source names a theme file (`*.stylex`, with or without a
+/// code extension), as the Babel plugin's `matchesFileSuffix('.stylex')` does.
+pub(super) fn is_theme_import(source: &str) -> bool {
+    const SUFFIXES: [&str; 7] = ["", ".js", ".ts", ".tsx", ".jsx", ".mjs", ".cjs"];
+    SUFFIXES
+        .iter()
+        .any(|extension| source.ends_with(&format!(".stylex{extension}")))
+}
+
 /// The Babel plugin's `rewriteAliases`: at the end of the transform, a theme
-/// import (`*.stylex`, with or without a code extension) is rewritten to the
-/// relative path it resolves to through the configured aliases.
+/// import is rewritten to the relative path it resolves to through the
+/// configured aliases.
 fn rewrite_alias_imports(
     module: &mut swc_core::ecma::ast::Module,
     filename: &str,
     rewriter: &dyn ImportResolver,
 ) -> Result<()> {
     use swc_core::ecma::ast::{ModuleDecl, ModuleItem, Str};
-    const SUFFIXES: [&str; 7] = ["", ".js", ".ts", ".tsx", ".jsx", ".mjs", ".cjs"];
     for item in &mut module.body {
         let ModuleItem::ModuleDecl(ModuleDecl::Import(import)) = item else {
             continue;
@@ -147,10 +155,7 @@ fn rewrite_alias_imports(
         let Some(source) = import.src.value.as_str().map(str::to_owned) else {
             continue;
         };
-        if !SUFFIXES
-            .iter()
-            .any(|extension| source.ends_with(&format!(".stylex{extension}")))
-        {
+        if !is_theme_import(&source) {
             continue;
         }
         let rewritten = rewriter

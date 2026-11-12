@@ -61,6 +61,33 @@ const EXIT_CALLS = new Set(['props', 'attrs', 'merge', 'default']);
 // Diagnostics `compile` raised, so callers needn't inspect user-thrown values.
 const compileDiagnostics = new WeakSet();
 
+// Babel validates the options of every file, so a file skipped for having no
+// StyleX still reports a malformed option. The diagnostics depend only on the
+// options, so they are computed once per options object.
+const optionDiagnostics = new WeakMap();
+const NO_OPTIONS = {};
+function reportOptionDiagnostics(state) {
+  const key =
+    state.opts != null && typeof state.opts === 'object'
+      ? state.opts
+      : NO_OPTIONS;
+  let errors = optionDiagnostics.get(key);
+  if (errors == null) {
+    try {
+      errors =
+        compiler.transformSync('', {
+          ...state.opts,
+          filename: state.file.opts.filename || 'unknown.js',
+        }).errors || [];
+    } catch (_) {
+      // Options the compiler refuses outright stay as before for skipped files.
+      errors = [];
+    }
+    optionDiagnostics.set(key, errors);
+  }
+  for (const error of errors) logDiagnostic('error', error);
+}
+
 function compile(input, state, filename) {
   // Babel wraps an escaping exception once, so user exceptions stay unwrapped.
   const errors = { userThrew: false };
@@ -192,6 +219,7 @@ function enter(program, state) {
   const s = {
     sources: importSources(state.opts),
     sx: sxPropName(state.opts),
+    rewriteAliases: state.opts?.rewriteAliases === true,
     names: null,
     known: new WeakSet(),
     edits: [],
@@ -285,8 +313,10 @@ function enter(program, state) {
                 consumerCalls.push(attribute);
         };
   // An untouched parse cannot hold StyleX the text cannot spell: skip the walk.
-  if (s.pristine && s.names.empty && cannotSpellStyleX(state.file.code, s))
+  if (s.pristine && s.names.empty && cannotSpellStyleX(state.file.code, s)) {
+    reportOptionDiagnostics(state);
     return;
+  }
   // An untouched parse needs no walk if nothing beyond its imports is collected.
   const walkFree =
     s.pristine &&
@@ -297,8 +327,10 @@ function enter(program, state) {
   if (
     !walkFree &&
     !mayUseStyleX(program.node, state.opts, syntax, declarations, visit)
-  )
+  ) {
+    reportOptionDiagnostics(state);
     return;
+  }
   s.consumerCalls = consumerCalls;
   // The program-level binding of each reference, by Babel's scope at entry.
   if (s.recordShapes) {

@@ -51,6 +51,8 @@ const CONTROL_ESCAPES = 'nrtbfv';
 function cannotSpellStyleX(code, s) {
   if (s.sx != null && code.includes(s.sx)) return false;
   const needles = [...s.sources.keys()];
+  // `rewriteAliases` rewrites theme imports even in a file without StyleX.
+  if (s.rewriteAliases) needles.push('.stylex');
   if (needles.some((needle) => code.includes(needle))) return false;
   const controls = needles.some((needle) => /[\n\r\t\b\f\v]/.test(needle));
   for (let i = code.indexOf('\\'); i !== -1; i = code.indexOf('\\', i + 2)) {
@@ -88,6 +90,14 @@ function mayUseStyleX(
     )
       relevant = true;
     if (isRequireOf(node, sources)) relevant = true;
+    // `rewriteAliases` rewrites theme imports even in a file without StyleX.
+    if (
+      options?.rewriteAliases === true &&
+      node.type === 'ImportDeclaration' &&
+      typeof node.source.value === 'string' &&
+      node.source.value.includes('.stylex')
+    )
+      relevant = true;
     if (
       sx != null &&
       node.type === 'JSXOpeningElement' &&

@@ -33,7 +33,9 @@ impl Discovery<'_> {
             || text == "@stylexjs/atoms"
             || self.sx == Some(text)
             || (self.options.runtime_injection_enabled()
-                && text == self.options.runtime_injection_path());
+                && text == self.options.runtime_injection_path())
+            // `rewriteAliases` rewrites theme imports in every file, as Babel does.
+            || (self.options.rewrite_aliases && super::is_theme_import(text));
     }
 }
 
@@ -79,6 +81,22 @@ impl Visit for Discovery<'_> {
 mod tests {
     use super::*;
     use crate::utils::parser::{parse_module_with_options, syntax_for_file, SourceType};
+
+    #[test]
+    fn a_theme_import_needs_the_compiler_only_under_rewrite_aliases() {
+        let source = "import { tokens } from './tokens.stylex.js';export { tokens };";
+        let parsed = parse_module_with_options(
+            source,
+            "proof.js",
+            syntax_for_file("proof.js"),
+            SourceType::Module,
+        )
+        .unwrap();
+        let mut options = StyleXTransformOptions::default();
+        assert!(!may_transform(&parsed.module, &options));
+        options.rewrite_aliases = true;
+        assert!(may_transform(&parsed.module, &options));
+    }
 
     #[test]
     fn discovery_is_a_conservative_no_change_proof() {
