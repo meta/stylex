@@ -94,12 +94,18 @@ fn leaves_spellings_no_normalizer_has_an_opinion_about_alone() {
   ]);
 }
 
-/// Which is why the unit-sensitive normalizers miss upper-case spellings.
+/// Only the zero-dimension pass reads a unit case-insensitively (upstream #2000); the other
+/// unit-sensitive normalizers still miss upper-case spellings.
 #[test]
-fn never_folds_letter_case_in_a_unit() {
+fn folds_letter_case_only_for_a_zero_dimension() {
   check(&[
     ("0PX", "width", "0"),
-    ("0DEG", "transform", "0"),
+    ("0DEG", "transform", "0deg"),
+    ("rotate(0DEG)", "transform", "rotate(0deg)"),
+    ("0Turn", "transform", "0deg"),
+    ("0MS", "transitionDuration", "0s"),
+    ("0S", "animationDelay", "0s"),
+    ("0FR 1fr", "gridTemplateColumns", "0fr 1fr"),
     ("10MS", "transitionDuration", "10MS"),
     ("10Ms", "transitionDuration", "10Ms"),
     ("1E3px", "width", "1E3px"),

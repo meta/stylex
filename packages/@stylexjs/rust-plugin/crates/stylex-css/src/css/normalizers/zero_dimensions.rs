@@ -45,13 +45,16 @@ pub fn normalize_zero_dimensions(ast: &mut ValueParser, key: &str) {
         return true;
       }
 
-      if ANGLES.contains(&dimension.unit) {
+      // Units are ASCII case-insensitive (upstream #2000): `0MS` is still a duration and `0FR`
+      // a flex value, and dropping their unit would change the value.
+      let unit = dimension.unit.to_lowercase();
+      if ANGLES.contains(&unit.as_str()) {
         node.value = "0deg".to_owned();
-      } else if TIMINGS.contains(&dimension.unit) {
+      } else if TIMINGS.contains(&unit.as_str()) {
         node.value = "0s".to_owned();
-      } else if dimension.unit == FRACTION {
+      } else if unit == FRACTION {
         node.value = "0fr".to_owned();
-      } else if dimension.unit == PERCENTAGE {
+      } else if unit == PERCENTAGE {
         node.value = "0%".to_owned();
       } else if end_function == 0 {
         node.value = "0".to_owned();
