@@ -114,6 +114,12 @@ describe('style-value-parser/at-queries', () => {
         );
       });
 
+      test('throws SYNTAX_ERROR for unknown boolean media features', () => {
+        expect(() => parse('@media (prefers-reduce-motion)')).toThrow(
+          MediaQueryErrors.SYNTAX_ERROR,
+        );
+      });
+
       test('throws UNBALANCED_PARENS for unmatched parentheses', () => {
         expect(() => parse('@media (width: 600px')).toThrow(
           MediaQueryErrors.UNBALANCED_PARENS,
