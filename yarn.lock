@@ -7212,9 +7212,9 @@ base64-js@^1.3.1:
   integrity sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==
 
 baseline-browser-mapping@^2.8.25, baseline-browser-mapping@^2.9.0, baseline-browser-mapping@^2.9.14, baseline-browser-mapping@^2.9.19:
-  version "2.11.33"
-  resolved "https://registry.yarnpkg.com/baseline-browser-mapping/-/baseline-browser-mapping-2.11.33.tgz#117253b1d92cc6e1dd9a8aa5a53d9da916b984ad"
-  integrity sha512-yiVKDX+qCMRKBE084lXvq9EcwFUhKZ2nU8TK1EQQuOgPNR/lmbGxXOeDdlGUqC2Zz11Cs9rk1d/8NfgBmlkt0w==
+  version "2.11.36"
+  resolved "https://registry.yarnpkg.com/baseline-browser-mapping/-/baseline-browser-mapping-2.11.36.tgz#79fce438a350a9e710292c9ed77ebcb4651d8be3"
+  integrity sha512-AbPFGS4K9S3meMRCLTM0Zas+e9X7b5ygUBOboDT5zevCZt9ByKSbMtKhwyVqW+oL8WemPVsbP7X3rdZcIyOa0w==
 
 basic-ftp@^5.0.2:
   version "5.3.1"
@@ -15226,19 +15226,10 @@ react-router@8.3.0:
   dependencies:
     cookie-es "^3.1.1"
 
-react-server-dom-webpack@19.2.6, react-server-dom-webpack@^19.2.6:
-  version "19.2.6"
-  resolved "https://registry.npmjs.org/react-server-dom-webpack/-/react-server-dom-webpack-19.2.6.tgz"
-  integrity sha512-762YXjBPc6hw2V16k4x1sdnw0mxghcSPzoiOhefGYjiTguJLCImGBUz6EjznPIfqKhWgLtpaQMlBhp66N8dKrw==
-  dependencies:
-    acorn-loose "^8.3.0"
-    neo-async "^2.6.1"
-    webpack-sources "^3.2.0"
-
-react-server-dom-webpack@19.2.8:
-  version "19.2.8"
-  resolved "https://registry.yarnpkg.com/react-server-dom-webpack/-/react-server-dom-webpack-19.2.8.tgz#f25752bedff5173500579e72055281a3ee5b7638"
-  integrity sha512-rFO1VJZ+cH9ZH6hGy9+qmIsmZHZpCMKJZXhWHqT71UnSfg+w+W+gwrwp58MVzMqdFquG8GF1c6C8q0OGphkEdg==
+react-server-dom-webpack@19.2.9, react-server-dom-webpack@^19.2.9:
+  version "19.2.9"
+  resolved "https://registry.yarnpkg.com/react-server-dom-webpack/-/react-server-dom-webpack-19.2.9.tgz#6e50830945a9dfb51e0d259b3b78a11376b6cbf2"
+  integrity sha512-7vhLc+COcttZsIsZa5qbT4Qn3Flp2fCadhuGRKpwE3ahmbu21hOnPFKwziNHZj8Fqtfcbs7pTJV69QA5GcUpbw==
   dependencies:
     acorn-loose "^8.3.0"
     neo-async "^2.6.1"
