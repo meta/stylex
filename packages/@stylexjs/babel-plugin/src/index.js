@@ -677,17 +677,9 @@ function compareWidthSortKeys(
     : b.bound.value - a.bound.value;
 }
 
-// A `--<key>` custom-property name, up to the first CSS delimiter. Broader
-// than resolveConstant's ASCII regex, so it matches non-ASCII keys -- but
-// resolveConstant doesn't pre-collapse non-ASCII alias chains, so those
-// resolve only one step there. Escapes are not handled either, so a key that
-// backslash-escapes a delimiter (e.g. `--foo\:bar`) ends at that delimiter
-// and won't match.
+// A `--<key>` custom property name, up to the first CSS delimiter.
 const CUSTOM_PROPERTY_KEY = '--[^\\s,:;)(}{\'"]+';
-// `var(--key)` value usages and `--key:` override declarations, both built
-// from CUSTOM_PROPERTY_KEY. `var(--key)` won't match `var(--key, fallback)`
-// -- those stay overridable, so we leave them. Module scope: neither depends
-// on anything per-call, and `replace` doesn't read or retain `lastIndex`.
+// `var(--key, fallback)` is not matched, so those stay overridable.
 const VAR_USAGE_REGEX = new RegExp(`var\\(${CUSTOM_PROPERTY_KEY}\\)`, 'g');
 const OVERRIDE_KEY_REGEX = new RegExp(`(${CUSTOM_PROPERTY_KEY}):`, 'g');
 
@@ -846,26 +838,21 @@ function processStylexRules(
           return;
         }
 
-        // Pass 1: substitute `var(--key)` usages. One pass is enough --
-        // resolveConstant pre-collapsed the alias chains, so values are terminal.
+        // resolveConstant already collapsed alias chains, so one pass is enough.
         original = original.replace(VAR_USAGE_REGEX, (match) => {
           const constValue = constsMap.get(match);
           return constValue == null ? match : String(constValue);
         });
 
-        // Pass 2 -- rewrite `--key:` override declarations (#1219): a single
-        // `replace` (not cumulative replaceAll) so one declaration's rewrite
-        // can't cascade into another's; each resolves one independent step.
+        // Rewrite `--key:` overrides (#1219) in one pass so rewrites can't cascade.
         original = original.replace(OVERRIDE_KEY_REGEX, (match, cssVar) => {
           const constValue = constsMap.get(`var(${cssVar})`);
           if (constValue == null) {
             return match;
           }
           const replacement = String(constValue);
-          // When the replacement is a variable, we need to replace the key to allow variable overrides
           if (replacement.startsWith('var(') && replacement.endsWith(')')) {
             const inside = replacement.slice(4, -1).trim();
-            // Account for fallback variables
             const commaIdx = inside.indexOf(',');
             const targetName = (
               commaIdx >= 0 ? inside.slice(0, commaIdx) : inside
