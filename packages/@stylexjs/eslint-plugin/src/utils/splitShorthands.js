@@ -138,6 +138,13 @@ const BACKGROUND_REPEAT_KEYWORDS = new Set([
   'round',
 ]);
 const BACKGROUND_ATTACHMENT_KEYWORDS = new Set(['scroll', 'fixed', 'local']);
+const CSS_GLOBAL_KEYWORDS = new Set([
+  'inherit',
+  'initial',
+  'unset',
+  'revert',
+  'revert-layer',
+]);
 const BACKGROUND_POSITION_KEYWORDS = new Set([
   'left',
   'right',
@@ -886,6 +893,16 @@ function expandBackgroundShorthand(
     return null;
   }
 
+  // CSS global keywords on background shorthand apply to ALL sub-properties.
+  // There is no safe single-longhand expansion, so bail out.
+  if (
+    beforeSlash.length === 1 &&
+    afterSlash.length === 0 &&
+    CSS_GLOBAL_KEYWORDS.has(beforeSlash[0].toLowerCase())
+  ) {
+    return null;
+  }
+
   let color = null;
   let image = null;
   let repeat = null;
@@ -1130,7 +1147,11 @@ export function splitSpecificShorthands(
   }
 
   const splitValues = splitTopLevelValueTokens(baseValue);
-  if (splitValues.parts.length <= 1 && !splitValues.hasTopLevelSlash) {
+  if (
+    splitValues.parts.length <= 1 &&
+    !splitValues.hasTopLevelSlash &&
+    property !== 'background'
+  ) {
     return [[toCamelCase(property), isNumber ? Number(rawValue) : rawValue]];
   }
 

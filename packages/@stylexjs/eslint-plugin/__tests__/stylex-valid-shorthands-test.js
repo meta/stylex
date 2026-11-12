@@ -2860,5 +2860,181 @@ eslintTester.run('stylex-valid-shorthands', rule.default, {
         },
       ],
     },
+    {
+      code: `
+      import * as stylex from '@stylexjs/stylex';
+      const styles = stylex.create({
+        main: {
+          background: 'red'
+        },
+      })
+    `,
+      output: `
+      import * as stylex from '@stylexjs/stylex';
+      const styles = stylex.create({
+        main: {
+          backgroundColor: 'red'
+        },
+      })
+    `,
+      errors: [
+        {
+          message:
+            'Property shorthands using multiple values like "background: red" are not supported in StyleX. Separate into individual properties.',
+        },
+      ],
+    },
+    {
+      code: `
+      import * as stylex from '@stylexjs/stylex';
+      const styles = stylex.create({
+        main: {
+          background: 'transparent'
+        },
+      })
+    `,
+      output: `
+      import * as stylex from '@stylexjs/stylex';
+      const styles = stylex.create({
+        main: {
+          backgroundColor: 'transparent'
+        },
+      })
+    `,
+      errors: [
+        {
+          message:
+            'Property shorthands using multiple values like "background: transparent" are not supported in StyleX. Separate into individual properties.',
+        },
+      ],
+    },
+    {
+      code: `
+      import * as stylex from '@stylexjs/stylex';
+      const styles = stylex.create({
+        main: {
+          background: 'url("image.jpg")'
+        },
+      })
+    `,
+      output: `
+      import * as stylex from '@stylexjs/stylex';
+      const styles = stylex.create({
+        main: {
+          backgroundImage: 'url("image.jpg")'
+        },
+      })
+    `,
+      errors: [
+        {
+          message:
+            'Property shorthands using multiple values like "background: url("image.jpg")" are not supported in StyleX. Separate into individual properties.',
+        },
+      ],
+    },
+    {
+      code: `
+      import * as stylex from '@stylexjs/stylex';
+      const styles = stylex.create({
+        main: {
+          background: 'linear-gradient(to right, red, blue)'
+        },
+      })
+    `,
+      output: `
+      import * as stylex from '@stylexjs/stylex';
+      const styles = stylex.create({
+        main: {
+          backgroundImage: 'linear-gradient(to right, red, blue)'
+        },
+      })
+    `,
+      errors: [
+        {
+          message:
+            'Property shorthands using multiple values like "background: linear-gradient(to right, red, blue)" are not supported in StyleX. Separate into individual properties.',
+        },
+      ],
+    },
+    {
+      code: `
+      import * as stylex from '@stylexjs/stylex';
+      const styles = stylex.create({
+        main: {
+          background: 'no-repeat'
+        },
+      })
+    `,
+      output: `
+      import * as stylex from '@stylexjs/stylex';
+      const styles = stylex.create({
+        main: {
+          backgroundRepeat: 'no-repeat'
+        },
+      })
+    `,
+      errors: [
+        {
+          message:
+            'Property shorthands using multiple values like "background: no-repeat" are not supported in StyleX. Separate into individual properties.',
+        },
+      ],
+    },
+    {
+      code: `
+      import * as stylex from '@stylexjs/stylex';
+      const styles = stylex.create({
+        main: {
+          background: 'center'
+        },
+      })
+    `,
+      output: `
+      import * as stylex from '@stylexjs/stylex';
+      const styles = stylex.create({
+        main: {
+          backgroundPosition: 'center'
+        },
+      })
+    `,
+      errors: [
+        {
+          message:
+            'Property shorthands using multiple values like "background: center" are not supported in StyleX. Separate into individual properties.',
+        },
+      ],
+    },
+    {
+      code: `
+      import * as stylex from '@stylexjs/stylex';
+      const styles = stylex.create({
+        main: {
+          background: 'inherit'
+        },
+      })
+    `,
+      errors: [
+        {
+          message:
+            'Property shorthands using multiple values like "background: inherit" are not supported in StyleX. Separate into individual properties.',
+        },
+      ],
+    },
+    {
+      code: `
+      import * as stylex from '@stylexjs/stylex';
+      const styles = stylex.create({
+        main: {
+          background: 'initial'
+        },
+      })
+    `,
+      errors: [
+        {
+          message:
+            'Property shorthands using multiple values like "background: initial" are not supported in StyleX. Separate into individual properties.',
+        },
+      ],
+    },
   ],
 });
