@@ -32,18 +32,18 @@
     "testEnvironment": "node"
   },
   "dependencies": {
-    "@babel/core": "^7.26.8",
-    "@babel/plugin-syntax-flow": "^7.26.0",
-    "@babel/plugin-syntax-jsx": "^7.25.9",
-    "@babel/plugin-syntax-typescript": "^7.25.9",
+    "@babel/core": "^8.1.0",
+    "@babel/plugin-syntax-flow": "^8.0.1",
+    "@babel/plugin-syntax-jsx": "^8.0.1",
+    "@babel/plugin-syntax-typescript": "^8.0.3",
     "@stylexjs/babel-plugin": "0.19.2",
-    "lightningcss": "^1.29.1"
+    "lightningcss": "^1.33.0"
   },
   "devDependencies": {
-    "@rollup/plugin-babel": "^6.0.4",
-    "@rollup/plugin-commonjs": "^28.0.1",
-    "@rollup/plugin-node-resolve": "^15.3.0",
-    "rollup": "^4.59.0"
+    "@rollup/plugin-babel": "^7.1.0",
+    "@rollup/plugin-commonjs": "^29.0.3",
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "rollup": "^4.68.0"
   },
   "files": [
     "flow_modules/*",

@@ -26,16 +26,16 @@
     "create-app"
   ],
   "dependencies": {
-    "fs-extra": "^11.3.0",
+    "fs-extra": "^11.4.1",
     "cross-spawn": "^7.0.6",
-    "@clack/prompts": "^0.11.0",
+    "@clack/prompts": "^1.8.1",
     "picocolors": "^1.1.0",
-    "giget": "^2.0.0"
+    "giget": "^3.3.1"
   },
   "devDependencies": {
-    "@babel/cli": "^7.26.4",
-    "@babel/core": "^7.26.8",
-    "@babel/preset-env": "^7.26.8",
+    "@babel/cli": "^8.1.0",
+    "@babel/core": "^8.1.0",
+    "@babel/preset-env": "^8.0.7",
     "cross-env": "^10.1.0",
     "scripts": "0.19.2"
   }
