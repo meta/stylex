@@ -2403,6 +2403,25 @@ eslintTester.run('stylex-valid-styles [restrictions]', rule.default, {
         });
       `,
     },
+    ...[
+      '.5px',
+      '-.5px',
+      '1e2px',
+      '1.5E-3px',
+      '.5rem',
+      '1e1em',
+      '.5%',
+      '+1e2%',
+    ].map((value) => ({
+      code: `
+        import * as stylex from'stylex';
+        const styles = stylex.create({
+          default: {
+            textUnderlineOffset: '${value}',
+          },
+        });
+      `,
+    })),
     {
       code: `
         import * as stylex from'stylex';
@@ -2749,6 +2768,66 @@ revert`,
         },
       ],
     },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          invalidStyle: {
+            textUnderlineOffset: ',10%',
+          },
+        });
+      `,
+      errors: [
+        {
+          message: `textUnderlineOffset value must be one of:
+auto
+a number literal or math expression
+a number ending in px, mm, in, pc, pt
+a number ending in ch, em, ex, ic, rem, vh, vw, vmin, vmax, svh, dvh, lvh, svw, dvw, ldw, cqw, cqh, cqmin, cqmax
+A string literal representing a percentage (e.g. 100%)
+null
+initial
+inherit
+unset
+revert`,
+        },
+      ],
+    },
+    ...[
+      '4.px',
+      '4.rem',
+      '4.%',
+      '1epx',
+      ' 4px',
+      '4px /**/',
+      '5p\\\\x',
+      '5\\\\px',
+      '5\\\\rem',
+    ].map((value) => ({
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          invalidStyle: {
+            textUnderlineOffset: '${value}',
+          },
+        });
+      `,
+      errors: [
+        {
+          message: `textUnderlineOffset value must be one of:
+auto
+a number literal or math expression
+a number ending in px, mm, in, pc, pt
+a number ending in ch, em, ex, ic, rem, vh, vw, vmin, vmax, svh, dvh, lvh, svw, dvw, ldw, cqw, cqh, cqmin, cqmax
+A string literal representing a percentage (e.g. 100%)
+null
+initial
+inherit
+unset
+revert`,
+        },
+      ],
+    })),
     {
       code: `
         import * as stylex from '@stylexjs/stylex';

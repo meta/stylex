@@ -15,6 +15,11 @@ import type {
   Variables,
 } from '../stylex-valid-styles';
 import type { Node } from 'estree';
+import {
+  tokenize,
+  isTokenDimension,
+  isTokenEOF,
+} from '@csstools/css-tokenizer';
 
 const absoluteLengthUnits = new Set(['px', 'mm', 'in', 'pc', 'pt']);
 const isAbsoluteLength: RuleCheck = (
@@ -23,13 +28,16 @@ const isAbsoluteLength: RuleCheck = (
 ): RuleResponse => {
   if (node.type === 'Literal') {
     const val = node.value;
-    if (
-      typeof val === 'string' &&
-      Array.from(absoluteLengthUnits).some((unit) =>
-        val.match(new RegExp(`^([+-]?\\d+(\\.\\d+)?${unit})$`)),
-      )
-    ) {
-      return undefined;
+    if (typeof val === 'string') {
+      const [token, eof] = tokenize({ css: val });
+      if (
+        isTokenDimension(token) &&
+        isTokenEOF(eof) &&
+        absoluteLengthUnits.has(token[4].unit) &&
+        !token[1].includes('\\')
+      ) {
+        return undefined;
+      }
     }
   }
   return {
