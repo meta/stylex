@@ -45,8 +45,8 @@ git push origin <version>
 
 The [publish workflow](../.github/workflows/publish.yml) builds the tagged
 commit, publishes every package to npm and creates the GitHub release. It can
-also be run manually from the Actions tab for an existing tag. Leave "dry run"
-checked to try it without publishing.
+also be run manually from the Actions tab by picking the release tag in "Use
+workflow from". Leave "dry run" checked to try it without publishing.
 
 If the workflow can't be used, publish from your machine with Node 22:
 
