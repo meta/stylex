@@ -166,7 +166,7 @@ export default function Footer({
 
         <div {...stylex.props(styles.bottom)}>
           <span {...stylex.props(styles.copyright)}>
-            Copyright © 2025 Meta Platforms, Inc.
+            Copyright © {new Date().getFullYear()} Meta Platforms, Inc.
           </span>
 
           <div {...stylex.props(styles.bottomSpacer)} />

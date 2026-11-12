@@ -27,8 +27,9 @@ module.exports = function createBundler() {
   // Transforms the source code using Babel, extracting StyleX rules and storing them.
   async function transform(id, sourceCode, babelConfig, options) {
     const { isDev, shouldSkipTransformError } = options;
-    const { code, map, metadata } = await babel
-      .transformAsync(sourceCode, {
+    let result;
+    try {
+      result = await babel.transformAsync(sourceCode, {
         filename: id,
         caller: {
           name: '@stylexjs/postcss-plugin',
@@ -36,21 +37,27 @@ module.exports = function createBundler() {
           isDev,
         },
         ...babelConfig,
-      })
-      .catch((error) => {
-        if (shouldSkipTransformError) {
-          console.warn(
-            `[@stylexjs/postcss-plugin] Failed to transform "${id}": ${error.message}`,
-          );
-
-          return { code: sourceCode, map: null, metadata: {} };
-        }
-        throw error;
       });
+    } catch (error) {
+      if (shouldSkipTransformError) {
+        console.warn(
+          `[@stylexjs/postcss-plugin] Failed to transform "${id}": ${error.message}`,
+        );
+        return null;
+      }
+      throw error;
+    }
 
+    const { code, map, metadata } = result ?? {
+      code: sourceCode,
+      map: null,
+      metadata: {},
+    };
     const stylex = metadata.stylex;
     if (stylex != null && stylex.length > 0) {
       styleXRulesMap.set(id, stylex);
+    } else {
+      styleXRulesMap.delete(id);
     }
 
     return { code, map, metadata };

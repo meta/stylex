@@ -1,7 +1,7 @@
 {
   "private": true,
   "name": "example-webpack",
-  "version": "0.18.2",
+  "version": "0.19.2",
   "description": "Example: StyleX with Webpack via @stylexjs/unplugin",
   "main": "index.js",
   "scripts": {
@@ -15,21 +15,22 @@
     "@babel/preset-env": "^7.28.3",
     "@babel/preset-react": "^7.27.1",
     "@pmmmwh/react-refresh-webpack-plugin": "^0.6.1",
-    "@stylexjs/eslint-plugin": "0.18.2",
-    "@stylexjs/unplugin": "0.18.2",
+    "@stylexjs/eslint-plugin": "0.19.2",
+    "@stylexjs/unplugin": "0.19.2",
     "babel-loader": "^10.0.0",
     "css-loader": "^7.1.2",
     "file-loader": "^6.2.0",
     "html-webpack-plugin": "^5.6.0",
     "mini-css-extract-plugin": "^2.9.4",
     "react-refresh": "^0.18.0",
+    "shx": "^0.4.0",
     "serve": "^14.2.5",
     "webpack": "^5.101.3",
     "webpack-cli": "^6.0.1",
-    "webpack-dev-server": "^5.2.2"
+    "webpack-dev-server": "^5.2.6"
   },
   "dependencies": {
-    "@stylexjs/stylex": "0.18.2",
+    "@stylexjs/stylex": "0.19.2",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   }

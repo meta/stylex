@@ -10,7 +10,6 @@ import { defineConfig } from 'waku/config';
 
 const stylexPlugin = stylex.vite({
   debug: process.env.NODE_ENV === 'development',
-  enableDebugClassNames: false,
   enableDevClassNames: false,
   useCSSLayers: true,
   devMode: 'css-only',

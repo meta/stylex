@@ -236,6 +236,44 @@ describe('@stylexjs/babel-plugin', () => {
       `);
     });
 
+    test('unitless numbers in keyframes object', () => {
+      const { code, metadata } = transform(`
+        import * as stylex from '@stylexjs/stylex';
+        export const name = stylex.keyframes({
+          from: {
+            fontWeight: 400,
+            lineHeight: 1.2,
+            zIndex: 1,
+          },
+          to: {
+            fontWeight: 700,
+            lineHeight: 1.5,
+            zIndex: 2,
+          }
+        });
+      `);
+
+      expect(code).toMatchInlineSnapshot(`
+        "import * as stylex from '@stylexjs/stylex';
+        export const name = "xrv73u4-B";"
+      `);
+
+      expect(metadata).toMatchInlineSnapshot(`
+        {
+          "stylex": [
+            [
+              "xrv73u4-B",
+              {
+                "ltr": "@keyframes xrv73u4-B{from{font-weight:400;line-height:1.2;z-index:1;}to{font-weight:700;line-height:1.5;z-index:2;}}",
+                "rtl": null,
+              },
+              0,
+            ],
+          ],
+        }
+      `);
+    });
+
     test('[legacy] keyframes object RTL polyfills', () => {
       const { code, metadata } = transform(`
         import * as stylex from '@stylexjs/stylex';

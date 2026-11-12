@@ -1,0 +1,48 @@
+/**
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ *
+ * @flow strict
+ */
+
+import type { NodePath } from '@babel/traverse';
+
+type StyleInfo = Readonly<{ property: string, value: string | number }>;
+type DynamicStyleInfo = Readonly<{ property: string, value: unknown }>;
+
+type CompileUtils = Readonly<{ +[string]: unknown }>;
+
+type BabelVisitor = Readonly<{
+  MemberExpression(path: NodePath<>): void,
+  CallExpression(path: NodePath<>): void,
+}>;
+
+declare function createUtilityStylesVisitor(
+  state: unknown,
+  compile: CompileUtils,
+): BabelVisitor;
+
+declare function isUtilityStylesIdentifier(
+  ident: unknown,
+  state: unknown,
+  path: NodePath<>,
+): boolean;
+
+declare function getStaticStyleFromPath(
+  path: NodePath<>,
+  state: unknown,
+): ?StyleInfo;
+
+declare function getDynamicStyleFromPath(
+  path: NodePath<>,
+  state: unknown,
+): ?DynamicStyleInfo;
+
+declare module.exports: {
+  createUtilityStylesVisitor: typeof createUtilityStylesVisitor,
+  isUtilityStylesIdentifier: typeof isUtilityStylesIdentifier,
+  getStaticStyleFromPath: typeof getStaticStyleFromPath,
+  getDynamicStyleFromPath: typeof getDynamicStyleFromPath,
+};

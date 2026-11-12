@@ -1,6 +1,6 @@
 {
   "name": "@stylexjs/stylex",
-  "version": "0.18.2",
+  "version": "0.19.2",
   "description": "A library for defining styles for optimized user interfaces.",
   "main": "./lib/cjs/stylex.js",
   "module": "./lib/es/stylex.mjs",
@@ -25,7 +25,8 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/facebook/stylex.git"
+    "url": "git+https://github.com/meta/stylex.git",
+    "directory": "packages/@stylexjs/stylex"
   },
   "license": "MIT",
   "scripts": {
@@ -37,8 +38,6 @@
     "test": "cross-env BABEL_ENV=test jest --coverage"
   },
   "dependencies": {
-    "css-mediaquery": "^0.1.2",
-    "invariant": "^2.2.4",
     "styleq": "0.2.1"
   },
   "devDependencies": {
@@ -57,10 +56,10 @@
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^15.3.0",
     "@rollup/plugin-replace": "^6.0.1",
-    "babel-plugin-syntax-hermes-parser": "^0.32.1",
+    "babel-plugin-syntax-hermes-parser": "^0.36.1",
     "cross-env": "^10.1.0",
     "rollup": "^4.59.0",
-    "scripts": "0.18.2"
+    "scripts": "0.19.2"
   },
   "files": [
     "lib/*"

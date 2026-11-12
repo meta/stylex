@@ -117,7 +117,7 @@ const styles = stylex.create({
   },
   card: { padding: '2em' },
   readTheDocs: { color: '#888' },
-  h1: { fontSize: '3.2em', lineHeight: '1.1' },
+  h1: { fontSize: '3.2em', lineHeight: 1.1 },
   link: { fontWeight: 500, color: '#646cff', textDecoration: 'none' },
   linkHover: { color: { ':hover': '#535bf2' } },
   button: {

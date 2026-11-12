@@ -16,14 +16,14 @@ const DARK_MODE = '@media (prefers-color-scheme: dark)';
 
 const crossStyles = stylex.create({
   card: {
-    width: '100%',
-    padding: '1rem',
-    borderRadius: '0.5rem',
-    backgroundColor: nestedTokens.surface.hover,
     display: 'flex',
     flexDirection: 'column',
     gap: '0.75rem',
     alignItems: 'center',
+    width: '100%',
+    padding: '1rem',
+    backgroundColor: nestedTokens.surface.hover,
+    borderRadius: '0.5rem',
   },
   label: {
     margin: 0,
@@ -35,16 +35,16 @@ const crossStyles = stylex.create({
   },
   swatch: {
     display: 'flex',
-    gap: '0.5rem',
     flexWrap: 'wrap',
+    gap: '0.5rem',
     justifyContent: 'center',
   },
   swatchItem: {
     width: 40,
     height: 40,
-    borderRadius: nestedConsts.badge.borderRadius,
-    borderWidth: 2,
     borderStyle: 'solid',
+    borderWidth: 2,
+    borderRadius: nestedConsts.badge.borderRadius,
   },
   infoSwatch: {
     backgroundColor: nestedTokens.badge.info.bg,
@@ -66,14 +66,14 @@ const crossStyles = stylex.create({
     opacity: 0.6,
   },
   code: {
+    paddingBlock: '0.1em',
+    paddingInline: '0.3em',
     fontFamily: 'ui-monospace, Menlo, Monaco, monospace',
     fontSize: '0.85em',
     backgroundColor: {
-      default: 'rgba(0,0,0,0.05)',
       [DARK_MODE]: 'rgba(255,255,255,0.08)',
+      default: 'rgba(0,0,0,0.05)',
     },
-    paddingInline: '0.3em',
-    paddingBlock: '0.1em',
     borderRadius: '4px',
   },
 });

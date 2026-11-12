@@ -8,7 +8,7 @@ Values can also be `null`, `undefined`, or `false`.
 The return value should be spread onto an element to apply the styles directly.
 
 ```ts
-function props(styles: StyleXStyles | StyleXStyles[]): {
+function props(...styles: StyleXStyles[]): {
   className: string;
   style: { [key: string]: string };
 };
@@ -43,38 +43,39 @@ const styles = stylex.create({
 />;
 ```
 
+## `sx={}` on JSX elements
+
+When using the compiler, JSX host elements can also use an `sx` prop as a
+shorter alternative to `stylex.props`:
+
+```tsx
+<button sx={styles.root}>Save</button>
+```
+
+This compiles to the same output as:
+
+```tsx
+<button {...stylex.props(styles.root)}>Save</button>
+```
+
+The JSX shorthand only applies to lowercase DOM elements such as `div`,
+`button`, or `span`. For custom components, continue passing the result of
+`stylex.props` explicitly.
+
+You can rename or disable this syntax with the
+[`sxPropName`](/docs/api/configuration/babel-plugin#sxpropname) compiler option.
+
 ### Not using React?
 
 <Callout type="tip" title="For Solid, Svelte, Qwik, Vue">
 
-For frameworks that expect `class` instead of `className`, and expect `style` to
-be a string instead of an object, you can wrap use of the `props` API with the
-function below.
-
-```js
-export function attrs({ className, 'data-style-src': dataStyleSrc, style }) {
-  const result = {};
-  // Convert className to class
-  if (className != null && className !== '') {
-    result.class = className;
-  }
-  // Convert style object to string
-  if (style != null && Object.keys(style).length > 0) {
-    result.style = Object.keys(style)
-      .map((key) => `${key}:${style[key]};`)
-      .join('');
-  }
-  if (dataStyleSrc != null && dataStyleSrc !== '') {
-    result['data-style-src'] = dataStyleSrc;
-  }
-  return result;
-}
-```
+Use [`stylex.attrs()`](/docs/api/javascript/attrs) to get `class` and a string
+`style` value directly.
 
 Example use:
 
 ```js
-<div {...attrs(stylex.props(...styles))} />
+<div {...stylex.attrs(styles.root, condition && styles.active)} />
 ```
 
 </Callout>

@@ -10,6 +10,7 @@
 import type { StyleXOptions } from '../common-types';
 
 import normalizeValue from './normalize-value';
+import parser from 'postcss-value-parser';
 
 /**
  * Convert a CSS value in JS to the final CSS string value
@@ -60,14 +61,46 @@ export default function transformValue(
       val.includes(func),
     );
     const isKeyword = cssContentKeywords.has(val);
-    const hasMatchingQuotes =
-      (val.match(/"/g)?.length ?? 0) >= 2 ||
-      (val.match(/'/g)?.length ?? 0) >= 2;
 
-    if (isCssFunction || isKeyword || hasMatchingQuotes) {
+    // A value the author already wrote as CSS is a list of content components:
+    // quoted strings, functions and quote keywords. Counting quote characters
+    // is not enough to detect that, because ordinary text can contain a pair of
+    // them, as in "Bob's and Jim's" or 'He said "hello"'. Such a value is not a
+    // CSS string, so the browser drops the whole declaration.
+    const contentNodes = parser(val).nodes.filter(
+      (node) => node.type !== 'space' && node.type !== 'div',
+    );
+    const isQuotedContentList =
+      contentNodes.some((node) => node.type === 'string' && !node.unclosed) &&
+      contentNodes.every((node) => {
+        if (node.type === 'string' || node.type === 'function') {
+          return !node.unclosed;
+        }
+        return node.type === 'word' && cssContentKeywords.has(node.value);
+      });
+
+    if (isCssFunction || isKeyword || isQuotedContentList) {
       return val;
     }
-    return `"${val}"`;
+
+    // Inside a CSS string a backslash starts an escape sequence, so an escape
+    // the author wrote, such as `\2014` for an em dash, is left as it is. Only
+    // what would end the string early is escaped: a double quote that is not
+    // already escaped, a trailing backslash that would otherwise escape the
+    // closing quote, and a line break, which a CSS string writes as `\A`.
+    const escaped = val.replace(
+      /\\(?:\r\n|[\s\S])|\r\n|[\n\r\f]|["\\]/g,
+      (match) => {
+        if (match.length > 1 && match[0] === '\\') {
+          return match;
+        }
+        if (match === '"' || match === '\\') {
+          return `\\${match}`;
+        }
+        return '\\A ';
+      },
+    );
+    return `"${escaped}"`;
   }
 
   return normalizeValue(value, key, options);
@@ -110,6 +143,7 @@ const unitlessNumberProperties = new Set([
   'gridColumnStart',
   'gridColumnEnd',
   'gridArea',
+  'fontSizeAdjust',
   'fontWeight',
   'hyphenateLimitChars',
   'lineClamp',

@@ -66,9 +66,9 @@ export default [
     },
     rules: {
       '@stylexjs/valid-styles': 'error',
-      'ft-flow/space-after-type-colon': 0,
-      'ft-flow/no-types-missing-file-annotation': 0,
-      'ft-flow/generic-spacing': 0,
+      '@stylexjs/no-unused': 'error',
+      '@stylexjs/no-legacy-contextual-styles': 'error',
+      '@stylexjs/sort-keys': ['error', { order: 'recess' }],
     },
   },
 ];

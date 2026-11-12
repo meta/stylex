@@ -30,8 +30,11 @@ the expressive power available. We believe this is possible through build-tools.
 
 StyleX provides a completely predictable and deterministic styling system that
 works across files. It produces deterministic results not only when merging
-multiple selectors, but also when merging multiple shorthand and longhand
-properties (e.g. `margin` vs `margin-top`). The last style applied always wins.
+multiple selectors, but also when merging shorthand and longhand properties
+(e.g. `margin` vs `margin-top`). By default, the more specific property wins
+(`margin-top` over `margin`) regardless of application order. When two styles
+set the same property, the last style applied wins. See
+[`styleResolution`](/docs/api/configuration/babel-plugin/#styleresolution).
 
 ### Low-cost abstractions
 

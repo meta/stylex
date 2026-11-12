@@ -26,7 +26,7 @@ const isAbsoluteLength: RuleCheck = (
     if (
       typeof val === 'string' &&
       Array.from(absoluteLengthUnits).some((unit) =>
-        val.match(new RegExp(`^([-,+]?\\d+(\\.\\d+)?${unit})$`)),
+        val.match(new RegExp(`^([+-]?\\d+(\\.\\d+)?${unit})$`)),
       )
     ) {
       return undefined;

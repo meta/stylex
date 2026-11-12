@@ -1,7 +1,7 @@
 {
   "name": "example-vite-react",
   "private": true,
-  "version": "0.18.2",
+  "version": "0.19.2",
   "type": "module",
   "scripts": {
     "example:dev": "vite",
@@ -12,23 +12,25 @@
   "dependencies": {
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "@stylexjs/stylex": "0.18.2",
-    "@stylexjs/shared-ui": "0.18.2"
+    "@stylexjs/stylex": "0.19.2",
+    "@stylexjs/shared-ui": "0.19.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
+    "@stylexjs/eslint-plugin": "0.19.2",
     "@types/node": "^24.6.0",
     "@types/react": "^19.2.6",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.0.4",
-    "@stylexjs/unplugin": "0.18.2",
+    "@stylexjs/unplugin": "0.19.2",
     "babel-plugin-react-compiler": "^1.0.0",
     "eslint": "^9.36.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.22",
     "globals": "^16.4.0",
+    "shx": "^0.4.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.45.0",
-    "vite": "^7.1.7"
+    "vite": "^7.3.7"
   }
 }

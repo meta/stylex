@@ -50,37 +50,37 @@ export default function App() {
 
 const styles = stylex.create({
   main: {
-    padding: '2rem',
-    alignItems: 'center',
-    columnGap: '2rem',
     display: 'flex',
     flexDirection: 'column',
-    justifyContent: 'center',
     rowGap: '2rem',
+    columnGap: '2rem',
+    alignItems: 'center',
+    justifyContent: 'center',
     height: '100vh',
+    padding: '2rem',
   },
   logoContainer: {
-    columnGap: '2rem',
     display: 'flex',
     rowGap: '2rem',
+    columnGap: '2rem',
   },
   logo: {
-    transition: 'filter 300ms',
+    height: '6em',
     filter: {
       default: null,
       ':hover': 'drop-shadow(0 0 2em #646cffaa)',
     },
+    transition: 'filter 300ms',
     willChange: 'filter',
-    height: '6em',
   },
   header: {
-    color: colors.textPrimary,
     fontSize: '3.2em',
     lineHeight: 1.1,
+    color: colors.textPrimary,
   },
   card: {
-    columnGap: '2rem',
     display: 'flex',
     rowGap: '2rem',
+    columnGap: '2rem',
   },
 });

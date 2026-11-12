@@ -9,8 +9,9 @@ import { Provider } from '@/components/provider';
 import '@/styles/globals.css';
 import DevStyleXHMR from '@/components/DevStyleXHMR';
 import { SidebarProvider } from '@/contexts/SidebarContext';
-import faviconUrl from '@/static/img/favicon.svg';
 import coverImageUrl from '@/static/img/stylex-cover-photo.png';
+
+const faviconUrl = '/favicon.svg';
 
 const DEFAULT_TITLE = 'StyleX — The styling system for ambitious interfaces';
 const DEFAULT_DESCRIPTION = 'The styling system that powers Meta.';

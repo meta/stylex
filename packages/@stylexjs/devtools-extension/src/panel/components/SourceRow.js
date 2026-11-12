@@ -7,209 +7,214 @@
  * @flow strict
  */
 
-'use strict';
-
 import * as React from 'react';
-import { useState, useCallback, use, Suspense, useTransition } from 'react';
+import { useEffect, useState } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import type { SourcePreview } from '../../types';
-// import { openInVsCodeFromStylexSource } from '../../utils/vscode';
 
+import type { SourcePreview, StylexSource } from '../../types';
+import { devtoolsBridge } from '../../devtools/bridge';
+import { copyText } from '../../utils/clipboard';
 import {
-  getSourcePreview,
-  openSourceBestEffort,
-} from '../../devtools/resources';
-// import { Button } from './Button';
+  formatCopyableSourceLocation,
+  formatSourceLocation,
+} from '../../utils/sourceLocation';
 import { colors } from '../theme.stylex';
 import { EyeIcon } from './EyeIcon';
 
 export function SourceRow({
-  src,
-  onError,
+  revision,
+  source,
 }: {
-  src: { raw: string, file: string, line: number | null, ... },
-  onError: (message: string) => void,
+  revision: number,
+  source: StylexSource,
 }): React.Node {
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [preview, setPreview] = useState<?SourcePreview>(null);
+  const [error, setError] = useState<?string>(null);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>(
+    'idle',
+  );
 
-  const togglePreview = useCallback(() => {
-    startTransition(() => {
-      setIsPreviewOpen((open) => !open);
-    });
-  }, []);
+  useEffect(() => {
+    if (!previewOpen || !devtoolsBridge.capabilities.sourcePreview) return;
+    let cancelled = false;
+    setPreview(null);
+    setError(null);
+    devtoolsBridge.getSourcePreview(source.file, source.line).then(
+      (nextPreview) => {
+        if (!cancelled) setPreview(nextPreview);
+      },
+      (caught) => {
+        if (!cancelled) {
+          setError(
+            caught instanceof Error
+              ? caught.message
+              : 'Could not load the source preview.',
+          );
+        }
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [previewOpen, revision, source.file, source.line]);
+
+  useEffect(() => {
+    if (copyStatus === 'idle') return;
+    const timeoutId = window.setTimeout(() => setCopyStatus('idle'), 1600);
+    return () => window.clearTimeout(timeoutId);
+  }, [copyStatus]);
+
+  const location = formatSourceLocation(source);
+  const copyLocation = formatCopyableSourceLocation(source);
+  const sourceControl = devtoolsBridge.capabilities.openSource ? (
+    <button
+      {...stylex.props(styles.pathButton)}
+      onClick={() => {
+        setError(null);
+        devtoolsBridge
+          .openSource(source.file, source.line)
+          .catch((caught) =>
+            setError(
+              caught instanceof Error
+                ? caught.message
+                : 'Could not open source.',
+            ),
+          );
+      }}
+      title={source.raw}
+      type="button"
+    >
+      {location}
+    </button>
+  ) : (
+    <button
+      {...stylex.props(styles.pathButton, styles.copyPathButton)}
+      aria-label={
+        copyStatus === 'copied'
+          ? `Copied source location ${copyLocation}`
+          : copyStatus === 'failed'
+            ? `Copy failed for source location ${copyLocation}`
+            : `Copy source location ${copyLocation}`
+      }
+      onClick={async () => {
+        setCopyStatus('idle');
+        const copied = await copyText(copyLocation);
+        setCopyStatus(copied ? 'copied' : 'failed');
+      }}
+      title={
+        copyStatus === 'copied'
+          ? `Copied: ${copyLocation}`
+          : copyStatus === 'failed'
+            ? `Could not copy: ${copyLocation}`
+            : `Copy: ${copyLocation}`
+      }
+      type="button"
+    >
+      {location}
+    </button>
+  );
 
   return (
-    <div {...stylex.props(styles.sourceEntry)}>
-      <div {...stylex.props(styles.sourceRow)}>
-        <button
-          {...stylex.props(
-            styles.pill,
-            isPreviewOpen && styles.pillActive,
-            isPending && styles.buttonPending,
-          )}
-          onClick={togglePreview}
-          title="Order in data-style-src"
-        >
-          <EyeIcon xstyle={styles.icon} />
-        </button>
-        <button
-          {...stylex.props(styles.sourcePath)}
-          onClick={() =>
-            openSourceBestEffort(src.file, src.line).catch((e) =>
-              onError(
-                e instanceof Error ? e.message : 'Failed to open source.',
-              ),
-            )
-          }
-          title={src.raw}
-        >
-          {src.raw}
-        </button>
-        {/* <Button
-          onClick={() => openInVsCodeFromStylexSource(src.file, src.line)}
-          title="Opens the StyleX source location in VS Code (requires setting a local root path once)."
-        >
-          VS Code
-        </Button> */}
-        {/* <Button
-          onClick={togglePreview}
-          title="Shows file contents (best-effort via DevTools resources)"
-          xstyle={isPending ? styles.buttonPending : undefined}
-        >
-          {isPreviewOpen ? 'Hide' : 'Preview'}
-        </Button> */}
+    <div {...stylex.props(styles.root)}>
+      <div {...stylex.props(styles.row)}>
+        {devtoolsBridge.capabilities.sourcePreview ? (
+          <button
+            {...stylex.props(
+              styles.iconButton,
+              previewOpen && styles.iconButtonActive,
+            )}
+            aria-label={previewOpen ? 'Hide source preview' : 'Preview source'}
+            onClick={() => setPreviewOpen((open) => !open)}
+            title={previewOpen ? 'Hide source preview' : 'Preview source'}
+            type="button"
+          >
+            <EyeIcon xstyle={styles.icon} />
+          </button>
+        ) : null}
+        {sourceControl}
+        {!devtoolsBridge.capabilities.openSource && copyStatus !== 'idle' ? (
+          <span
+            {...stylex.props(
+              styles.copyStatus,
+              copyStatus === 'failed' && styles.copyStatusFailed,
+            )}
+            role="status"
+          >
+            {copyStatus === 'copied' ? 'Copied' : 'Copy failed'}
+          </span>
+        ) : null}
       </div>
-
-      {isPreviewOpen ? (
-        <div {...stylex.props(styles.sourcePreview)}>
-          <SourceSnippetSuspense file={src.file} line={src.line ?? 0} />
+      {error != null ? (
+        <div {...stylex.props(styles.error)} role="alert">
+          {error}
         </div>
+      ) : null}
+      {previewOpen ? (
+        <pre {...stylex.props(styles.preview)}>
+          {preview?.snippet ?? (error == null ? 'Loading…' : '')}
+        </pre>
       ) : null}
     </div>
   );
 }
 
-const cache: { [string]: Promise<SourcePreview> } = {};
-function getSourcePreviewPromise(file: string, line: number) {
-  const cacheKey = `${file}:${line}`;
-  if (cache[cacheKey]) {
-    return cache[cacheKey];
-  }
-  const promise = getSourcePreview(file, line);
-  cache[cacheKey] = promise;
-  return promise;
-}
-
-function SourceSnippet({ file, line }: { file: string, line: number }) {
-  const preview = use(getSourcePreviewPromise(file, line));
-
-  return (
-    <pre {...stylex.props(styles.sourcePreviewCode)}>
-      {preview?.snippet ?? 'no source found'}
-    </pre>
-  );
-}
-
-function SourceSnippetSuspense({ file, line }: { file: string, line: number }) {
-  return (
-    <Suspense fallback={<SourceSnippetFallback />}>
-      <SourceSnippet file={file} line={line} />
-    </Suspense>
-  );
-}
-
-function SourceSnippetFallback() {
-  return (
-    <div {...stylex.props(styles.sourcePreviewCode, styles.loading)}>
-      Loading…
-    </div>
-  );
-}
-
 const styles = stylex.create({
-  icon: {
-    width: 16,
-    height: 16,
-  },
-  pill: {
+  root: { display: 'grid', gap: 5, minWidth: 0 },
+  row: { alignItems: 'center', display: 'flex', gap: 5, minWidth: 0 },
+  icon: { height: 16, width: 16 },
+  iconButton: {
     appearance: 'none',
-    backgroundColor: {
-      default: 'transparent',
-      ':hover': colors.bgRaised,
-      ':focus-visible': colors.bgRaised,
-    },
-    transform: {
-      default: null,
-      ':active': 'scale(0.95)',
-    },
-    display: 'inline-block',
-    paddingTop: 8,
-    paddingBottom: 2,
-    paddingInline: 4,
-    borderRadius: 8,
-    borderWidth: 1,
+    backgroundColor: { default: 'transparent', ':hover': colors.bgRaised },
     borderStyle: 'none',
-  },
-  pillActive: {
-    color: colors.textAccent,
-  },
-  loading: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: colors.textMuted,
-  },
-  sourceEntry: {
-    width: '100%',
-    maxWidth: '100%',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 4,
-  },
-  sourceRow: {
-    width: '100%',
-    display: 'flex',
-    alignItems: 'center',
-  },
-  sourcePath: {
-    appearance: 'none',
-    textAlign: 'start',
-    backgroundColor: 'transparent',
-    display: 'inline',
-    borderStyle: 'none',
+    color: colors.textPrimary,
     cursor: 'pointer',
-    flexGrow: 1,
-    fontFamily:
-      'ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace',
+    display: 'flex',
+    flexShrink: 0,
+    padding: 4,
+  },
+  iconButtonActive: { color: colors.textAccent },
+  pathButton: {
+    appearance: 'none',
+    backgroundColor: 'transparent',
+    borderStyle: 'none',
     color: {
       default: colors.textPrimary,
-      ':hover': colors.textAccent,
       ':focus-visible': colors.textAccent,
+      ':hover': colors.textAccent,
     },
-    textDecoration: {
-      default: 'none',
-      ':hover': 'underline',
-      ':focus-visible': 'underline',
-    },
-    wordBreak: 'break-word',
-  },
-  buttonPending: {
-    opacity: 0.5,
-  },
-  sourcePreview: {},
-  sourcePreviewCode: {
+    cursor: 'pointer',
+    flexBasis: 0,
+    flexGrow: 1,
+    flexShrink: 1,
     fontFamily:
       'ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace',
-    whiteSpace: 'pre',
-    width: '100%',
-    overflow: 'auto',
+    minWidth: 0,
+    overflowWrap: 'anywhere',
+    padding: 0,
+    textAlign: 'left',
+  },
+  copyPathButton: { flexBasis: 'auto', flexGrow: 0 },
+  copyStatus: {
+    color: colors.secondaryAccent,
+    flexShrink: 0,
+    fontSize: 11,
+    whiteSpace: 'nowrap',
+  },
+  copyStatusFailed: { color: 'light-dark(#b42318, #ff8a80)' },
+  error: { color: 'light-dark(#b42318, #ff8a80)', overflowWrap: 'anywhere' },
+  preview: {
     backgroundColor: colors.bgRaised,
-    borderWidth: 1,
-    borderStyle: 'solid',
     borderColor: colors.border,
     borderRadius: 6,
+    borderStyle: 'solid',
+    borderWidth: 1,
+    fontFamily:
+      'ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace',
     margin: 0,
+    minHeight: 32,
+    overflow: 'auto',
     padding: 8,
+    whiteSpace: 'pre',
   },
 });

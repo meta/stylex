@@ -38,9 +38,12 @@ import isNumber from './rules/isNumber';
 import isAnimationName from './rules/isAnimationName';
 import isPositionTryFallbacks from './rules/isPositionTryFallbacks';
 import isStylexResolvedVarsToken from './rules/isStylexResolvedVarsToken';
+import isStylexEnvMember from './rules/isStylexEnvMember';
 import isCSSVariable from './rules/isCSSVariable';
 import evaluate from './utils/evaluate';
 import resolveKey from './utils/resolveKey';
+import formatPropertiesWithNodeIndentation from './utils/formatPropertiesWithNodeIndentation';
+import getSourceCode from './utils/getSourceCode';
 import {
   CSSPropertyKeys,
   CSSProperties,
@@ -50,6 +53,7 @@ import {
   allModifiers,
   all,
 } from './reference/cssProperties';
+import { splitSpecificShorthands, CANNOT_FIX } from './utils/splitShorthands';
 
 export type Variables = $ReadOnlyMap<string, Expression | 'ARG'>;
 export type RuleCheck = (
@@ -61,6 +65,7 @@ export type RuleCheck = (
 export type RuleResponse = void | {
   message: string,
   distance?: number,
+  fix?: Rule.ReportFixer,
   suggest?: {
     fix: Rule.ReportFixer,
     desc: string,
@@ -76,6 +81,113 @@ type ValidationResult =
 const showError =
   (message: string): RuleCheck =>
   () => ({ message });
+
+// Maps camelCase CSS shorthand property names to the hyphenated names
+// used by splitSpecificShorthands
+const shorthandExpansionMap: { [string]: string } = {
+  animation: 'animation',
+  font: 'font',
+  gap: 'gap',
+  gridArea: 'grid-area',
+  gridColumn: 'grid-column',
+  gridRow: 'grid-row',
+  gridTemplate: 'grid-template',
+  gridGap: 'gap',
+};
+
+const LEGACY_CONDITIONAL_SHORTHAND_FIXERS = new Set(['animation', 'font']);
+
+const LEGACY_CONDITIONAL_REPLACEMENT_FIXERS = new Set([
+  'border',
+  'borderTop',
+  'borderBlockStart',
+  'borderEnd',
+  'borderInlineEnd',
+  'borderRight',
+  'borderBottom',
+  'borderBlockEnd',
+  'borderStart',
+  'borderInlineStart',
+  'borderLeft',
+]);
+
+const NUMERIC_LITERAL_VALUE_REGEX = /^[-+]?(?:\d+|\d*\.\d+)$/;
+
+const NUMERIC_LITERAL_PROPERTIES = new Set([
+  'rowGap',
+  'columnGap',
+  'lineHeight',
+  'fontWeight',
+  'animationIterationCount',
+]);
+
+const serializeValue = (propertyKey: string, val: number | string): string => {
+  if (typeof val === 'number') {
+    return String(val);
+  }
+  if (
+    NUMERIC_LITERAL_PROPERTIES.has(propertyKey) &&
+    NUMERIC_LITERAL_VALUE_REGEX.test(val)
+  ) {
+    return String(Number(val));
+  }
+  // Escape single quotes within the string
+  const escaped = val.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  return `'${escaped}'`;
+};
+
+const formatExpandedProperties = (
+  prop: $ReadOnly<Property>,
+  expanded: $ReadOnlyArray<$ReadOnly<[string, number | string]>>,
+  context?: Rule.RuleContext,
+): string => {
+  const sourceCode = context != null ? getSourceCode(context) : undefined;
+  const properties = expanded.map(
+    ([key, value]) => `${key}: ${serializeValue(key, value)}`,
+  );
+  return formatPropertiesWithNodeIndentation(prop, properties, sourceCode);
+};
+
+const showErrorWithFix =
+  (message: string, propertyKey: string): RuleCheck =>
+  (
+    node: $ReadOnly<Expression | Pattern>,
+    _variables?: Variables,
+    prop?: $ReadOnly<Property>,
+    context?: Rule.RuleContext,
+  ): RuleResponse => {
+    const response: $NonMaybeType<RuleResponse> = { message };
+    const shorthandProp = shorthandExpansionMap[propertyKey];
+    if (shorthandProp == null || node.type !== 'Literal' || prop == null) {
+      return response;
+    }
+    const val = node.value;
+    if (typeof val !== 'string' && typeof val !== 'number') {
+      return response;
+    }
+    const expanded = splitSpecificShorthands(shorthandProp, String(val));
+    if (expanded.length <= 1 && expanded[0]?.[1] !== CANNOT_FIX) {
+      // Single value that's unchanged — no expansion available
+      return response;
+    }
+    if (expanded.length === 1 && expanded[0]?.[1] === CANNOT_FIX) {
+      // Cannot be auto-fixed
+      return response;
+    }
+    const newPropertiesText = formatExpandedProperties(prop, expanded, context);
+    const fixFn = (fixer: Rule.RuleFixer) => {
+      return fixer.replaceText(prop, newPropertiesText);
+    };
+    // animation is suggest-only since animationName needs a keyframes() reference
+    if (propertyKey !== 'animation') {
+      response.fix = fixFn;
+    }
+    response.suggest = {
+      desc: `Split '${propertyKey}' shorthand into individual longhand properties?`,
+      fix: fixFn,
+    };
+    return response;
+  };
 
 const stylexValidStyles = {
   meta: {
@@ -118,6 +230,14 @@ const stylexValidStyles = {
           banPropsForLegacy: {
             type: 'boolean',
             default: false,
+          },
+          styleResolution: {
+            type: 'string',
+            enum: [
+              'application-order',
+              'property-specificity',
+              'legacy-expand-shorthands',
+            ],
           },
           propLimits: {
             type: 'object',
@@ -176,11 +296,22 @@ const stylexValidStyles = {
       allowRawCSSVars: boolean,
       allowOuterPseudoAndMedia: boolean,
       banPropsForLegacy: boolean,
+      styleResolution?:
+        | 'application-order'
+        | 'property-specificity'
+        | 'legacy-expand-shorthands',
       propLimits?: PropLimits,
     };
 
     const legacyProps: PropLimits = {
-      'grid*': { limit: null, reason: legacyReason },
+      grid: { limit: null, reason: legacyReason },
+      gridArea: { limit: null, reason: legacyReason },
+      gridColumn: { limit: null, reason: legacyReason },
+      gridRow: { limit: null, reason: legacyReason },
+      gridTemplate: { limit: null, reason: legacyReason },
+      gridGap: { limit: null, reason: legacyReason },
+      gridColumnGap: { limit: null, reason: legacyReason },
+      gridRowGap: { limit: null, reason: legacyReason },
       'mask+([a-zA-Z])': { limit: null, reason: legacyReason },
       blockOverflow: { limit: null, reason: legacyReason },
       inlineOverflow: { limit: null, reason: legacyReason },
@@ -195,8 +326,18 @@ const stylexValidStyles = {
       allowRawCSSVars = true,
       allowOuterPseudoAndMedia,
       banPropsForLegacy = false,
+      styleResolution,
       propLimits = {},
     }: Schema = context.options[0] || {};
+
+    const isLegacyExpandShorthands =
+      styleResolution === 'legacy-expand-shorthands' || banPropsForLegacy;
+
+    const shouldEnableLegacyConditionalShorthandFixer = (
+      propertyKey: string,
+    ): boolean =>
+      isLegacyExpandShorthands ||
+      !LEGACY_CONDITIONAL_SHORTHAND_FIXERS.has(propertyKey);
 
     /**
      * Check if a file has a valid extension for StyleX variable imports.
@@ -230,8 +371,7 @@ const stylexValidStyles = {
     const stylexResolvedVarsTokenImports = new Set<string>();
 
     // Track same-file defineVars/defineVarsNested/defineConstsNested declarations.
-    const currentFilename =
-      context.getFilename != null ? context.getFilename() : '';
+    const currentFilename = context.filename;
     const isStylexFile = isValidStylexResolvedVarsFileExtension(
       currentFilename,
       themeFileExtension,
@@ -241,10 +381,12 @@ const stylexValidStyles = {
     const styleXCreateImports = new Set<string>();
     const styleXKeyframesImports = new Set<string>();
     const styleXPositionTryImports = new Set<string>();
+    const styleXFirstThatWorksImports = new Set<string>();
     const styleXWhenImports = new Set<string>();
+    const styleXEnvImports = new Set<string>();
 
     const overrides: PropLimits = {
-      ...(banPropsForLegacy ? legacyProps : {}),
+      ...(isLegacyExpandShorthands ? legacyProps : {}),
       ...propLimits,
     };
 
@@ -263,36 +405,59 @@ const stylexValidStyles = {
         all,
       ),
     };
+    const getOverrideErrorRule = (reason: string, propertyKey: string) =>
+      shorthandExpansionMap[propertyKey] != null &&
+      shouldEnableLegacyConditionalShorthandFixer(propertyKey)
+        ? showErrorWithFix(reason, propertyKey)
+        : showError(reason);
+
     for (const overrideKey in overrides) {
       const { limit, reason } = overrides[overrideKey];
+      if (limit === null) {
+        // For properties with known shorthand expansions, provide auto-fixers
+        if (overrideKey.includes('*') || overrideKey.includes('+')) {
+          for (const key in CSSPropertiesWithOverrides) {
+            if (micromatch.isMatch(key, overrideKey)) {
+              CSSPropertiesWithOverrides[key] = getOverrideErrorRule(
+                reason,
+                key,
+              );
+            }
+          }
+        } else {
+          CSSPropertiesWithOverrides[overrideKey] = getOverrideErrorRule(
+            reason,
+            overrideKey,
+          );
+        }
+        continue;
+      }
       const overrideValue =
-        limit === null
-          ? showError(reason)
-          : limit === '*'
-            ? makeUnionRule(isString, isNumber, all)
-            : limit === 'string'
-              ? makeUnionRule(isString, all)
-              : limit === 'number'
-                ? makeUnionRule(isNumber, all)
-                : typeof limit === 'string' || typeof limit === 'number'
-                  ? makeUnionRule(limit, all)
-                  : Array.isArray(limit)
-                    ? makeUnionRule(
-                        ...limit.map((l) => {
-                          if (l === '*') {
-                            return makeUnionRule(isString, isNumber);
-                          }
-                          if (l === 'string') {
-                            return isString;
-                          }
-                          if (l === 'number') {
-                            return isNumber;
-                          }
-                          return l;
-                        }),
-                        all,
-                      )
-                    : undefined;
+        limit === '*'
+          ? makeUnionRule(isString, isNumber, all)
+          : limit === 'string'
+            ? makeUnionRule(isString, all)
+            : limit === 'number'
+              ? makeUnionRule(isNumber, all)
+              : typeof limit === 'string' || typeof limit === 'number'
+                ? makeUnionRule(limit, all)
+                : Array.isArray(limit)
+                  ? makeUnionRule(
+                      ...limit.map((l) => {
+                        if (l === '*') {
+                          return makeUnionRule(isString, isNumber);
+                        }
+                        if (l === 'string') {
+                          return isString;
+                        }
+                        if (l === 'number') {
+                          return isNumber;
+                        }
+                        return l;
+                      }),
+                      all,
+                    )
+                  : undefined;
       if (overrideValue === undefined) {
         // skip
         continue;
@@ -393,6 +558,37 @@ const stylexValidStyles = {
         return null;
       }
 
+      if (valueNode.type === 'CallExpression') {
+        const callee = valueNode.callee;
+        if (
+          (callee.type === 'MemberExpression' &&
+            callee.object.type === 'Identifier' &&
+            styleXDefaultImports.has(callee.object.name) &&
+            callee.property.type === 'Identifier' &&
+            callee.property.name === 'firstThatWorks') ||
+          (callee.type === 'Identifier' &&
+            styleXFirstThatWorksImports.has(callee.name))
+        ) {
+          for (const arg of valueNode.arguments) {
+            if (arg.type === 'SpreadElement') {
+              continue;
+            }
+            const argCheck = validateStyleValue(
+              arg,
+              varsWithFnArgs,
+              style,
+              styleKey,
+              propertyKey,
+              ruleChecker,
+            );
+            if (argCheck != null) {
+              return argCheck;
+            }
+          }
+          return null;
+        }
+      }
+
       if (
         (propertyKey === 'float' || propertyKey === 'clear') &&
         valueNode.type === 'Literal' &&
@@ -429,7 +625,14 @@ const stylexValidStyles = {
         return {
           node: valueNode,
           loc: valueNode.loc,
-          message: 'The empty string is not allowed by Stylex.',
+          message:
+            'The empty string is not allowed by Stylex. Use `null` to reset a style.',
+          suggest: [
+            {
+              desc: 'Replace empty string with `null`?',
+              fix: (fixer) => fixer.replaceText(valueNode, 'null'),
+            },
+          ],
           isSpecialCase: true,
         };
       }
@@ -477,6 +680,16 @@ const stylexValidStyles = {
                 : null;
           if (isStylexResolvedVarsToken(key, stylexResolvedVarsTokenImports)) {
             return undefined;
+          }
+          if (isStylexEnvMember(key, styleXDefaultImports, styleXEnvImports)) {
+            return styleValue.properties.forEach((prop) =>
+              checkStyleProperty(
+                prop,
+                level + 1,
+                propName,
+                outerIsPseudoElement,
+              ),
+            );
           }
           if (
             typeof keyName !== 'string' ||
@@ -552,6 +765,11 @@ const stylexValidStyles = {
           return undefined;
         }
 
+        const isStylexEnvKey = isStylexEnvMember(
+          styleKey,
+          styleXDefaultImports,
+          styleXEnvImports,
+        );
         let isStylexWhenCall = false;
         if (style.computed && styleKey.type !== 'Literal') {
           if (
@@ -595,7 +813,8 @@ const stylexValidStyles = {
         if (
           styleKey.type !== 'Literal' &&
           styleKey.type !== 'Identifier' &&
-          !isStylexWhenCall
+          !isStylexWhenCall &&
+          !isStylexEnvKey
         ) {
           return context.report({
             node: styleKey,
@@ -620,13 +839,22 @@ const stylexValidStyles = {
           const propCheck: RuleCheck = CSSPropertyReplacements[key];
           // eslint-disable-next-line no-unused-vars
           const val: Property = style;
-          const check = propCheck(style.value, variables, style);
+          const check = propCheck(style.value, variables, style, context);
           if (check != null) {
-            const { message, suggest } = check;
+            const { message } = check;
+            const { suggest } = check;
+            let { fix } = check;
+            if (
+              !isLegacyExpandShorthands &&
+              LEGACY_CONDITIONAL_REPLACEMENT_FIXERS.has(key)
+            ) {
+              fix = undefined;
+            }
             const diagnostic: Rule.ReportDescriptor = {
               node: style,
               loc: style.loc,
               message,
+              fix: fix != null ? fix : undefined,
               suggest: suggest != null ? [suggest] : undefined,
             };
             return context.report(diagnostic);
@@ -720,7 +948,51 @@ const stylexValidStyles = {
               });
             }
 
-            const { message, suggest } = check;
+            const { message } = check;
+            let { fix, suggest } = check;
+
+            // If the property has a known shorthand expansion and no fix yet,
+            // try to attach one
+            if (
+              fix == null &&
+              suggest == null &&
+              shorthandExpansionMap[key] != null &&
+              shouldEnableLegacyConditionalShorthandFixer(key) &&
+              style.value.type === 'Literal'
+            ) {
+              const val = style.value.value;
+              if (typeof val === 'string' || typeof val === 'number') {
+                const shorthandProp = shorthandExpansionMap[key];
+                const expanded = splitSpecificShorthands(
+                  shorthandProp,
+                  String(val),
+                );
+                const canFix =
+                  expanded.length > 1 ||
+                  (expanded.length === 1 && expanded[0]?.[1] === CANNOT_FIX);
+                const isFixable =
+                  canFix &&
+                  !(expanded.length === 1 && expanded[0]?.[1] === CANNOT_FIX);
+                if (isFixable) {
+                  const newPropertiesText = formatExpandedProperties(
+                    style,
+                    expanded,
+                    context,
+                  );
+                  const fixFn = (fixer: Rule.RuleFixer) =>
+                    fixer.replaceText(style, newPropertiesText);
+                  // animation is suggest-only since animationName needs keyframes()
+                  if (key !== 'animation') {
+                    fix = fixFn;
+                  }
+                  suggest = {
+                    desc: `Split '${key}' shorthand into individual longhand properties?`,
+                    fix: fixFn,
+                  };
+                }
+              }
+            }
+
             const isBackgroundBlendModeFormatError =
               key === 'backgroundBlendMode' &&
               typeof message === 'string' &&
@@ -740,6 +1012,7 @@ const stylexValidStyles = {
               node: style.value,
               loc: style.value.loc,
               message: finalMessage,
+              fix: fix != null ? fix : undefined,
               suggest: suggest != null ? [suggest] : undefined,
             } as Rule.ReportDescriptor);
           }
@@ -898,9 +1171,21 @@ const stylexValidStyles = {
               }
               if (
                 specifier.type === 'ImportSpecifier' &&
+                specifier.imported.name === 'firstThatWorks'
+              ) {
+                styleXFirstThatWorksImports.add(specifier.local.name);
+              }
+              if (
+                specifier.type === 'ImportSpecifier' &&
                 specifier.imported.name === 'when'
               ) {
                 styleXWhenImports.add(specifier.local.name);
+              }
+              if (
+                specifier.type === 'ImportSpecifier' &&
+                specifier.imported.name === 'env'
+              ) {
+                styleXEnvImports.add(specifier.local.name);
               }
             });
           }

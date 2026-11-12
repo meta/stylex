@@ -1,6 +1,6 @@
 {
   "name": "@stylexjs/shared-ui",
-  "version": "0.18.2",
+  "version": "0.19.2",
   "private": true,
   "main": "src/index.tsx",
   "exports": {

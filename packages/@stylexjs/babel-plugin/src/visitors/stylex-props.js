@@ -16,13 +16,15 @@ import { attrs, props } from '@stylexjs/stylex';
 import { convertObjectToAST } from '../utils/js-to-ast';
 import { evaluate } from '../utils/evaluate-path';
 import stylexDefaultMarker from '../shared/stylex-defaultMarker';
+import { hoistExpression } from '../utils/ast-helpers';
 
 type ClassNameValue = string | null | boolean | NonStringClassNameValue;
 type NonStringClassNameValue = [t.Expression, ClassNameValue, ClassNameValue];
 
-type StyleObject = {
-  [key: string]: string | null | boolean,
-};
+type StyleObject = $ReadOnly<{
+  [key: string]: string | null,
+  $$css?: true | string,
+}>;
 
 class ConditionalStyle {
   test: t.Expression;
@@ -108,11 +110,14 @@ export default function transformStylexProps(
     if (
       argPath.isObjectExpression() ||
       argPath.isIdentifier() ||
-      argPath.isMemberExpression()
+      argPath.isMemberExpression() ||
+      argPath.isCallExpression()
     ) {
       const resolved = parseNullableStyle(argPath, state, evaluatePathFnConfig);
       if (resolved === 'other') {
-        bailOutIndex = currentIndex;
+        if (bailOutIndex == null) {
+          bailOutIndex = currentIndex;
+        }
         bailOut = true;
       } else {
         resolvedArgs.push(resolved);
@@ -134,7 +139,9 @@ export default function transformStylexProps(
         evaluatePathFnConfig,
       );
       if (primary === 'other' || fallback === 'other') {
-        bailOutIndex = currentIndex;
+        if (bailOutIndex == null) {
+          bailOutIndex = currentIndex;
+        }
         bailOut = true;
       } else {
         resolvedArgs.push(new ConditionalStyle(test, primary, fallback));
@@ -161,7 +168,9 @@ export default function transformStylexProps(
         evaluatePathFnConfig,
       );
       if (leftResolved !== 'other' || rightResolved === 'other') {
-        bailOutIndex = currentIndex;
+        if (bailOutIndex == null) {
+          bailOutIndex = currentIndex;
+        }
         bailOut = true;
       } else {
         resolvedArgs.push(
@@ -170,14 +179,16 @@ export default function transformStylexProps(
         conditional++;
       }
     } else {
-      bailOutIndex = currentIndex;
+      if (bailOutIndex == null) {
+        bailOutIndex = currentIndex;
+      }
       bailOut = true;
     }
     if (conditional > 4) {
       bailOut = true;
     }
     if (bailOut) {
-      break;
+      continue;
     }
   }
   if (!state.options.enableInlinedConditionalMerge && conditional) {
@@ -262,6 +273,32 @@ export default function transformStylexProps(
           MemberExpression,
         });
       }
+
+      // Hoist inline CSS objects (from atoms) to module level
+      // Raw objects are pre-compiled in compileRawStyleObjects, so this only hoists compiled objects
+      // eslint-disable-next-line no-inner-declarations
+      function ObjectExpression(objPath: NodePath<t.ObjectExpression>) {
+        // Check if this object has $$css: true (compiled utility style object)
+        const hasCssMarker = objPath.node.properties.some(
+          (prop) =>
+            t.isObjectProperty(prop) &&
+            ((t.isIdentifier(prop.key) && prop.key.name === '$$css') ||
+              (t.isStringLiteral(prop.key) && prop.key.value === '$$css')) &&
+            t.isBooleanLiteral(prop.value, { value: true }),
+        );
+        if (hasCssMarker && canHoistObject(objPath)) {
+          const hoisted = hoistExpression(objPath, objPath.node);
+          objPath.replaceWith(hoisted);
+        }
+      }
+
+      if (argPath.isObjectExpression()) {
+        ObjectExpression(argPath);
+      } else {
+        argPath.traverse({
+          ObjectExpression,
+        });
+      }
     }
   } else {
     path.skip();
@@ -330,6 +367,19 @@ function parseNullableStyle(
     return null;
   }
 
+  // Local dynamic style functions (e.g., styles.opacity(1)) should bail out
+  // so runtime props merging keeps the conditional class/inline var semantics.
+  if (path.isCallExpression()) {
+    const callee = path.get('callee');
+    if (callee.isMemberExpression()) {
+      const obj = callee.get('object');
+      if (obj.isIdentifier() && state.styleMap.has(obj.node.name)) {
+        return 'other';
+      }
+    }
+    return 'other';
+  }
+
   if (t.isMemberExpression(node)) {
     const { object, property, computed: computed } = node;
     let objName = null;
@@ -357,8 +407,14 @@ function parseNullableStyle(
     if (objName != null && propName != null) {
       const style = state.styleMap.get(objName);
       if (style != null && style[String(propName)] != null) {
+        const memberVal = style[String(propName)];
+        // Dynamic style functions (arrow/function expressions) should bail out
+        // so runtime props handling remains intact.
+        if (typeof memberVal === 'function') {
+          return 'other';
+        }
         // $FlowFixMe[incompatible-type]
-        return style[String(propName)];
+        return memberVal;
       }
     }
   }
@@ -451,6 +507,31 @@ function genBitwiseOrOfConditions(
   return binaryExpressions.reduce((acc, expr) => {
     return t.binaryExpression('|', acc, expr);
   });
+}
+
+function canHoistObject(objPath: NodePath<t.ObjectExpression>): boolean {
+  const programScope = objPath.scope.getProgramParent();
+  for (const prop of objPath.node.properties) {
+    if (!t.isObjectProperty(prop)) {
+      return false;
+    }
+    if (prop.computed && t.isIdentifier(prop.key)) {
+      const binding = objPath.scope.getBinding(prop.key.name);
+      if (binding != null && binding.scope !== programScope) {
+        return false;
+      }
+    }
+    const val = prop.value;
+    if (t.isIdentifier(val)) {
+      const binding = objPath.scope.getBinding(val.name);
+      if (binding != null && binding.scope !== programScope) {
+        return false;
+      }
+    } else if (!t.isLiteral(val)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function getPropsLikeCall(

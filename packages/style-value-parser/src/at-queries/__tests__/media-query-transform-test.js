@@ -33,6 +33,26 @@ describe('Media Query Transformer', () => {
     expect(JSON.stringify(result)).toBe(JSON.stringify(expectedStyles));
   });
 
+  test('keeps Chromium from rounding generated max-width boundaries', () => {
+    const originalStyles = {
+      color: {
+        default: 'blue',
+        '@media (min-width: 400px)': 'red',
+        '@media (min-width: 600px)': 'green',
+      },
+    };
+
+    const result = lastMediaQueryWinsTransform(originalStyles);
+
+    expect(result).toEqual({
+      color: {
+        default: 'blue',
+        '@media (min-width: 400px) and (max-width: 599.98px)': 'red',
+        '@media (min-width: 600px)': 'green',
+      },
+    });
+  });
+
   test('basic usage: nested query', () => {
     const originalStyles = {
       gridColumn: {
@@ -171,8 +191,8 @@ describe('Media Query Transformer', () => {
     const expectedStyles = {
       gridColumn: {
         default: '1 / 2',
-        '@media (min-width: 768px) and (max-width: 1023.99px)': '1 / -1',
-        '@media (min-width: 1024px) and (max-width: 1439.99px)': '1 / 3',
+        '@media (min-width: 768px) and (max-width: 1023.98px)': '1 / -1',
+        '@media (min-width: 1024px) and (max-width: 1439.98px)': '1 / 3',
         '@media (min-width: 1440px)': '1 / 4',
       },
     };
@@ -256,6 +276,21 @@ describe('Media Query Transformer', () => {
     expect(JSON.stringify(result)).toBe(JSON.stringify(expectedStyles));
   });
 
+  test('handles only screen media queries without parenthesizing the media type', () => {
+    const originalStyles = {
+      color: {
+        default: null,
+        '@media only screen and (max-width: 600px)': 'red',
+        '@media only screen and (max-width: 400px)': 'blue',
+      },
+    };
+
+    const result = lastMediaQueryWinsTransform(originalStyles);
+    const resultStr = JSON.stringify(result);
+    expect(resultStr).not.toContain('only (screen)');
+    expect(resultStr).toContain('only screen');
+  });
+
   test('handles comma-separated (or) media queries', () => {
     const originalStyles = {
       width: {
@@ -268,7 +303,7 @@ describe('Media Query Transformer', () => {
     const expectedStyles = {
       width: {
         default: '100%',
-        '@media (screen) and (not (max-width: 500px)), (min-width: 500.01px) and (max-width: 800px)':
+        '@media screen and (not (max-width: 500px)), (min-width: 500.01px) and (max-width: 800px)':
           '80%',
         '@media (max-width: 500px)': '60%',
       },
@@ -322,6 +357,203 @@ describe('Media Query Transformer', () => {
 
     const result = lastMediaQueryWinsTransform(originalStyles);
     expect(JSON.stringify(result)).toBe(JSON.stringify(expectedStyles));
+  });
+
+  test('mixed responsive and print values anchor to a screen media type', () => {
+    // Regression test for https://github.com/facebook/stylex/issues/1860.
+    // A `print` media type must not be emitted as a `(not (print))` boolean
+    // feature (which never matches in browsers); the responsive branch is
+    // instead anchored to the complementary `screen` media type.
+    const originalStyles = {
+      marginLeft: {
+        default: 224,
+        '@media (max-width: 900px)': {
+          default: 168,
+          '@media (max-width: 620px)': 132,
+        },
+        '@media print': 0,
+      },
+    };
+
+    const expectedStyles = {
+      marginLeft: {
+        default: 224,
+        '@media screen and (max-width: 900px)': {
+          default: 168,
+          '@media (max-width: 620px)': 132,
+        },
+        '@media print': 0,
+      },
+    };
+
+    const result = lastMediaQueryWinsTransform(originalStyles);
+    expect(JSON.stringify(result)).toBe(JSON.stringify(expectedStyles));
+  });
+
+  test('a leading not negates the whole query', () => {
+    const originalStyles = {
+      filter: {
+        default: 'grayscale(1)',
+        '@media not all and (monochrome)': 'none',
+      },
+      color: {
+        default: 'black',
+        '@media not screen and (min-width: 100px)': 'red',
+      },
+    };
+
+    expect(lastMediaQueryWinsTransform(originalStyles)).toMatchInlineSnapshot(`
+      {
+        "color": {
+          "@media not screen and (min-width: 100px)": "red",
+          "default": "black",
+        },
+        "filter": {
+          "@media not all and (monochrome)": "none",
+          "default": "grayscale(1)",
+        },
+      }
+    `);
+  });
+
+  test('a leading not followed by a later query', () => {
+    const originalStyles = {
+      color: {
+        default: 'black',
+        '@media not all and (monochrome)': 'blue',
+        '@media (min-width: 500px)': 'red',
+      },
+    };
+
+    expect(lastMediaQueryWinsTransform(originalStyles)).toMatchInlineSnapshot(`
+      {
+        "color": {
+          "@media (min-width: 500px)": "red",
+          "@media (not (min-width: 500px)) and (not (monochrome))": "blue",
+          "default": "black",
+        },
+      }
+    `);
+  });
+
+  test('a later query with a leading not', () => {
+    const originalStyles = {
+      color: {
+        default: 'black',
+        '@media (min-width: 500px)': 'red',
+        '@media not all and (monochrome)': 'blue',
+      },
+      width: {
+        default: '100%',
+        '@media (max-width: 900px)': '80%',
+        '@media not print and (min-width: 600px)': '60%',
+      },
+    };
+
+    expect(lastMediaQueryWinsTransform(originalStyles)).toMatchInlineSnapshot(`
+      {
+        "color": {
+          "@media (min-width: 500px) and (monochrome)": "red",
+          "@media not all and (monochrome)": "blue",
+          "default": "black",
+        },
+        "width": {
+          "@media not print and (min-width: 600px)": "60%",
+          "@media print and (max-width: 900px) and (min-width: 600px)": "80%",
+          "default": "100%",
+        },
+      }
+    `);
+  });
+
+  test('a leading not over an or condition stays linear in size', () => {
+    const originalStyles = {
+      color: {
+        default: 'black',
+        '@media (min-width: 10px)': 'red',
+        '@media not screen and ((min-width: 100px) or (min-width: 200px) or (min-width: 300px) or (min-width: 400px))':
+          'blue',
+      },
+    };
+
+    expect(lastMediaQueryWinsTransform(originalStyles)).toMatchInlineSnapshot(`
+      {
+        "color": {
+          "@media not screen and ((min-width: 100px) or (min-width: 200px) or (min-width: 300px) or (min-width: 400px))": "blue",
+          "@media screen and (min-width: 100px) and (min-width: 10px), screen and (min-width: 200px) and (min-width: 10px), screen and (min-width: 300px) and (min-width: 10px), screen and (min-width: 400px) and (min-width: 10px)": "red",
+          "default": "black",
+        },
+      }
+    `);
+  });
+
+  test('a leading not over mixed and/or conditions', () => {
+    const originalStyles = {
+      color: {
+        default: 'black',
+        '@media not all and (min-width: 500px) and ((max-width: 900px) or (max-height: 600px))':
+          'blue',
+      },
+      width: {
+        default: '100%',
+        '@media (min-width: 10px)': '80%',
+        '@media not all and (min-width: 500px) and ((max-width: 900px) or (max-height: 600px))':
+          '60%',
+      },
+    };
+
+    expect(lastMediaQueryWinsTransform(originalStyles)).toMatchInlineSnapshot(`
+      {
+        "color": {
+          "@media not all and (min-width: 500px) and ((max-width: 900px) or (max-height: 600px))": "blue",
+          "default": "black",
+        },
+        "width": {
+          "@media (max-width: 900px) and (min-width: 10px) and (min-width: 500px), (max-height: 600px) and (min-width: 10px) and (min-width: 500px)": "80%",
+          "@media not all and (min-width: 500px) and ((max-width: 900px) or (max-height: 600px))": "60%",
+          "default": "100%",
+        },
+      }
+    `);
+  });
+
+  test('an or condition inside an and keeps its parentheses', () => {
+    const originalStyles = {
+      color: {
+        default: 'black',
+        '@media (min-width: 1px) and ((max-width: 200px) or (max-height: 600px))':
+          'blue',
+      },
+    };
+
+    expect(lastMediaQueryWinsTransform(originalStyles)).toMatchInlineSnapshot(`
+      {
+        "color": {
+          "@media (min-width: 1px) and ((max-width: 200px) or (max-height: 600px))": "blue",
+          "default": "black",
+        },
+      }
+    `);
+  });
+
+  test('a media type from a negated later query is moved to the front', () => {
+    const originalStyles = {
+      color: {
+        default: 'black',
+        '@media (max-width: 900px)': 'red',
+        '@media not print, (max-width: 100px)': 'blue',
+      },
+    };
+
+    expect(lastMediaQueryWinsTransform(originalStyles)).toMatchInlineSnapshot(`
+      {
+        "color": {
+          "@media not print, (max-width: 100px)": "blue",
+          "@media print and (max-width: 900px) and (not (max-width: 100px))": "red",
+          "default": "black",
+        },
+      }
+    `);
   });
 
   test('basic usage: does not modify single queries', () => {
@@ -511,7 +743,7 @@ describe('Media Query Transformer', () => {
       foo: {
         gridColumn: {
           default: '1 / 2',
-          '@media ((min-width: 900px) and (max-width: 999.99px)) or ((min-width: 1100.01px) and (max-width: 1440px))':
+          '@media ((min-width: 900px) and (max-width: 999.98px)) or ((min-width: 1100.01px) and (max-width: 1440px))':
             '1 / 4',
           '@media (min-width: 1000px) and (max-width: 1100px)': '1 / 3',
           '@media (min-width: 400px) and (max-width: 500px)': '1 / 1',
@@ -538,7 +770,7 @@ describe('Media Query Transformer', () => {
       foo: {
         gridColumn: {
           default: '1 / 2',
-          '@media ((min-width: 900px) and (max-width: 999.99px)) or ((min-width: 1100.01px) and (max-width: 1440px))':
+          '@media ((min-width: 900px) and (max-width: 999.98px)) or ((min-width: 1100.01px) and (max-width: 1440px))':
             '1 / 4',
           '@media (min-width: 1000px) and (max-width: 1100px)': '1 / 3',
         },
@@ -565,9 +797,9 @@ describe('Media Query Transformer', () => {
       foo: {
         gridColumn: {
           default: '1 / 2',
-          '@media ((min-width: 900px) and (max-width: 999.99px)) or ((min-width: 1100.01px) and (max-width: 1440px))':
+          '@media ((min-width: 900px) and (max-width: 999.98px)) or ((min-width: 1100.01px) and (max-width: 1440px))':
             '1 / 4',
-          '@media ((min-width: 1000px) and (max-width: 1009.99px)) or ((min-width: 1050.01px) and (max-width: 1100px))':
+          '@media ((min-width: 1000px) and (max-width: 1009.98px)) or ((min-width: 1050.01px) and (max-width: 1100px))':
             '1 / 3',
           '@media (min-width: 1010px) and (max-width: 1050px)': '1 / -1',
         },

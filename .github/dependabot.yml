@@ -1,0 +1,36 @@
+# Dependabot configuration
+# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# `groups` bundles all updates for an ecosystem into a SINGLE pull request
+# instead of one PR per dependency. This applies to both version updates and
+# (when "Grouped security updates" is enabled in repo settings) security
+# updates.
+#
+# NOTE: severity filtering (e.g. "only critical") is NOT configurable here —
+# it is set via repo Settings > Code security > Dependabot auto-triage rules.
+version: 2
+updates:
+  # JavaScript/TypeScript dependencies across the monorepo (root + workspaces).
+  - package-ecosystem: 'npm'
+    directories:
+      - '/'
+      - '/packages/**'
+      - '/examples/**'
+    schedule:
+      interval: 'weekly'
+    open-pull-requests-limit: 5
+    groups:
+      npm-dependencies:
+        patterns:
+          - '*'
+
+  # GitHub Actions used in .github/workflows.
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns:
+          - '*'

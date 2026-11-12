@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import { createEsbuildPlugin } from 'unplugin';
 
-import { unpluginFactory } from './core';
+import { INDEX_CSS_RE, STYLE_CSS_RE, unpluginFactory } from './core';
 
 function attachEsbuildHooks(plugin) {
   return {
@@ -33,8 +33,8 @@ function attachEsbuildHooks(plugin) {
               const outputs = Object.keys(meta.outputs);
               const cssOutputs = outputs.filter((f) => f.endsWith('.css'));
               const pick =
-                cssOutputs.find((f) => /(^|\/)index\.css$/.test(f)) ||
-                cssOutputs.find((f) => /(^|\/)style\.css$/.test(f)) ||
+                cssOutputs.find((f) => INDEX_CSS_RE.test(f)) ||
+                cssOutputs.find((f) => STYLE_CSS_RE.test(f)) ||
                 cssOutputs[0];
               if (pick)
                 outfile = path.isAbsolute(pick)
@@ -46,8 +46,8 @@ function attachEsbuildHooks(plugin) {
                   .readdirSync(outDir)
                   .filter((f) => f.endsWith('.css'));
                 const pick =
-                  files.find((f) => /(^|\/)index\.css$/.test(f)) ||
-                  files.find((f) => /(^|\/)style\.css$/.test(f)) ||
+                  files.find((f) => INDEX_CSS_RE.test(f)) ||
+                  files.find((f) => STYLE_CSS_RE.test(f)) ||
                   files[0];
                 if (pick) outfile = path.join(outDir, pick);
               } catch {}

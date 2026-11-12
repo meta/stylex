@@ -319,6 +319,42 @@ ruleTester.run('stylex-enforce-extension', rule.default, {
       `,
       filename: 'testComponent.stylex.jsx',
     },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        export const vars = stylex.unstable_defineVarsNested({});
+      `,
+      filename: 'testComponent.stylex.jsx',
+    },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        export const consts = stylex.unstable_defineConstsNested({});
+      `,
+      filename: 'testComponent.stylex.jsx',
+    },
+    {
+      code: `
+        import { unstable_defineVarsNested } from '@stylexjs/stylex';
+        export const vars = unstable_defineVarsNested({});
+      `,
+      filename: 'testComponent.stylex.jsx',
+    },
+    {
+      code: `
+        import { unstable_defineConstsNested } from '@stylexjs/stylex';
+        export const consts = unstable_defineConstsNested({});
+      `,
+      filename: 'testComponent.stylex.jsx',
+    },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        export const consts = stylex.unstable_defineConstsNested({});
+      `,
+      filename: 'myComponent.stylex.const.jsx',
+      options: [{ enforceDefineConstsExtension: true }],
+    },
   ],
 
   invalid: [
@@ -913,5 +949,153 @@ ruleTester.run('stylex-enforce-extension', rule.default, {
       filename: 'myComponent.stylex.jsx',
       errors: [{ message: invalidDefaultExport('defineMarker') }],
     },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        export const vars = stylex.unstable_defineVarsNested({});
+      `,
+      filename: 'testComponent.jsx',
+      errors: [
+        { message: invalidFilenameWithRestrictedExports('.stylex.jsx') },
+      ],
+    },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        export const consts = stylex.unstable_defineConstsNested({});
+      `,
+      filename: 'testComponent.jsx',
+      errors: [
+        { message: invalidFilenameWithRestrictedExports('.stylex.jsx') },
+      ],
+    },
+    {
+      code: `
+        import { unstable_defineVarsNested } from '@stylexjs/stylex';
+        export const vars = unstable_defineVarsNested({});
+      `,
+      filename: 'testComponent.jsx',
+      errors: [
+        { message: invalidFilenameWithRestrictedExports('.stylex.jsx') },
+      ],
+    },
+    {
+      code: `
+        import { unstable_defineConstsNested } from '@stylexjs/stylex';
+        export const consts = unstable_defineConstsNested({});
+      `,
+      filename: 'testComponent.jsx',
+      errors: [
+        { message: invalidFilenameWithRestrictedExports('.stylex.jsx') },
+      ],
+    },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        export const vars = stylex.unstable_defineVarsNested({});
+        export const somethingElse = someFunction();
+      `,
+      filename: 'myComponent.stylex.jsx',
+      errors: [{ message: invalidExportFromThemeFiles }],
+    },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        export const consts = stylex.unstable_defineConstsNested({});
+      `,
+      filename: 'myComponent.jsx',
+      options: [{ enforceDefineConstsExtension: true }],
+      errors: [
+        {
+          message:
+            invalidConstsFilenameWithRestrictedExports('.stylex.const.jsx'),
+        },
+      ],
+    },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        export const consts = stylex.unstable_defineConstsNested({});
+        export const somethingElse = someFunction();
+      `,
+      filename: 'myComponent.stylex.const.jsx',
+      options: [{ enforceDefineConstsExtension: true }],
+      errors: [{ message: invalidExportFromConstsFiles }],
+    },
   ],
 });
+
+const typeExportRuleTester = new RuleTester({
+  parser: require.resolve('@typescript-eslint/parser'),
+  parserOptions: { sourceType: 'module' },
+});
+
+typeExportRuleTester.run(
+  'stylex-enforce-extension (type exports)',
+  rule.default,
+  {
+    valid: [
+      {
+        code: `
+        import * as stylex from '@stylexjs/stylex';
+        export const colors = stylex.defineVars({
+          primary: 'blue',
+          secondary: 'green',
+          accent: 'coral',
+        });
+        export type Colors = keyof typeof colors;
+      `,
+        filename: 'colors.stylex.ts',
+      },
+      {
+        code: `
+        import * as stylex from '@stylexjs/stylex';
+        export const colors = stylex.defineConsts({
+          primary: 'blue',
+          secondary: 'green',
+        });
+        export type Colors = keyof typeof colors;
+      `,
+        filename: 'colors.stylex.const.ts',
+        options: [{ enforceDefineConstsExtension: true }],
+      },
+      {
+        code: `
+        import * as stylex from '@stylexjs/stylex';
+        type Colors = keyof typeof colors;
+        export const colors = stylex.defineVars({
+          primary: 'blue',
+          secondary: 'green',
+        });
+        export type { Colors };
+      `,
+        filename: 'colors.stylex.ts',
+      },
+      {
+        code: `
+        import * as stylex from '@stylexjs/stylex';
+        type Colors = keyof typeof colors;
+        export const colors = stylex.defineVars({
+          primary: 'blue',
+          secondary: 'green',
+        });
+        export { type Colors };
+      `,
+        filename: 'colors.stylex.ts',
+      },
+    ],
+
+    invalid: [
+      {
+        code: `
+        import * as stylex from '@stylexjs/stylex';
+        export const colors = stylex.defineVars({ primary: 'blue' });
+        export type Colors = keyof typeof colors;
+        export const helper = someFunction();
+      `,
+        filename: 'colors.stylex.ts',
+        errors: [{ message: invalidExportFromThemeFiles }],
+      },
+    ],
+  },
+);

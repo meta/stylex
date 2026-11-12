@@ -1,0 +1,30 @@
+{
+  "name": "@stylexjs/atoms",
+  "version": "0.19.2",
+  "description": "Atomic style helpers for StyleX.",
+  "license": "MIT",
+  "main": "src/index.js",
+  "types": "src/index.d.ts",
+  "exports": {
+    ".": "./src/index.js",
+    "./babel-transform": "./src/babel-transform.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/meta/stylex.git",
+    "directory": "packages/@stylexjs/atoms"
+  },
+  "scripts": {
+    "prebuild": "gen-types -i src/ -o src/"
+  },
+  "sideEffects": false,
+  "peerDependencies": {
+    "@stylexjs/stylex": "0.19.2"
+  },
+  "devDependencies": {
+    "scripts": "0.19.2"
+  },
+  "files": [
+    "src"
+  ]
+}

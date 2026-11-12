@@ -1,0 +1,41 @@
+{
+  "css": "@keyframes xekv6nw-B{0%{opacity:0;}100%{opacity:1;}}\n.x127lhb5:not(#\\#){animation-name:xekv6nw-B}\n.x1e2nbdu:not(#\\#){color:red}\n.x1tavwxn.x1tavwxn:where(.x-default-marker:focus *):not(#\\#){color:blue}",
+  "errors": [],
+  "js": "/**\n * Copyright (c) Meta Platforms, Inc. and affiliates.\n *\n * This source code is licensed under the MIT license found in the\n * LICENSE file in the root directory of this source tree.\n */\n\nimport * as stylex from '@stylexjs/stylex';\nexport const styles = {\n  root: {\n    kKVMdj: \"x127lhb5\",\n    kMwMTN: \"x1e2nbdu x1tavwxn\",\n    $$css: true\n  }\n};",
+  "metadata": [
+    [
+      "xekv6nw-B",
+      {
+        "ltr": "@keyframes xekv6nw-B{0%{opacity:0;}100%{opacity:1;}}",
+        "rtl": null
+      },
+      0
+    ],
+    [
+      "x127lhb5",
+      {
+        "ltr": ".x127lhb5{animation-name:xekv6nw-B}",
+        "rtl": null
+      },
+      3000
+    ],
+    [
+      "x1e2nbdu",
+      {
+        "ltr": ".x1e2nbdu{color:red}",
+        "rtl": null
+      },
+      3000
+    ],
+    [
+      "x1tavwxn",
+      {
+        "ltr": ".x1tavwxn.x1tavwxn:where(.x-default-marker:focus *){color:blue}",
+        "rtl": null
+      },
+      3011.5
+    ]
+  ],
+  "status": "ok",
+  "warnings": []
+}

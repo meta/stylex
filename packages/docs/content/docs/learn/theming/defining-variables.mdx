@@ -70,6 +70,25 @@ export const colors = stylex.defineVars({
 
 Similarly, `@supports` can be used as well.
 
+## Deriving variables from other variables
+
+`defineVars` also supports zero-argument function values for derived variables.
+These functions are evaluated at compile time and can reference other keys from
+the same variable group.
+
+```tsx title="tokens.stylex.js"
+import * as stylex from '@stylexjs/stylex';
+
+export const colors = stylex.defineVars({
+  text: 'black',
+  textMuted: () => `color-mix(in srgb, ${colors.text}, transparent 50%)`,
+  textSubtle: () => `color-mix(in srgb, ${colors.textMuted}, transparent 50%)`,
+});
+```
+
+This is useful when several theme values build on top of the same base token.
+StyleX detects missing references and cyclical references at compile time.
+
 ## Rules when defining variables
 
 Variables are the only type of non-local value that can be used within a

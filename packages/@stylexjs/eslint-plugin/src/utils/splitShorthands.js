@@ -1391,3 +1391,9 @@ export function splitDirectionalShorthands(
 
   return nodes;
 }
+
+export function isSingleToken(value: string): boolean {
+  const { value: baseValue } = extractImportant(value);
+  const { parts } = splitTopLevelValueTokens(baseValue);
+  return parts.length <= 1;
+}

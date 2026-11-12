@@ -21,9 +21,24 @@ import { transform as lightningTransform } from 'lightningcss';
 import browserslist from 'browserslist';
 import { browserslistToTargets } from 'lightningcss';
 
+// The babel plugin always recognises these on top of any configured source.
+const BUILT_IN_IMPORT_SOURCES = ['stylex', '@stylexjs/stylex'];
+
+// Vite and Rollup hash asset file names by default, so `index.css` reaches the
+// output directory as e.g. `assets/index-B5Jdbbfd.css`. Both patterns therefore
+// allow an optional content hash.
+//
+// Rollup's default `hashCharacters` is `base64`, which is base64url, so a hash
+// may contain `-` and `_` alongside letters and digits (about one in five
+// eight character hashes does, e.g. `assets/index-BVm_Qe95.css`). The character
+// class has to cover the whole base64url alphabet or the miss this is meant to
+// fix simply comes back for those builds.
+export const INDEX_CSS_RE = /(^|\/)index(-[\w-]{8,})?\.css$/i;
+export const STYLE_CSS_RE = /(^|\/)style(-[\w-]{8,})?\.css$/i;
+
 /**
  * Try to pick a stable CSS asset to inject into.
- * - Prefer files named like `style.css` or `index.css`
+ * - Prefer files named like `style.css` or `index.css`, hashed or not
  * - Otherwise, first .css asset encountered
  */
 export function pickCssAssetFromRollupBundle(bundle, choose) {
@@ -40,8 +55,8 @@ export function pickCssAssetFromRollupBundle(bundle, choose) {
     if (chosen) return chosen;
   }
   const best =
-    assets.find((a) => /(^|\/)index\.css$/.test(a.fileName)) ||
-    assets.find((a) => /(^|\/)style\.css$/.test(a.fileName));
+    assets.find((a) => INDEX_CSS_RE.test(a.fileName)) ||
+    assets.find((a) => STYLE_CSS_RE.test(a.fileName));
   return best || assets[0];
 }
 
@@ -219,7 +234,7 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
       process.env.BABEL_ENV === 'development',
     unstable_moduleResolution = { type: 'commonJS', rootDir: process.cwd() },
     babelConfig: { plugins = [], presets = [] } = {},
-    importSources = ['stylex', '@stylexjs/stylex'],
+    importSources = BUILT_IN_IMPORT_SOURCES,
     useCSSLayers = false,
     lightningcssOptions,
     cssInjectionTarget,
@@ -232,6 +247,8 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
     treeshakeCompensation = ['vite', 'rollup', 'rolldown'].includes(framework),
     ...stylexOptions
   } = userOptions;
+
+  const gateImportSources = [...BUILT_IN_IMPORT_SOURCES, ...importSources];
 
   // Shared state across a single compilation (used for builds)
   const stylexRulesById = new Map(); // id -> Rule[]
@@ -330,7 +347,7 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
 
   function shouldHandle(code) {
     if (!code) return false;
-    return importSources.some((src) => containsStylexImport(code, src));
+    return gateImportSources.some((src) => containsStylexImport(code, src));
   }
 
   function resetState() {
@@ -382,6 +399,21 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
     } catch {}
   }
 
+  // Drop a module's previously extracted rules from both in-memory stores
+  // (and disk, when persistence is on). Used when Babel reports no StyleX
+  // output *and* when the file no longer imports StyleX at all — the latter
+  // used to early-return from `transform` and leave stale CSS behind.
+  // https://github.com/facebook/stylex/issues/2015
+  async function clearCollectedRulesForId(id) {
+    const shared = getSharedStore();
+    const hadRules = stylexRulesById.delete(id);
+    const hadSharedRules = shared.rulesById.delete(id);
+    if (hadRules || hadSharedRules) {
+      shared.version++;
+    }
+    await persistRulesToDisk(id, []);
+  }
+
   // No rollup-style virtual module normalize for webpack/rspack stability
 
   const plugin = {
@@ -413,7 +445,10 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
     async transform(code, id) {
       // Only handle JS-like files; avoid parsing CSS/JSON/etc
       if (!JS_LIKE_RE.test(id) && !SVELTE_LIKE_RE.test(id)) return null;
-      if (!shouldHandle(code)) return null;
+      if (!shouldHandle(code)) {
+        await clearCollectedRulesForId(id);
+        return null;
+      }
 
       // Extract the pure filename by removing everything after '?' (e.g., handling Vite's '?v=' cache busting).
       const dir = path.dirname(id);
@@ -434,12 +469,7 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
           shared.version++;
           await persistRulesToDisk(id, metadata.stylex);
         } else {
-          stylexRulesById.delete(id);
-          if (shared.rulesById.has(id)) {
-            shared.rulesById.delete(id);
-            shared.version++;
-          }
-          await persistRulesToDisk(id, []);
+          await clearCollectedRulesForId(id);
         }
       }
 

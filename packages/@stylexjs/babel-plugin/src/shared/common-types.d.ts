@@ -40,17 +40,22 @@ export type StyleXOptions = Readonly<{
   classNamePrefix: string;
   debug: null | undefined | boolean;
   definedStylexCSSVariables?: { [key: string]: unknown };
+  env?: Readonly<{ [$$Key$$: string]: any }>;
   dev: boolean;
   propertyValidationMode?: 'throw' | 'warn' | 'silent';
-  enableDebugClassNames?: null | undefined | boolean;
   enableDebugDataProp?: null | undefined | boolean;
   enableDevClassNames?: null | undefined | boolean;
   enableFontSizePxToRem?: null | undefined | boolean;
+  enableInlinedConditionalMerge?: null | undefined | boolean;
   enableMediaQueryOrder?: null | undefined | boolean;
   enableLegacyValueFlipping?: null | undefined | boolean;
   enableLogicalStylesPolyfill?: null | undefined | boolean;
   enableLTRRTLComments?: null | undefined | boolean;
   enableMinifiedKeys?: null | undefined | boolean;
+  importSources?: ReadonlyArray<
+    string | Readonly<{ from: string; as: string }>
+  >;
+  treeshakeCompensation?: boolean;
   styleResolution:
     | 'application-order'
     | 'property-specificity'

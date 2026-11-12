@@ -38,7 +38,16 @@ declare function stylexPluginWithOptions(
  *
  * End-users can choose to not use this function and use their own logic instead.
  */
-export type Rule = [string, { ltr: string; rtl?: null | string }, number];
+export type Rule = [
+  string,
+  {
+    ltr: string;
+    rtl?: null | string;
+    constKey?: string;
+    constVal?: string | number;
+  },
+  number,
+];
 declare function processStylexRules(
   rules: Array<Rule>,
   config?:

@@ -29,13 +29,20 @@ type Options = {
   //
   // Default: false
   banPropsForLegacy: boolean;
+
+  // Mirrors the compiler option and enables legacy-mode
+  // shorthand autofixers when set to 'legacy-expand-shorthands'.
+  styleResolution?:
+    | 'application-order'
+    | 'property-specificity'
+    | 'legacy-expand-shorthands';
 };
 
 type PropLimits = {
   // The property name as a string or a glob pattern
   [propertyName: string]: {
     limit: // Disallow the property
-    | null
+      | null
       // Allow any string value
       | 'string'
       // Allow any number value
@@ -125,7 +132,7 @@ type Options = {
 
 ### `@stylexjs/valid-shorthands` rule
 
-```ts
+````ts
 type Options = {
   // Possible strings where you can import stylex from
   //
@@ -142,7 +149,7 @@ type Options = {
   // Default: false
   preferInline: boolean;
 };
-```
+````
 
 ### `@stylexjs/enforce-extension` rule
 
@@ -161,6 +168,19 @@ type Options = {
 ```
 
 ### `@stylexjs/no-unused` rule
+
+```ts
+type Options = {
+  // Possible strings where you can import stylex from
+  //
+  // Default: ['stylex', '@stylexjs/stylex']
+  validImports: Array<string | { from: string; as: string }>;
+};
+```
+
+### `@stylexjs/no-conflicting-props` rule
+
+Disallows using `className` or `style` props on elements that spread `stylex.props()`, which would cause conflicts.
 
 ```ts
 type Options = {

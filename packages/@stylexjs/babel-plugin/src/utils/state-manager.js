@@ -95,7 +95,6 @@ export type StyleXOptions = $ReadOnly<{
   ...RuntimeOptions,
   aliases?: ?$ReadOnly<{ [string]: string | $ReadOnlyArray<string> }>,
   propertyValidationMode?: 'throw' | 'warn' | 'silent',
-  enableDebugClassNames?: boolean,
   enableDebugDataProp?: boolean,
   enableDevClassNames?: boolean,
   enableInlinedConditionalMerge?: boolean,
@@ -188,6 +187,9 @@ export default class StateManager {
   +stylexDefineConstsNestedImport: Set<string> = new Set();
   +stylexCreateThemeNestedImport: Set<string> = new Set();
   +stylexConditionalImport: Set<string> = new Set();
+  // Map of local identifier -> imported name.
+  // For namespace/default imports we store '*'.
+  +atomImports: Map<string, string> = new Map();
 
   injectImportInserted: ?t.Identifier = null;
 
@@ -224,14 +226,6 @@ export default class StateManager {
       false,
       'options.debug',
     );
-
-    const enableDebugClassNames: StyleXStateOptions['enableDebugClassNames'] =
-      z.logAndDefault(
-        z.boolean(),
-        options.enableDebugClassNames ?? defaultOptions.enableDebugClassNames,
-        true,
-        'options.enableDebugClassNames',
-      );
 
     const enableDebugDataProp: StyleXStateOptions['enableDebugDataProp'] =
       z.logAndDefault(
@@ -442,7 +436,6 @@ export default class StateManager {
       dev,
       propertyValidationMode,
       env,
-      enableDebugClassNames,
       enableDebugDataProp,
       enableDevClassNames,
       enableFontSizePxToRem,
@@ -667,6 +660,7 @@ export default class StateManager {
           importPath,
           sourceFilePath,
           aliases,
+          this.options.unstable_moduleResolution?.rootDir,
         );
         return resolvedFilePath
           ? ['themeNameRef', this.getCanonicalFilePath(resolvedFilePath)]
@@ -693,6 +687,7 @@ export default class StateManager {
           importPath,
           sourceFilePath,
           aliases,
+          this.options.unstable_moduleResolution?.rootDir,
         );
         return resolvedFilePath ? ['filePath', resolvedFilePath] : false;
       }
@@ -870,6 +865,7 @@ export const filePathResolver = (
   relativeFilePath: string,
   sourceFilePath: string,
   aliases: StyleXStateOptions['aliases'],
+  rootDir?: ?string,
 ): ?string => {
   for (const importPathStr of getPossibleFilePaths(relativeFilePath)) {
     // Try to resolve relative paths as is
@@ -886,6 +882,31 @@ export const filePathResolver = (
     // Otherwise, try to resolve the path with aliases
     const allAliases = possibleAliasedPaths(importPathStr, aliases);
     for (const possiblePath of allAliases) {
+      // Handle /ROOT/ placeholder paths (used by Turbopack).
+      // Replace /ROOT/ with the configured rootDir.
+      if (possiblePath.startsWith('/ROOT/') && rootDir != null) {
+        const realPath = path.join(
+          rootDir,
+          possiblePath.slice('/ROOT/'.length),
+        );
+        for (const candidate of getPossibleFilePaths(realPath)) {
+          if (fs.existsSync(candidate)) {
+            return candidate;
+          }
+        }
+        continue;
+      }
+      // If the alias expanded to an absolute path, resolve it directly
+      // rather than going through moduleResolve which expects relative
+      // or module-style paths.
+      if (path.isAbsolute(possiblePath)) {
+        for (const candidate of getPossibleFilePaths(possiblePath)) {
+          if (fs.existsSync(candidate)) {
+            return candidate;
+          }
+        }
+        continue;
+      }
       try {
         return url.fileURLToPath(
           moduleResolve(possiblePath, url.pathToFileURL(sourceFilePath)),

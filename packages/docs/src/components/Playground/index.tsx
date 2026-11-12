@@ -556,7 +556,19 @@ export const vars = stylex.defineVars({
   useEffect(() => {
     let mounted = true;
 
-    const { transformedFiles, generatedCSS } = transformSourceFiles(inputFiles);
+    // The initial files come from the URL, so they are not guaranteed to
+    // compile. Surface the failure the same way editing does, instead of
+    // letting it escape the effect and take down the page. Sandpack still
+    // has to load, otherwise the editor stays read only and there is no way
+    // to correct the code.
+    let transformedFiles: Record<string, string> = {};
+    let generatedCSS = '';
+    try {
+      ({ transformedFiles, generatedCSS } = transformSourceFiles(inputFiles));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err : new Error(String(err)));
+    }
+
     setTransformedFiles(transformedFiles);
     setCssOutput(generatedCSS);
     loadSandpackClient(
@@ -697,6 +709,19 @@ export const vars = stylex.defineVars({
                       REACT_JSX_RUNTIME_TYPES,
                       'file:///node_modules/@types/react/jsx-runtime.d.ts',
                     );
+                    monaco.languages.typescript.typescriptDefaults.addExtraLib(
+                      `import type { StyleXArray, CompiledStyles, InlineStyles } from '@stylexjs/stylex';
+declare module 'react' {
+  interface DOMAttributes<T> {
+    sx?: StyleXArray<
+      | (null | undefined | CompiledStyles)
+      | boolean
+      | Readonly<[CompiledStyles, InlineStyles]>
+    >;
+  }
+}`,
+                      'file:///react-augmentation.d.ts',
+                    );
                   }}
                   defaultLanguage="typescript"
                   height="100%"
@@ -714,7 +739,7 @@ export const vars = stylex.defineVars({
                     scrollBeyondLastLine: true,
                     contextmenu: false,
                     readOnly: !sandpackInitialized,
-                    fontSize: 13,
+                    fontSize: 14,
                     lineHeight: 22,
                   }}
                   path={`/${activeInputFile}`}
@@ -766,7 +791,7 @@ export const vars = stylex.defineVars({
                         scrollBeyondLastLine: false,
                         contextmenu: false,
                         readOnly: true,
-                        fontSize: 13,
+                        fontSize: 14,
                         lineHeight: 22,
                       }}
                       theme={
@@ -948,10 +973,10 @@ const styles = stylex.create({
     display: 'block',
     flexShrink: 0,
     width: '100%',
-    height: 44,
+    height: 46,
     paddingBlock: 8,
     paddingInline: 16,
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 500,
     color: vars['--color-fd-foreground'],
     textAlign: 'start',

@@ -25,7 +25,7 @@ export default async function RootLayout({ children }: RootLayoutProps) {
       <link crossOrigin="" href="https://fonts.gstatic.com" rel="preconnect" />
       <link
         href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,400;0,700;1,400;1,700&display=swap"
-        // eslint-disable-next-line react/no-unknown-property
+        // eslint-disable-next-line
         precedence="font"
         rel="stylesheet"
       />
@@ -55,27 +55,27 @@ export const getConfig = async () => {
 const styles = stylex.create({
   root: {
     minHeight: '100vh',
-    backgroundColor: '#f5f7fb',
-    color: '#0f172a',
     fontFamily:
       "'Nunito', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    color: '#0f172a',
+    backgroundColor: '#f5f7fb',
   },
   main: {
     display: 'flex',
     flexDirection: 'column',
     gap: '1.5rem',
     alignItems: 'center',
-    margin: {
-      default: '1.5rem',
-      '@media (min-width: 1024px)': 0,
+    justifyContent: {
+      default: 'flex-start',
+      '@media (min-width: 1024px)': 'center',
     },
     minHeight: {
       default: 'auto',
       '@media (min-width: 1024px)': '100svh',
     },
-    justifyContent: {
-      default: 'flex-start',
-      '@media (min-width: 1024px)': 'center',
+    margin: {
+      default: '1.5rem',
+      '@media (min-width: 1024px)': 0,
     },
   },
 });

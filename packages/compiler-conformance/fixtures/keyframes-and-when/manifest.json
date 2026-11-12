@@ -1,0 +1,4 @@
+{
+  "description": "stylex.keyframes() emits an @keyframes rule at priority 0 and stylex.when.ancestor() emits a conditional rule with raised specificity.",
+  "entry": "input.js"
+}

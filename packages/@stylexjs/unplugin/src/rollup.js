@@ -11,6 +11,8 @@ import fsp from 'node:fs/promises';
 import { createRollupPlugin } from 'unplugin';
 
 import {
+  INDEX_CSS_RE,
+  STYLE_CSS_RE,
   pickCssAssetFromRollupBundle,
   replaceCssAssetWithHashedCopy,
   unpluginFactory,
@@ -53,8 +55,8 @@ export function attachRollupHooks(plugin) {
               .readdirSync(assetsDir)
               .filter((f) => f.endsWith('.css'));
             const pick =
-              files.find((f) => /(^|\/)index\.css$/.test(f)) ||
-              files.find((f) => /(^|\/)style\.css$/.test(f)) ||
+              files.find((f) => INDEX_CSS_RE.test(f)) ||
+              files.find((f) => STYLE_CSS_RE.test(f)) ||
               files[0];
             if (pick) outfile = path.join(assetsDir, pick);
           }

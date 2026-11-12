@@ -64,7 +64,7 @@ export function pathReplaceHoisted(
   path.replaceWith(nameIdent);
 }
 
-function getProgramPath(path: NodePath<>): ?NodePath<t.Program> {
+export function getProgramPath(path: NodePath<>): ?NodePath<t.Program> {
   let programPath = path;
   while (programPath != null && !programPath.isProgram()) {
     if (programPath.parentPath) {

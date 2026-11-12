@@ -1,0 +1,116 @@
+---
+title: '@stylexjs/atoms'
+---
+
+`@stylexjs/atoms` provides compile-time helpers for authoring inline atomic
+styles.
+
+Atoms are StyleX styles. They can be passed to
+[`stylex.props()`](/docs/api/javascript/props) alongside styles created with
+[`stylex.create()`](/docs/api/javascript/create), conditional styles, arrays of
+styles, and dynamic styles.
+
+<Callout type="info">
+
+`@stylexjs/atoms` must be compiled by `@stylexjs/babel-plugin`. The package
+throws at runtime if an atom is accessed without compilation.
+
+</Callout>
+
+## Installation
+
+```bash
+npm install @stylexjs/atoms
+```
+
+## Example use:
+
+```tsx
+import * as stylex from '@stylexjs/stylex';
+import x from '@stylexjs/atoms';
+
+function Button({ color, isDisabled }) {
+  return (
+    <button
+      {...stylex.props(
+        x.display['inline-flex'],
+        x.alignItems.center,
+        x.borderRadius._6px,
+        x.paddingInline._12px,
+        x.paddingBlock._8px,
+        x.color(color),
+        isDisabled && x.opacity['0.5'],
+      )}
+    />
+  );
+}
+```
+
+Static atoms use property access:
+
+```tsx
+x.display.flex;
+x.flexDirection.column;
+x.backgroundColor.blue;
+```
+
+Dynamic atoms use call syntax and accept a single value:
+
+```tsx
+x.color(color);
+x.marginInlineStart(offset);
+```
+
+Dynamic atoms should be used sparingly. Static atoms can be fully resolved at
+compile time; dynamic atoms use an inline CSS variable for the runtime value.
+
+## Values that are not identifiers
+
+Use a leading underscore for values that start with a number. The underscore is
+removed by the compiler.
+
+```tsx
+x.padding._16px;
+x.fontSize._1rem;
+```
+
+For values that contain spaces, punctuation, or other characters that are not
+valid JavaScript identifiers, use computed property syntax:
+
+```tsx
+x.opacity['0.5'];
+x.width['calc(100% - 20px)'];
+x.gridTemplateColumns['1fr minmax(0, 3fr)'];
+x.transitionTimingFunction['cubic-bezier(0.2, 0, 0, 1)'];
+```
+
+## Composing with other styles
+
+Atoms compose through `stylex.props` in the same way as any other StyleX style.
+Later styles still win for the same property.
+
+```tsx
+import * as stylex from '@stylexjs/stylex';
+import x from '@stylexjs/atoms';
+
+const styles = stylex.create({
+  root: {
+    color: 'red',
+    backgroundColor: 'white',
+  },
+});
+
+<div {...stylex.props(styles.root, x.color.blue)} />;
+```
+
+The generated output is equivalent to defining the inline atom with
+`stylex.create`, and identical declarations deduplicate with other StyleX
+styles.
+
+## Import
+
+Use the default import:
+
+```tsx
+import x from '@stylexjs/atoms';
+```

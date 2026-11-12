@@ -7,162 +7,140 @@
  * @flow strict
  */
 
-'use strict';
+type TemplateFrame = {
+  inExpression: boolean,
+  expressionDepth: number,
+};
 
-function findMatchingClosingCurlyBraceLine(
+function findMatchingClosingBraceLine(
   lines: Array<string>,
   startLine: number,
 ): number | null {
-  const startIndex = Math.max(0, startLine - 1);
+  const startIndex = startLine - 1;
   const firstLine = lines[startIndex] ?? '';
-  const startColumn = Math.max(0, firstLine.lastIndexOf('{'));
+  const propertyOpening = /:\s*{/.exec(firstLine);
+  const startColumn =
+    propertyOpening == null
+      ? firstLine.indexOf('{')
+      : firstLine.indexOf('{', propertyOpening.index);
+  if (startColumn === -1) return null;
 
   let depth = 0;
-  let started = false;
-  let inSingle = false;
-  let inDouble = false;
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
   let inLineComment = false;
   let inBlockComment = false;
   let escapeNext = false;
-  const templateStack = [];
+  const templateStack: Array<TemplateFrame> = [];
 
-  for (let li = startIndex; li < lines.length; li += 1) {
-    const text = lines[li] ?? '';
+  for (let lineIndex = startIndex; lineIndex < lines.length; lineIndex += 1) {
+    const text = lines[lineIndex] ?? '';
     inLineComment = false;
-    const colStart = li === startIndex ? startColumn : 0;
+    const columnStart = lineIndex === startIndex ? startColumn : 0;
 
-    for (let ci = colStart; ci < text.length; ci += 1) {
-      const ch = text[ci];
-      const next = text[ci + 1];
+    for (
+      let columnIndex = columnStart;
+      columnIndex < text.length;
+      columnIndex += 1
+    ) {
+      const character = text[columnIndex];
+      const nextCharacter = text[columnIndex + 1];
 
       if (inLineComment) break;
 
       if (inBlockComment) {
-        if (ch === '*' && next === '/') {
+        if (character === '*' && nextCharacter === '/') {
           inBlockComment = false;
-          ci += 1;
+          columnIndex += 1;
         }
         continue;
       }
 
-      if (inSingle) {
+      if (inSingleQuote || inDoubleQuote) {
         if (escapeNext) {
           escapeNext = false;
           continue;
         }
-        if (ch === '\\') {
+        if (character === '\\') {
           escapeNext = true;
           continue;
         }
-        if (ch === "'") {
-          inSingle = false;
+        if (
+          (inSingleQuote && character === "'") ||
+          (inDoubleQuote && character === '"')
+        ) {
+          inSingleQuote = false;
+          inDoubleQuote = false;
         }
         continue;
       }
 
-      if (inDouble) {
+      const templateFrame = templateStack.at(-1) ?? null;
+      if (templateFrame != null && !templateFrame.inExpression) {
         if (escapeNext) {
           escapeNext = false;
           continue;
         }
-        if (ch === '\\') {
+        if (character === '\\') {
           escapeNext = true;
           continue;
         }
-        if (ch === '"') {
-          inDouble = false;
-        }
-        continue;
-      }
-
-      const templateTop =
-        templateStack.length > 0
-          ? templateStack[templateStack.length - 1]
-          : null;
-      const inTemplateText = templateTop && templateTop.inExpression === false;
-
-      if (inTemplateText) {
-        if (escapeNext) {
-          escapeNext = false;
-          continue;
-        }
-        if (ch === '\\') {
-          escapeNext = true;
-          continue;
-        }
-        if (ch === '`') {
+        if (character === '`') {
           templateStack.pop();
           continue;
         }
-        if (ch === '$' && next === '{' && templateTop != null) {
-          templateTop.inExpression = true;
-          templateTop.exprDepth = 1;
-
-          if (!started) {
-            started = true;
-            depth = 1;
-          } else {
-            depth += 1;
-          }
-
-          ci += 1;
-          continue;
-        }
-        continue;
-      }
-
-      if (ch === '/' && next === '/') {
-        inLineComment = true;
-        ci += 1;
-        continue;
-      }
-      if (ch === '/' && next === '*') {
-        inBlockComment = true;
-        ci += 1;
-        continue;
-      }
-      if (ch === "'") {
-        inSingle = true;
-        escapeNext = false;
-        continue;
-      }
-      if (ch === '"') {
-        inDouble = true;
-        escapeNext = false;
-        continue;
-      }
-      if (ch === '`') {
-        templateStack.push({ inExpression: false, exprDepth: 0 });
-        escapeNext = false;
-        continue;
-      }
-
-      if (ch === '{') {
-        if (!started) {
-          started = true;
-          depth = 1;
-        } else {
+        if (character === '$' && nextCharacter === '{') {
+          templateFrame.inExpression = true;
+          templateFrame.expressionDepth = 1;
           depth += 1;
-        }
-        if (templateTop && templateTop.inExpression) {
-          templateTop.exprDepth += 1;
+          columnIndex += 1;
         }
         continue;
       }
 
-      if (ch === '}') {
-        if (!started) continue;
+      if (character === '/' && nextCharacter === '/') {
+        inLineComment = true;
+        columnIndex += 1;
+        continue;
+      }
+      if (character === '/' && nextCharacter === '*') {
+        inBlockComment = true;
+        columnIndex += 1;
+        continue;
+      }
+      if (character === "'") {
+        inSingleQuote = true;
+        escapeNext = false;
+        continue;
+      }
+      if (character === '"') {
+        inDoubleQuote = true;
+        escapeNext = false;
+        continue;
+      }
+      if (character === '`') {
+        templateStack.push({ inExpression: false, expressionDepth: 0 });
+        escapeNext = false;
+        continue;
+      }
+
+      if (character === '{') {
+        depth += 1;
+        if (templateFrame != null && templateFrame.inExpression) {
+          templateFrame.expressionDepth += 1;
+        }
+        continue;
+      }
+
+      if (character === '}') {
         depth -= 1;
-        if (templateTop && templateTop.inExpression) {
-          templateTop.exprDepth -= 1;
-          if (templateTop.exprDepth === 0) {
-            templateTop.inExpression = false;
-            templateTop.exprDepth = 0;
+        if (templateFrame != null && templateFrame.inExpression) {
+          templateFrame.expressionDepth -= 1;
+          if (templateFrame.expressionDepth === 0) {
+            templateFrame.inExpression = false;
           }
         }
-        if (depth === 0) {
-          return li + 1;
-        }
+        if (depth === 0) return lineIndex + 1;
       }
     }
   }
@@ -174,40 +152,27 @@ export function formatSourceSnippet(
   content: string,
   line: number | null,
 ): string {
-  const normalized = content.replace(/\r\n/g, '\n');
-  const lines = normalized.split('\n');
+  const lines = content.replace(/\r\n/g, '\n').split('\n');
   if (lines.length === 0) return '';
 
-  const targetLine =
-    typeof line === 'number' && Number.isFinite(line) ? line : null;
-  if (targetLine == null) {
-    return lines.slice(0, Math.min(40, lines.length)).join('\n');
-  }
-
-  const start = Math.max(targetLine, 1);
-  const startLineText = lines[targetLine - 1] ?? '';
-  const hasOpeningBrace = startLineText.includes('{');
-  const braceEnd = hasOpeningBrace
-    ? findMatchingClosingCurlyBraceLine(lines, targetLine)
-    : null;
-
-  let end =
-    braceEnd != null ? braceEnd : Math.min(targetLine + 6, lines.length);
-  const maxPreviewLines = 200;
-  const truncated = end - start + 1 > maxPreviewLines;
-  if (truncated) {
-    end = Math.min(start + maxPreviewLines - 1, lines.length);
-  }
-
+  const target =
+    typeof line === 'number' && Number.isFinite(line)
+      ? Math.min(Math.max(Math.floor(line), 1), lines.length)
+      : 1;
+  const end =
+    findMatchingClosingBraceLine(lines, target) ??
+    Math.min(target + 6, lines.length);
   const width = String(end).length;
-  const out = [];
-  for (let i = start; i <= end; i += 1) {
-    const prefix = targetLine === i ? '>' : ' ';
-    const num = String(i).padStart(width, ' ');
-    out.push(`${prefix} ${num} | ${lines[i - 1] ?? ''}`);
+  const output = [];
+
+  for (let current = target; current <= end; current += 1) {
+    const marker = current === target ? '>' : ' ';
+    output.push(
+      `${marker} ${String(current).padStart(width, ' ')} | ${
+        lines[current - 1] ?? ''
+      }`,
+    );
   }
-  if (truncated) {
-    out.push('… (preview truncated)');
-  }
-  return out.join('\n');
+
+  return output.join('\n');
 }

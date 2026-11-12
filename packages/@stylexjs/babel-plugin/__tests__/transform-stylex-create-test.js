@@ -2270,7 +2270,6 @@ describe('@stylexjs/babel-plugin', () => {
           `);
         });
 
-        // Generates invalid CSS, need to revisit this API
         test('"::before" containing pseudo-classes', () => {
           const { code, metadata } = transform(`
             import * as stylex from '@stylexjs/stylex';
@@ -2308,7 +2307,7 @@ describe('@stylexjs/babel-plugin', () => {
                 [
                   "xeb2lg0",
                   {
-                    "ltr": ".xeb2lg0::before:hover{color:blue}",
+                    "ltr": ".xeb2lg0:hover::before{color:blue}",
                     "rtl": null,
                   },
                   8130,
@@ -2387,6 +2386,36 @@ describe('@stylexjs/babel-plugin', () => {
                 ],
               ],
             }
+          `);
+        });
+
+        test('"::after" with multiple pseudo-class conditions', () => {
+          const { metadata } = transform(`
+            import * as stylex from '@stylexjs/stylex';
+            export const styles = stylex.create({
+              button: {
+                '::after': {
+                  content: '""',
+                  boxShadow: {
+                    default: '0 0 0 1px gray',
+                    ':hover': '0 0 0 1px blue',
+                    ':active': '0 0 0 1px darkblue',
+                  },
+                },
+              },
+            });
+          `);
+
+          // Pseudo-classes (:hover, :active) must come before the
+          // pseudo-element (::after) in the selector for valid CSS.
+          const rules = metadata.stylex.map(([_className, { ltr }]) => ltr);
+          expect(rules).toMatchInlineSnapshot(`
+            [
+              ".x1s928wv::after{content:""}",
+              ".x5fy8b7::after{box-shadow:0 0 0 1px gray}",
+              ".xgazanr:hover::after{box-shadow:0 0 0 1px blue}",
+              ".x136huz6:active::after{box-shadow:0 0 0 1px darkblue}",
+            ]
           `);
         });
       });
@@ -2479,7 +2508,7 @@ describe('@stylexjs/babel-plugin', () => {
             "import * as stylex from '@stylexjs/stylex';
             export const styles = {
               root: {
-                kWkggS: "xrkmrrc x1qc147k x9qmkci x17z8iku",
+                kWkggS: "xrkmrrc xa5oah1 x1seukri xduqtph",
                 $$css: true
               }
             };"
@@ -2496,25 +2525,103 @@ describe('@stylexjs/babel-plugin', () => {
                   3000,
                 ],
                 [
-                  "x1qc147k",
+                  "xa5oah1",
                   {
-                    "ltr": "@media (((screen) and (max-width: 900px) and (not (screen)) and (not (screen))) or ((screen) and (max-width: 900px) and (not (screen)) and (not (max-width: 400px)))) or (((screen) and (max-width: 900px) and (not (max-width: 500px)) and (not (screen))) or ((screen) and (max-width: 900px) and (not (max-width: 500px)) and (not (max-width: 400px)))){.x1qc147k.x1qc147k{background-color:blue}}",
+                    "ltr": "@media screen and (max-width: 900px) and (not (max-width: 500px)) and (not (max-width: 400px)){.xa5oah1.xa5oah1{background-color:blue}}",
                     "rtl": null,
                   },
                   3200,
                 ],
                 [
-                  "x9qmkci",
+                  "x1seukri",
                   {
-                    "ltr": "@media ((screen) and (max-width: 500px) and (not (screen))) or ((screen) and (max-width: 500px) and (not (max-width: 400px))){.x9qmkci.x9qmkci{background-color:purple}}",
+                    "ltr": "@media screen and (max-width: 500px) and (not (max-width: 400px)){.x1seukri.x1seukri{background-color:purple}}",
                     "rtl": null,
                   },
                   3200,
                 ],
                 [
-                  "x17z8iku",
+                  "xduqtph",
                   {
-                    "ltr": "@media (screen) and (max-width: 400px){.x17z8iku.x17z8iku{background-color:green}}",
+                    "ltr": "@media screen and (max-width: 400px){.xduqtph.xduqtph{background-color:green}}",
+                    "rtl": null,
+                  },
+                  3200,
+                ],
+              ],
+            }
+          `);
+        });
+
+        test('media queries with a leading not and last query wins', () => {
+          const { code, metadata } = transform(
+            `
+            import * as stylex from '@stylexjs/stylex';
+            export const styles = stylex.create({
+              root: {
+                filter: {
+                  default: 'grayscale(1)',
+                  '@media not all and (monochrome)': 'none',
+                },
+                backgroundColor: {
+                  default: 'red',
+                  '@media not screen and (min-width: 100px)': 'blue',
+                  '@media (min-width: 500px)': 'purple',
+                }
+              },
+            });
+          `,
+            { enableMediaQueryOrder: true },
+          );
+          expect(code).toMatchInlineSnapshot(`
+            "import * as stylex from '@stylexjs/stylex';
+            export const styles = {
+              root: {
+                ku685b: "xifi7vn x342vwv",
+                kWkggS: "xrkmrrc x8tgh9g x132kqxt",
+                $$css: true
+              }
+            };"
+          `);
+          expect(metadata).toMatchInlineSnapshot(`
+            {
+              "stylex": [
+                [
+                  "xifi7vn",
+                  {
+                    "ltr": ".xifi7vn{filter:grayscale(1)}",
+                    "rtl": null,
+                  },
+                  3000,
+                ],
+                [
+                  "x342vwv",
+                  {
+                    "ltr": "@media not all and (monochrome){.x342vwv.x342vwv{filter:none}}",
+                    "rtl": null,
+                  },
+                  3200,
+                ],
+                [
+                  "xrkmrrc",
+                  {
+                    "ltr": ".xrkmrrc{background-color:red}",
+                    "rtl": null,
+                  },
+                  3000,
+                ],
+                [
+                  "x8tgh9g",
+                  {
+                    "ltr": "@media print and (not (min-width: 500px)), (max-width: 99.98px){.x8tgh9g.x8tgh9g{background-color:blue}}",
+                    "rtl": null,
+                  },
+                  3200,
+                ],
+                [
+                  "x132kqxt",
+                  {
+                    "ltr": "@media (min-width: 500px){.x132kqxt.x132kqxt{background-color:purple}}",
                     "rtl": null,
                   },
                   3200,
@@ -2609,7 +2716,7 @@ describe('@stylexjs/babel-plugin', () => {
             "import * as stylex from '@stylexjs/stylex';
             export const styles = {
               root: {
-                kWkggS: "xrkmrrc xw6up8c x1ssfqz5",
+                kWkggS: "xrkmrrc xr725a3 x1ssfqz5",
                 $$css: true
               }
             };"
@@ -2626,9 +2733,9 @@ describe('@stylexjs/babel-plugin', () => {
                   3000,
                 ],
                 [
-                  "xw6up8c",
+                  "xr725a3",
                   {
-                    "ltr": "@media (min-width: 1000px) and (max-width: 1999.99px){.xw6up8c.xw6up8c{background-color:blue}}",
+                    "ltr": "@media (min-width: 1000px) and (max-width: 1999.98px){.xr725a3.xr725a3{background-color:blue}}",
                     "rtl": null,
                   },
                   3200,
@@ -3615,8 +3722,8 @@ describe('@stylexjs/babel-plugin', () => {
             "$$css": true
           };
           export const styles = {
-            root: color => [_temp, {
-              kMwMTN: color != null ? "x14rh7hd" : color,
+            root: color => [_temp, color !== undefined && {
+              kMwMTN: color != null ? "x14rh7hd" : "",
               $$css: true
             }, {
               "--x-color": color != null ? color : undefined
@@ -3670,8 +3777,8 @@ describe('@stylexjs/babel-plugin', () => {
         expect(code).toMatchInlineSnapshot(`
           "import * as stylex from '@stylexjs/stylex';
           export const styles = {
-            one: color => [{
-              kMwMTN: color != null ? "x14rh7hd" : color,
+            one: color => [color !== undefined && {
+              kMwMTN: color != null ? "x14rh7hd" : "",
               $$css: true
             }, {
               "--x-color": color != null ? color : undefined
@@ -3728,9 +3835,11 @@ describe('@stylexjs/babel-plugin', () => {
         expect(code).toMatchInlineSnapshot(`
           "import * as stylex from '@stylexjs/stylex';
           export const styles = {
-            root: (bgColor, otherColor) => [{
-              "--background-color": bgColor != null ? "xwn82o0" : bgColor,
-              "--otherColor": otherColor != null ? "xp3hsad" : otherColor,
+            root: (bgColor, otherColor) => [bgColor !== undefined && {
+              "--background-color": bgColor != null ? "xwn82o0" : "",
+              $$css: true
+            }, otherColor !== undefined && {
+              "--otherColor": otherColor != null ? "xp3hsad" : "",
               $$css: true
             }, {
               "--x---background-color": bgColor != null ? bgColor : undefined,
@@ -3792,8 +3901,8 @@ describe('@stylexjs/babel-plugin', () => {
           expect(code).toMatchInlineSnapshot(`
             "import * as stylex from '@stylexjs/stylex';
             export const styles = {
-              root: width => [{
-                kzqmXN: width != null ? "x5lhr3w" : width,
+              root: width => [width !== undefined && {
+                kzqmXN: width != null ? "x5lhr3w" : "",
                 $$css: true
               }, {
                 "--x-width": (val => typeof val === "number" ? val + "px" : val != null ? val : undefined)(width)
@@ -3844,8 +3953,8 @@ describe('@stylexjs/babel-plugin', () => {
               "$$css": true
             };
             export const styles = {
-              root: width => [_temp, {
-                kzqmXN: width != null ? "x5lhr3w" : width,
+              root: width => [_temp, width !== undefined && {
+                kzqmXN: width != null ? "x5lhr3w" : "",
                 $$css: true
               }, {
                 "--x-width": (val => typeof val === "number" ? val + "px" : val != null ? val : undefined)(width),
@@ -3923,8 +4032,8 @@ describe('@stylexjs/babel-plugin', () => {
             "import * as stylex from '@stylexjs/stylex';
             import { vars } from 'vars.stylex.js';
             export const styles = {
-              root: width => [{
-                "--x1anmu0j": width != null ? "x5fq457" : width,
+              root: width => [width !== undefined && {
+                "--x1anmu0j": width != null ? "x5fq457" : "",
                 $$css: true
               }, {
                 "--x---x1anmu0j": width != null ? width : undefined
@@ -4377,8 +4486,8 @@ describe('@stylexjs/babel-plugin', () => {
               "$$css": true
             };
             export const styles = {
-              root: (color, isDark) => [_temp, {
-                kMwMTN: (isDark ? color : 'black') != null ? "x14rh7hd" : isDark ? color : 'black',
+              root: (color, isDark) => [_temp, (isDark ? color : 'black') !== undefined && {
+                kMwMTN: (isDark ? color : 'black') != null ? "x14rh7hd" : "",
                 $$css: true
               }, {
                 "--x-backgroundColor": (isDark ? 'black' : 'white') != null ? isDark ? 'black' : 'white' : undefined,
@@ -4547,9 +4656,11 @@ describe('@stylexjs/babel-plugin', () => {
           expect(code).toMatchInlineSnapshot(`
             "import * as stylex from '@stylexjs/stylex';
             export const styles = {
-              root: color => [{
-                kWkggS: color != null ? "x1j2k28p" : color,
-                kMwMTN: color != null ? "x1qvlgnj" : color,
+              root: color => [color !== undefined && {
+                kWkggS: color != null ? "x1j2k28p" : "",
+                $$css: true
+              }, color !== undefined && {
+                kMwMTN: color != null ? "x1qvlgnj" : "",
                 $$css: true
               }, {
                 "--x-1e2mv7m": color != null ? color : undefined,
@@ -4615,7 +4726,7 @@ describe('@stylexjs/babel-plugin', () => {
             "import * as stylex from '@stylexjs/stylex';
             export const styles = {
               root: (hover, active, focus) => [{
-                kMwMTN: (hover != null ? "x1qvlgnj " : hover) + (active != null ? "xx746rz " : active) + (focus != null ? "x152n5rj " : focus) + "x126ychx",
+                kMwMTN: (hover != null ? "x1qvlgnj " : "") + (active != null ? "xx746rz " : "") + (focus != null ? "x152n5rj " : "") + "x126ychx",
                 $$css: true
               }, {
                 "--x-1113oo7": hover != null ? hover : undefined,
@@ -4707,9 +4818,11 @@ describe('@stylexjs/babel-plugin', () => {
           expect(code).toMatchInlineSnapshot(`
             "import * as stylex from '@stylexjs/stylex';
             export const styles = {
-              foo: (a, b) => [{
-                kxBb7d: a != null ? "xaigonn" : a,
-                kB1Fuz: b != null ? "x1p1099i" : b,
+              foo: (a, b) => [a !== undefined && {
+                kxBb7d: a != null ? "xaigonn" : "",
+                $$css: true
+              }, b !== undefined && {
+                kB1Fuz: b != null ? "x1p1099i" : "",
                 $$css: true
               }, {
                 "--x-1g451k2": a != null ? a : undefined,
@@ -4771,8 +4884,8 @@ describe('@stylexjs/babel-plugin', () => {
           expect(code).toMatchInlineSnapshot(`
             "import * as stylex from '@stylexjs/stylex';
             export const styles = {
-              foo: color => [{
-                k8Qsv1: color != null ? "x1mzl164" : color,
+              foo: color => [color !== undefined && {
+                k8Qsv1: color != null ? "x1mzl164" : "",
                 $$css: true
               }, {
                 "--x-163tekb": color != null ? color : undefined
@@ -4817,8 +4930,8 @@ describe('@stylexjs/babel-plugin', () => {
           expect(code).toMatchInlineSnapshot(`
             "import * as stylex from '@stylexjs/stylex';
             export const styles = {
-              foo: width => [{
-                k8pbKx: width != null ? "x18fgbt0" : width,
+              foo: width => [width !== undefined && {
+                k8pbKx: width != null ? "x18fgbt0" : "",
                 $$css: true
               }, {
                 "--x-msahdu": (val => typeof val === "number" ? val + "px" : val != null ? val : undefined)(width)
@@ -4889,7 +5002,7 @@ describe('@stylexjs/babel-plugin', () => {
                 [
                   "xndy4z1",
                   {
-                    "ltr": ".xndy4z1::before:hover{color:var(--x-6bge3v)}",
+                    "ltr": ".xndy4z1:hover::before{color:var(--x-6bge3v)}",
                     "rtl": null,
                   },
                   8130,
@@ -4921,8 +5034,8 @@ describe('@stylexjs/babel-plugin', () => {
           expect(code).toMatchInlineSnapshot(`
             "import * as stylex from '@stylexjs/stylex';
             export const styles = {
-              repro: color => [{
-                kB1Fuz: color != null ? "x1p1099i" : color,
+              repro: color => [color !== undefined && {
+                kB1Fuz: color != null ? "x1p1099i" : "",
                 $$css: true
               }, {
                 "--x-19erzii": color != null ? color : undefined
@@ -4972,7 +5085,7 @@ describe('@stylexjs/babel-plugin', () => {
             "import * as stylex from '@stylexjs/stylex';
             export const styles = {
               root: (a, b, c) => [{
-                kzqmXN: "x11ymkkh " + "x38mdg9 " + (c != null ? "x1bai16n" : c),
+                kzqmXN: "x11ymkkh " + "xwr9iet " + (c != null ? "x1bai16n" : ""),
                 $$css: true
               }, {
                 "--x-1xmrurk": (val => typeof val === "number" ? val + "px" : val != null ? val : undefined)('color-mix(' + color + ', blue)'),
@@ -4993,9 +5106,9 @@ describe('@stylexjs/babel-plugin', () => {
                   4000,
                 ],
                 [
-                  "x38mdg9",
+                  "xwr9iet",
                   {
-                    "ltr": "@media (min-width: 1000px) and (max-width: 1999.99px){.x38mdg9.x38mdg9{width:var(--x-wm47pl)}}",
+                    "ltr": "@media (min-width: 1000px) and (max-width: 1999.98px){.xwr9iet.xwr9iet{width:var(--x-wm47pl)}}",
                     "rtl": null,
                   },
                   4200,
@@ -5054,7 +5167,7 @@ describe('@stylexjs/babel-plugin', () => {
             "import * as stylex from '@stylexjs/stylex';
             export const styles = {
               root: (a, b, c) => [{
-                kMwMTN: (a != null ? "x3d248p " : a) + (b != null ? "x1iuwwch " : b) + (c != null ? "x5268pl" : c),
+                kMwMTN: (a != null ? "x3d248p " : "") + (b != null ? "x1iuwwch " : "") + (c != null ? "x5268pl" : ""),
                 $$css: true
               }, {
                 "--x-4xs81a": a != null ? a : undefined,
@@ -5138,7 +5251,7 @@ describe('@stylexjs/babel-plugin', () => {
             "import * as stylex from '@stylexjs/stylex';
             export const styles = {
               root: (a, b, c) => [{
-                kGuDYH: (a != null ? "xww4jgc " : a) + (b != null ? "xfqys7t " : b) + (c != null ? "x13w7uki" : c),
+                kGuDYH: (a != null ? "xww4jgc " : "") + (b != null ? "xfqys7t " : "") + (c != null ? "x13w7uki" : ""),
                 $$css: true
               }, {
                 "--x-19zvkyr": (val => typeof val === "number" ? val + "px" : val != null ? val : undefined)(a),
@@ -5221,7 +5334,7 @@ describe('@stylexjs/babel-plugin', () => {
             "import * as stylex from '@stylexjs/stylex';
             export const styles = {
               root: (a, b, c) => [{
-                kGuDYH: ((a ? '16px' : undefined) != null ? "xww4jgc " : a ? '16px' : undefined) + ((b ? '18px' : undefined) != null ? "xqdov8i " : b ? '18px' : undefined) + ((c ? '20px' : undefined) != null ? "x1j86d60" : c ? '20px' : undefined),
+                kGuDYH: ((a ? '16px' : undefined) != null ? "xww4jgc " : "") + ((b ? '18px' : undefined) != null ? "x1845opi " : "") + ((c ? '20px' : undefined) != null ? "x1j86d60" : ""),
                 $$css: true
               }, {
                 "--x-19zvkyr": (val => typeof val === "number" ? val + "px" : val != null ? val : undefined)(a ? '16px' : undefined),
@@ -5243,9 +5356,9 @@ describe('@stylexjs/babel-plugin', () => {
                   3000,
                 ],
                 [
-                  "xqdov8i",
+                  "x1845opi",
                   {
-                    "ltr": "@media (min-width: 800px) and (max-width: 1279.99px){.xqdov8i.xqdov8i{font-size:var(--x-1bks2es)}}",
+                    "ltr": "@media (min-width: 800px) and (max-width: 1279.98px){.x1845opi.x1845opi{font-size:var(--x-1bks2es)}}",
                     "rtl": null,
                   },
                   3200,
@@ -5293,7 +5406,6 @@ describe('@stylexjs/babel-plugin', () => {
       test('adds debug data', () => {
         const options = {
           debug: true,
-          enableDebugClassNames: true,
           filename: '/html/js/components/Foo.react.js',
         };
         const { code, metadata } = transform(
@@ -5317,15 +5429,15 @@ describe('@stylexjs/babel-plugin', () => {
           "import * as stylex from '@stylexjs/stylex';
           export const styles = {
             "1": {
-              "fontSize-kGuDYH": "fontSize-xrv4cvt",
+              "fontSize-kGuDYH": "xrv4cvt",
               $$css: "components/Foo.react.js:10"
             },
             foo: {
-              "color-kMwMTN": "color-x1e2nbdu",
+              "color-kMwMTN": "x1e2nbdu",
               $$css: "components/Foo.react.js:4"
             },
             "bar-baz": {
-              "display-k1xSpc": "display-x1lliihq",
+              "display-k1xSpc": "x1lliihq",
               $$css: "components/Foo.react.js:7"
             }
           };"
@@ -5334,25 +5446,25 @@ describe('@stylexjs/babel-plugin', () => {
           {
             "stylex": [
               [
-                "fontSize-xrv4cvt",
+                "xrv4cvt",
                 {
-                  "ltr": ".fontSize-xrv4cvt{font-size:1em}",
+                  "ltr": ".xrv4cvt{font-size:1em}",
                   "rtl": null,
                 },
                 3000,
               ],
               [
-                "color-x1e2nbdu",
+                "x1e2nbdu",
                 {
-                  "ltr": ".color-x1e2nbdu{color:red}",
+                  "ltr": ".x1e2nbdu{color:red}",
                   "rtl": null,
                 },
                 3000,
               ],
               [
-                "display-x1lliihq",
+                "x1lliihq",
                 {
-                  "ltr": ".display-x1lliihq{display:block}",
+                  "ltr": ".x1lliihq{display:block}",
                   "rtl": null,
                 },
                 3000,
@@ -5365,7 +5477,6 @@ describe('@stylexjs/babel-plugin', () => {
       test('adds debug data for npm packages', () => {
         const options = {
           debug: true,
-          enableDebugClassNames: true,
           filename: '/js/node_modules/npm-package/dist/components/Foo.react.js',
         };
         const { code, metadata } = transform(
@@ -5389,15 +5500,15 @@ describe('@stylexjs/babel-plugin', () => {
           "import * as stylex from '@stylexjs/stylex';
           export const styles = {
             "1": {
-              "fontSize-kGuDYH": "fontSize-xrv4cvt",
+              "fontSize-kGuDYH": "xrv4cvt",
               $$css: "npm-package:components/Foo.react.js:10"
             },
             foo: {
-              "color-kMwMTN": "color-x1e2nbdu",
+              "color-kMwMTN": "x1e2nbdu",
               $$css: "npm-package:components/Foo.react.js:4"
             },
             "bar-baz": {
-              "display-k1xSpc": "display-x1lliihq",
+              "display-k1xSpc": "x1lliihq",
               $$css: "npm-package:components/Foo.react.js:7"
             }
           };"
@@ -5406,25 +5517,25 @@ describe('@stylexjs/babel-plugin', () => {
           {
             "stylex": [
               [
-                "fontSize-xrv4cvt",
+                "xrv4cvt",
                 {
-                  "ltr": ".fontSize-xrv4cvt{font-size:1em}",
+                  "ltr": ".xrv4cvt{font-size:1em}",
                   "rtl": null,
                 },
                 3000,
               ],
               [
-                "color-x1e2nbdu",
+                "x1e2nbdu",
                 {
-                  "ltr": ".color-x1e2nbdu{color:red}",
+                  "ltr": ".x1e2nbdu{color:red}",
                   "rtl": null,
                 },
                 3000,
               ],
               [
-                "display-x1lliihq",
+                "x1lliihq",
                 {
-                  "ltr": ".display-x1lliihq{display:block}",
+                  "ltr": ".x1lliihq{display:block}",
                   "rtl": null,
                 },
                 3000,
@@ -5437,7 +5548,6 @@ describe('@stylexjs/babel-plugin', () => {
       test('adds debug data (haste)', () => {
         const options = {
           debug: true,
-          enableDebugClassNames: true,
           filename: '/html/js/components/Foo.react.js',
           unstable_moduleResolution: { type: 'haste' },
         };
@@ -5462,15 +5572,15 @@ describe('@stylexjs/babel-plugin', () => {
           "import * as stylex from '@stylexjs/stylex';
           export const styles = {
             "1": {
-              "fontSize-kGuDYH": "fontSize-xrv4cvt",
+              "fontSize-kGuDYH": "xrv4cvt",
               $$css: "Foo.react.js:10"
             },
             foo: {
-              "color-kMwMTN": "color-x1e2nbdu",
+              "color-kMwMTN": "x1e2nbdu",
               $$css: "Foo.react.js:4"
             },
             "bar-baz": {
-              "display-k1xSpc": "display-x1lliihq",
+              "display-k1xSpc": "x1lliihq",
               $$css: "Foo.react.js:7"
             }
           };"
@@ -5479,25 +5589,25 @@ describe('@stylexjs/babel-plugin', () => {
           {
             "stylex": [
               [
-                "fontSize-xrv4cvt",
+                "xrv4cvt",
                 {
-                  "ltr": ".fontSize-xrv4cvt{font-size:1em}",
+                  "ltr": ".xrv4cvt{font-size:1em}",
                   "rtl": null,
                 },
                 3000,
               ],
               [
-                "color-x1e2nbdu",
+                "x1e2nbdu",
                 {
-                  "ltr": ".color-x1e2nbdu{color:red}",
+                  "ltr": ".x1e2nbdu{color:red}",
                   "rtl": null,
                 },
                 3000,
               ],
               [
-                "display-x1lliihq",
+                "x1lliihq",
                 {
-                  "ltr": ".display-x1lliihq{display:block}",
+                  "ltr": ".x1lliihq{display:block}",
                   "rtl": null,
                 },
                 3000,
@@ -5510,7 +5620,6 @@ describe('@stylexjs/babel-plugin', () => {
       test('adds debug data for npm packages (haste)', () => {
         const options = {
           debug: true,
-          enableDebugClassNames: true,
           filename: '/node_modules/npm-package/dist/components/Foo.react.js',
           unstable_moduleResolution: { type: 'haste' },
         };
@@ -5535,15 +5644,15 @@ describe('@stylexjs/babel-plugin', () => {
           "import * as stylex from '@stylexjs/stylex';
           export const styles = {
             "1": {
-              "fontSize-kGuDYH": "fontSize-xrv4cvt",
+              "fontSize-kGuDYH": "xrv4cvt",
               $$css: "npm-package:components/Foo.react.js:10"
             },
             foo: {
-              "color-kMwMTN": "color-x1e2nbdu",
+              "color-kMwMTN": "x1e2nbdu",
               $$css: "npm-package:components/Foo.react.js:4"
             },
             "bar-baz": {
-              "display-k1xSpc": "display-x1lliihq",
+              "display-k1xSpc": "x1lliihq",
               $$css: "npm-package:components/Foo.react.js:7"
             }
           };"
@@ -5552,25 +5661,25 @@ describe('@stylexjs/babel-plugin', () => {
           {
             "stylex": [
               [
-                "fontSize-xrv4cvt",
+                "xrv4cvt",
                 {
-                  "ltr": ".fontSize-xrv4cvt{font-size:1em}",
+                  "ltr": ".xrv4cvt{font-size:1em}",
                   "rtl": null,
                 },
                 3000,
               ],
               [
-                "color-x1e2nbdu",
+                "x1e2nbdu",
                 {
-                  "ltr": ".color-x1e2nbdu{color:red}",
+                  "ltr": ".x1e2nbdu{color:red}",
                   "rtl": null,
                 },
                 3000,
               ],
               [
-                "display-x1lliihq",
+                "x1lliihq",
                 {
-                  "ltr": ".display-x1lliihq{display:block}",
+                  "ltr": ".x1lliihq{display:block}",
                   "rtl": null,
                 },
                 3000,
@@ -5752,7 +5861,7 @@ describe('@stylexjs/babel-plugin', () => {
             priority: 8000
           });
           _inject2({
-            ltr: ".xeb2lg0::before:hover{color:blue}",
+            ltr: ".xeb2lg0:hover::before{color:blue}",
             priority: 8130
           });
           export const styles = {
@@ -5844,11 +5953,11 @@ describe('@stylexjs/babel-plugin', () => {
             priority: 8130
           });
           _inject2({
-            ltr: ".x1gobd9t:hover::before:hover{color:green}",
+            ltr: ".x1gobd9t:hover:hover::before{color:green}",
             priority: 8260
           });
           _inject2({
-            ltr: ".xs8jp5:hover::before:active{color:purple}",
+            ltr: ".xs8jp5:hover:active::before{color:purple}",
             priority: 8300
           });
           export const styles = {
@@ -6013,9 +6122,9 @@ describe('@stylexjs/babel-plugin', () => {
           });
           export const styles = {
             default: margin => [_temp, {
-              k71WvV: (margin != null ? "x17e2bsb " : margin) + "xtcj1g9",
-              k1K539: (margin != null ? "xg6eqc8 " : margin) + "xgrn1a3",
-              keTefX: (margin != null ? "x19ja4a5 " : margin) + "x2tye95",
+              k71WvV: (margin != null ? "x17e2bsb " : "") + "xtcj1g9",
+              k1K539: (margin != null ? "xg6eqc8 " : "") + "xgrn1a3",
+              keTefX: (margin != null ? "x19ja4a5 " : "") + "x2tye95",
               $$css: true
             }, {
               "--x-14mfytm": (val => typeof val === "number" ? val + "px" : val != null ? val : undefined)(margin),

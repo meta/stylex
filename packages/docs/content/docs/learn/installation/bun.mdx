@@ -1,0 +1,55 @@
+---
+title: 'Bun'
+---
+
+[`examples/example-bun`](https://github.com/facebook/stylex/tree/main/examples/example-bun)
+demonstrates using StyleX with Bun and `@stylexjs/unplugin`.
+
+For production builds, Bun can use the unplugin `esbuild` adapter through
+`Bun.build()`. For Bun's dev server, StyleX also provides a dedicated Bun plugin
+entrypoint.
+
+## Install
+
+<DevInstallExample dev={[`@stylexjs/unplugin`]} />
+
+## Production builds with `Bun.build()`
+
+```js title="scripts/build.mjs"
+import stylex from '@stylexjs/unplugin';
+
+await Bun.build({
+  entrypoints: ['src/main.jsx'],
+  outdir: 'dist',
+  target: 'browser',
+  metafile: true,
+  plugins: [
+    stylex.esbuild({
+      useCSSLayers: true,
+      importSources: ['@stylexjs/stylex'],
+      unstable_moduleResolution: { type: 'commonJS' },
+    }),
+  ],
+});
+```
+
+- `metafile: true` lets the plugin locate Bun's emitted CSS asset.
+- `useCSSLayers: true` wraps the generated StyleX output in `@layer` blocks.
+
+## Bun dev server
+
+Add the Bun plugin entrypoint in `bunfig.toml`:
+
+```toml title="bunfig.toml"
+[serve.static]
+plugins = ["@stylexjs/unplugin/bun"]
+```
+
+The Bun plugin writes generated StyleX CSS to a dev stylesheet so Bun can reload
+it during development.
+
+## CSS entrypoint
+
+As with the other bundler integrations, make sure your app imports a CSS file
+from the root entry so Bun emits a stylesheet for StyleX to append to during
+production builds.

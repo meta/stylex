@@ -22,7 +22,6 @@ const defaultOptions = {
   classNamePrefix: 'x',
   dev: false,
   debug: false,
-  enableDebugClassNames: true,
   test: false,
   useRemForFontSize: false,
   enableFontSizePxToRem: false,

@@ -1,0 +1,83 @@
+---
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+slug: v0.19.0
+title: Release 0.19.0
+authors: [nmn, mellyeliu]
+tags:
+  - release
+---
+
+StyleX v0.19 introduces `@stylexjs/atoms`, a new package for inline atomic
+styles that compile to the same output as `stylex.create`. This release also
+adds ESLint 10 compatibility, expands shorthand autofixes, and includes fixes
+for JSX `sx`, selector ordering, theme resolution, style sorting, and media
+query parsing.
+
+## New `@stylexjs/atoms` package
+
+`@stylexjs/atoms` gives you a concise way to write one-off atomic styles inline
+while keeping the same StyleX compile-time guarantees.
+
+```tsx
+import * as stylex from '@stylexjs/stylex';
+import _ from '@stylexjs/atoms';
+
+function Stack({ color, styles }) {
+  return (
+    <div
+      // syntactic sugar for `{...stylex.props()}`
+      sx={[
+        _.display.grid,
+
+        // Arbitrary strings can be used as values
+        _.gridTemplateColumns['1fr minmax(0, 3fr)'],
+        _.gap._12px,
+
+        // Dynamic values are supported too
+        _.color(color),
+
+        // Styles passed in as props can still be combined
+        styles,
+      ]}
+    />
+  );
+}
+```
+
+Static atoms use property access, such as `_.display.flex`, and dynamic atoms
+use call syntax, such as `_.color(color)`. Values that begin with a number can
+be written with a leading underscore, and complex values can use computed
+property syntax.
+
+The package is not a new runtime styling system. The Babel plugin compiles atoms
+away and emits the same atomic CSS rules as equivalent `stylex.create` styles,
+so atoms deduplicate with existing StyleX styles and follow the same merge
+semantics in `stylex.props`.
+
+See the [`@stylexjs/atoms` API docs](/docs/api/javascript/atoms) for usage
+details.
+
+## ESLint updates
+
+StyleX v0.19 is compatible with ESLint 10.
+
+The ESLint plugin also includes a new `gap` autofix when using
+`legacy-expand-shorthands` style resolution. Single-value `gap` and `flex`
+shorthands are now skipped by `valid-shorthands`, which avoids unnecessary
+warnings for values that do not need to be expanded.
+
+The `textWrap` validator now accepts the newer `pretty` and `stable` values.
+
+## Fixes and polish
+
+- Fixed runtime `stylex` import injection for the JSX `sx` prop.
+- Fixed selector ordering when pseudo-elements and pseudo-classes are combined.
+- Fixed aliased theme file resolution so aliases expand to absolute paths.
+- Fixed `sort-keys` autofix ordering.
+- Fixed media type parenthesization in `and` chains in the style value parser.
+
+Thanks to everyone who contributed fixes, tested the new atoms package, and
+helped tighten the tooling around recent StyleX releases.

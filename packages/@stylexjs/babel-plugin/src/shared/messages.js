@@ -48,6 +48,7 @@ export const INVALID_PSEUDO = 'Invalid pseudo selector, not on the whitelist.';
 export const INVALID_PSEUDO_OR_AT_RULE = 'Invalid pseudo or at-rule.';
 export const INVALID_MEDIA_QUERY_SYNTAX = 'Invalid media query syntax.';
 export const LINT_UNCLOSED_FUNCTION = 'Rule contains an unclosed function';
+export const LINT_UNCLOSED_STRING = 'Rule contains an unclosed string';
 export const LOCAL_ONLY =
   'The return value of create() should not be exported.';
 export const NON_OBJECT_KEYFRAME =

@@ -1,12 +1,14 @@
 {
   "title": "Installation",
   "pages": [
-      "./nextjs.mdx",
-      "./vite",
-      "./webpack.mdx",
-      "./rspack.mdx",
-      "./esbuild.mdx",
-      "./postcss.mdx",
-      "./cli.mdx"
+    "./create.mdx",
+    "./nextjs.mdx",
+    "./bun.mdx",
+    "./vite",
+    "./webpack.mdx",
+    "./rspack.mdx",
+    "./esbuild.mdx",
+    "./postcss.mdx",
+    "./cli.mdx"
   ]
 }

@@ -351,6 +351,11 @@ export default function transformStyleXCreate(
 
               const conditionalProps: Array<t.ObjectProperty> = [];
 
+              const guardedProps: Array<{
+                +prop: t.ObjectProperty,
+                +expr: t.Expression,
+              }> = [];
+
               value.properties.forEach((prop) => {
                 if (!t.isObjectProperty(prop) || t.isPrivateName(prop.key)) {
                   return;
@@ -379,6 +384,7 @@ export default function transformStyleXCreate(
                   : [];
 
                 let isStatic = true;
+                let controllingExpr: t.Expression | null = null;
                 const exprList: t.Expression[] = [];
 
                 classList.forEach((cls, index) => {
@@ -417,11 +423,12 @@ export default function transformStyleXCreate(
 
                   if (expr && !isSafeToSkipNullCheck(expr)) {
                     isStatic = false;
+                    controllingExpr = expr;
                     exprList.push(
                       t.conditionalExpression(
                         t.binaryExpression('!=', expr, t.nullLiteral()),
                         t.stringLiteral(clsWithSpace),
-                        expr,
+                        t.stringLiteral(''),
                       ),
                     );
                   } else {
@@ -438,6 +445,12 @@ export default function transformStyleXCreate(
 
                 if (isStatic) {
                   staticProps.push(t.objectProperty(objProp.key, joined));
+                } else if (classList.length === 1 && controllingExpr != null) {
+                  const guardExpr = controllingExpr;
+                  guardedProps.push({
+                    prop: t.objectProperty(objProp.key, joined),
+                    expr: guardExpr,
+                  });
                 } else {
                   conditionalProps.push(t.objectProperty(objProp.key, joined));
                 }
@@ -460,15 +473,38 @@ export default function transformStyleXCreate(
                 conditionalObj = t.objectExpression(conditionalProps);
               }
 
+              const guardedObjs = guardedProps.map(({ prop, expr }) =>
+                t.logicalExpression(
+                  '&&',
+                  t.binaryExpression(
+                    '!==',
+                    t.cloneNode(expr),
+                    t.identifier('undefined'),
+                  ),
+                  t.objectExpression([
+                    prop,
+                    t.objectProperty(
+                      t.identifier('$$css'),
+                      t.cloneNode(cssTagValue),
+                    ),
+                  ]),
+                ),
+              );
+
               let finalFnValue: t.Expression = t.objectExpression(
                 Object.entries(inlineStyles).map(([key, val]) =>
                   t.objectProperty(t.stringLiteral(key), val.expression),
                 ),
               );
-              if (staticObj != null || conditionalObj != null) {
+              if (
+                staticObj != null ||
+                conditionalObj != null ||
+                guardedObjs.length > 0
+              ) {
                 finalFnValue = t.arrayExpression(
                   [
                     staticObj && hoistExpression(path, staticObj),
+                    ...guardedObjs,
                     conditionalObj,
                     finalFnValue,
                   ].filter(Boolean),

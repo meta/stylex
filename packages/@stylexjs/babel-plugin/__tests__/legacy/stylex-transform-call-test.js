@@ -723,14 +723,14 @@ describe('@stylexjs/babel-plugin', () => {
           priority: 3000
         });
         _inject2({
-          ltr: "@media (min-width: 1000px) and (max-width: 1999.99px){.xw6up8c.xw6up8c{background-color:blue}}",
+          ltr: "@media (min-width: 1000px) and (max-width: 1999.98px){.xr725a3.xr725a3{background-color:blue}}",
           priority: 3200
         });
         _inject2({
           ltr: "@media (min-width: 2000px){.x1ssfqz5.x1ssfqz5{background-color:purple}}",
           priority: 3200
         });
-        "xrkmrrc xw6up8c x1ssfqz5";"
+        "xrkmrrc xr725a3 x1ssfqz5";"
       `);
     });
 
@@ -1179,7 +1179,6 @@ describe('@stylexjs/babel-plugin', () => {
           filename: '/html/js/FooBar.react.js',
           dev: true,
           enableDevClassNames: false,
-          enableDebugClassNames: true,
           enableInlinedConditionalMerge: false,
         };
         expect(
@@ -1200,10 +1199,10 @@ describe('@stylexjs/babel-plugin', () => {
           var _inject2 = _inject;
           import stylex from 'stylex';
           _inject2({
-            ltr: ".color-x1e2nbdu{color:red}",
+            ltr: ".x1e2nbdu{color:red}",
             priority: 3000
           });
-          "color-x1e2nbdu";"
+          "x1e2nbdu";"
         `);
 
         expect(
@@ -1229,22 +1228,22 @@ describe('@stylexjs/babel-plugin', () => {
           var _inject2 = _inject;
           import stylex from 'stylex';
           _inject2({
-            ltr: ".color-x1e2nbdu{color:red}",
+            ltr: ".x1e2nbdu{color:red}",
             priority: 3000
           });
           const styles = {
             default: {
-              "color-kMwMTN": "color-x1e2nbdu",
+              "color-kMwMTN": "x1e2nbdu",
               $$css: "js/FooBar.react.js:4"
             }
           };
           _inject2({
-            ltr: ".backgroundColor-x1t391ir{background-color:blue}",
+            ltr: ".x1t391ir{background-color:blue}",
             priority: 3000
           });
           const otherStyles = {
             default: {
-              "backgroundColor-kWkggS": "backgroundColor-x1t391ir",
+              "backgroundColor-kWkggS": "x1t391ir",
               $$css: "js/FooBar.react.js:9"
             }
           };
@@ -1272,20 +1271,20 @@ describe('@stylexjs/babel-plugin', () => {
           var _inject2 = _inject;
           import stylex from 'stylex';
           _inject2({
-            ltr: ".color-x1e2nbdu{color:red}",
+            ltr: ".x1e2nbdu{color:red}",
             priority: 3000
           });
           _inject2({
-            ltr: ".color-xju2f9n{color:blue}",
+            ltr: ".xju2f9n{color:blue}",
             priority: 3000
           });
           const styles = {
             default: {
-              "color-kMwMTN": "color-x1e2nbdu",
+              "color-kMwMTN": "x1e2nbdu",
               $$css: "js/FooBar.react.js:4"
             },
             active: {
-              "color-kMwMTN": "color-xju2f9n",
+              "color-kMwMTN": "xju2f9n",
               $$css: "js/FooBar.react.js:7"
             }
           };
@@ -1297,7 +1296,6 @@ describe('@stylexjs/babel-plugin', () => {
         const options = {
           filename: '/html/js/FooBar.react.js',
           dev: true,
-          enableDebugClassNames: true,
           enableDevClassNames: false,
         };
         expect(
@@ -1323,16 +1321,16 @@ describe('@stylexjs/babel-plugin', () => {
           var _inject2 = _inject;
           import stylex from 'stylex';
           _inject2({
-            ltr: ".color-x1e2nbdu{color:red}",
+            ltr: ".x1e2nbdu{color:red}",
             priority: 3000
           });
           _inject2({
-            ltr: ".backgroundColor-x1t391ir{background-color:blue}",
+            ltr: ".x1t391ir{background-color:blue}",
             priority: 3000
           });
           ({
-            0: "color-x1e2nbdu",
-            1: "color-x1e2nbdu backgroundColor-x1t391ir"
+            0: "x1e2nbdu",
+            1: "x1e2nbdu x1t391ir"
           })[!!isActive << 0];"
         `);
 
@@ -1357,16 +1355,16 @@ describe('@stylexjs/babel-plugin', () => {
           var _inject2 = _inject;
           import stylex from 'stylex';
           _inject2({
-            ltr: ".color-x1e2nbdu{color:red}",
+            ltr: ".x1e2nbdu{color:red}",
             priority: 3000
           });
           _inject2({
-            ltr: ".color-xju2f9n{color:blue}",
+            ltr: ".xju2f9n{color:blue}",
             priority: 3000
           });
           ({
-            0: "color-x1e2nbdu",
-            1: "color-xju2f9n"
+            0: "x1e2nbdu",
+            1: "xju2f9n"
           })[!!isActive << 0];"
         `);
       });
@@ -1876,7 +1874,6 @@ describe('@stylexjs/babel-plugin', () => {
         `,
           {
             dev: true,
-            enableDebugClassNames: true,
             enableDevClassNames: false,
             filename: 'src/js/components/Foo.react.js',
           },
@@ -1890,56 +1887,56 @@ describe('@stylexjs/babel-plugin', () => {
         function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
         var _inject2 = _stylexInject.default;
         _inject2({
-          ltr: ".boxSizing-x9f619{box-sizing:border-box}",
+          ltr: ".x9f619{box-sizing:border-box}",
           priority: 3000
         });
         _inject2({
-          ltr: ".gridArea-x1yc5d2u{grid-area:sidebar}",
+          ltr: ".x1yc5d2u{grid-area:sidebar}",
           priority: 1000
         });
         _inject2({
-          ltr: ".gridArea-x1fdo2jl{grid-area:content}",
+          ltr: ".x1fdo2jl{grid-area:content}",
           priority: 1000
         });
         _inject2({
-          ltr: ".display-xrvj5dj{display:grid}",
+          ltr: ".xrvj5dj{display:grid}",
           priority: 3000
         });
         _inject2({
-          ltr: ".gridTemplateRows-x7k18q3{grid-template-rows:100%}",
+          ltr: ".x7k18q3{grid-template-rows:100%}",
           priority: 3000
         });
         _inject2({
-          ltr: ".gridTemplateAreas-x5gp9wm{grid-template-areas:\\"content\\"}",
+          ltr: ".x5gp9wm{grid-template-areas:\\"content\\"}",
           priority: 2000
         });
         _inject2({
-          ltr: ".gridTemplateColumns-x1rkzygb{grid-template-columns:auto minmax(0,1fr)}",
+          ltr: ".x1rkzygb{grid-template-columns:auto minmax(0,1fr)}",
           priority: 3000
         });
         _inject2({
-          ltr: ".gridTemplateAreas-x17lh93j{grid-template-areas:\\"sidebar content\\"}",
+          ltr: ".x17lh93j{grid-template-areas:\\"sidebar content\\"}",
           priority: 2000
         });
         _inject2({
-          ltr: "@media (max-width: 640px){.gridTemplateRows-xmr4b4k.gridTemplateRows-xmr4b4k{grid-template-rows:minmax(0,1fr) auto}}",
+          ltr: "@media (max-width: 640px){.xmr4b4k.xmr4b4k{grid-template-rows:minmax(0,1fr) auto}}",
           priority: 3200
         });
         _inject2({
-          ltr: "@media (max-width: 640px){.gridTemplateAreas-xesbpuc.gridTemplateAreas-xesbpuc{grid-template-areas:\\"content\\" \\"sidebar\\"}}",
+          ltr: "@media (max-width: 640px){.xesbpuc.xesbpuc{grid-template-areas:\\"content\\" \\"sidebar\\"}}",
           priority: 2200
         });
         _inject2({
-          ltr: "@media (max-width: 640px){.gridTemplateColumns-x15nfgh4.gridTemplateColumns-x15nfgh4{grid-template-columns:100%}}",
+          ltr: "@media (max-width: 640px){.x15nfgh4.x15nfgh4{grid-template-columns:100%}}",
           priority: 3200
         });
         _inject2({
-          ltr: ".gridTemplateColumns-x1mkdm3x{grid-template-columns:minmax(0,1fr)}",
+          ltr: ".x1mkdm3x{grid-template-columns:minmax(0,1fr)}",
           priority: 3000
         });
         ({
-          0: "display-xrvj5dj gridTemplateColumns-x1rkzygb gridTemplateRows-x7k18q3 gridTemplateAreas-x17lh93j gridTemplateRows-xmr4b4k gridTemplateAreas-xesbpuc gridTemplateColumns-x15nfgh4",
-          1: "display-xrvj5dj gridTemplateRows-x7k18q3 gridTemplateAreas-x5gp9wm gridTemplateColumns-x1mkdm3x"
+          0: "xrvj5dj x1rkzygb x7k18q3 x17lh93j xmr4b4k xesbpuc x15nfgh4",
+          1: "xrvj5dj x7k18q3 x5gp9wm x1mkdm3x"
         })[!!(sidebar == null) << 0];"
       `);
     });
@@ -1982,7 +1979,6 @@ describe('@stylexjs/babel-plugin', () => {
         `,
           {
             dev: true,
-            enableDebugClassNames: true,
             enableDevClassNames: false,
           },
         ),
@@ -1991,57 +1987,57 @@ describe('@stylexjs/babel-plugin', () => {
         var _inject2 = _inject;
         import * as stylex from '@stylexjs/stylex';
         _inject2({
-          ltr: ".boxSizing-x9f619{box-sizing:border-box}",
+          ltr: ".x9f619{box-sizing:border-box}",
           priority: 3000
         });
         _inject2({
-          ltr: ".gridArea-x1yc5d2u{grid-area:sidebar}",
+          ltr: ".x1yc5d2u{grid-area:sidebar}",
           priority: 1000
         });
         _inject2({
-          ltr: ".gridArea-x1fdo2jl{grid-area:content}",
+          ltr: ".x1fdo2jl{grid-area:content}",
           priority: 1000
         });
         _inject2({
-          ltr: ".display-xrvj5dj{display:grid}",
+          ltr: ".xrvj5dj{display:grid}",
           priority: 3000
         });
         _inject2({
-          ltr: ".gridTemplateRows-x7k18q3{grid-template-rows:100%}",
+          ltr: ".x7k18q3{grid-template-rows:100%}",
           priority: 3000
         });
         _inject2({
-          ltr: ".gridTemplateAreas-x5gp9wm{grid-template-areas:\\"content\\"}",
+          ltr: ".x5gp9wm{grid-template-areas:\\"content\\"}",
           priority: 2000
         });
         _inject2({
-          ltr: ".gridTemplateColumns-x1rkzygb{grid-template-columns:auto minmax(0,1fr)}",
+          ltr: ".x1rkzygb{grid-template-columns:auto minmax(0,1fr)}",
           priority: 3000
         });
         _inject2({
-          ltr: ".gridTemplateAreas-x17lh93j{grid-template-areas:\\"sidebar content\\"}",
+          ltr: ".x17lh93j{grid-template-areas:\\"sidebar content\\"}",
           priority: 2000
         });
         _inject2({
-          ltr: "@media (max-width: 640px){.gridTemplateRows-xmr4b4k.gridTemplateRows-xmr4b4k{grid-template-rows:minmax(0,1fr) auto}}",
+          ltr: "@media (max-width: 640px){.xmr4b4k.xmr4b4k{grid-template-rows:minmax(0,1fr) auto}}",
           priority: 3200
         });
         _inject2({
-          ltr: "@media (max-width: 640px){.gridTemplateAreas-xesbpuc.gridTemplateAreas-xesbpuc{grid-template-areas:\\"content\\" \\"sidebar\\"}}",
+          ltr: "@media (max-width: 640px){.xesbpuc.xesbpuc{grid-template-areas:\\"content\\" \\"sidebar\\"}}",
           priority: 2200
         });
         _inject2({
-          ltr: "@media (max-width: 640px){.gridTemplateColumns-x15nfgh4.gridTemplateColumns-x15nfgh4{grid-template-columns:100%}}",
+          ltr: "@media (max-width: 640px){.x15nfgh4.x15nfgh4{grid-template-columns:100%}}",
           priority: 3200
         });
         _inject2({
-          ltr: ".gridTemplateColumns-x1mkdm3x{grid-template-columns:minmax(0,1fr)}",
+          ltr: ".x1mkdm3x{grid-template-columns:minmax(0,1fr)}",
           priority: 3000
         });
         export const styles = {
           sidebar: {
-            "boxSizing-kB7OPa": "boxSizing-x9f619",
-            "gridArea-kJuA4N": "gridArea-x1yc5d2u",
+            "boxSizing-kB7OPa": "x9f619",
+            "gridArea-kJuA4N": "x1yc5d2u",
             "gridRow-kbNqZ1": null,
             "gridRowStart-k1lYIM": null,
             "gridRowEnd-kpJH7q": null,
@@ -2051,7 +2047,7 @@ describe('@stylexjs/babel-plugin', () => {
             $$css: "@stylexjs/babel-plugin::4"
           },
           content: {
-            "gridArea-kJuA4N": "gridArea-x1fdo2jl",
+            "gridArea-kJuA4N": "x1fdo2jl",
             "gridRow-kbNqZ1": null,
             "gridRowStart-k1lYIM": null,
             "gridRowEnd-kpJH7q": null,
@@ -2061,28 +2057,28 @@ describe('@stylexjs/babel-plugin', () => {
             $$css: "@stylexjs/babel-plugin::8"
           },
           root: {
-            "display-k1xSpc": "display-xrvj5dj",
-            "gridTemplateRows-k9llMU": "gridTemplateRows-x7k18q3",
-            "gridTemplateAreas-kC13JO": "gridTemplateAreas-x5gp9wm",
+            "display-k1xSpc": "xrvj5dj",
+            "gridTemplateRows-k9llMU": "x7k18q3",
+            "gridTemplateAreas-kC13JO": "x5gp9wm",
             $$css: "@stylexjs/babel-plugin::11"
           },
           withSidebar: {
-            "gridTemplateColumns-kumcoG": "gridTemplateColumns-x1rkzygb",
-            "gridTemplateRows-k9llMU": "gridTemplateRows-x7k18q3",
-            "gridTemplateAreas-kC13JO": "gridTemplateAreas-x17lh93j",
-            "@media (max-width: 640px)_gridTemplateRows-k9pwkU": "gridTemplateRows-xmr4b4k",
-            "@media (max-width: 640px)_gridTemplateAreas-kOnEH4": "gridTemplateAreas-xesbpuc",
-            "@media (max-width: 640px)_gridTemplateColumns-k1JLwA": "gridTemplateColumns-x15nfgh4",
+            "gridTemplateColumns-kumcoG": "x1rkzygb",
+            "gridTemplateRows-k9llMU": "x7k18q3",
+            "gridTemplateAreas-kC13JO": "x17lh93j",
+            "@media (max-width: 640px)_gridTemplateRows-k9pwkU": "xmr4b4k",
+            "@media (max-width: 640px)_gridTemplateAreas-kOnEH4": "xesbpuc",
+            "@media (max-width: 640px)_gridTemplateColumns-k1JLwA": "x15nfgh4",
             $$css: "@stylexjs/babel-plugin::16"
           },
           noSidebar: {
-            "gridTemplateColumns-kumcoG": "gridTemplateColumns-x1mkdm3x",
+            "gridTemplateColumns-kumcoG": "x1mkdm3x",
             $$css: "@stylexjs/babel-plugin::26"
           }
         };
         ({
-          0: "display-xrvj5dj gridTemplateColumns-x1rkzygb gridTemplateRows-x7k18q3 gridTemplateAreas-x17lh93j gridTemplateRows-xmr4b4k gridTemplateAreas-xesbpuc gridTemplateColumns-x15nfgh4",
-          1: "display-xrvj5dj gridTemplateRows-x7k18q3 gridTemplateAreas-x5gp9wm gridTemplateColumns-x1mkdm3x"
+          0: "xrvj5dj x1rkzygb x7k18q3 x17lh93j xmr4b4k xesbpuc x15nfgh4",
+          1: "xrvj5dj x7k18q3 x5gp9wm x1mkdm3x"
         })[!!(sidebar == null) << 0];"
       `);
     });
@@ -2126,7 +2122,6 @@ describe('@stylexjs/babel-plugin', () => {
         `,
           {
             dev: true,
-            enableDebugClassNames: true,
             enableDevClassNames: false,
             enableInlinedConditionalMerge: false,
           },
@@ -2136,57 +2131,57 @@ describe('@stylexjs/babel-plugin', () => {
         var _inject2 = _inject;
         import * as stylex from '@stylexjs/stylex';
         _inject2({
-          ltr: ".boxSizing-x9f619{box-sizing:border-box}",
+          ltr: ".x9f619{box-sizing:border-box}",
           priority: 3000
         });
         _inject2({
-          ltr: ".gridArea-x1yc5d2u{grid-area:sidebar}",
+          ltr: ".x1yc5d2u{grid-area:sidebar}",
           priority: 1000
         });
         _inject2({
-          ltr: ".gridArea-x1fdo2jl{grid-area:content}",
+          ltr: ".x1fdo2jl{grid-area:content}",
           priority: 1000
         });
         _inject2({
-          ltr: ".display-xrvj5dj{display:grid}",
+          ltr: ".xrvj5dj{display:grid}",
           priority: 3000
         });
         _inject2({
-          ltr: ".gridTemplateRows-x7k18q3{grid-template-rows:100%}",
+          ltr: ".x7k18q3{grid-template-rows:100%}",
           priority: 3000
         });
         _inject2({
-          ltr: ".gridTemplateAreas-x5gp9wm{grid-template-areas:\\"content\\"}",
+          ltr: ".x5gp9wm{grid-template-areas:\\"content\\"}",
           priority: 2000
         });
         _inject2({
-          ltr: ".gridTemplateColumns-x1rkzygb{grid-template-columns:auto minmax(0,1fr)}",
+          ltr: ".x1rkzygb{grid-template-columns:auto minmax(0,1fr)}",
           priority: 3000
         });
         _inject2({
-          ltr: ".gridTemplateAreas-x17lh93j{grid-template-areas:\\"sidebar content\\"}",
+          ltr: ".x17lh93j{grid-template-areas:\\"sidebar content\\"}",
           priority: 2000
         });
         _inject2({
-          ltr: "@media (max-width: 640px){.gridTemplateRows-xmr4b4k.gridTemplateRows-xmr4b4k{grid-template-rows:minmax(0,1fr) auto}}",
+          ltr: "@media (max-width: 640px){.xmr4b4k.xmr4b4k{grid-template-rows:minmax(0,1fr) auto}}",
           priority: 3200
         });
         _inject2({
-          ltr: "@media (max-width: 640px){.gridTemplateAreas-xesbpuc.gridTemplateAreas-xesbpuc{grid-template-areas:\\"content\\" \\"sidebar\\"}}",
+          ltr: "@media (max-width: 640px){.xesbpuc.xesbpuc{grid-template-areas:\\"content\\" \\"sidebar\\"}}",
           priority: 2200
         });
         _inject2({
-          ltr: "@media (max-width: 640px){.gridTemplateColumns-x15nfgh4.gridTemplateColumns-x15nfgh4{grid-template-columns:100%}}",
+          ltr: "@media (max-width: 640px){.x15nfgh4.x15nfgh4{grid-template-columns:100%}}",
           priority: 3200
         });
         _inject2({
-          ltr: ".gridTemplateColumns-x1mkdm3x{grid-template-columns:minmax(0,1fr)}",
+          ltr: ".x1mkdm3x{grid-template-columns:minmax(0,1fr)}",
           priority: 3000
         });
         export const styles = {
           sidebar: {
-            "boxSizing-kB7OPa": "boxSizing-x9f619",
-            "gridArea-kJuA4N": "gridArea-x1yc5d2u",
+            "boxSizing-kB7OPa": "x9f619",
+            "gridArea-kJuA4N": "x1yc5d2u",
             "gridRow-kbNqZ1": null,
             "gridRowStart-k1lYIM": null,
             "gridRowEnd-kpJH7q": null,
@@ -2196,7 +2191,7 @@ describe('@stylexjs/babel-plugin', () => {
             $$css: "@stylexjs/babel-plugin::4"
           },
           content: {
-            "gridArea-kJuA4N": "gridArea-x1fdo2jl",
+            "gridArea-kJuA4N": "x1fdo2jl",
             "gridRow-kbNqZ1": null,
             "gridRowStart-k1lYIM": null,
             "gridRowEnd-kpJH7q": null,
@@ -2206,22 +2201,22 @@ describe('@stylexjs/babel-plugin', () => {
             $$css: "@stylexjs/babel-plugin::8"
           },
           root: {
-            "display-k1xSpc": "display-xrvj5dj",
-            "gridTemplateRows-k9llMU": "gridTemplateRows-x7k18q3",
-            "gridTemplateAreas-kC13JO": "gridTemplateAreas-x5gp9wm",
+            "display-k1xSpc": "xrvj5dj",
+            "gridTemplateRows-k9llMU": "x7k18q3",
+            "gridTemplateAreas-kC13JO": "x5gp9wm",
             $$css: "@stylexjs/babel-plugin::11"
           },
           withSidebar: {
-            "gridTemplateColumns-kumcoG": "gridTemplateColumns-x1rkzygb",
-            "gridTemplateRows-k9llMU": "gridTemplateRows-x7k18q3",
-            "gridTemplateAreas-kC13JO": "gridTemplateAreas-x17lh93j",
-            "@media (max-width: 640px)_gridTemplateRows-k9pwkU": "gridTemplateRows-xmr4b4k",
-            "@media (max-width: 640px)_gridTemplateAreas-kOnEH4": "gridTemplateAreas-xesbpuc",
-            "@media (max-width: 640px)_gridTemplateColumns-k1JLwA": "gridTemplateColumns-x15nfgh4",
+            "gridTemplateColumns-kumcoG": "x1rkzygb",
+            "gridTemplateRows-k9llMU": "x7k18q3",
+            "gridTemplateAreas-kC13JO": "x17lh93j",
+            "@media (max-width: 640px)_gridTemplateRows-k9pwkU": "xmr4b4k",
+            "@media (max-width: 640px)_gridTemplateAreas-kOnEH4": "xesbpuc",
+            "@media (max-width: 640px)_gridTemplateColumns-k1JLwA": "x15nfgh4",
             $$css: "@stylexjs/babel-plugin::16"
           },
           noSidebar: {
-            "gridTemplateColumns-kumcoG": "gridTemplateColumns-x1mkdm3x",
+            "gridTemplateColumns-kumcoG": "x1mkdm3x",
             $$css: "@stylexjs/babel-plugin::26"
           }
         };
@@ -2270,7 +2265,6 @@ describe('@stylexjs/babel-plugin', () => {
         `,
           {
             dev: true,
-            enableDebugClassNames: true,
             enableDevClassNames: false,
           },
         ),
@@ -2279,62 +2273,62 @@ describe('@stylexjs/babel-plugin', () => {
         var _inject2 = _inject;
         import * as stylex from '@stylexjs/stylex';
         _inject2({
-          ltr: ".boxSizing-x9f619{box-sizing:border-box}",
+          ltr: ".x9f619{box-sizing:border-box}",
           priority: 3000
         });
         _inject2({
-          ltr: ".gridArea-x1yc5d2u{grid-area:sidebar}",
+          ltr: ".x1yc5d2u{grid-area:sidebar}",
           priority: 1000
         });
         _inject2({
-          ltr: ".gridArea-x1fdo2jl{grid-area:content}",
+          ltr: ".x1fdo2jl{grid-area:content}",
           priority: 1000
         });
         _inject2({
-          ltr: ".display-xrvj5dj{display:grid}",
+          ltr: ".xrvj5dj{display:grid}",
           priority: 3000
         });
         _inject2({
-          ltr: ".gridTemplateRows-x7k18q3{grid-template-rows:100%}",
+          ltr: ".x7k18q3{grid-template-rows:100%}",
           priority: 3000
         });
         _inject2({
-          ltr: ".gridTemplateAreas-x5gp9wm{grid-template-areas:\\"content\\"}",
+          ltr: ".x5gp9wm{grid-template-areas:\\"content\\"}",
           priority: 2000
         });
         _inject2({
-          ltr: ".gridTemplateColumns-x1rkzygb{grid-template-columns:auto minmax(0,1fr)}",
+          ltr: ".x1rkzygb{grid-template-columns:auto minmax(0,1fr)}",
           priority: 3000
         });
         _inject2({
-          ltr: ".gridTemplateAreas-x17lh93j{grid-template-areas:\\"sidebar content\\"}",
+          ltr: ".x17lh93j{grid-template-areas:\\"sidebar content\\"}",
           priority: 2000
         });
         _inject2({
-          ltr: "@media (max-width: 640px){.gridTemplateRows-xmr4b4k.gridTemplateRows-xmr4b4k{grid-template-rows:minmax(0,1fr) auto}}",
+          ltr: "@media (max-width: 640px){.xmr4b4k.xmr4b4k{grid-template-rows:minmax(0,1fr) auto}}",
           priority: 3200
         });
         _inject2({
-          ltr: "@media (max-width: 640px){.gridTemplateAreas-xesbpuc.gridTemplateAreas-xesbpuc{grid-template-areas:\\"content\\" \\"sidebar\\"}}",
+          ltr: "@media (max-width: 640px){.xesbpuc.xesbpuc{grid-template-areas:\\"content\\" \\"sidebar\\"}}",
           priority: 2200
         });
         _inject2({
-          ltr: "@media (max-width: 640px){.gridTemplateColumns-x15nfgh4.gridTemplateColumns-x15nfgh4{grid-template-columns:100%}}",
+          ltr: "@media (max-width: 640px){.x15nfgh4.x15nfgh4{grid-template-columns:100%}}",
           priority: 3200
         });
         _inject2({
-          ltr: ".gridTemplateColumns-x1mkdm3x{grid-template-columns:minmax(0,1fr)}",
+          ltr: ".x1mkdm3x{grid-template-columns:minmax(0,1fr)}",
           priority: 3000
         });
         const complex = {
-          0: "display-xrvj5dj gridTemplateColumns-x1rkzygb gridTemplateRows-x7k18q3 gridTemplateAreas-x17lh93j gridTemplateRows-xmr4b4k gridTemplateAreas-xesbpuc gridTemplateColumns-x15nfgh4",
-          4: "display-xrvj5dj gridTemplateRows-x7k18q3 gridTemplateAreas-x5gp9wm gridTemplateColumns-x1mkdm3x",
-          2: "display-xrvj5dj gridTemplateColumns-x1rkzygb gridTemplateRows-x7k18q3 gridTemplateAreas-x17lh93j gridTemplateRows-xmr4b4k gridTemplateAreas-xesbpuc gridTemplateColumns-x15nfgh4 boxSizing-x9f619 gridArea-x1yc5d2u",
-          6: "display-xrvj5dj gridTemplateRows-x7k18q3 gridTemplateAreas-x5gp9wm gridTemplateColumns-x1mkdm3x boxSizing-x9f619 gridArea-x1yc5d2u",
-          1: "display-xrvj5dj gridTemplateColumns-x1rkzygb gridTemplateRows-x7k18q3 gridTemplateAreas-x17lh93j gridTemplateRows-xmr4b4k gridTemplateAreas-xesbpuc gridTemplateColumns-x15nfgh4 gridArea-x1fdo2jl",
-          5: "display-xrvj5dj gridTemplateRows-x7k18q3 gridTemplateAreas-x5gp9wm gridTemplateColumns-x1mkdm3x gridArea-x1fdo2jl",
-          3: "display-xrvj5dj gridTemplateColumns-x1rkzygb gridTemplateRows-x7k18q3 gridTemplateAreas-x17lh93j gridTemplateRows-xmr4b4k gridTemplateAreas-xesbpuc gridTemplateColumns-x15nfgh4 boxSizing-x9f619 gridArea-x1fdo2jl",
-          7: "display-xrvj5dj gridTemplateRows-x7k18q3 gridTemplateAreas-x5gp9wm gridTemplateColumns-x1mkdm3x boxSizing-x9f619 gridArea-x1fdo2jl"
+          0: "xrvj5dj x1rkzygb x7k18q3 x17lh93j xmr4b4k xesbpuc x15nfgh4",
+          4: "xrvj5dj x7k18q3 x5gp9wm x1mkdm3x",
+          2: "xrvj5dj x1rkzygb x7k18q3 x17lh93j xmr4b4k xesbpuc x15nfgh4 x9f619 x1yc5d2u",
+          6: "xrvj5dj x7k18q3 x5gp9wm x1mkdm3x x9f619 x1yc5d2u",
+          1: "xrvj5dj x1rkzygb x7k18q3 x17lh93j xmr4b4k xesbpuc x15nfgh4 x1fdo2jl",
+          5: "xrvj5dj x7k18q3 x5gp9wm x1mkdm3x x1fdo2jl",
+          3: "xrvj5dj x1rkzygb x7k18q3 x17lh93j xmr4b4k xesbpuc x15nfgh4 x9f619 x1fdo2jl",
+          7: "xrvj5dj x7k18q3 x5gp9wm x1mkdm3x x9f619 x1fdo2jl"
         }[!!(sidebar == null && !isSidebar) << 2 | !!isSidebar << 1 | !!isContent << 0];"
       `);
     });
@@ -2353,7 +2347,6 @@ describe('@stylexjs/babel-plugin', () => {
         `,
           {
             dev: true,
-            enableDebugClassNames: true,
             enableDevClassNames: false,
           },
         ),
@@ -2402,7 +2395,6 @@ describe('@stylexjs/babel-plugin', () => {
         `,
           {
             dev: true,
-            enableDebugClassNames: true,
             enableDevClassNames: false,
           },
         ),
@@ -2411,7 +2403,7 @@ describe('@stylexjs/babel-plugin', () => {
         var _inject2 = _inject;
         import * as stylex from '@stylexjs/stylex';
         _inject2({
-          ltr: ".marginRight-x1wsuqlk{margin-right:12px}",
+          ltr: ".x1wsuqlk{margin-right:12px}",
           priority: 4000
         });
         const styles = {};
@@ -2432,7 +2424,6 @@ describe('@stylexjs/babel-plugin', () => {
         `,
           {
             dev: true,
-            enableDebugClassNames: true,
             enableDevClassNames: false,
           },
         ),
@@ -2441,7 +2432,7 @@ describe('@stylexjs/babel-plugin', () => {
         var _inject2 = _inject;
         import * as stylex from '@stylexjs/stylex';
         _inject2({
-          ltr: ".marginRight-x1wsuqlk{margin-right:12px}",
+          ltr: ".x1wsuqlk{margin-right:12px}",
           priority: 4000
         });
         const styles = {};

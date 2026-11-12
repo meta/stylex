@@ -1,0 +1,43 @@
+---
+title: 'stylex.attrs'
+---
+
+Takes the same arguments as [`stylex.props`](/docs/api/javascript/props), but
+returns DOM attributes for environments that expect `class` instead of
+`className`, and a serialized `style` string instead of a style object.
+
+This is useful for SSR output and for frameworks such as Solid, Svelte, Vue, and
+Qwik.
+
+```ts
+function attrs(...styles: StyleXStyles[]): {
+  class?: string;
+  style?: string;
+  'data-style-src'?: string;
+};
+```
+
+### Example use:
+
+```tsx
+import * as stylex from '@stylexjs/stylex';
+
+const styles = stylex.create({
+  root: {
+    backgroundColor: 'red',
+    paddingInline: '1rem',
+  },
+});
+
+<div {...stylex.attrs(styles.root)} />;
+```
+
+The output shape is designed to spread directly onto an element:
+
+```js
+{
+  class: 'xrkmrrc xnxx81d',
+}
+```
+
+Like `stylex.props`, `stylex.attrs` also accepts conditional and dynamic styles.

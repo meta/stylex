@@ -208,22 +208,32 @@ export class HashColor extends Color {
     return `#${this.value}`;
   }
 
+  // Expand 3-digit shorthand (e.g. 'f0a' -> 'ff00aa') so the channel getters
+  // can slice fixed 2-char windows. 6- and 8-digit values are returned as-is.
+  #expanded(): string {
+    return this.value.length === 3
+      ? this.value
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : this.value;
+  }
+
   get r(): number {
-    return parseInt(this.value.slice(0, 2), 16);
+    return parseInt(this.#expanded().slice(0, 2), 16);
   }
 
   get g(): number {
-    return parseInt(this.value.slice(2, 4), 16);
+    return parseInt(this.#expanded().slice(2, 4), 16);
   }
 
   get b(): number {
-    return parseInt(this.value.slice(4, 6), 16);
+    return parseInt(this.#expanded().slice(4, 6), 16);
   }
 
   get a(): number {
-    return this.value.length === 8
-      ? parseInt(this.value.slice(6, 8), 16) / 255
-      : 1;
+    const value = this.#expanded();
+    return value.length === 8 ? parseInt(value.slice(6, 8), 16) / 255 : 1;
   }
 
   static get parser(): TokenParser<HashColor> {

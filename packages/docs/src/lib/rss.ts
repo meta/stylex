@@ -6,8 +6,12 @@
  */
 import { Feed } from 'feed';
 import { blogSource } from '@/lib/source';
+import { parseBlogDate } from '@/lib/blog-date';
 import { marked } from 'marked';
 import type { InferPageType } from 'fumadocs-core/source';
+
+const logoUrl = '/stylex-logo-small.svg';
+const faviconUrl = '/favicon.svg';
 
 const baseUrl = 'https://stylexjs.com';
 
@@ -44,8 +48,8 @@ async function createFeed(): Promise<Feed> {
     id: `https://stylexjs.com/blog`,
     link: `https://stylexjs.com/blog`,
     language: 'en',
-    image: `${baseUrl}/img/stylex-logo-small-light.svg`,
-    favicon: `${baseUrl}/img/favicon.svg`,
+    image: `${baseUrl}${logoUrl}`,
+    favicon: `${baseUrl}${faviconUrl}`,
     copyright: `Copyright © ${new Date().getFullYear()} Meta Platforms, Inc.`,
     feedLinks: {
       rss: `${baseUrl}/blog/rss.xml`,
@@ -62,9 +66,7 @@ async function createFeed(): Promise<Feed> {
     const url = `${baseUrl}/blog/${page.data.slug}`;
 
     // Parse date from the path (format: YYYY-MM-DD-title)
-    const pathMatch = page.path.match(/\/(\d{4}-\d{2}-\d{2})/);
-    const dateStr = pathMatch?.[1];
-    const date = dateStr ? new Date(dateStr) : new Date();
+    const date = parseBlogDate(page.path) ?? new Date();
 
     const authors = (page.data.authors ?? [])
       .map((authorId: string) => AUTHORS[authorId])
@@ -104,4 +106,3 @@ export async function getAtom(): Promise<string> {
   const feed = await getFeed();
   return feed.atom1();
 }
-

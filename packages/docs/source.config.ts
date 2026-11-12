@@ -9,6 +9,8 @@ import {
   defineDocs,
   frontmatterSchema,
 } from 'fumadocs-mdx/config';
+import remarkDirective from 'remark-directive';
+import { remarkDirectiveAdmonition } from 'fumadocs-core/mdx-plugins';
 import z from 'zod';
 
 export const docs = defineDocs({
@@ -35,4 +37,8 @@ export const blog = defineDocs({
   },
 });
 
-export default defineConfig();
+export default defineConfig({
+  mdxOptions: {
+    remarkPlugins: [remarkDirective, remarkDirectiveAdmonition],
+  },
+});

@@ -38,10 +38,10 @@ export default function styleXViewTransitionClass(
   const preprocessedObject = objMap(styles, (style) =>
     Pipe.create(style)
       .pipe((style) => preprocessProperties(style, options))
-      .pipe((x) => objMapKeys(x, dashify))
       .pipe((x) =>
         objMap(x, (value, key) => transformValue(key, value, options)),
       )
+      .pipe((x) => objMapKeys(x, dashify))
       .done(),
   );
 

@@ -671,6 +671,84 @@ describe('@stylexjs/babel-plugin', () => {
         }).toThrow(messages.LINT_UNCLOSED_FUNCTION);
       });
 
+      test('invalid value: unclosed double-quoted string', () => {
+        expect(() => {
+          transform(`
+            import * as stylex from '@stylexjs/stylex';
+            const styles = stylex.create({
+              root: {
+                fontFamily: '"Helvetica Neue'
+              }
+            });
+          `);
+        }).toThrow(messages.LINT_UNCLOSED_STRING);
+      });
+
+      test('invalid value: unclosed single-quoted string', () => {
+        expect(() => {
+          transform(`
+            import * as stylex from '@stylexjs/stylex';
+            const styles = stylex.create({
+              root: {
+                fontFamily: "'Helvetica Neue"
+              }
+            });
+          `);
+        }).toThrow(messages.LINT_UNCLOSED_STRING);
+      });
+
+      test('invalid value: unclosed string in multi-value property', () => {
+        expect(() => {
+          transform(`
+            import * as stylex from '@stylexjs/stylex';
+            const styles = stylex.create({
+              root: {
+                fontFamily: '"Helvetica Neue, sans-serif'
+              }
+            });
+          `);
+        }).toThrow(messages.LINT_UNCLOSED_STRING);
+      });
+
+      test('invalid value: stray apostrophe in font-family list', () => {
+        expect(() => {
+          transform(`
+            import * as stylex from '@stylexjs/stylex';
+            const styles = stylex.create({
+              root: {
+                fontFamily: "'SF Pro Text', 'SF Pro Icons', Helvetica Neue', 'Helvetica', sans-serif",
+              }
+            });
+          `);
+        }).toThrow(messages.LINT_UNCLOSED_STRING);
+      });
+
+      test('valid value: properly closed strings do not throw', () => {
+        expect(() => {
+          transform(`
+            import * as stylex from '@stylexjs/stylex';
+            const styles = stylex.create({
+              root: {
+                fontFamily: '"Helvetica Neue", sans-serif',
+              }
+            });
+          `);
+        }).not.toThrow();
+      });
+
+      test('valid value: properly closed single-quoted string', () => {
+        expect(() => {
+          transform(`
+            import * as stylex from '@stylexjs/stylex';
+            const styles = stylex.create({
+              root: {
+                fontFamily: "'Helvetica Neue', sans-serif",
+              }
+            });
+          `);
+        }).not.toThrow();
+      });
+
       test('invalid CSS variable: unprefixed custom property', () => {
         const options = { definedStylexCSSVariables: { foo: 1 } };
         expect(() => {

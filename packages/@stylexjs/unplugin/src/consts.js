@@ -31,7 +31,14 @@ function disableLink() {
     const links = [...document.querySelectorAll('link[rel="stylesheet"]')];
     for (const l of links) {
       if(typeof l.href==='string' && l.href.includes(DEV_CSS_PATH)) {
-        l.disabled=true;
+        // Keep server-rendered link attributes unchanged during hydration.
+        if (l.sheet) {
+          l.sheet.disabled = true;
+        } else {
+          l.addEventListener('load', () => {
+            if (l.sheet) l.sheet.disabled = true;
+          }, {once: true});
+        }
       }
     }
   } catch {}
@@ -119,7 +126,14 @@ function disableLink() {
     const links = [ ...document.querySelectorAll('link[rel="stylesheet"]') ];
     for(const l of links) {
       if(typeof l.href==='string' && l.href.includes(DEV_CSS_PATH)) {
-        l.disabled=true;
+        // Keep server-rendered link attributes unchanged during hydration.
+        if (l.sheet) {
+          l.sheet.disabled = true;
+        } else {
+          l.addEventListener('load', () => {
+            if (l.sheet) l.sheet.disabled = true;
+          }, {once: true});
+        }
       }
     }
   } catch {

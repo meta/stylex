@@ -45,6 +45,9 @@ export default function normalizeWhitespace(
       case 'function': {
         node.before = '';
         node.after = '';
+        if (node.value.toLowerCase() === 'url') {
+          return false;
+        }
         break;
       }
       case 'word': {

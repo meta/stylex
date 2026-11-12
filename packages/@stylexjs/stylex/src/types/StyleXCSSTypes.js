@@ -1550,7 +1550,7 @@ export type CSSProperties = Readonly<{
   textTransform?: all | textTransform,
   textUnderlineOffset?: all | number | string,
   textUnderlinePosition?: all | textUnderlinePosition,
-  textWrap?: all | 'wrap' | 'nowrap' | 'balance',
+  textWrap?: all | 'wrap' | 'nowrap' | 'balance' | 'pretty' | 'stable',
 
   timelineScope?: all | string,
   top?: all | top,

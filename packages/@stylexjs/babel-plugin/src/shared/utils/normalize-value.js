@@ -19,6 +19,7 @@ import normalizeWhitespace from './normalizers/whitespace';
 import normalizeZeroDimensions from './normalizers/zero-dimensions';
 
 import detectUnclosedFns from './normalizers/detect-unclosed-fns';
+import detectUnclosedStrings from './normalizers/detect-unclosed-strings';
 import parser from 'postcss-value-parser';
 import convertCamelCaseValues from './normalizers/convert-camel-case-values';
 
@@ -26,6 +27,7 @@ import convertCamelCaseValues from './normalizers/convert-camel-case-values';
 // changes 500ms to 0.5s, then `LeadingZero` makes it .5s
 const normalizers = [
   detectUnclosedFns,
+  detectUnclosedStrings,
   normalizeWhitespace,
   normalizeTimings,
   normalizeZeroDimensions,

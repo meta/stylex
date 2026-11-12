@@ -9,7 +9,7 @@ module.exports = {
   rules: {
     '@stylexjs/valid-styles': 'error',
     '@stylexjs/no-unused': 'error',
-    '@stylexjs/valid-shorthands': 'warn',
-    '@stylexjs/sort-keys': 'warn',
+    '@stylexjs/no-legacy-contextual-styles': 'error',
+    '@stylexjs/sort-keys': ['error', { order: 'recess' }],
   },
 };

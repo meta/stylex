@@ -34,8 +34,8 @@ const styles = stylex.create({
   },
   reset: {
     minHeight: '100%',
-    margin: 0,
     padding: 0,
+    margin: 0,
   },
   body: {
     backgroundColor: $.surfaceBg,

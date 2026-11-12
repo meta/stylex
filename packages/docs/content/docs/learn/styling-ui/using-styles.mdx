@@ -16,9 +16,14 @@ use them conditionally, or even compose styles across module boundaries.
 ## Merging styles
 
 The `props` function can take a list of styles and merge them in a deterministic
-way, where the last style applied always wins. The order in which the styles are
-defined does not affect the resulting styles, only the order in which they are
-applied to the HTML element.
+way. When two styles set the same property, the last style applied always wins.
+The order in which the styles are defined does not affect the resulting styles,
+only the order in which they are applied to the HTML element.
+
+Shorthand and longhand properties are different keys (`margin` vs `marginTop`).
+By default (`styleResolution: 'property-specificity'`), the longhand wins even
+if the shorthand is applied later. See
+[`styleResolution`](/docs/api/configuration/babel-plugin/#styleresolution).
 
 Using `props` is only required when styles are set on React DOM host elements
 like `<div>`.
@@ -49,8 +54,8 @@ last. If instead the order of the styles were reversed, the text would be gray.
 <div {...stylex.props(styles.highlighted, styles.base)} />
 ```
 
-A simple way to think about the `props` function is that it merges many objects and
-the later objects have precedence over previous objects.
+A simple way to think about the `props` function is that it merges many objects
+and the later objects have precedence over previous objects.
 
 Each individual style object can be passed to `props` as a separate argument, or
 passed in as an array of styles.
@@ -74,6 +79,31 @@ such as `null`, `undefined`, or `false`.
   )}
 />
 ```
+
+## Inline atomic styles
+
+For small one-off styles, `@stylexjs/atoms` can be used directly inside
+`stylex.props` without creating a separate `stylex.create` namespace.
+
+```tsx
+import * as stylex from '@stylexjs/stylex';
+import x from '@stylexjs/atoms';
+
+<div
+  {...stylex.props(
+    x.display.flex,
+    x.alignItems.center,
+    x.gap._8px,
+    isActive && x.color.blue,
+  )}
+/>;
+```
+
+Atoms are compiled away by the StyleX Babel plugin and produce the same output
+as equivalent `stylex.create` styles. Use
+[`@stylexjs/atoms`](/docs/api/javascript/atoms) for inline styles that are
+easier to read at the callsite; use `stylex.create` when a set of styles is
+reused or benefits from a descriptive local name.
 
 ## Style variants
 

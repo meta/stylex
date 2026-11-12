@@ -10,3 +10,5 @@
 export * as tokenParser from './token-parser';
 export * as properties from './properties';
 export { lastMediaQueryWinsTransform } from './at-queries/media-query-transform.js';
+export { MediaQuery } from './at-queries/media-query.js';
+export type { MediaQueryRule } from './at-queries/media-query.js';

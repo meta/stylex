@@ -29,70 +29,74 @@ export type CSSSyntax =
 type CSSSyntaxType = CSSSyntax;
 type InnerValue = null | string | number;
 
-interface ICSSType<+_T extends InnerValue> {
-  +value: ValueWithDefault<string>;
-  +syntax: CSSSyntaxType;
+interface ICSSType<out _T extends InnerValue> {
+  readonly value: ValueWithDefault<string>;
+  readonly syntax: CSSSyntaxType;
 }
-declare export class Angle<+T extends InnerValue> implements ICSSType<T> {
-  +value: ValueWithDefault<string>;
-  +syntax: CSSSyntaxType;
+declare export class Angle<out T extends InnerValue> implements ICSSType<T> {
+  readonly value: ValueWithDefault<string>;
+  readonly syntax: CSSSyntaxType;
 }
-declare export class Color<+T extends InnerValue> implements ICSSType<T> {
-  +value: ValueWithDefault<string>;
-  +syntax: CSSSyntaxType;
+declare export class Color<out T extends InnerValue> implements ICSSType<T> {
+  readonly value: ValueWithDefault<string>;
+  readonly syntax: CSSSyntaxType;
 }
-declare export class Url<+T extends InnerValue> implements ICSSType<T> {
-  +value: ValueWithDefault<string>;
-  +syntax: CSSSyntaxType;
+declare export class Url<out T extends InnerValue> implements ICSSType<T> {
+  readonly value: ValueWithDefault<string>;
+  readonly syntax: CSSSyntaxType;
 }
-declare export class Image<+T extends InnerValue> implements ICSSType<T> {
-  +value: ValueWithDefault<string>;
-  +syntax: CSSSyntaxType;
+declare export class Image<out T extends InnerValue> implements ICSSType<T> {
+  readonly value: ValueWithDefault<string>;
+  readonly syntax: CSSSyntaxType;
 }
-declare export class Integer<+T extends InnerValue> implements ICSSType<T> {
-  +value: ValueWithDefault<string>;
-  +syntax: CSSSyntaxType;
+declare export class Integer<out T extends InnerValue> implements ICSSType<T> {
+  readonly value: ValueWithDefault<string>;
+  readonly syntax: CSSSyntaxType;
 }
-declare export class LengthPercentage<+T extends InnerValue>
+declare export class LengthPercentage<out T extends InnerValue>
   implements ICSSType<T>
 {
-  +value: ValueWithDefault<string>;
-  +syntax: CSSSyntaxType;
+  readonly value: ValueWithDefault<string>;
+  readonly syntax: CSSSyntaxType;
 }
-declare export class Length<+T extends InnerValue> implements ICSSType<T> {
-  +value: ValueWithDefault<string>;
-  +syntax: CSSSyntaxType;
+declare export class Length<out T extends InnerValue> implements ICSSType<T> {
+  readonly value: ValueWithDefault<string>;
+  readonly syntax: CSSSyntaxType;
 }
-declare export class Percentage<+T extends InnerValue> implements ICSSType<T> {
-  +value: ValueWithDefault<string>;
-  +syntax: CSSSyntaxType;
-}
-declare export class Num<+T extends InnerValue> implements ICSSType<T> {
-  +value: ValueWithDefault<string>;
-  +syntax: CSSSyntaxType;
-}
-declare export class Resolution<+T extends InnerValue> implements ICSSType<T> {
-  +value: ValueWithDefault<string>;
-  +syntax: CSSSyntaxType;
-}
-declare export class Time<+T extends InnerValue> implements ICSSType<T> {
-  +value: ValueWithDefault<string>;
-  +syntax: CSSSyntaxType;
-}
-declare export class TransformFunction<+T extends InnerValue>
+declare export class Percentage<out T extends InnerValue>
   implements ICSSType<T>
 {
-  +value: ValueWithDefault<string>;
-  +syntax: CSSSyntaxType;
+  readonly value: ValueWithDefault<string>;
+  readonly syntax: CSSSyntaxType;
 }
-declare export class TransformList<+T extends InnerValue>
+declare export class Num<out T extends InnerValue> implements ICSSType<T> {
+  readonly value: ValueWithDefault<string>;
+  readonly syntax: CSSSyntaxType;
+}
+declare export class Resolution<out T extends InnerValue>
   implements ICSSType<T>
 {
-  +value: ValueWithDefault<string>;
-  +syntax: CSSSyntaxType;
+  readonly value: ValueWithDefault<string>;
+  readonly syntax: CSSSyntaxType;
+}
+declare export class Time<out T extends InnerValue> implements ICSSType<T> {
+  readonly value: ValueWithDefault<string>;
+  readonly syntax: CSSSyntaxType;
+}
+declare export class TransformFunction<out T extends InnerValue>
+  implements ICSSType<T>
+{
+  readonly value: ValueWithDefault<string>;
+  readonly syntax: CSSSyntaxType;
+}
+declare export class TransformList<out T extends InnerValue>
+  implements ICSSType<T>
+{
+  readonly value: ValueWithDefault<string>;
+  readonly syntax: CSSSyntaxType;
 }
 
-export type CSSType<+T extends InnerValue> =
+export type CSSType<out T extends InnerValue> =
   | Angle<T>
   | Color<T>
   | Url<T>

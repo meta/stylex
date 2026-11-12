@@ -13,6 +13,7 @@ import type {
   RuleCheck,
 } from '../stylex-valid-styles';
 import type { Expression, Pattern, Property } from 'estree';
+/*:: import { Rule } from 'eslint'; */
 
 import makeLiteralRule from './makeLiteralRule';
 
@@ -23,6 +24,7 @@ export default function makeUnionRule(
     node: Expression | Pattern,
     variables?: Variables,
     prop?: Property,
+    context?: Rule.RuleContext,
   ): RuleResponse => {
     const failedRules = [];
     for (const _rule of rules) {
@@ -33,18 +35,21 @@ export default function makeUnionRule(
             ? makeLiteralRule(_rule)
             : _rule;
 
-      const check = rule(node, variables, prop);
+      const check = rule(node, variables, prop, context);
       if (check === undefined) {
         // passes, that means we pass.
         return undefined;
       }
       failedRules.push(check);
     }
-    const fixable = failedRules.filter((a) => a.suggest != null);
+    const fixable = failedRules.filter(
+      (a) => a.suggest != null || a.fix != null,
+    );
     fixable.sort((a, b) => (a.distance || Infinity) - (b.distance || Infinity));
 
     return {
       message: failedRules.map((a) => a.message).join('\n'),
+      fix: fixable[0] != null ? fixable[0].fix : undefined,
       suggest: fixable[0] != null ? fixable[0].suggest : undefined,
     };
   };

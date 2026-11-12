@@ -33,7 +33,7 @@ const relativeLengthUnits = new Set([
   'lvh',
   'svw',
   'dvw',
-  'ldw',
+  'lvw',
   // container units
   'cqw',
   'cqh',
@@ -49,7 +49,7 @@ const isRelativeLength: RuleCheck = (
     if (
       typeof val === 'string' &&
       Array.from(relativeLengthUnits).some((unit) =>
-        val.match(new RegExp(`^([-,+]?\\d+(\\.\\d+)?${unit})$`)),
+        val.match(new RegExp(`^([+-]?\\d+(\\.\\d+)?${unit})$`)),
       )
     ) {
       return undefined;

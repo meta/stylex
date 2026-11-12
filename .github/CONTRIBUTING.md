@@ -16,7 +16,7 @@ Fork, then clone the repo:
 git clone https://github.com/your-username/stylex.git
 ```
 
-Make sure you have yarn@1.22 and node@>=16 installed. Then install the package
+Make sure you have yarn@1.22 and node@>=18 installed. Then install the package
 dependencies:
 
 ```

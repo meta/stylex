@@ -26,9 +26,6 @@ export function Counter() {
   );
 }
 
-const opacity = (color: string, percentage: number) =>
-  `color-mix(in oklab, ${color} ${percentage}%, transparent)`;
-
 const styles = stylex.create({
   wrapper: {
     marginBlockStart: '1rem',
@@ -36,7 +33,7 @@ const styles = stylex.create({
     borderWidth: 1,
     borderStyle: 'dashed',
     borderColor: '#60a5fa',
-    backgroundColor: opacity(tokens.primaryColor, 5),
+    backgroundColor: `color-mix(in oklab, ${tokens.primaryColor} 5%, transparent)`,
     borderRadius: 6,
     padding: '1rem',
   },

@@ -1,11 +1,12 @@
 {
   "name": "@stylexjs/eslint-plugin",
-  "version": "0.18.2",
+  "version": "0.19.2",
   "description": "StyleX eslint plugin.",
   "main": "lib/index.js",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/facebook/stylex.git"
+    "url": "git+https://github.com/meta/stylex.git",
+    "directory": "packages/@stylexjs/eslint-plugin"
   },
   "license": "MIT",
   "scripts": {
@@ -17,7 +18,7 @@
   },
   "dependencies": {
     "@csstools/css-tokenizer": "^3.0.3",
-    "@stylexjs/shared": "0.18.2",
+    "@stylexjs/shared": "0.19.2",
     "micromatch": "^4.0.5",
     "postcss-value-parser": "^4.2.0"
   },

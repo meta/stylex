@@ -6,6 +6,7 @@
  */
 import js from '@eslint/js';
 import globals from 'globals';
+import stylexPlugin from '@stylexjs/eslint-plugin';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import tseslint from 'typescript-eslint';
@@ -15,6 +16,12 @@ import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const stylexRules = {
+  '@stylexjs/valid-styles': 'error',
+  '@stylexjs/no-unused': 'error',
+  '@stylexjs/no-legacy-contextual-styles': 'error',
+  '@stylexjs/sort-keys': ['error', { order: 'recess' }],
+};
 
 export default defineConfig([
   globalIgnores(['dist']),
@@ -33,5 +40,9 @@ export default defineConfig([
         tsconfigRootDir: __dirname,
       },
     },
+    plugins: {
+      '@stylexjs': stylexPlugin,
+    },
+    rules: stylexRules,
   },
 ]);

@@ -36,7 +36,7 @@ export default function styleXDefineVars<Vars: VarsConfig>(
   variables: Vars,
   options: $ReadOnly<{ ...Partial<StyleXOptions>, exportId: string, ... }>,
 ): [VarsObject<Vars>, { [string]: InjectableStyle }] {
-  const { classNamePrefix, exportId, debug, enableDebugClassNames } = {
+  const { classNamePrefix, exportId } = {
     ...defaultOptions,
     ...options,
   };
@@ -53,14 +53,9 @@ export default function styleXDefineVars<Vars: VarsConfig>(
   const variablesMap: {
     +[string]: { +nameHash: string, +value: VarsConfigValue },
   } = objMap(variables, (value, key) => {
-    const varSafeKey = (
-      key[0] >= '0' && key[0] <= '9' ? `_${key}` : key
-    ).replace(/[^a-zA-Z0-9]/g, '_');
     const nameHash = key.startsWith('--')
       ? key.slice(2)
-      : debug && enableDebugClassNames
-        ? varSafeKey + '-' + classNamePrefix + createHash(`${exportId}.${key}`)
-        : classNamePrefix + createHash(`${exportId}.${key}`);
+      : classNamePrefix + createHash(`${exportId}.${key}`);
 
     if (isCSSType(value)) {
       const v: CSSType<> = value;

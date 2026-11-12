@@ -33,8 +33,9 @@ Prefix to be applied to every generated className.
 debug: boolean; // Default: false
 ```
 
-When `true`, StyleX will use debug class names and insert `data-style-src` props
-to help identify the source of the styles.
+When `true`, StyleX will make compiled style keys easier to read and insert
+`data-style-src` props to help identify the source of the styles. Generated
+atomic class names remain hashed.
 
 ---
 
@@ -46,7 +47,8 @@ dev: boolean; // Default: false
 
 When `true`, StyleX will insert function calls to inject the CSS rules at
 runtime, making it possible to use StyleX without setting up CSS file
-extraction.
+extraction. It also enables the DOM metadata used by the StyleX Dev Tools
+Extension.
 
 ---
 
@@ -88,6 +90,29 @@ Strategy to use for merging styles.
   styles work on the web.
 - **property-specificity**: More specific styles will win over less specific
   styles. Consistent with React Native. (`margin-top` wins over `margin`)
+
+---
+
+### `sxPropName`
+
+```ts
+sxPropName: string | false; // Default: 'sx'
+```
+
+Customize JSX prop name for applying styles on HTML elements. Defaults to `sx`.
+
+```tsx
+<div sx={styles.root} />
+```
+
+is transformed to:
+
+```tsx
+<div {...stylex.props(styles.root)} />
+```
+
+Set this option to another string to use a different prop name, such as `css`.
+Set it to `false` to disable the JSX shorthand entirely.
 
 ---
 
@@ -170,9 +195,9 @@ import styleXTransform from '@stylexjs/babel-plugin';
 const css: string = styleXTransform.processStylexRules(rules, config);
 ```
 
-`processStylexRules` takes an array of CSS rules collected from the babel
-plugin and returns the final CSS string. The optional `config` parameter
-controls layer wrapping and RTL handling.
+`processStylexRules` takes an array of CSS rules collected from the babel plugin
+and returns the final CSS string. The optional `config` parameter controls layer
+wrapping and RTL handling.
 
 ### `config`
 
@@ -203,14 +228,15 @@ useLayers?: boolean | {
 ```
 
 Controls whether generated CSS is wrapped in `@layer` blocks for cascade
-ordering. When `true`, each priority level is placed in its own layer.
-When your project also uses other CSS layers (e.g. a reset layer, a design-system
-layer, or a utility framework like Tailwind), pass an object to position
-StyleX's layers relative to yours in the
+ordering. When `true`, each priority level is placed in its own layer. When your
+project also uses other CSS layers (e.g. a reset layer, a design-system layer,
+or a utility framework like Tailwind), pass an object to position StyleX's
+layers relative to yours in the
 [`@layer` ordering declaration](https://developer.mozilla.org/en-US/docs/Web/CSS/@layer)
 and to namespace them to avoid collisions:
 
-- **`before`** — layer names placed _before_ StyleX layers in the ordering header.
+- **`before`** — layer names placed _before_ StyleX layers in the ordering
+  header.
 - **`after`** — layer names placed _after_ StyleX layers.
 - **`prefix`** — string prepended to every StyleX layer name (e.g. `'stylex'` →
   `stylex.priority1`).
@@ -241,6 +267,7 @@ The generated CSS begins with a layer-ordering header followed by wrapped rules:
 :::note
 
 Bundler plugins (`@stylexjs/unplugin`, `@stylexjs/postcss-plugin`) expose this
-as **`useCSSLayers`** and pass it through to `processStylexRules` as `useLayers`.
+as **`useCSSLayers`** and pass it through to `processStylexRules` as
+`useLayers`.
 
 :::

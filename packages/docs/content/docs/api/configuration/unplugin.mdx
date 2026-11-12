@@ -10,7 +10,7 @@ Universal bundler plugin for StyleX built on top of
 [`unplugin`](https://github.com/unjs/unplugin). It compiles StyleX modules,
 aggregates the generated CSS, and appends the result to an emitted CSS asset (or
 creates `stylex.css` as a fallback). Adapters are available for Vite/Rollup,
-Webpack/Rspack, and esbuild.
+Webpack/Rspack, esbuild, and Bun.
 
 ## Install
 
@@ -97,9 +97,32 @@ esbuild.build({
 });
 ```
 
+### Bun
+
+For Bun production builds, use the `esbuild` adapter with `Bun.build()`:
+
+```js title="scripts/build.mjs"
+import stylex from '@stylexjs/unplugin';
+
+await Bun.build({
+  entrypoints: ['src/main.jsx'],
+  outdir: 'dist',
+  metafile: true,
+  plugins: [stylex.esbuild({ useCSSLayers: true })],
+});
+```
+
+For Bun's dev server, add the Bun plugin entrypoint in `bunfig.toml`:
+
+```toml title="bunfig.toml"
+[serve.static]
+plugins = ["@stylexjs/unplugin/bun"]
+```
+
 ## Options (shared)
 
-All options from [`@stylexjs/babel-plugin`](./babel-plugin.mdx) are forwarded.
+All options from
+[`@stylexjs/babel-plugin`](/docs/api/configuration/babel-plugin) are forwarded.
 The unplugin adds:
 
 - `dev` (`boolean`): defaults to `NODE_ENV === 'development'`. Forces dev or
@@ -107,24 +130,24 @@ The unplugin adds:
 - `importSources` (`string[] | {from: string, as: string}[]`, default
   `['stylex', '@stylexjs/stylex']`): packages that export StyleX APIs. Also used
   to auto-exclude dependencies from Vite optimizeDeps/SSR.
-- `useCSSLayers` (`boolean | { before?: string[], after?: string[], prefix?: string }`,
-  default `false`): wrap output in `@layer` blocks. When set to `true`, StyleX
-  wraps each priority level in its own `@layer` and emits a layer-ordering
-  header (`@layer priority1, priority2, …;`). This gives StyleX CSS lower
-  specificity than any unlayered CSS in the app (per the CSS cascade: layered
-  styles < unlayered styles). When your project also uses other
-  CSS layers (e.g. a reset layer, a design-system layer, or a utility framework
-  like Tailwind), pass an object to position StyleX's layers relative to yours
-  in the [`@layer` ordering declaration](https://developer.mozilla.org/en-US/docs/Web/CSS/@layer)
+- `useCSSLayers`
+  (`boolean | { before?: string[], after?: string[], prefix?: string }`, default
+  `false`): wrap output in `@layer` blocks. When set to `true`, StyleX wraps
+  each priority level in its own `@layer` and emits a layer-ordering header
+  (`@layer priority1, priority2, …;`). This gives StyleX CSS lower specificity
+  than any unlayered CSS in the app (per the CSS cascade: layered styles <
+  unlayered styles). When your project also uses other CSS layers (e.g. a reset
+  layer, a design-system layer, or a utility framework like Tailwind), pass an
+  object to position StyleX's layers relative to yours in the
+  [`@layer` ordering declaration](https://developer.mozilla.org/en-US/docs/Web/CSS/@layer)
   and to namespace them to avoid collisions:
-
   - **`before`** — extra layer names placed _before_ StyleX's priority layers in
-    the ordering header. Use this to ensure your reset or base layers are ordered
-    before StyleX.
+    the ordering header. Use this to ensure your reset or base layers are
+    ordered before StyleX.
   - **`after`** — extra layer names placed _after_ StyleX's priority layers.
     Useful for giving a utilities layer higher precedence than StyleX.
-  - **`prefix`** — string prepended to every StyleX layer name (joined with `.`).
-    Use this to namespace StyleX layers and avoid collisions with other
+  - **`prefix`** — string prepended to every StyleX layer name (joined with
+    `.`). Use this to namespace StyleX layers and avoid collisions with other
     frameworks (e.g. `prefix: 'stylex'` → `stylex.priority1`).
 
   ```js title="vite.config.ts"
@@ -137,7 +160,8 @@ The unplugin adds:
   });
   ```
 
-  The generated CSS begins with a layer-ordering header followed by wrapped rules:
+  The generated CSS begins with a layer-ordering header followed by wrapped
+  rules:
 
   ```css
   @layer reset, base, stylex.priority1, stylex.priority2, utilities;
@@ -149,6 +173,10 @@ The unplugin adds:
     /* higher-priority rules */
   }
   ```
+
+- `sxPropName` (`string | false`, default `'sx'`): enables JSX shorthand such as
+  `<div sx={styles.root} />` on lowercase host elements. Set to `false` to
+  disable it or rename it to another prop such as `css`.
 - `enableLTRRTLComments` (`boolean`): include `/* @ltr */` and `/* @rtl */`
   annotations when emitting directional CSS.
 - `legacyDisableLayers` (`boolean`): disable layer usage when emitting CSS

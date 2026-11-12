@@ -3,11 +3,13 @@
   "pages": [
     "./create.mdx",
     "./props.mdx",
+    "./attrs.mdx",
     "./defineConsts.mdx",
     "./defineVars.mdx",
     "./createTheme.mdx",
     "./when.mdx",
     "./env.mdx",
+    "./atoms.mdx",
     "./keyframes.mdx",
     "./viewTransitionClass.mdx",
     "./positionTry.mdx",

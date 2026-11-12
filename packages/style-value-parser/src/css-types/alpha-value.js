@@ -18,14 +18,7 @@ export class AlphaValue {
     return this.value.toString();
   }
   static parser: TokenParser<AlphaValue> = TokenParser.oneOf(
-    TokenParser.tokens.Percentage.map(
-      (v) =>
-        new AlphaValue(
-          ((v[4].signCharacter === '-' ? -1 : 1) * v[4].value) / 100,
-        ),
-    ),
-    TokenParser.tokens.Number.map(
-      (v) => new AlphaValue((v[4].signCharacter === '-' ? -1 : 1) * v[4].value),
-    ),
+    TokenParser.tokens.Percentage.map((v) => new AlphaValue(v[4].value / 100)),
+    TokenParser.tokens.Number.map((v) => new AlphaValue(v[4].value)),
   );
 }

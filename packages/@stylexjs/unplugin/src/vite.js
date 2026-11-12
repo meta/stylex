@@ -17,6 +17,8 @@ import {
   VIRTUAL_STYLEX_CSS_ONLY_SCRIPT,
 } from './consts';
 import {
+  INDEX_CSS_RE,
+  STYLE_CSS_RE,
   pickCssAssetFromRollupBundle,
   replaceCssAssetWithHashedCopy,
   unpluginFactory,
@@ -87,7 +89,18 @@ function attachViteHooks(plugin) {
             } catch {}
           }
         }, 150);
+        // This dev-only polling timer must never keep the process alive. Under
+        // Vitest (and Vite middleware mode) the server has no `httpServer`, so
+        // the `close` cleanup below is skipped; a still-referenced interval
+        // would then leak and hang the process on exit (~10s under
+        // `vitest run`) (#1836).
+        if (typeof interval.unref === 'function') {
+          interval.unref();
+        }
         server.httpServer?.once('close', () => clearInterval(interval));
+        // Exposed so tests (and hosts that tear the server down without an
+        // `httpServer` close event) can observe/clear the timer.
+        server.__stylexSharedPollingInterval = interval;
       }
     },
     resolveId(id) {
@@ -179,8 +192,8 @@ function attachViteHooks(plugin) {
               .readdirSync(assetsDir)
               .filter((f) => f.endsWith('.css'));
             const pick =
-              files.find((f) => /(^|\/)index\.css$/.test(f)) ||
-              files.find((f) => /(^|\/)style\.css$/.test(f)) ||
+              files.find((f) => INDEX_CSS_RE.test(f)) ||
+              files.find((f) => STYLE_CSS_RE.test(f)) ||
               files[0];
             if (pick) outfile = path.join(assetsDir, pick);
           }

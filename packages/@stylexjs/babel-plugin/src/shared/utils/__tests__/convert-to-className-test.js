@@ -18,44 +18,28 @@ describe('convert-to-className test', () => {
   test('converts style to className', () => {
     expect(convert(['margin', 10])).toEqual('margin:10px');
   });
-  test('prefixes classname with property name when options.debug is true', () => {
-    const options = {
+  test('generates the same classname in debug and production modes', () => {
+    const baseOptions = {
       classNamePrefix: 'x',
       dev: false,
+      styleResolution: 'property-specificity',
+      test: false,
+    } as const;
+    const debugClassName = convertStyleToClassName(['margin', 10], [], [], [], {
+      ...baseOptions,
       debug: true,
-      styleResolution: 'property-specificity',
-      test: false,
-    } as const;
-    const result = convertStyleToClassName(['margin', 10], [], [], [], options);
-    const className = result[1];
-    expect(className.startsWith('margin-x')).toBe(true);
-  });
-  test('prefixes classname with prefix only when options.enableDebugClassNames is false', () => {
-    const options = {
-      classNamePrefix: 'x',
-      dev: false,
-      debug: true,
-      enableDebugClassNames: false,
-      styleResolution: 'property-specificity',
-      test: false,
-    } as const;
-    const result = convertStyleToClassName(['margin', 10], [], [], [], options);
-    const className = result[1];
-    expect(className.startsWith('x')).toBe(true);
-    expect(className.startsWith('margin-x')).toBe(false);
-  });
-  test('prefixes classname with prefix only when options.debug is false', () => {
-    const options = {
-      classNamePrefix: 'x',
-      dev: false,
-      debug: false,
-      styleResolution: 'property-specificity',
-      test: false,
-    } as const;
-    const result = convertStyleToClassName(['margin', 10], [], [], [], options);
-    const className = result[1];
-    expect(className.startsWith('x')).toBe(true);
-    expect(className.startsWith('margin-x')).toBe(false);
+    })[1];
+    const productionClassName = convertStyleToClassName(
+      ['margin', 10],
+      [],
+      [],
+      [],
+      { ...baseOptions, debug: false },
+    )[1];
+
+    expect(debugClassName).toBe(productionClassName);
+    expect(debugClassName.startsWith('x')).toBe(true);
+    expect(debugClassName.startsWith('margin-x')).toBe(false);
   });
   test('converts margin number to px', () => {
     expect(convert(['margin', 10])).toEqual('margin:10px');

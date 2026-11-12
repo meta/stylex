@@ -30,6 +30,9 @@ const IS_DEV_ENV =
   process.env.NODE_ENV === 'development' ||
   process.env.BABEL_ENV === 'development';
 
+// The babel plugin always recognises these on top of any configured source.
+const BUILT_IN_IMPORT_SOURCES = ['stylex', '@stylexjs/stylex'];
+
 export type PluginOptions = $ReadOnly<{
   ...Partial<Options>,
   fileName?: string,
@@ -68,11 +71,12 @@ export default function stylexPlugin({
   unstable_moduleResolution = { type: 'commonJS', rootDir: process.cwd() },
   fileName = 'stylex.css',
   babelConfig: { plugins = [], presets = [] } = {},
-  importSources = ['stylex', '@stylexjs/stylex'],
+  importSources = BUILT_IN_IMPORT_SOURCES,
   useCSSLayers = false,
   lightningcssOptions,
   ...options
 }: PluginOptions = {}): Plugin<> {
+  const gateImportSources = [...BUILT_IN_IMPORT_SOURCES, ...importSources];
   let stylexRules: { [string]: $ReadOnlyArray<Rule> } = {};
   return {
     name: 'rollup-plugin-stylex',
@@ -117,7 +121,7 @@ export default function stylexPlugin({
       id: string,
     ): Promise<null | TransformResult> {
       if (
-        !importSources.some((importName) =>
+        !gateImportSources.some((importName) =>
           typeof importName === 'string'
             ? inputCode.includes(importName)
             : inputCode.includes(importName.from),
@@ -140,6 +144,7 @@ export default function stylexPlugin({
           jsxSyntaxPlugin,
           stylexBabelPlugin.withOptions({
             ...options,
+            importSources,
             dev,
             unstable_moduleResolution,
           }),

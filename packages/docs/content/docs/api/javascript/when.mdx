@@ -36,6 +36,28 @@ const styles = stylex.create({
 </div>;
 ```
 
+## Observing attribute selectors
+
+The same APIs also support attribute selectors, which is useful for styling
+elements from ARIA or state attributes without introducing extra classes.
+
+```tsx
+import * as stylex from '@stylexjs/stylex';
+
+const styles = stylex.create({
+  panel: {
+    opacity: {
+      default: 0.6,
+      [stylex.when.ancestor('[data-state="open"]')]: 1,
+    },
+  },
+});
+
+<section data-state="open" {...stylex.props(stylex.defaultMarker())}>
+  <div {...stylex.props(styles.panel)}>Visible when open</div>
+</section>;
+```
+
 ## Available selectors
 
 ### `stylex.when.ancestor`
@@ -171,19 +193,19 @@ const styles = stylex.create({
 
 Custom markers created with `stylex.defineMarker()` let you have multiple
 independent sets of contextual selectors in the same component tree. For
-example, a table cell could have different styling depending on whether
-the cell itself is being hovered, or whether its row is being hovered:
+example, a table cell could have different styling depending on whether the cell
+itself is being hovered, or whether its row is being hovered:
 
 ```tsx
 // markers.stylex.js
-import * as stylex from "@stylexjs/stylex";
+import * as stylex from '@stylexjs/stylex';
 export const rowMarker = stylex.defineMarker();
 export const cellMarker = stylex.defineMarker();
-
 ```
+
 ```tsx
-import * as stylex from "@stylexjs/stylex";
-import { cellMarker, rowMarker } from "./markers.stylex.js";
+import * as stylex from '@stylexjs/stylex';
+import { cellMarker, rowMarker } from './markers.stylex.js';
 
 const styles = stylex.create({
   editButton: {
@@ -205,10 +227,10 @@ function Row({ children }) {
 }
 
 function Cell({ children }) {
-  return (<td {...stylex.props(cellMarker)}>{children}</td>);
+  return <td {...stylex.props(cellMarker)}>{children}</td>;
 }
 
-function EditableContents({children}) {
+function EditableContents({ children }) {
   return (
     <>
       {children}
@@ -221,17 +243,20 @@ export default function App() {
   return (
     <table>
       <Row>
-        <Cell><EditableContents>Daniel</EditableContents></Cell>
+        <Cell>
+          <EditableContents>Daniel</EditableContents>
+        </Cell>
         <Cell>1234</Cell>
       </Row>
       <Row>
-        <Cell><EditableContents>Test</EditableContents></Cell>
+        <Cell>
+          <EditableContents>Test</EditableContents>
+        </Cell>
         <Cell>Two</Cell>
       </Row>
     </table>
   );
 }
-
 ```
 
 ## Specificity ranking

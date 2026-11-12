@@ -9,27 +9,23 @@
 
 import * as React from 'react';
 import * as stylex from '@stylexjs/stylex';
+import type { StylexSource } from '../../types';
 import { SourceRow } from './SourceRow';
 
 export function SourcesList({
+  revision,
   sources,
-  onError,
 }: {
-  sources: $ReadOnlyArray<{
-    raw: string,
-    file: string,
-    line: number | null,
-    ...
-  }>,
-  onError: (message: string) => void,
+  revision: number,
+  sources: $ReadOnlyArray<StylexSource>,
 }): React.Node {
   return (
     <div {...stylex.props(styles.sourcesList)}>
       {sources.map((src, index) => (
         <SourceRow
           key={src.raw ?? `${src.file}:${String(src.line ?? '')}:${index}`}
-          onError={onError}
-          src={src}
+          revision={revision}
+          source={src}
         />
       ))}
     </div>

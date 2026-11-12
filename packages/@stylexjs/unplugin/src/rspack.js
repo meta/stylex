@@ -11,5 +11,5 @@ import { unpluginFactory } from './core';
 import { attachWebpackHooks } from './webpack';
 
 export default createRspackPlugin((options, metaOptions) =>
-  attachWebpackHooks(unpluginFactory(options, metaOptions)),
+  attachWebpackHooks(unpluginFactory(options, metaOptions), 'rspack'),
 );

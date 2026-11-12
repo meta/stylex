@@ -36,6 +36,7 @@ type Schema = {
   order: 'default' | 'clean' | 'recess',
   minKeys: number,
   allowLineSeparatedGroups: boolean,
+  enableMediaQueryOrder: boolean,
 };
 
 type Stack = null | {
@@ -46,11 +47,36 @@ type Stack = null | {
   numKeys: number,
 };
 
+type SortableProperty = {
+  node: Property,
+  name: string,
+  text: string,
+  rangeStart: number,
+  rangeEnd: number,
+};
+
+function isMediaQuery(name: string): boolean {
+  return typeof name === 'string' && name.startsWith('@media');
+}
+
 function isValidOrder(
   prevName: string,
   currName: string,
   order: Schema['order'],
+  enableMediaQueryOrder: boolean,
 ): boolean {
+  // When `enableMediaQueryOrder` is set, StyleX resolves overlapping media
+  // queries by source order ("last media query wins"). Sorting `@media`
+  // condition keys alphabetically inverts that cascade, so we treat any
+  // authored order between two media queries as valid and leave it untouched.
+  if (
+    enableMediaQueryOrder &&
+    isMediaQuery(prevName) &&
+    isMediaQuery(currName)
+  ) {
+    return true;
+  }
+
   const prev = getPropertyPriorityAndType(prevName, order);
   const curr = getPropertyPriorityAndType(currName, order);
 
@@ -60,6 +86,26 @@ function isValidOrder(
   }
 
   return prevName <= currName;
+}
+
+function comparePropertyNames(
+  aName: string,
+  bName: string,
+  order: Schema['order'],
+  enableMediaQueryOrder: boolean,
+): number {
+  if (aName === bName) {
+    return 0;
+  }
+
+  // Preserve the authored relative order of media queries so the autofix does
+  // not reshuffle them (the sort below is stable and falls back to the
+  // original index when this returns 0).
+  if (enableMediaQueryOrder && isMediaQuery(aName) && isMediaQuery(bName)) {
+    return 0;
+  }
+
+  return isValidOrder(aName, bName, order, enableMediaQueryOrder) ? -1 : 1;
 }
 
 const stylexSortKeys = {
@@ -104,6 +150,10 @@ const stylexSortKeys = {
             type: 'boolean',
             default: false,
           },
+          enableMediaQueryOrder: {
+            type: 'boolean',
+            default: false,
+          },
         },
         additionalProperties: false,
       },
@@ -115,6 +165,7 @@ const stylexSortKeys = {
       order = 'default',
       minKeys = 2,
       allowLineSeparatedGroups = false,
+      enableMediaQueryOrder = false,
     }: Schema = context.options[0] || {};
 
     const importTracker = createImportTracker(importsToLookFor);
@@ -212,7 +263,6 @@ const stylexSortKeys = {
         }
 
         const prevName = stack.prevName;
-        const prevNode = stack?.prevNode;
         const numKeys = stack.numKeys;
         const currName = getPropertyName(node);
         let isBlankLineBetweenNodes = stack?.prevBlankLine;
@@ -274,7 +324,7 @@ const stylexSortKeys = {
           return;
         }
 
-        if (!isValidOrder(prevName, currName, order)) {
+        if (!isValidOrder(prevName, currName, order, enableMediaQueryOrder)) {
           context.report({
             // $FlowFixMe[incompatible-type]
             node,
@@ -282,9 +332,11 @@ const stylexSortKeys = {
             message: `StyleX property key "${currName}" should be above "${prevName}"`,
             // $FlowFixMe[incompatible-type]
             fix: createFix({
-              prevNode: prevNode as $FlowFixMe,
               currNode: node as $FlowFixMe,
               sourceCode,
+              order,
+              allowLineSeparatedGroups,
+              enableMediaQueryOrder,
             }),
           });
         }
@@ -305,87 +357,191 @@ const stylexSortKeys = {
 
 function createFix({
   currNode,
-  prevNode,
   sourceCode,
+  order,
+  allowLineSeparatedGroups,
+  enableMediaQueryOrder,
 }: {
   currNode: Property,
-  prevNode: Property,
   sourceCode: SourceCode,
+  order: Schema['order'],
+  allowLineSeparatedGroups: boolean,
+  enableMediaQueryOrder: boolean,
 }) {
   return function (fixer: RuleFixer) {
-    // Need to handle the case if there is white space between node and comment above
-    // This can be especially tricky if the "sort between space groups" option is turned on
-    const fixes = [];
+    const group = getSortableGroup(currNode);
 
-    // Retrieve comments before the previous node
-    const prevNodeCommentsBefore = getPropertyCommentsBefore(prevNode);
-
-    // Start node for the entire context with comments of prevNode
-    const prevNodeContextStartNode =
-      prevNodeCommentsBefore.length > 0 ? prevNodeCommentsBefore[0] : prevNode;
-
-    const { indentation: startNodeIndentation, isTokenBeforeSameLineAsNode } =
-      getNodeIndentation(prevNodeContextStartNode);
-
-    const prevNodeSameLineComment = getPropertySameLineComment(prevNode);
-
-    const tokenAfterPrevNode = sourceCode.getTokenAfter(prevNode, {
-      includeComments: false,
-    });
-
-    const prevNodeContextEndNode =
-      prevNodeSameLineComment ?? tokenAfterPrevNode;
-
-    if (!prevNodeContextEndNode?.range || !prevNodeContextStartNode.range) {
-      // Early return if range or prevNode doesn't exist
+    if (group.length < 2) {
       return [];
     }
 
-    const rangeStart =
-      prevNodeContextStartNode.range[0] - startNodeIndentation.length;
+    const sortedGroup = [...group].sort((a, b) => {
+      const result = comparePropertyNames(
+        a.name,
+        b.name,
+        order,
+        enableMediaQueryOrder,
+      );
 
-    const rangeEnd = prevNodeContextEndNode.range[1];
-
-    const textToMove = sourceCode.getText().slice(rangeStart, rangeEnd);
-
-    fixes.push(
-      fixer.removeRange([
-        // If previous token is not on the same line, we remove an extra char to account for newline
-        rangeStart - Number(!isTokenBeforeSameLineAsNode),
-        rangeEnd,
-      ]),
-    );
-
-    const currNodeSameLineComment = getPropertySameLineComment(currNode);
-
-    const tokenAfterCurrNode = sourceCode.getTokenAfter(currNode, {
-      includeComments: false,
+      return result === 0 ? group.indexOf(a) - group.indexOf(b) : result;
     });
 
-    const hasCommaAfterCurrNode =
-      tokenAfterCurrNode && isCommaToken(tokenAfterCurrNode);
-
-    if (!hasCommaAfterCurrNode) {
-      fixes.push(fixer.insertTextAfter(currNode, ','));
+    if (sortedGroup.every((item, index) => item === group[index])) {
+      return [];
     }
 
-    const newLine = isSameLine(prevNode, currNode) ? '' : '\n';
-    // If token after the current node is a comma then we insert after the comma
-    // Otherwise we insert after the current node because there is a guaranteed fix to add comma (above)
-    const fallbackNode =
-      hasCommaAfterCurrNode && tokenAfterCurrNode
-        ? tokenAfterCurrNode
-        : currNode;
+    const firstItem = group[0];
+    const lastItem = group[group.length - 1];
+    const replacementText = isInlineGroup(group)
+      ? getInlineReplacementText(sortedGroup, firstItem.text)
+      : sortedGroup.map((item) => item.text).join('\n');
 
-    fixes.push(
-      fixer.insertTextAfter(
-        currNodeSameLineComment ?? fallbackNode,
-        `${newLine}${textToMove}`,
-      ),
+    return fixer.replaceTextRange(
+      [firstItem.rangeStart, lastItem.rangeEnd],
+      replacementText,
     );
-
-    return fixes;
   };
+
+  function getSortableGroup(node: Property): SortableProperty[] {
+    const parent = (node as $FlowFixMe).parent;
+
+    if (!parent || parent.type !== 'ObjectExpression') {
+      return [];
+    }
+
+    const groups: Array<SortableProperty[]> = [];
+    let group: SortableProperty[] = [];
+
+    for (const property of parent.properties as $FlowFixMe) {
+      if (property.type !== 'Property') {
+        if (group.length > 0) {
+          groups.push(group);
+          group = [];
+        }
+        continue;
+      }
+
+      const name = getPropertyName(property);
+      if (name === null) {
+        if (group.length > 0) {
+          groups.push(group);
+          group = [];
+        }
+        continue;
+      }
+
+      const sortableProperty = getSortableProperty(property, name);
+      if (sortableProperty === null) {
+        if (group.length > 0) {
+          groups.push(group);
+          group = [];
+        }
+        continue;
+      }
+
+      if (
+        group.length > 0 &&
+        isGroupBoundary(group[group.length - 1], sortableProperty)
+      ) {
+        groups.push(group);
+        group = [];
+      }
+
+      group.push(sortableProperty);
+    }
+
+    if (group.length > 0) {
+      groups.push(group);
+    }
+
+    return (
+      groups.find((sortableGroup) =>
+        sortableGroup.some((item) => item.node === node),
+      ) ?? []
+    );
+  }
+
+  function getSortableProperty(
+    node: Property,
+    name: string,
+  ): SortableProperty | null {
+    const commentsBefore = getPropertyCommentsBefore(node);
+    const contextStartNode =
+      commentsBefore.length > 0 ? commentsBefore[0] : node;
+    const { indentation } = getNodeIndentation(contextStartNode);
+    const sameLineComment = getPropertySameLineComment(node);
+    const tokenAfterNode = sourceCode.getTokenAfter(node, {
+      includeComments: false,
+    });
+    const hasCommaAfterNode = tokenAfterNode && isCommaToken(tokenAfterNode);
+    const contextEndNode =
+      sameLineComment ?? (hasCommaAfterNode ? tokenAfterNode : node);
+    const contextStartRange = contextStartNode.range;
+    const contextEndRange = contextEndNode?.range;
+    const nodeRange = node.range;
+
+    if (!contextStartRange || !contextEndRange || !nodeRange) {
+      return null;
+    }
+
+    const rangeStart = contextStartRange[0] - indentation.length;
+    const rangeEnd = contextEndRange[1];
+    const sourceText = sourceCode.getText();
+    const commaInsertIndex = nodeRange[1] - rangeStart;
+    let text = sourceText.slice(rangeStart, rangeEnd);
+
+    if (!hasCommaAfterNode) {
+      text =
+        text.slice(0, commaInsertIndex) + ',' + text.slice(commaInsertIndex);
+    }
+
+    return {
+      node,
+      name,
+      text,
+      rangeStart,
+      rangeEnd,
+    };
+  }
+
+  function isGroupBoundary(
+    prevProperty: SortableProperty,
+    currProperty: SortableProperty,
+  ): boolean {
+    const textBetweenProperties = sourceCode
+      .getText()
+      .slice(prevProperty.rangeEnd, currProperty.rangeStart);
+
+    if (/[^ \t\r\n]/.test(textBetweenProperties)) {
+      return true;
+    }
+
+    return (
+      allowLineSeparatedGroups &&
+      /(?:\r?\n)[ \t]*(?:\r?\n)/.test(textBetweenProperties)
+    );
+  }
+
+  function isInlineGroup(group: SortableProperty[]): boolean {
+    const firstItem = group[0];
+    const lastItem = group[group.length - 1];
+
+    return !/[\r\n]/.test(
+      sourceCode.getText().slice(firstItem.rangeStart, lastItem.rangeEnd),
+    );
+  }
+
+  function getInlineReplacementText(
+    sortedGroup: SortableProperty[],
+    firstText: string,
+  ): string {
+    const leadingWhitespace = firstText.match(/^[ \t]*/)?.[0] ?? '';
+
+    return (
+      leadingWhitespace +
+      sortedGroup.map((item) => item.text.trimStart()).join(' ')
+    );
+  }
 
   function getEmptyLineCountBetweenNodes(
     aNode: Property | Comment,

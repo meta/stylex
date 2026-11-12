@@ -1,7 +1,7 @@
 {
   "private": true,
   "name": "scripts",
-  "version": "0.18.2",
+  "version": "0.19.2",
   "description": "Helper scripts for stylex monorepo.",
   "license": "MIT",
   "bin": {
@@ -9,7 +9,7 @@
     "rewrite-imports": "./flow-translator/rewrite-imports.js"
   },
   "dependencies": {
-    "flow-api-translator": "^0.32.1",
+    "flow-api-translator": "^0.36.1",
     "yargs": "^17.7.2"
   }
 }

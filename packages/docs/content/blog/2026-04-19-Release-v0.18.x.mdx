@@ -1,0 +1,202 @@
+---
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+slug: v0.18
+title: Release 0.18
+authors: [nmn, mellyeliu]
+tags:
+  - release
+---
+
+StyleX v0.18 adds compile-time environment values with `stylex.env`, a
+`create-stylex-app` scaffolding CLI, Bun support in `@stylexjs/unplugin`,
+improvements to the theming and linting workflows, and better tooling for
+debugging StyleX in development.
+
+## `stylex.env` for compile-time constants and shareable tokens
+
+StyleX already supports `stylex.defineConsts` which lets you define constants
+that can be used as values or shared media queries. This works by defining CSS
+variables whose values are inlined at compile-time. However, sometimes you may
+want something simpler, akin to using environment variables at compile time.
+
+StyleX now supports `stylex.env`, which can be configured with arbitrary values
+as part of the configuration. This system is limited in how it can be shared. It
+is not suitable for defining constants as part of a library. However, in other
+scenarios it can be an easy way to define arbitrary values and use them without
+worrying about compilation rules.
+
+`stylex.env` can be used arbitrarily in any stylex API and can hold any
+arbitrary value including objects and arrays and it has no overhead compared to
+using literal values directly in your source.
+
+```js title="babel.config.js"
+module.exports = {
+  plugins: [
+    [
+      '@stylexjs/babel-plugin',
+      {
+        env: {
+          absoluteFill: {
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            bottom: 0,
+            left: 0,
+          },
+        },
+      },
+    ],
+  ],
+};
+```
+
+```tsx
+import * as stylex from '@stylexjs/stylex';
+
+const styles = stylex.create({
+  root: {
+    ...stylex.env.absoluteFill,
+    // ...
+  },
+});
+```
+
+Because these values are substituted before compilation, identical values still
+deduplicate into the same generated CSS rules.
+
+## `create-stylex-app`
+
+We now ship `create-stylex-app`, a project scaffolding CLI for spinning up a new
+StyleX app from an official template:
+
+```bash
+npx create-stylex-app my-app
+```
+
+The CLI can scaffold projects for common setups including Next.js, Vite,
+Webpack, Rspack, esbuild, React Router, Waku, and more.
+(Thanks [abhakat](https://github.com/abhakat)!)
+
+## Bun support in `@stylexjs/unplugin`
+
+StyleX 0.18 improves Bun support in the unplugin package.
+
+For production builds, Bun's `Bun.build()` API can use the `esbuild` adapter:
+
+```js title="scripts/build.mjs"
+import stylex from '@stylexjs/unplugin';
+
+await Bun.build({
+  entrypoints: ['src/main.jsx'],
+  outdir: 'dist',
+  metafile: true,
+  plugins: [stylex.esbuild({ useCSSLayers: true })],
+});
+```
+
+For Bun's dev server, you can also use the dedicated Bun plugin entrypoint from
+`@stylexjs/unplugin/bun`.
+
+## StyleX Dev Tools Extension
+
+A StyleX DevTools extension is now available in the
+[Chrome Web Store](https://chromewebstore.google.com/detail/stylex-devtools/pfcoadoepdjlhhnchklcinajnmmninem).
+
+It shows the styles applied, the source of each style object, and provides a
+simple way to override styles on individual elements without modifying atomic
+CSS rules.
+
+## `stylex.attrs` is back
+
+We also brought back `stylex.attrs`, which is especially useful for SSR and
+frameworks that expect `class` instead of `className`, or a serialized `style`
+string instead of a style object.
+
+```tsx
+import * as stylex from '@stylexjs/stylex';
+
+<div {...stylex.attrs(styles.card)} />;
+```
+
+This is useful for using StyleX with frameworks such as Solid.js, Svelte, Vue,
+Qwik.js etc. (See the
+[SvelteKit example](https://github.com/facebook/stylex/tree/main/examples/example-sveltekit)
+for a demo of this new API in action!)
+
+## Authoring ergonomics
+
+### `sx={}` JSX syntax
+
+If you prefer a lighter JSX syntax, you can now write:
+
+```tsx
+<button sx={styles.button}>Save</button>
+```
+
+This compiles to the same output as:
+
+```tsx
+<button {...stylex.props(styles.button)}>Save</button>
+```
+
+The `sx` prop is enabled by default and the prop name can be customised. The
+output can also be customised to use `stylex.attrs` instead of `stylex.props`.
+
+## Self-referencing variables in `defineVars`
+
+`stylex.defineVars` now supports zero-argument functions to define values for
+variables that depend on other variables in the same set.
+
+```tsx title="colors.stylex.ts"
+import * as stylex from '@stylexjs/stylex';
+
+export const colors = stylex.defineVars({
+  text: 'black',
+  textMuted: () => `color-mix(in srgb, ${colors.text}, transparent 50%)`,
+});
+```
+
+This pattern can be very useful as their values will always reflect the
+derivation based on the _current_ value of the other variables, with no need to
+override them in themes at all. However, you can optionally override them in
+themes if you want to deviate from the default derivation.
+
+This pattern is particularly useful for design systems.
+
+## Selector and layering improvements
+
+`stylex.when` now supports attribute selectors in addition to pseudo-classes,
+which makes it easier to style elements based on state attributes like
+`[data-state="open"]` or `[aria-expanded="true"]`.
+(Thanks [vincentriemer](https://github.com/vincentriemer)!)
+
+We also added more control over CSS layers when `useCSSLayers` is enabled, so
+you can position StyleX layers relative to other layers in your app and prefix
+them to avoid naming collisions.
+(Thanks [chunw-meta](https://github.com/chunw-meta)!)
+
+## Fixes and polish
+
+- Fixed Bun and unplugin integration details, including emitted bundle handling.
+  (Thanks [skovhus](https://github.com/skovhus),
+  [martpie](https://github.com/martpie)!)
+- Fixed priority calculation for compound pseudo selectors.
+- Added shorthand expansion support for `flex`, `grid`, `gap`, `animation`, and
+  `border` in the ESLint plugin.
+  (Thanks [abhakat](https://github.com/abhakat)!)
+- Fixed a number of ESLint false positives and numeric-value edge cases.
+  (Thanks [skovhus](https://github.com/skovhus),
+  [taphill](https://github.com/taphill),
+  [j-malt](https://github.com/j-malt)!)
+- Allow overriding `stylex.env` types in TypeScript.
+  (Thanks [pawelblaszczyk5](https://github.com/pawelblaszczyk5)!)
+- Fixed deterministic sort comparator in `processStylexRules`.
+  (Thanks [matclayton](https://github.com/matclayton)!)
+- Replaced deprecated Flow utility types with modern equivalents.
+  (Thanks [marcoww6](https://github.com/marcoww6)!)
+
+As always, thanks to everyone for filing issues, contributing fixes, and trying
+StyleX in more real-world setups.

@@ -109,23 +109,20 @@ export type RuleContext = {
   id: string,
   options: Array<$FlowFixMe>,
   settings: { [name: string]: $FlowFixMe },
-  parserPath: string,
-  // parserOptions: Linter.ParserOptions;
+  // parserPath: string,
   // parserServices: SourceCode.ParserServices;
   sourceCode: SourceCode,
   getAncestors(): Array<ESTree.Node>,
 
   // getDeclaredVariables(node: ESTree.Node): Scope.Variable[];
 
-  getFilename(): string,
+  filename: string;
 
-  getPhysicalFilename(): string,
+  physicalFilename: string;
 
-  getCwd(): string,
+  cwd: string;
 
   // getScope(): Scope.Scope;
-
-  // getSourceCode(): SourceCode;
 
   markVariableAsUsed(name: string): boolean,
 

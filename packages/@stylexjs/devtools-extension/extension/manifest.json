@@ -1,8 +1,0 @@
-{
-  "manifest_version": 3,
-  "name": "StyleX DevTools",
-  "version": "0.1.0",
-  "description": "Inspect StyleX-applied styles and their sources in the Elements panel.",
-  "devtools_page": "devtools.html"
-}
-

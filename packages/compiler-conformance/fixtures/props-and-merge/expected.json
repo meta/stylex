@@ -1,0 +1,25 @@
+{
+  "css": ".x1e2nbdu{color:red}\n.x17z2mba:hover{color:blue}",
+  "errors": [],
+  "js": "/**\n * Copyright (c) Meta Platforms, Inc. and affiliates.\n *\n * This source code is licensed under the MIT license found in the\n * LICENSE file in the root directory of this source tree.\n */\n\nimport * as stylex from '@stylexjs/stylex';\nimport React from 'react';\nexport function Button(props) {\n  return <button {...{\n    0: {\n      className: \"x1e2nbdu\"\n    },\n    1: {\n      className: \"x1e2nbdu x17z2mba\"\n    }\n  }[!!props.active << 0]} />;\n}",
+  "metadata": [
+    [
+      "x1e2nbdu",
+      {
+        "ltr": ".x1e2nbdu{color:red}",
+        "rtl": null
+      },
+      3000
+    ],
+    [
+      "x17z2mba",
+      {
+        "ltr": ".x17z2mba:hover{color:blue}",
+        "rtl": null
+      },
+      3130
+    ]
+  ],
+  "status": "ok",
+  "warnings": []
+}

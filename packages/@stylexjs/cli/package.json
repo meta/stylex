@@ -1,9 +1,13 @@
 {
   "name": "@stylexjs/cli",
-  "version": "0.18.2",
+  "version": "0.19.2",
   "description": "A cli to compile a folder with StyleX",
   "main": "./lib/transform.js",
-  "repository": "https://www.github.com/facebook/stylex",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/meta/stylex.git",
+    "directory": "packages/@stylexjs/cli"
+  },
   "license": "MIT",
   "scripts": {
     "prebuild": "gen-types -i src/ -o lib/",
@@ -19,7 +23,7 @@
     "@babel/plugin-syntax-jsx": "^7.25.9",
     "@babel/plugin-syntax-typescript": "^7.25.9",
     "@babel/types": "^7.26.8",
-    "@stylexjs/babel-plugin": "0.18.2",
+    "@stylexjs/babel-plugin": "0.19.2",
     "ansis": "^3.3.2",
     "fb-watchman": "^2.0.2",
     "json5": "^2.2.3",
@@ -27,10 +31,10 @@
     "yargs": "^17.7.2"
   },
   "devDependencies": {
-    "scripts": "0.18.2"
+    "scripts": "0.19.2"
   },
   "bin": {
-    "stylex": "./lib/index.js"
+    "stylex": "lib/index.js"
   },
   "jest": {
     "testPathIgnorePatterns": [

@@ -1,7 +1,7 @@
 {
   "private": true,
   "name": "style-value-parser",
-  "version": "0.18.2",
+  "version": "0.19.2",
   "type": "module",
   "main": "lib/index.js",
   "license": "MIT",

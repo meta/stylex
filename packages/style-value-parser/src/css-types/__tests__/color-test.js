@@ -27,6 +27,21 @@ describe('Test CSS Type: <color>', () => {
     expect(Color.parser.parse('#ffffff')).toEqual(new HashColor('ffffff'));
   });
 
+  test('hash color channel getters expand 3-digit shorthand', () => {
+    // The parser accepts 3-digit shorthand hex, so the channel getters must
+    // expand each digit (#f0a === #ff00aa) rather than slicing fixed windows.
+    expect(Color.parser.parse('#f0a')).toEqual(new HashColor('f0a'));
+    const short = new HashColor('f0a');
+    expect(short.r).toBe(255);
+    expect(short.g).toBe(0);
+    expect(short.b).toBe(170);
+    expect(short.a).toBe(1);
+    // Full-length hex (with and without alpha) is unaffected.
+    const full = new HashColor('ff00aa');
+    expect([full.r, full.g, full.b]).toEqual([255, 0, 170]);
+    expect(new HashColor('ff00aa80').a).toBeCloseTo(128 / 255);
+  });
+
   test('parses RGB values', () => {
     expect(Color.parser.parse('rgb(255, 0, 0)')).toEqual(new Rgb(255, 0, 0));
     expect(Color.parser.parse('rgb(0, 255, 0)')).toEqual(new Rgb(0, 255, 0));

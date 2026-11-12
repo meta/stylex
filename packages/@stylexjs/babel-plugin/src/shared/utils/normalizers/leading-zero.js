@@ -19,6 +19,9 @@ export default function normalizeLeadingZero(
   _: mixed,
 ): PostCSSValueAST {
   ast.walk((node) => {
+    if (node.type === 'function' && node.value.toLowerCase() === 'url') {
+      return false;
+    }
     if (node.type !== 'word') {
       return;
     }

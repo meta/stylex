@@ -188,21 +188,32 @@ function createBuilder() {
         continue;
       }
 
-      fileModifiedMap.set(file, mtimeMs);
-      filesToTransform.push(file);
+      // Record mtime only after transform finishes. Recording earlier lets a
+      // concurrent build skip this file and bundle stale CSS.
+      filesToTransform.push({ file, mtimeMs });
     }
 
     await Promise.all(
-      filesToTransform.map((file) => {
+      filesToTransform.map(async ({ file, mtimeMs }) => {
         const filePath = path.resolve(cwd, file);
         const contents = fs.readFileSync(filePath, 'utf-8');
-        if (!bundler.shouldTransform(contents, { importSources })) {
-          return;
+        if (bundler.shouldTransform(contents, { importSources })) {
+          const result = await bundler.transform(
+            filePath,
+            contents,
+            babelConfig,
+            {
+              isDev,
+              shouldSkipTransformError,
+            },
+          );
+          if (result == null) {
+            return;
+          }
+        } else {
+          bundler.remove(filePath);
         }
-        return bundler.transform(filePath, contents, babelConfig, {
-          isDev,
-          shouldSkipTransformError,
-        });
+        fileModifiedMap.set(file, mtimeMs);
       }),
     );
 

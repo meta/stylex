@@ -1,7 +1,7 @@
 {
   "private": true,
   "name": "example-cli",
-  "version": "0.18.2",
+  "version": "0.19.2",
   "scripts": {
     "example:build": "stylex --config .stylex.json5"
   },
@@ -12,9 +12,10 @@
   "devDependencies": {
     "@babel/preset-react": "^7.25.7",
     "@babel/preset-typescript": "^7.25.7",
-    "@stylexjs/cli": "0.18.2",
+    "@stylexjs/cli": "0.19.2",
     "@types/react": "^19.2.6",
     "@types/react-dom": "^19.2.3",
+    "shx": "^0.4.0",
     "typescript": "^5.9.3"
   }
 }

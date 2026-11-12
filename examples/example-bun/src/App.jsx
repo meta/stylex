@@ -21,20 +21,20 @@ export default function App() {
 
 const styles = stylex.create({
   main: {
-    minHeight: '100vh',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: '100vh',
     backgroundColor: colors.gray0,
   },
   card: {
-    backgroundColor: colors.blue9,
-    padding: sizes.spacing5,
-    borderRadius: sizes.spacing2,
-    justifyContent: 'center',
     display: 'flex',
     alignItems: 'center',
-    color: colors.gray0,
+    justifyContent: 'center',
+    padding: sizes.spacing5,
     fontFamily: fonts.mono,
+    color: colors.gray0,
+    backgroundColor: colors.blue9,
+    borderRadius: sizes.spacing2,
   },
 });

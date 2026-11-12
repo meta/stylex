@@ -7,14 +7,14 @@
 
 import { createWebpackPlugin } from 'unplugin';
 
-import { unpluginFactory } from './core';
+import { INDEX_CSS_RE, STYLE_CSS_RE, unpluginFactory } from './core';
 
-export function attachWebpackHooks(plugin) {
+export function attachWebpackHooks(plugin, hookName = 'webpack') {
   const cssInjectionTarget = plugin.__stylexCssInjectionTarget;
 
   return {
     ...plugin,
-    webpack(compiler) {
+    [hookName](compiler) {
       const PLUGIN_NAME = '@stylexjs/unplugin';
       compiler.hooks.thisCompilation.tap(PLUGIN_NAME, (compilation) => {
         plugin.__stylexResetState?.();
@@ -48,8 +48,8 @@ export function attachWebpackHooks(plugin) {
           const pickName =
             (typeof cssInjectionTarget === 'function' &&
               cssAssets.find((f) => cssInjectionTarget(f))) ||
-            cssAssets.find((f) => /(^|\/)index\.css$/.test(f)) ||
-            cssAssets.find((f) => /(^|\/)style\.css$/.test(f)) ||
+            cssAssets.find((f) => INDEX_CSS_RE.test(f)) ||
+            cssAssets.find((f) => STYLE_CSS_RE.test(f)) ||
             cssAssets[0];
 
           const asset = compilation.getAsset(pickName);

@@ -38,6 +38,10 @@ describe('Test CSS Type: <alpha-value>', () => {
       expect(AlphaValue.parser.parse('0.5')).toEqual(new AlphaValue(0.5));
       expect(AlphaValue.parser.parse('1')).toEqual(new AlphaValue(1));
     });
+    test('preserves the sign of negative alpha values', () => {
+      expect(AlphaValue.parser.parse('-0.5')).toEqual(new AlphaValue(-0.5));
+      expect(AlphaValue.parser.parse('-50%')).toEqual(new AlphaValue(-0.5));
+    });
   });
   describe('Percentages', () => {
     test('50%', () => {

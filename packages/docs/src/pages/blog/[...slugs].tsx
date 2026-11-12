@@ -14,6 +14,7 @@ import {
   DocsTitle,
 } from '@/components/layout/page';
 import { baseOptions } from '@/lib/layout.shared';
+import { parseBlogDate, formatBlogDate } from '@/lib/blog-date';
 import { mdxComponents } from '@/components/mdx';
 import nmnImage from '@/static/img/nmn.jpg';
 import necolasImage from '@/static/img/necolas.jpg';
@@ -43,6 +44,7 @@ export default function BlogPage({ slugs }: PageProps<'/blog/[...slugs]'>) {
   const authors = page.data.authors.map(
     (author) => AUTHORS[author as keyof typeof AUTHORS],
   );
+  const publishedDate = parseBlogDate(page.path);
 
   return (
     <DocsPage
@@ -59,6 +61,14 @@ export default function BlogPage({ slugs }: PageProps<'/blog/[...slugs]'>) {
           {slugs.length === 1 && slugs[0] === page.data.slug ? 'true' : 'false'}
         </code> */}
       </DocsTitle>
+      {publishedDate && (
+        <time
+          dateTime={publishedDate.toISOString().slice(0, 10)}
+          {...stylex.props(styles.date)}
+        >
+          {formatBlogDate(publishedDate)}
+        </time>
+      )}
       <div {...stylex.props(styles.authors)}>
         {authors.map((author) => (
           <a href={author.url} target="_blank" {...stylex.props(styles.author)}>
@@ -106,6 +116,15 @@ const styles = stylex.create({
     color: `${vars['--color-fd-foreground']}`,
   },
   fallbackDescription: {
+    color: `${vars['--color-fd-muted-foreground']}`,
+  },
+  date: {
+    // The parent <article> is a flex column with `gap: 24`. The big title's
+    // line-height makes that 24px gap read as too much above the date, so pull the
+    // date in with an equal negative block margin — leaving a tighter, uniform
+    // ~12px of space between title, date, and authors.
+    marginBlock: -12,
+    fontSize: 14,
     color: `${vars['--color-fd-muted-foreground']}`,
   },
   authors: {

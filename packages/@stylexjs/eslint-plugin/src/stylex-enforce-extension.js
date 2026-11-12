@@ -67,7 +67,7 @@ const stylexEnforceExtension = {
     let hasDefineVarsExports = false;
     let hasDefineMarkerExports = false;
     let reportedDefaultExportError = false;
-    const fileName = context.getFilename();
+    const fileName = context.filename;
     const options = context.options[0] || {};
     const {
       validImports: importsToLookFor = ['stylex', '@stylexjs/stylex'],
@@ -108,9 +108,14 @@ const stylexEnforceExtension = {
           callee.object?.type === 'Identifier' &&
           importTracker.isStylexDefaultImport(callee.object.name) &&
           callee.property?.type === 'Identifier' &&
-          callee.property.name === 'defineVars') ||
+          (callee.property.name === 'defineVars' ||
+            callee.property.name === 'unstable_defineVarsNested')) ||
         (callee?.type === 'Identifier' &&
-          importTracker.isStylexNamedImport('defineVars', callee.name))
+          (importTracker.isStylexNamedImport('defineVars', callee.name) ||
+            importTracker.isStylexNamedImport(
+              'unstable_defineVarsNested',
+              callee.name,
+            )))
       );
     }
 
@@ -127,9 +132,14 @@ const stylexEnforceExtension = {
           callee.object?.type === 'Identifier' &&
           importTracker.isStylexDefaultImport(callee.object.name) &&
           callee.property?.type === 'Identifier' &&
-          callee.property.name === 'defineConsts') ||
+          (callee.property.name === 'defineConsts' ||
+            callee.property.name === 'unstable_defineConstsNested')) ||
         (callee?.type === 'Identifier' &&
-          importTracker.isStylexNamedImport('defineConsts', callee.name))
+          (importTracker.isStylexNamedImport('defineConsts', callee.name) ||
+            importTracker.isStylexNamedImport(
+              'unstable_defineConstsNested',
+              callee.name,
+            )))
       );
     }
 
@@ -421,6 +431,9 @@ const stylexEnforceExtension = {
         });
       },
       'ExportNamedDeclaration, ExportDefaultDeclaration'(node: Node): void {
+        if ((node as any).exportKind === 'type') {
+          return;
+        }
         reportedDefaultExportError = false;
         checkExports(node);
         if (!reportedDefaultExportError) {

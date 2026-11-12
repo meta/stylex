@@ -81,9 +81,11 @@ making it easy to create "reset" themes:
 const reset = stylex.createTheme(varGroup, {});
 ```
 
-:::tip You can define this "reset" theme multiple times within your app and they
+:::tip
+You can define this "reset" theme multiple times within your app and they
 will all be de-duplicated by the compiler. We encourage you to "repeat
-yourself"! :::
+yourself"!
+:::
 
 ### `rootDir` is now optional!
 
@@ -99,7 +101,8 @@ Now, the `rootDir` option is optional, and StyleX will use the nearest
 `package.json` file to determine the canonical path, automatically. This should
 make theming APIs work more reliably.
 
-:::note When determining the canonical path, StyleX will use the `name` field
+:::note
+When determining the canonical path, StyleX will use the `name` field
 from the nearest `package.json` file and the relative path to the `.stylex.js`
 file. We intentionally ignore the `version` number.
 
@@ -108,7 +111,8 @@ package, StyleX will only generate a single set of variables for them. This will
 usually be the desired behavior, but you may see some unexpected results if the
 variables within the two versions are different.
 
-We will be making further improvements to minimize any such edge-cases. :::
+We will be making further improvements to minimize any such edge-cases.
+:::
 
 ### More reliable ESM resolution
 
@@ -156,11 +160,13 @@ const styles = stylex.create({
 });
 ```
 
-:::warning The `@stylexjs/dev-runtime` only exists as a convenience for
+:::warning
+The `@stylexjs/dev-runtime` only exists as a convenience for
 development purposes. It does not completely match the behavior of the StyleX
 compiler and will always lack certain features.
 
-**DO NOT** use it in production. :::
+**DO NOT** use it in production.
+:::
 
 ## Improved handling of nested pseudo-elements and pseudo-classes
 

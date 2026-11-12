@@ -11,6 +11,6 @@
 //   value: T;
 // }
 // This is the type for the variables object
-export opaque type StyleXVar<+_Val extends unknown>: string = string;
+export opaque type StyleXVar<out _Val extends unknown>: string = string;
 
-export opaque type StyleXClassNameFor<+_K, +_V>: string = string;
+export opaque type StyleXClassNameFor<out _K, out _V>: string = string;

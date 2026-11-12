@@ -87,9 +87,6 @@ export const Welcome = () => {
   );
 };
 
-const opacity = (color: string, percentage: number) =>
-  `color-mix(in oklab, ${color} ${percentage}%, transparent)`;
-
 const styles = stylex.create({
   container: {
     maxWidth: 1100,
@@ -131,10 +128,12 @@ const styles = stylex.create({
   },
   listItem: { marginBottom: 12 },
   link: {
-    color: '#f47238',
+    color: {
+      default: '#f47238',
+      ':hover': '#ffad48',
+    },
     fontWeight: 700,
     textDecorationLine: 'none',
-    ':hover': { color: '#ffad48' },
   },
   codeBlock: {
     backgroundColor: '#1b1b1b',
@@ -153,8 +152,8 @@ const styles = stylex.create({
   code: { flexGrow: 1 },
   btn: {
     backgroundColor: {
-      default: opacity(tokens.primaryColor, 50),
-      ':hover': opacity(tokens.primaryColor, 95),
+      default: `color-mix(in oklab, ${tokens.primaryColor} 50%, transparent)`,
+      ':hover': `color-mix(in oklab, ${tokens.primaryColor} 95%, transparent)`,
     },
     transform: {
       default: null,
