@@ -1583,3 +1583,20 @@ fn validates_edit_overlap_and_utf8_boundaries() {
     let range = source_range(&parsed.file, parsed.module.body[0].span()).unwrap();
     assert_eq!(range.start, 0);
 }
+
+#[test]
+fn reused_expressions_are_parenthesized_only_where_their_slot_needs_it() {
+    let source = r#"import * as stylex from '@stylexjs/stylex';
+const s = stylex.create({a: {color: 'red'}});
+export const C = () => (
+  <B {...stylex.props(s.a)} onClick={() => go()} items={[() => 1, x || y]} pair={a, b} />
+);
+"#;
+    let options = stylex_swc_plugin::StyleXTransformOptions::default();
+    let code = stylex_swc_plugin::transform_source(source, "/x/c.jsx", &options)
+        .unwrap()
+        .code;
+    assert!(code.contains("onClick={() => go()}"), "{code}");
+    assert!(code.contains("items={[() => 1, x || y]}"), "{code}");
+    assert!(code.contains("pair={(a, b)}"), "{code}");
+}

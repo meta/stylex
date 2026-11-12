@@ -375,6 +375,7 @@ where
         reused: Vec::new(),
         prefix,
         next: 0,
+        any_expression_slot: false,
     };
     after.visit_mut_with(&mut reuse);
     let code = emit_owned_node(after)?;
@@ -652,8 +653,25 @@ pub(super) struct TypedSourceReuse<'a, B> {
     reused: Vec<Range<usize>>,
     prefix: &'a str,
     next: usize,
+    /// The next expression fills a slot that takes any assignment expression (a call argument,
+    /// array element, property value, initializer or JSX attribute), so reused text needs no
+    /// parentheses there. Extra ones would differ from Babel, and minifiers keep them around
+    /// functions as an eager-compile hint.
+    any_expression_slot: bool,
 }
-impl<B> TypedSourceReuse<'_, B> {
+impl<B> TypedSourceReuse<'_, B>
+where
+    B: for<'a> VisitWith<FindSourceExpr<'a>>
+        + for<'a> VisitWith<FindSourcePat<'a>>
+        + for<'a> VisitWith<FindSourceType<'a>>
+        + for<'a> VisitWith<FindSourceStmt<'a>>
+        + for<'a> VisitWith<FindSourceTypeParams<'a>>,
+{
+    fn visit_any_expression_slot(&mut self, expr: &mut Expr) {
+        self.any_expression_slot = true;
+        self.visit_mut_expr(expr);
+        self.any_expression_slot = false;
+    }
     fn available(&self, span: Span) -> bool {
         source_range(self.file, span).is_ok_and(|range| {
             !self
@@ -662,14 +680,14 @@ impl<B> TypedSourceReuse<'_, B> {
                 .any(|used| used.start < range.end && range.start < used.end)
         })
     }
-    fn placeholder(&mut self, range: Range<usize>, expression: bool) -> Ident {
+    fn placeholder(&mut self, range: Range<usize>, parenthesize: bool) -> Ident {
         self.reused.push(range.clone());
         let marker = format!("{}{}__", self.prefix, self.next);
         self.next += 1;
         let raw = &self.file.src[range];
         self.replacements.push((
             marker.clone(),
-            if expression {
+            if parenthesize {
                 format!("({raw})")
             } else {
                 raw.to_owned()
@@ -739,6 +757,7 @@ where
         node.visit_mut_children_with(self);
     }
     fn visit_mut_expr(&mut self, node: &mut Expr) {
+        let any_expression_slot = std::mem::take(&mut self.any_expression_slot);
         if !node.span().is_dummy() && self.available(node.span()) {
             let mut finder = FindSourceExpr {
                 needle: node,
@@ -747,11 +766,31 @@ where
             };
             self.before.visit_with(&mut finder);
             if let Some(range) = finder.found {
-                *node = Expr::Ident(self.placeholder(range, true));
+                let parenthesize = !any_expression_slot || matches!(node, Expr::Seq(_));
+                *node = Expr::Ident(self.placeholder(range, parenthesize));
                 return;
             }
         }
         node.visit_mut_children_with(self);
+    }
+    fn visit_mut_expr_or_spread(&mut self, node: &mut ExprOrSpread) {
+        self.visit_any_expression_slot(&mut node.expr);
+    }
+    fn visit_mut_key_value_prop(&mut self, node: &mut KeyValueProp) {
+        node.key.visit_mut_with(self);
+        self.visit_any_expression_slot(&mut node.value);
+    }
+    fn visit_mut_var_declarator(&mut self, node: &mut VarDeclarator) {
+        node.name.visit_mut_with(self);
+        if let Some(init) = &mut node.init {
+            self.visit_any_expression_slot(init);
+        }
+    }
+    fn visit_mut_jsx_expr(&mut self, node: &mut JSXExpr) {
+        match node {
+            JSXExpr::Expr(expr) => self.visit_any_expression_slot(expr),
+            JSXExpr::JSXEmptyExpr(_) => {}
+        }
     }
     fn visit_mut_pat(&mut self, node: &mut Pat) {
         if !node.span().is_dummy() && self.available(node.span()) {
