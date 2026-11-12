@@ -1,6 +1,5 @@
 # Every text file in this package is LF in the working tree, on Windows as well,
 # matching the vendored stylex-swc-plugin. Git decides what is text by content.
 * text=auto eol=lf
-tests/fixtures/** -text
 # Verbatim third-party license texts, some with CRLF line endings.
 RUST_DEPENDENCY_LICENSES.md -text
