@@ -73,28 +73,38 @@ fn nesting_error(span: Span, budget: &str, limit: &str) -> Error {
 #[derive(Clone)]
 pub(crate) struct BoundedLexer<'a> {
     lexer: Lexer<'a>,
-    stack_start: usize,
+    /// The stack address below which the parse stops: within the reserve of the stack's end, or
+    /// more than the budget below where the parse started. 0 when the stack's end is unknown.
+    stack_floor: usize,
     exhausted: Option<Error>,
     reported: bool,
 }
 
+/// The current stack address. Stacks grow down on every target this builds for.
+#[inline(always)]
+fn stack_address() -> usize {
+    let probe = 0u8;
+    std::hint::black_box(std::ptr::addr_of!(probe)) as usize
+}
+
 impl<'a> BoundedLexer<'a> {
     fn new(lexer: Lexer<'a>) -> Self {
+        // Computed once, so each token costs one comparison rather than a stack query.
+        let start = stack_address();
+        let stack_floor = stacker::remaining_stack().map_or(0, |remaining| {
+            let end = start.saturating_sub(remaining);
+            (end + PARSER_STACK_RESERVE).max(start.saturating_sub(PARSER_STACK_BUDGET))
+        });
         Self {
             lexer,
-            stack_start: stacker::remaining_stack().unwrap_or(0),
+            stack_floor,
             exhausted: None,
             reported: false,
         }
     }
 
     fn guard(&mut self, mut token: TokenAndSpan, jsx_scan: bool) -> TokenAndSpan {
-        if self.exhausted.is_none()
-            && stacker::remaining_stack().is_some_and(|left| {
-                left < PARSER_STACK_RESERVE
-                    || self.stack_start.saturating_sub(left) > PARSER_STACK_BUDGET
-            })
-        {
+        if self.exhausted.is_none() && stack_address() < self.stack_floor {
             self.exhausted = Some(nesting_error(
                 token.span,
                 "syntax nesting/complexity",
