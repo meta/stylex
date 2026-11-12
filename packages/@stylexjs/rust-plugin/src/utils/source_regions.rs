@@ -486,6 +486,13 @@ fn substitute_source_placeholders(
     Ok(result)
 }
 
+/// Whether a node spanning `span` cannot hold the needle: parsed spans nest, so a node that
+/// does not cover the needle's span has no descendant with that span either. Each finder skips
+/// such subtrees instead of searching the whole region again for every node it emits.
+fn cannot_hold(span: Span, needle: Span) -> bool {
+    !span.is_dummy() && (span.lo > needle.lo || span.hi < needle.hi)
+}
+
 pub(super) struct FindSourceExpr<'a> {
     needle: &'a Expr,
     file: &'a SourceFile,
@@ -493,7 +500,7 @@ pub(super) struct FindSourceExpr<'a> {
 }
 impl Visit for FindSourceExpr<'_> {
     fn visit_expr(&mut self, node: &Expr) {
-        if self.found.is_some() {
+        if self.found.is_some() || cannot_hold(node.span(), self.needle.span()) {
             return;
         }
         if node.span() == self.needle.span()
@@ -513,8 +520,13 @@ pub(super) struct FindSourcePat<'a> {
     found: Option<Range<usize>>,
 }
 impl Visit for FindSourcePat<'_> {
+    fn visit_expr(&mut self, node: &Expr) {
+        if self.found.is_none() && !cannot_hold(node.span(), self.needle.span()) {
+            node.visit_children_with(self);
+        }
+    }
     fn visit_pat(&mut self, node: &Pat) {
-        if self.found.is_some() {
+        if self.found.is_some() || cannot_hold(node.span(), self.needle.span()) {
             return;
         }
         if node.span() == self.needle.span()
@@ -545,8 +557,13 @@ pub(super) struct FindSourceType<'a> {
     found: Option<Range<usize>>,
 }
 impl Visit for FindSourceType<'_> {
+    fn visit_expr(&mut self, node: &Expr) {
+        if self.found.is_none() && !cannot_hold(node.span(), self.needle.span()) {
+            node.visit_children_with(self);
+        }
+    }
     fn visit_ts_type(&mut self, node: &TsType) {
-        if self.found.is_some() {
+        if self.found.is_some() || cannot_hold(node.span(), self.needle.span()) {
             return;
         }
         if node.span() == self.needle.span()
@@ -566,8 +583,13 @@ pub(super) struct FindSourceStmt<'a> {
     found: Option<Range<usize>>,
 }
 impl Visit for FindSourceStmt<'_> {
+    fn visit_expr(&mut self, node: &Expr) {
+        if self.found.is_none() && !cannot_hold(node.span(), self.needle.span()) {
+            node.visit_children_with(self);
+        }
+    }
     fn visit_stmt(&mut self, node: &Stmt) {
-        if self.found.is_some() {
+        if self.found.is_some() || cannot_hold(node.span(), self.needle.span()) {
             return;
         }
         if node.span() == self.needle.span()
@@ -604,8 +626,13 @@ pub(super) struct FindSourceTypeParams<'a> {
     found: Option<Range<usize>>,
 }
 impl Visit for FindSourceTypeParams<'_> {
+    fn visit_expr(&mut self, node: &Expr) {
+        if self.found.is_none() && !cannot_hold(node.span(), self.needle.span()) {
+            node.visit_children_with(self);
+        }
+    }
     fn visit_ts_type_param_decl(&mut self, node: &TsTypeParamDecl) {
-        if self.found.is_some() {
+        if self.found.is_some() || cannot_hold(node.span(), self.needle.span()) {
             return;
         }
         if node.span == self.needle.span && node == self.needle && node.eq_ignore_span(self.needle)
