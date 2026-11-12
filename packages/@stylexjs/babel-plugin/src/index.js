@@ -677,6 +677,12 @@ function compareWidthSortKeys(
     : b.bound.value - a.bound.value;
 }
 
+// A `--<key>` custom property name, up to the first CSS delimiter.
+const CUSTOM_PROPERTY_KEY = '--[^\\s,:;)(}{\'"]+';
+// `var(--key, fallback)` is not matched, so those stay overridable.
+const VAR_USAGE_REGEX = new RegExp(`var\\(${CUSTOM_PROPERTY_KEY}\\)`, 'g');
+const OVERRIDE_KEY_REGEX = new RegExp(`(${CUSTOM_PROPERTY_KEY}):`, 'g');
+
 function processStylexRules(
   rules: Array<Rule>,
   config?:
@@ -814,29 +820,49 @@ function processStylexRules(
     return key;
   };
 
+  const hasConsts = constsMap.size > 0;
+
   const sortedRules: Array<Rule> = nonConstantRules
     .map(([key, { ...styleObj }, priority]): Rule => {
+      if (!hasConsts) {
+        return [key, styleObj, priority];
+      }
+
       const adjustedPriority = adjustConstAtRulePriority(
         styleObj.ltr,
         priority,
       );
       Object.keys(styleObj).forEach((dir) => {
         let original = styleObj[dir];
-        for (const [varRef, constValue] of constsMap.entries()) {
-          if (typeof original !== 'string') continue;
+        if (typeof original !== 'string' || !original.includes('--')) {
+          return;
+        }
+
+        // resolveConstant already collapsed alias chains, so one pass is enough.
+        original = original.replace(VAR_USAGE_REGEX, (match) => {
+          const constValue = constsMap.get(match);
+          return constValue == null ? match : String(constValue);
+        });
+
+        // Rewrite `--key:` overrides (#1219) in one pass so rewrites can't cascade.
+        original = original.replace(OVERRIDE_KEY_REGEX, (match, cssVar) => {
+          const constValue = constsMap.get(`var(${cssVar})`);
+          if (constValue == null) {
+            return match;
+          }
           const replacement = String(constValue);
-          original = original.replaceAll(varRef, () => replacement);
           if (replacement.startsWith('var(') && replacement.endsWith(')')) {
             const inside = replacement.slice(4, -1).trim();
             const commaIdx = inside.indexOf(',');
             const targetName = (
               commaIdx >= 0 ? inside.slice(0, commaIdx) : inside
             ).trim();
-            const constName = varRef.slice(4, -1);
-            original = original.replaceAll(`${constName}:`, `${targetName}:`);
+            return `${targetName}:`;
           }
-          styleObj[dir] = original;
-        }
+          return match;
+        });
+
+        styleObj[dir] = original;
       });
       return [key, styleObj, adjustedPriority];
     })
