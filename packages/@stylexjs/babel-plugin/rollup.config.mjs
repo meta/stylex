@@ -9,6 +9,7 @@ import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import { babel } from '@rollup/plugin-babel';
 import path from 'path';
+import babelTypes from '@babel/types';
 
 const extensions = ['.js', '.jsx', '.cjs', '.mjs'];
 
@@ -16,6 +17,10 @@ const extensions = ['.js', '.jsx', '.cjs', '.mjs'];
 const __dirname = new URL('.', import.meta.url).pathname;
 
 const rootDir = path.resolve(__dirname, '../..');
+
+const babelTypesExports = Object.keys(babelTypes).filter((name) =>
+  babelTypes.isValidIdentifier(name),
+);
 
 const external = [
   '@babel/traverse',
@@ -65,6 +70,12 @@ const browserConfig = {
     format: 'esm',
   },
   external: ['@babel/standalone', '@stylexjs/stylex', 'postcss-value-parser'],
+  onwarn(warning, warn) {
+    if (warning.code === 'MISSING_EXPORT') {
+      throw new Error(warning.message);
+    }
+    warn(warning);
+  },
   plugins: [
     {
       name: 'stub-modules',
@@ -99,19 +110,7 @@ const browserConfig = {
             return "import { packages } from '@babel/standalone'; export default packages.traverse.default;";
           case '@babel/types':
             return `import { packages } from '@babel/standalone';
-export const {
-  arrayExpression, arrowFunctionExpression, binaryExpression, booleanLiteral,
-  callExpression, conditionalExpression, expressionStatement, identifier,
-  importDeclaration, isAssignmentExpression, isBinaryExpression, isBooleanLiteral,
-  isCallExpression, isClass, isConditionalExpression, isExpression,
-  isExpressionStatement, isFunction, isIdentifier, isImportDeclaration,
-  isLogicalExpression, isMemberExpression, isNode, isNullLiteral,
-  isNumericLiteral, isObjectExpression, isObjectProperty, isPrivateName,
-  isSpreadElement, isStringLiteral, isTemplateLiteral, isUnaryExpression,
-  isUpdateExpression, isValidIdentifier, isVariableDeclaration, jsxAttribute,
-  jsxIdentifier, jsxSpreadAttribute, memberExpression, nullLiteral, numericLiteral, objectExpression,
-  objectProperty, stringLiteral, unaryExpression, variableDeclaration, variableDeclarator
-} = packages.types;`;
+export const { ${babelTypesExports.join(', ')} } = packages.types;`;
           default:
             return null;
         }
