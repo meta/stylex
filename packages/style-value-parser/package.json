@@ -15,12 +15,12 @@
     "lib/*"
   ],
   "dependencies": {
-    "@csstools/css-tokenizer": "^3.0.3"
+    "@csstools/css-tokenizer": "^4.0.2"
   },
   "devDependencies": {
-    "@babel/cli": "^7.23.9",
-    "@babel/core": "^7.23.9",
-    "@babel/node": "^7.23.9",
+    "@babel/cli": "^8.1.0",
+    "@babel/core": "^8.1.0",
+    "@babel/node": "^8.0.6",
     "benchmark": "^2.1.4"
   }
 }
