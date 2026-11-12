@@ -794,6 +794,57 @@ function _evaluate(path: NodePath<>, state: State): any {
       return deopt(binding.path, state, errMsgs.USED_BEFORE_DECLARATION);
     }
 
+    // Destructured bindings: `const { colors } = stylex.env` / `const { a: b } = expr`.
+    // Babel's default `path.resolve()` surfaces the VariableDeclarator here,
+    // which falls into the "Unsupported expression" deopt. Evaluate the init
+    // expression and pull out the matching key so downstream member access
+    // (e.g. `colors.brand`) can continue statically.
+    if (
+      binding &&
+      bindingPath &&
+      bindingPath.isVariableDeclarator() &&
+      (bindingPath as NodePath<t.VariableDeclarator>)
+        .get('id')
+        .isObjectPattern()
+    ) {
+      const declarator: NodePath<t.VariableDeclarator> =
+        bindingPath as NodePath<t.VariableDeclarator>;
+      const idPath = declarator.get('id');
+      const initPath = declarator.get('init');
+      if (initPath.node != null && initPath.isExpression()) {
+        const propPaths: $ReadOnlyArray<NodePath<>> = (
+          idPath as NodePath<t.ObjectPattern>
+        ).get('properties');
+        for (const propPath of propPaths) {
+          if (!propPath.isObjectProperty()) {
+            continue;
+          }
+          const valueNode = propPath.node.value;
+          if (
+            valueNode.type !== 'Identifier' ||
+            valueNode.name !== path.node.name
+          ) {
+            continue;
+          }
+          const keyNode = propPath.node.key;
+          let key: string | number | null = null;
+          if (!propPath.node.computed && keyNode.type === 'Identifier') {
+            key = keyNode.name;
+          } else if (keyNode.type === 'StringLiteral') {
+            key = keyNode.value;
+          } else if (keyNode.type === 'NumericLiteral') {
+            key = keyNode.value;
+          }
+          if (key == null) {
+            break;
+          }
+          const initValue = evaluateCached(initPath, state);
+          if (!state.confident) return;
+          return initValue != null ? initValue[key] : undefined;
+        }
+      }
+    }
+
     if (binding && binding.hasValue) {
       return binding.value;
     } else {

@@ -222,6 +222,88 @@ describe('@stylexjs/babel-plugin', () => {
         `);
       });
 
+      test('stylex.env destructured at top level resolves compile-time constants', () => {
+        const { code, metadata } = transform(
+          `
+          import * as stylex from '@stylexjs/stylex';
+          const { colors } = stylex.env;
+          export const styles = stylex.create({
+            root: {
+              color: colors.brand,
+            }
+          });
+        `,
+          { env: { colors: { brand: '#0066ff' } } },
+        );
+        expect(code).toMatchInlineSnapshot(`
+          "import * as stylex from '@stylexjs/stylex';
+          const {
+            colors
+          } = stylex.env;
+          export const styles = {
+            root: {
+              kMwMTN: "xcudlns",
+              $$css: true
+            }
+          };"
+        `);
+        expect(metadata).toMatchInlineSnapshot(`
+          {
+            "stylex": [
+              [
+                "xcudlns",
+                {
+                  "ltr": ".xcudlns{color:#0066ff}",
+                  "rtl": null,
+                },
+                3000,
+              ],
+            ],
+          }
+        `);
+      });
+
+      test('stylex.env destructured with alias resolves compile-time constants', () => {
+        const { code, metadata } = transform(
+          `
+          import * as stylex from '@stylexjs/stylex';
+          const { colors: palette } = stylex.env;
+          export const styles = stylex.create({
+            root: {
+              color: palette.brand,
+            }
+          });
+        `,
+          { env: { colors: { brand: '#abcdef' } } },
+        );
+        expect(code).toMatchInlineSnapshot(`
+          "import * as stylex from '@stylexjs/stylex';
+          const {
+            colors: palette
+          } = stylex.env;
+          export const styles = {
+            root: {
+              kMwMTN: "x1r1tdag",
+              $$css: true
+            }
+          };"
+        `);
+        expect(metadata).toMatchInlineSnapshot(`
+          {
+            "stylex": [
+              [
+                "x1r1tdag",
+                {
+                  "ltr": ".x1r1tdag{color:#abcdef}",
+                  "rtl": null,
+                },
+                3000,
+              ],
+            ],
+          }
+        `);
+      });
+
       test('stylex.env function call resolves at compile time', () => {
         const { code, metadata } = transform(
           `
