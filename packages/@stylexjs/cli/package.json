@@ -3,7 +3,11 @@
   "version": "0.19.2",
   "description": "A cli to compile a folder with StyleX",
   "main": "./lib/transform.js",
-  "repository": "https://www.github.com/facebook/stylex",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/meta/stylex.git",
+    "directory": "packages/@stylexjs/cli"
+  },
   "license": "MIT",
   "scripts": {
     "prebuild": "gen-types -i src/ -o lib/",
@@ -30,7 +34,7 @@
     "scripts": "0.19.2"
   },
   "bin": {
-    "stylex": "./lib/index.js"
+    "stylex": "lib/index.js"
   },
   "jest": {
     "testPathIgnorePatterns": [

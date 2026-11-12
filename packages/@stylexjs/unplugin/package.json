@@ -4,6 +4,11 @@
   "private": false,
   "description": "Universal bundler plugin for StyleX using unplugin",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/meta/stylex.git",
+    "directory": "packages/@stylexjs/unplugin"
+  },
   "main": "./lib/index.js",
   "module": "./lib/es/index.mjs",
   "types": "./lib/index.d.ts",

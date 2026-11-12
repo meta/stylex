@@ -2,10 +2,14 @@
   "name": "create-stylex-app",
   "version": "0.19.2",
   "description": "Scaffold a new StyleX project from official templates",
-  "repository": "https://www.github.com/facebook/stylex",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/meta/stylex.git",
+    "directory": "packages/@stylexjs/create-stylex-app"
+  },
   "license": "MIT",
   "bin": {
-    "create-stylex-app": "./lib/index.js"
+    "create-stylex-app": "lib/index.js"
   },
   "files": [
     "lib",

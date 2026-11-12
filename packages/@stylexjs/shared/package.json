@@ -4,7 +4,8 @@
   "main": "lib/index.js",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/facebook/stylex.git"
+    "url": "git+https://github.com/meta/stylex.git",
+    "directory": "packages/@stylexjs/shared"
   },
   "license": "MIT",
   "scripts": {
