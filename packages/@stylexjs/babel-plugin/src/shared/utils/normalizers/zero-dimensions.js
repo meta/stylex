@@ -48,13 +48,16 @@ export default function normalizeZeroDimensions(
     if (!dimension || dimension.number !== '0') {
       return;
     }
-    if (angles.indexOf(dimension.unit) !== -1) {
+    // CSS units are ASCII case-insensitive: `0MS` is a time and `0FR` a flex
+    // value, and dropping their unit would change what the value means.
+    const unit = dimension.unit.toLowerCase();
+    if (angles.indexOf(unit) !== -1) {
       node.value = '0deg';
-    } else if (timings.indexOf(dimension.unit) !== -1) {
+    } else if (timings.indexOf(unit) !== -1) {
       node.value = '0s';
-    } else if (dimension.unit === fraction) {
+    } else if (unit === fraction) {
       node.value = '0fr';
-    } else if (dimension.unit === percentage) {
+    } else if (unit === percentage) {
       node.value = '0%';
     } else if (!endFunction) {
       node.value = '0';
