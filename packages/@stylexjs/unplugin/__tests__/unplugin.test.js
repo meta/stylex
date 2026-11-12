@@ -167,7 +167,7 @@ export const styles = stylex.create({
       },
     };
 
-    plugin.generateBundle.call(ctx, {}, bundle);
+    plugin.generateBundle.handler.call(ctx, {}, bundle);
 
     // generateBundle should have injected CSS into the bundle
     const cssAssets = Object.values(bundle).filter(
@@ -238,7 +238,7 @@ export const styles = stylex.create({
         return null;
       },
     };
-    plugin.generateBundle.call(ctx, {}, {});
+    plugin.generateBundle.handler.call(ctx, {}, {});
 
     // writeBundle should still create fallback CSS
     const tempDir = fs.mkdtempSync(
@@ -253,6 +253,86 @@ export const styles = stylex.create({
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
+  });
+
+  // Regression: https://github.com/facebook/stylex/issues/1889
+  // Vite emits the extracted CSS assets in `vite:css-post`'s own
+  // `generateBundle` hook, which runs after `enforce: 'pre'` plugins. With
+  // `build.cssCodeSplit: false` the single stylesheet is emitted *there* and
+  // nowhere else, so the adapter's `generateBundle` must run in `post` order.
+  // Otherwise the bundle contains no CSS asset yet and the fallback appends on
+  // disk in `writeBundle` without rehashing the filename, so a StyleX-only
+  // edit changes the CSS bytes while the content-hashed filename stays the
+  // same.
+  describe('Vite single-stylesheet builds (cssCodeSplit: false)', () => {
+    test("generateBundle runs in 'post' order", () => {
+      const plugin = unplugin.vite({});
+      expect(plugin.generateBundle).toEqual({
+        order: 'post',
+        handler: expect.any(Function),
+      });
+    });
+
+    test('rehashes the single emitted stylesheet with StyleX rules', async () => {
+      const plugin = unplugin.vite({
+        runtimeInjection: false,
+        devPersistToDisk: false,
+        dev: false,
+      });
+      if (typeof plugin.buildStart === 'function') {
+        plugin.buildStart();
+      }
+      const source = `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({ foo: { color: 'red' } });
+        export default styles;
+      `;
+      await plugin.transform(source, '/virtual/example.js');
+
+      // `vite:css-post` has already emitted the single stylesheet by the time
+      // our `order: 'post'` generateBundle runs.
+      const bundle = {
+        'assets/style-CW4HsblT.css': {
+          type: 'asset',
+          fileName: 'assets/style-CW4HsblT.css',
+          source: 'body { color: black; }',
+        },
+      };
+      const emitted = {};
+      const ctx = {
+        emitFile(file) {
+          const id = `ref_${Object.keys(emitted).length + 1}`;
+          emitted[id] = file;
+          // Rollup registers emitted assets in the output bundle immediately,
+          // so mirror that for the rehash path to work in the test.
+          if (file.type === 'asset' && file.name) {
+            bundle[`assets/${file.name}`] = {
+              type: 'asset',
+              fileName: `assets/${file.name}`,
+              source: file.source,
+            };
+          }
+          return id;
+        },
+        getFileName(id) {
+          return emitted[id] ? `assets/${emitted[id].name}` : null;
+        },
+      };
+
+      plugin.generateBundle.handler.call(ctx, {}, bundle);
+
+      // The raw single stylesheet must be replaced by a hashed copy that
+      // includes the StyleX rules.
+      expect(bundle['assets/style-CW4HsblT.css']).toBeUndefined();
+      const cssAssets = Object.values(bundle).filter(
+        (a) => a.type === 'asset' && a.fileName.endsWith('.css'),
+      );
+      const injected = cssAssets.find((a) =>
+        typeof a.source === 'string' ? a.source.includes('color: red') : false,
+      );
+      expect(injected).toBeTruthy();
+      expect(injected.fileName).not.toBe('assets/style-CW4HsblT.css');
+    });
   });
 
   test('marks StyleX deps as non-optimized in Vite', async () => {

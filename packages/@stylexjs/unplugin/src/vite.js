@@ -157,19 +157,32 @@ function attachViteHooks(plugin) {
         });
       } catch {}
     },
-    generateBundle(_opts, bundle) {
-      const css = plugin.__stylexCollectCss?.();
-      if (!css) return;
-      const target = pickCssAssetFromRollupBundle(bundle, cssInjectionTarget);
-      if (target) {
-        const current =
-          typeof target.source === 'string'
-            ? target.source
-            : target.source?.toString() || '';
-        const nextSource = current ? current + '\n' + css : css;
-        replaceCssAssetWithHashedCopy(this, bundle, target, nextSource);
-        cssInjectedInGenerateBundle = true;
-      }
+    // Vite's `vite:css-post` plugin emits the extracted CSS assets in its own
+    // `generateBundle` hook, which runs after the `enforce: 'pre'` plugins. With
+    // `build.cssCodeSplit: false` the whole stylesheet is emitted *there* (and
+    // nowhere else), so if this hook ran any earlier the bundle would not yet
+    // contain a CSS asset and the adapter would fall back to appending on disk
+    // in `writeBundle` without rehashing the filename. A StyleX-only edit would
+    // then change the CSS bytes while the content-hashed filename stayed the
+    // same, letting browsers/CDNs keep serving stale stylesheets against the
+    // new classes (#1889). Running as `post` guarantees the asset exists, so
+    // code-split and single-stylesheet builds share the same rehash path.
+    generateBundle: {
+      order: 'post',
+      handler(_opts, bundle) {
+        const css = plugin.__stylexCollectCss?.();
+        if (!css) return;
+        const target = pickCssAssetFromRollupBundle(bundle, cssInjectionTarget);
+        if (target) {
+          const current =
+            typeof target.source === 'string'
+              ? target.source
+              : target.source?.toString() || '';
+          const nextSource = current ? current + '\n' + css : css;
+          replaceCssAssetWithHashedCopy(this, bundle, target, nextSource);
+          cssInjectedInGenerateBundle = true;
+        }
+      },
     },
     async writeBundle(options, bundle) {
       if (cssInjectedInGenerateBundle) return;
