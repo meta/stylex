@@ -175,17 +175,26 @@ pub fn create_number_expr(value: f64) -> Expr {
   Expr::from(create_number_lit(value))
 }
 
-/// A numeric literal spelled the way JavaScript spells it (`0` for `-0`, `NaN`, `Infinity`),
-/// unlike [`create_number_expr`], which leaves the emitter to invent `0 / 0` and `1 / 0`.
-/// A negative number is `-` applied to its magnitude, the shape its text parses back to.
+/// A number spelled the way Babel's generator spells it: `0` for `-0`, and `NaN` and `Infinity`
+/// as the globals, unlike [`create_number_expr`], which leaves the emitter to invent `0 / 0`.
+/// Each is built in the shape its text parses back to: a negative number is `-` applied to its
+/// magnitude, and `NaN`/`Infinity` are identifiers.
 pub fn create_js_number_expr(value: f64) -> Expr {
-  if value < 0.0 && value.is_finite() {
+  if value.is_nan() {
+    return create_ident_expr("NaN");
+  }
+  if value < 0.0 {
     return Expr::Unary(UnaryExpr {
       span: DUMMY_SP,
       op: UnaryOp::Minus,
       arg: Box::new(create_js_number_expr(-value)),
     });
   }
+  if value.is_infinite() {
+    return create_ident_expr("Infinity");
+  }
+  // `-0` is not below zero; it prints and parses back as `0`.
+  let value = if value == 0.0 { 0.0 } else { value };
   Expr::Lit(Lit::Num(Number {
     span: DUMMY_SP,
     value,

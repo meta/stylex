@@ -170,9 +170,14 @@ function processStylexRules(rules, options = {}) {
   // Mirror the JS compiler's tolerance of extra entries and odd priorities.
   const normalized = Array.from(rules, (rule) => {
     const priority = Number(rule[2]);
+    // JSON has no NaN or Infinity; Babel inserts `String(constVal)`, so pass that text.
+    const fields = rule[1];
+    const constVal = fields?.constVal;
     return [
       rule[0],
-      rule[1],
+      typeof constVal === 'number' && !Number.isFinite(constVal)
+        ? { ...fields, constVal: String(constVal) }
+        : fields,
       Number.isFinite(priority) ? priority : String(priority),
     ];
   });

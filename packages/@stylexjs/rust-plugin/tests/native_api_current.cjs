@@ -932,6 +932,49 @@ test('rewriteAliases resolves a relative import through a symlinked directory as
   }
 });
 
+test('defineConsts accepts -0, NaN and Infinity as Babel does', () => {
+  const { runEngine } = require('./support/babel_errors.cjs');
+  const filename = appFile('numbers.stylex.js');
+  const source = (value) =>
+    `${header}export const c = stylex.defineConsts({ a: ${value} });\n` +
+    `export const s = stylex.create({ x: { zIndex: c.a } });\n`;
+  const options = {
+    unstable_moduleResolution: { type: 'commonJS', rootDir: path.dirname(filename) },
+  };
+  for (const value of ['-0', '0 / 0', '1 / 0', '-1 / 0', '-(1 / 0)']) {
+    const babelResult = runEngine('babel', source(value), filename, options);
+    const css = (rules) => processStylexRules(rules, {});
+    // The direct compiler prints with its own formatting: compare the programs.
+    const program = (code) =>
+      require('@babel/core').transformSync(code, {
+        babelrc: false,
+        configFile: false,
+        compact: true,
+        comments: false,
+      }).code;
+    for (const engine of ['direct', 'facade']) {
+      const result = runEngine(engine, source(value), filename, options);
+      assert.equal(
+        program(result.code),
+        program(babelResult.code),
+        `${engine} ${value}`,
+      );
+      assert.equal(
+        css(result.metadata.stylex),
+        css(babelResult.metadata.stylex),
+        `${engine} ${value}`,
+      );
+    }
+    // Babel's own metadata, with the numbers, gives the same stylesheet.
+    const babelPlugin = require('@stylexjs/babel-plugin');
+    assert.equal(
+      css(babelResult.metadata.stylex),
+      babelPlugin.processStylexRules(babelResult.metadata.stylex, {}),
+      value,
+    );
+  }
+});
+
 test('option diagnostics are reported for every file, as Babel does', () => {
   const { runEngine } = require('./support/babel_errors.cjs');
   const files = [

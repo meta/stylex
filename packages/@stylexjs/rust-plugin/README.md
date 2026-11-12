@@ -48,6 +48,7 @@ plugins: [myPlugin, [require('@stylexjs/rust-plugin/babel'), stylexOptions]];
 - An inline object passed as `sx` compiles to its styles (the Babel plugin emits `style="[object Object]"`).
 - `experimental_crossFileParsing` imports compile as `commonJS` ones do; the Babel plugin rejects every imported file in this mode.
 - StyleX code another plugin adds during the traversal is compiled; the Babel plugin can leave it uncompiled.
+- A `defineConsts` value of `NaN` or `±Infinity` is the string `"NaN"` or `"Infinity"` in the metadata, where Babel has the number; the generated code and CSS are the same.
 - In the Babel adapter, a later plugin that rewrites a definition another depends on fails the build (copied, rather than moved, compiled nodes are not detected).
 
 ## Development
