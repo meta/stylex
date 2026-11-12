@@ -1,6 +1,6 @@
 {
   "name": "@stylexjs/atoms",
-  "version": "0.19.1",
+  "version": "0.19.2",
   "description": "Atomic style helpers for StyleX.",
   "license": "MIT",
   "main": "src/index.js",
@@ -18,10 +18,10 @@
   },
   "sideEffects": false,
   "peerDependencies": {
-    "@stylexjs/stylex": "0.19.1"
+    "@stylexjs/stylex": "0.19.2"
   },
   "devDependencies": {
-    "scripts": "0.19.1"
+    "scripts": "0.19.2"
   },
   "files": [
     "src"

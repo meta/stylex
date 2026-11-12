@@ -1,6 +1,6 @@
 {
   "name": "@stylexjs/devtools-extension",
-  "version": "0.19.1",
+  "version": "0.19.2",
   "private": true,
   "description": "Chrome, Firefox, and Safari DevTools extension for debugging StyleX.",
   "repository": {
@@ -22,14 +22,14 @@
     "dist/safari/**"
   ],
   "dependencies": {
-    "@stylexjs/stylex": "0.19.1",
+    "@stylexjs/stylex": "0.19.2",
     "postcss-selector-parser": "7.1.6",
     "react": "^19.2.3",
     "react-dom": "^19.2.3"
   },
   "devDependencies": {
     "@babel/plugin-transform-flow-strip-types": "^7.27.1",
-    "@stylexjs/unplugin": "0.19.1",
+    "@stylexjs/unplugin": "0.19.2",
     "@rollup/plugin-babel": "^6.0.4",
     "@rollup/plugin-commonjs": "^28.0.1",
     "@rollup/plugin-json": "^6.1.0",
