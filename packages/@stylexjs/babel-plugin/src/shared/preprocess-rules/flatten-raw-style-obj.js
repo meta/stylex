@@ -104,7 +104,7 @@ export function _flattenRawStyleObject(
         // Remove Nulls
         .map(([property, values]) => [
           property,
-          [...new Set(values.filter(Boolean))],
+          [...new Set(values.filter((val) => val != null && val !== ''))],
         ])
         // Deduplicate and default to null when no values are found
         .map(([property, values]) => [
