@@ -1,5 +1,6 @@
 //! Capture-free, always-running whole-module verifier mutation tests.
 use super::*;
+use swc_ecma_parser::Syntax;
 
 struct Record {
     source: String,

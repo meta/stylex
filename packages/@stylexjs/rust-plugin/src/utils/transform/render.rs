@@ -6,7 +6,7 @@ use crate::utils::parser::ParsedModule;
 
 #[path = "../source_edits.rs"]
 pub(crate) mod source_edits;
-pub(super) use source_edits::{AuthoredModuleItem, SourcePreservingOutput, TextEdit};
+pub(super) use source_edits::SourcePreservingOutput;
 
 /// Output for a module the core cannot change; the caller must prove that.
 pub(super) fn emit_verbatim(
@@ -24,20 +24,16 @@ pub(super) fn emit_verbatim(
     }
 }
 
-/// `authored` is cloned after the resolver and before StyleXTransform.
+/// `original` is cloned after the resolver and before StyleXTransform.
 pub(super) fn emit_module_with_origins(
     parsed: &ParsedModule,
     original: &Module,
-    authored: &[TextEdit],
-    authored_items: &[AuthoredModuleItem],
 ) -> Result<SourcePreservingOutput> {
     source_edits::emit_source_preserving_with_syntax(
         &parsed.file,
         original,
         &parsed.module,
         &parsed.comments,
-        authored,
-        authored_items,
         crate::utils::parser::parser_modes::ParseOptions {
             syntax: parsed.syntax,
             source_type: parsed.source_type,

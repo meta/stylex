@@ -339,7 +339,7 @@ fn actual_public_core_dynamic_binary_expressions_reproduce_the_transformed_ast()
         core.state.set_input_source_file(parsed.file.clone());
         parsed.module.visit_mut_with(&mut core);
         drop(core);
-        let output = emit_module_with_origins(&parsed, &original, &[], &[]).unwrap();
+        let output = emit_module_with_origins(&parsed, &original).unwrap();
         assert!(!output.code.contains("stylex.create"));
         assert!(output.code.contains("width+100") || output.code.contains("width + 100"));
     });

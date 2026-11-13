@@ -1,12 +1,8 @@
 //! Typed lexical planning and emission of source-owned regions.
-use super::source_compare::{expressions_equivalent, items_equivalent};
 use super::*;
-use swc_core::common::{
-    comments::SingleThreadedComments, EqIgnoreSpan, FileName, SourceFile, SourceMap, Span, Spanned,
-};
+use swc_core::common::{comments::SingleThreadedComments, EqIgnoreSpan, SourceFile, Span, Spanned};
 use swc_core::ecma::ast::{
-    Decl, EsVersion, Expr, ExprStmt, Id, Lit, Module, ModuleDecl, ModuleItem, Pat, Prop,
-    PropOrSpread, Stmt, TsType,
+    Decl, Expr, ExprStmt, Lit, Module, ModuleDecl, ModuleItem, Prop, PropOrSpread, Stmt, TsType,
 };
 use swc_core::ecma::parser::Syntax;
 use swc_core::ecma::visit::{Visit, VisitWith};
@@ -237,26 +233,11 @@ fn import_literal_only_changed(before: &ImportDecl, after: &ImportDecl) -> bool 
     header == *after
 }
 
-fn binding_key(item: &ModuleItem) -> Option<Vec<Id>> {
-    let ModuleItem::Stmt(Stmt::Decl(Decl::Var(var))) = item else {
-        return None;
-    };
-    var.decls
-        .iter()
-        .map(|decl| match &decl.name {
-            Pat::Ident(binding) => Some(binding.id.to_id()),
-            _ => None,
-        })
-        .collect()
-}
-
 pub(super) fn emit(
     file: &SourceFile,
     original: &Module,
     transformed: &Module,
     comments: &SingleThreadedComments,
-    authored: &[TextEdit],
-    authored_items: &[AuthoredModuleItem],
     grammar: ParseOptions,
 ) -> Result<SourcePreservingOutput> {
     if original.shebang != transformed.shebang {
@@ -271,91 +252,18 @@ pub(super) fn emit(
         .collect::<Result<Vec<_>>>()?;
     ranges.sort_by_key(|range| (range.start, range.end));
     ranges.dedup();
-    let requested: HashSet<_> = authored.iter().map(|edit| (edit.start, edit.end)).collect();
-    struct Boundaries<'a> {
-        file: &'a SourceFile,
-        requested: &'a HashSet<(usize, usize)>,
-        found: HashSet<(usize, usize)>,
-    }
-    impl Visit for Boundaries<'_> {
-        fn visit_expr(&mut self, expr: &Expr) {
-            if let Ok(range) = source_range(self.file, expr.span()) {
-                let key = (range.start, range.end);
-                if self.requested.contains(&key) {
-                    self.found.insert(key);
-                }
-            }
-            expr.visit_children_with(self);
-        }
-    }
-    if !requested.is_empty() {
-        let mut boundaries = Boundaries {
-            file,
-            requested: &requested,
-            found: HashSet::new(),
-        };
-        original.visit_with(&mut boundaries);
-        if boundaries.found != requested {
-            bail!("an authored edit does not name an exact original expression boundary");
-        }
-    }
-    let mut by_binding = HashMap::new();
-    let mut other_items = Vec::new();
-    for item in authored_items {
-        if !item.item.span().is_dummy() {
-            bail!("authored generated module item must have a DUMMY_SP root");
-        }
-        if let Some(key) = binding_key(&item.item) {
-            if by_binding.insert(key, item).is_some() {
-                bail!("ambiguous authored generated module-item identity");
-            }
-        } else {
-            other_items.push(item);
-        }
-    }
-    let mut by_range = HashMap::new();
-    for (index, edit) in authored.iter().enumerate() {
-        if by_range.insert((edit.start, edit.end), index).is_some() {
-            bail!("duplicate authored expression boundaries");
-        }
-    }
-    let mut ordered_authored: Vec<_> = (0..authored.len()).collect();
-    ordered_authored.sort_by_key(|index| (authored[*index].start, authored[*index].end));
     let mut planner = TypedPlanner {
         file,
         source_module: original,
         source_prefix: std::cell::OnceCell::new(),
         grammar: grammar.syntax,
-        source_type: grammar.source_type,
         comments: &ranges,
-        authored,
-        by_range,
-        ordered_authored,
-        used: HashSet::new(),
         used_source_roots: HashSet::new(),
-        by_binding,
-        other_items,
-        inserted_origins: Vec::new(),
     };
     let before: Vec<_> = original.body.iter().map(Root::Module).collect();
     let after: Vec<_> = transformed.body.iter().map(Root::Module).collect();
     let edits = planner.list(&before, &after, file.src.len())?;
-    if planner.used.len() != authored.len() {
-        // Validates only the outstanding original expressions.
-        planner.mark_unchanged_module(original, transformed)?;
-    }
-    if planner.used.len() != authored.len() {
-        bail!("an authored edit does not name a changed or redundant original expression boundary");
-    }
-    finish_source_output(
-        file,
-        original,
-        transformed,
-        &ranges,
-        edits,
-        &planner.inserted_origins,
-        grammar,
-    )
+    finish_source_output(file, original, transformed, &ranges, edits, grammar)
 }
 
 struct TypedPlanner<'a> {
@@ -363,92 +271,16 @@ struct TypedPlanner<'a> {
     source_module: &'a Module,
     source_prefix: std::cell::OnceCell<String>,
     grammar: Syntax,
-    source_type: SourceType,
     comments: &'a [Range<usize>],
-    authored: &'a [TextEdit],
-    by_range: HashMap<(usize, usize), usize>,
-    ordered_authored: Vec<usize>,
-    used: HashSet<usize>,
     used_source_roots: HashSet<(u32, u32, &'static str)>,
-    by_binding: HashMap<Vec<Id>, &'a AuthoredModuleItem>,
-    other_items: Vec<&'a AuthoredModuleItem>,
-    inserted_origins: Vec<InsertedOrigin>,
 }
 impl TypedPlanner<'_> {
     fn source_prefix(&self) -> &str {
         self.source_prefix
             .get_or_init(|| source_unique_prefix(self.file))
     }
-    fn trivia_planner<'a>(&'a self, index: &'a SourceIndex<'a>) -> Planner<'a, 'a> {
-        Planner {
-            file: self.file,
-            grammar: self.grammar,
-            source_type: self.source_type,
-            index,
-            comments: self.comments,
-            authored: &[],
-            authored_items: &[],
-            inserted_origins: RefCell::new(Vec::new()),
-            used_authored: RefCell::new(HashSet::new()),
-        }
-    }
     fn retain(&self, range: &Range<usize>, text: String) -> Result<String> {
-        let null = Value::Null;
-        let index = SourceIndex::new(&null);
-        self.trivia_planner(&index)
-            .retain_comments(range, &[], text)
-    }
-    fn cover(&mut self, range: &Range<usize>) {
-        let start = self
-            .ordered_authored
-            .partition_point(|index| self.authored[*index].start < range.start);
-        for index in self.ordered_authored[start..].iter().copied() {
-            let edit = &self.authored[index];
-            if edit.start > range.end {
-                break;
-            }
-            if edit.end <= range.end {
-                self.used.insert(index);
-            }
-        }
-    }
-    fn exact_authored(&self, expr: &Expr) -> Option<usize> {
-        let range = source_range(self.file, expr.span()).ok()?;
-        self.by_range.get(&(range.start, range.end)).copied()
-    }
-    fn parsed_expr(&self, code: &str) -> Result<Box<Expr>> {
-        let map = SourceMap::default();
-        let file = map.new_source_file(
-            FileName::Custom(self.file.name.to_string()).into(),
-            code.to_owned(),
-        );
-        let mut errors = Vec::new();
-        let expr = with_bounded_file_parser(
-            &file,
-            self.grammar,
-            EsVersion::Es2022,
-            None,
-            &mut errors,
-            |parser| {
-                let expr = parser.parse_expr()?;
-                let span = parser.input().cur_span();
-                if span.lo != file.end_pos || span.hi != file.end_pos {
-                    return Err(swc_core::ecma::parser::error::Error::new(
-                        span,
-                        swc_core::ecma::parser::error::SyntaxError::Unexpected {
-                            got: parser.input().dump_cur(),
-                            expected: "end of authored expression",
-                        },
-                    ));
-                }
-                Ok(expr)
-            },
-        )
-        .map_err(|error| anyhow!("invalid authored expression: {}", error.kind().msg()))?;
-        if !errors.is_empty() {
-            bail!("authored expression has recovered syntax errors");
-        }
-        Ok(expr)
+        retain_comments(self.file, self.comments, range, &[], text)
     }
     fn append_arguments(
         &mut self,
@@ -726,9 +558,9 @@ impl TypedPlanner<'_> {
                                 original,
                                 attribute,
                             )?;
-                            let null = Value::Null;
-                            let index = SourceIndex::new(&null);
-                            let text = self.trivia_planner(&index).retain_comments(
+                            let text = retain_comments(
+                                self.file,
+                                self.comments,
                                 &range,
                                 &region.reused,
                                 region.code,
@@ -749,9 +581,9 @@ impl TypedPlanner<'_> {
                         original,
                         attribute,
                     )?;
-                    let null = Value::Null;
-                    let index = SourceIndex::new(&null);
-                    let text = self.trivia_planner(&index).retain_comments(
+                    let text = retain_comments(
+                        self.file,
+                        self.comments,
                         &range,
                         &region.reused,
                         region.code,
@@ -829,48 +661,7 @@ impl TypedPlanner<'_> {
     }
     fn expr(&mut self, before: &Expr, after: &Expr) -> Result<Vec<TextEdit>> {
         if before == after && before.eq_ignore_span(after) {
-            self.mark_noop(before)?;
             return Ok(Vec::new());
-        }
-        if let Some(index) = self.exact_authored(before) {
-            let edit = &self.authored[index];
-            let hint = self.parsed_expr(&edit.new_text)?;
-            if expressions_equivalent(&hint, after) {
-                let range = edit.start..edit.end;
-                let mut code = edit.new_text.clone();
-                if self
-                    .comments
-                    .iter()
-                    .any(|comment| range.start <= comment.start && comment.end <= range.end)
-                    && !snippet_has_comments(self.file, &code, self.grammar)?
-                {
-                    code = self.retain(&range, code)?;
-                }
-                self.cover(&range);
-                if expressions_equivalent(before, after) {
-                    return Ok(Vec::new());
-                }
-                return Ok(vec![TextEdit {
-                    start: range.start,
-                    end: range.end,
-                    new_text: format!("({})", code),
-                }]);
-            }
-            // Refines only a registered snippet that was mutated later.
-            let value = serde_json::to_value(after)?;
-            let null = Value::Null;
-            let index_values = SourceIndex::new(&null);
-            let code = self
-                .trivia_planner(&index_values)
-                .refine_authored_expression(&edit.new_text, &value)
-                .map_err(fatal)?;
-            let range = edit.start..edit.end;
-            self.cover(&range);
-            return Ok(vec![TextEdit {
-                start: range.start,
-                end: range.end,
-                new_text: format!("({})", self.retain(&range, code)?),
-            }]);
         }
         if let Some((_, _, old, new)) = keyword_operands(before, after) {
             // Rewrites only the operand, keeping the keyword and trivia.
@@ -1025,139 +816,20 @@ impl TypedPlanner<'_> {
     }
     fn legacy_expr(&mut self, before: &Expr, after: &Expr) -> Result<Vec<TextEdit>> {
         let range = source_range(self.file, before.span())?;
-        if self
-            .authored
-            .iter()
-            .any(|edit| range.start <= edit.start && edit.end <= range.end)
-        {
-            // An authored textual replacement; the core pipeline supplies none.
-            return self.region(
-                serde_json::to_value(before)?,
-                serde_json::to_value(after)?,
-                Role::Expression,
-            );
-        }
         let region =
             emit_region_from_source_cached(self.source_prefix(), self.file, before, after)?;
-        let null = Value::Null;
-        let index = SourceIndex::new(&null);
-        let code = self.trivia_planner(&index).retain_expression_comments(
+        let code = retain_expression_comments(
+            self.file,
+            self.comments,
             &range,
             &region.reused,
             format!("({})", region.code.trim()),
         )?;
-        self.cover(&range);
         Ok(vec![TextEdit {
             start: range.start,
             end: range.end,
             new_text: code,
         }])
-    }
-    fn region(&mut self, before: Value, after: Value, role: Role) -> Result<Vec<TextEdit>> {
-        let range = span_of(&before)
-            .map(|span| source_range(self.file, span))
-            .transpose()?;
-        let selected: Vec<_> = self
-            .authored
-            .iter()
-            .enumerate()
-            .filter(|(_, edit)| {
-                range
-                    .as_ref()
-                    .is_some_and(|range| range.start <= edit.start && edit.end <= range.end)
-            })
-            .collect();
-        let authored: Vec<_> = selected.iter().map(|(_, edit)| (*edit).clone()).collect();
-        let index = SourceIndex::new(&before);
-        let planner = Planner {
-            file: self.file,
-            grammar: self.grammar,
-            source_type: self.source_type,
-            index: &index,
-            comments: self.comments,
-            authored: &authored,
-            authored_items: &[],
-            inserted_origins: RefCell::new(Vec::new()),
-            used_authored: RefCell::new(HashSet::new()),
-        };
-        let result = planner.diff(&before, &after, role)?;
-        for local in planner.used_authored.borrow().iter() {
-            self.used.insert(selected[*local].0);
-        }
-        self.inserted_origins
-            .extend(planner.inserted_origins.into_inner());
-        for edit in &result {
-            self.cover(&(edit.start..edit.end));
-        }
-        Ok(result)
-    }
-    fn mark_noop(&mut self, original: &Expr) -> Result<()> {
-        if self.used.len() == self.authored.len() {
-            return Ok(());
-        }
-        // Clones only the requested expressions, not each ancestor.
-        struct Find<'a> {
-            file: &'a SourceFile,
-            wanted: &'a HashMap<(usize, usize), usize>,
-            found: Vec<(usize, Expr)>,
-        }
-        impl Visit for Find<'_> {
-            fn visit_expr(&mut self, expr: &Expr) {
-                if let Ok(range) = source_range(self.file, expr.span()) {
-                    if let Some(index) = self.wanted.get(&(range.start, range.end)) {
-                        self.found.push((*index, expr.clone()));
-                    }
-                }
-                expr.visit_children_with(self);
-            }
-        }
-        let mut find = Find {
-            file: self.file,
-            wanted: &self.by_range,
-            found: Vec::new(),
-        };
-        original.visit_with(&mut find);
-        for (index, expr) in find.found {
-            if !self.used.contains(&index)
-                && expressions_equivalent(
-                    &expr,
-                    &*self.parsed_expr(&self.authored[index].new_text)?,
-                )
-            {
-                self.used.insert(index);
-            }
-        }
-        Ok(())
-    }
-    fn mark_unchanged_module(&mut self, original: &Module, transformed: &Module) -> Result<()> {
-        for old in &original.body {
-            if let Some(new) = transformed.body.iter().find(|new| new.span() == old.span()) {
-                if old == new {
-                    self.noop_root(Root::Module(old))?;
-                }
-            }
-        }
-        Ok(())
-    }
-    fn noop_root(&mut self, original: Root<'_>) -> Result<()> {
-        if self.used.len() == self.authored.len() {
-            return Ok(());
-        }
-        struct Expressions(Vec<Expr>);
-        impl Visit for Expressions {
-            fn visit_expr(&mut self, expr: &Expr) {
-                self.0.push(expr.clone());
-            }
-        }
-        let mut expressions = Expressions(Vec::new());
-        match original {
-            Root::Module(item) => item.visit_with(&mut expressions),
-            Root::Statement(stmt) => stmt.visit_with(&mut expressions),
-        };
-        for expr in expressions.0 {
-            self.mark_noop(&expr)?;
-        }
-        Ok(())
     }
     fn typed_root_region(&mut self, before: Root<'_>, after: Root<'_>) -> Result<Vec<TextEdit>> {
         let range = source_range(self.file, before.span())?;
@@ -1170,12 +842,13 @@ impl TypedPlanner<'_> {
             }
             _ => bail!("source region changes a statement/module container kind"),
         };
-        let null = Value::Null;
-        let index = SourceIndex::new(&null);
-        let text =
-            self.trivia_planner(&index)
-                .retain_comments(&range, &region.reused, region.code)?;
-        self.cover(&range);
+        let text = retain_comments(
+            self.file,
+            self.comments,
+            &range,
+            &region.reused,
+            region.code,
+        )?;
         Ok(vec![TextEdit {
             start: range.start,
             end: range.end,
@@ -1197,7 +870,6 @@ impl TypedPlanner<'_> {
             .as_str()
             .context("rewritten import specifier is not representable as UTF-8")?;
         let code = js_literal::string_literal(value);
-        self.cover(&literal);
         Ok(vec![TextEdit {
             start: literal.start,
             end: literal.end,
@@ -1206,7 +878,6 @@ impl TypedPlanner<'_> {
     }
     fn root(&mut self, before: Root<'_>, after: Root<'_>) -> Result<Vec<TextEdit>> {
         if before.same(after) {
-            self.noop_root(before)?;
             return Ok(Vec::new());
         }
         if before
@@ -1219,7 +890,6 @@ impl TypedPlanner<'_> {
             })
         {
             // An authored directive stays a directive.
-            self.noop_root(before)?;
             return Ok(Vec::new());
         }
         match (before, after) {
@@ -1271,12 +941,13 @@ impl TypedPlanner<'_> {
         let range = source_range(self.file, before.span())?;
         let region =
             emit_region_from_source_cached(self.source_prefix(), self.file, before, after)?;
-        let null = Value::Null;
-        let index = SourceIndex::new(&null);
-        let code =
-            self.trivia_planner(&index)
-                .retain_comments(&range, &region.reused, region.code)?;
-        self.cover(&range);
+        let code = retain_comments(
+            self.file,
+            self.comments,
+            &range,
+            &region.reused,
+            region.code,
+        )?;
         Ok(vec![TextEdit {
             start: range.start,
             end: range.end,
@@ -1379,14 +1050,6 @@ impl TypedPlanner<'_> {
             {
                 return Ok(true);
             }
-        }
-        let range = source_range(self.file, before.span())?;
-        if self
-            .authored
-            .iter()
-            .any(|edit| range.start <= edit.start && edit.end <= range.end)
-        {
-            return Ok(true);
         }
         // Anchors are typed source-owned leaves, not coincident spans.
         let mut before_anchors = TypedAnchors::new(self.file);
@@ -1551,7 +1214,6 @@ impl TypedPlanner<'_> {
         }
         for (i, range) in ranges.iter().enumerate() {
             if !kept.contains(&i) {
-                self.cover(range);
                 edits.push(TextEdit {
                     start: range.start,
                     end: range.end,
@@ -1576,59 +1238,7 @@ impl TypedPlanner<'_> {
         }
         Ok(edits)
     }
-    fn registered(&self, root: Root<'_>) -> Result<Option<&AuthoredModuleItem>> {
-        let Root::Module(item) = root else {
-            return Ok(None);
-        };
-        if let Some(key) = binding_key(item) {
-            return Ok(self.by_binding.get(&key).copied());
-        }
-        let mut found = None;
-        for old in &self.other_items {
-            if items_equivalent(&old.item, item) {
-                if found.is_some() {
-                    bail!("ambiguous authored generated module-item identity")
-                }
-                found = Some(*old)
-            }
-        }
-        Ok(found)
-    }
     fn generated(&self, root: Root<'_>) -> Result<String> {
-        if let Some(saved) = self.registered(root)? {
-            let map = SourceMap::default();
-            let file = map.new_source_file(
-                FileName::Custom(self.file.name.to_string()).into(),
-                saved.code.clone(),
-            );
-            let mut errors = Vec::new();
-            let (module, _) = with_bounded_file_parser(
-                &file,
-                self.grammar,
-                EsVersion::Es2022,
-                None,
-                &mut errors,
-                |parser| parser_modes::parse_source(parser, self.source_type),
-            )
-            .map_err(|error| anyhow!("invalid authored module item: {}", error.kind().msg()))?;
-            if !errors.is_empty() || module.body.len() != 1 || module.shebang.is_some() {
-                bail!("authored module code must parse as exactly one valid module item")
-            }
-            if !items_equivalent(&module.body[0], &saved.item) {
-                bail!("authored module code does not match its saved typed AST")
-            }
-            let Root::Module(after) = root else {
-                unreachable!()
-            };
-            if items_equivalent(&module.body[0], after) {
-                return Ok(saved.code.clone());
-            }
-            let null = Value::Null;
-            let index = SourceIndex::new(&null);
-            return self
-                .trivia_planner(&index)
-                .emit_authored_item(saved, &serde_json::to_value(after)?);
-        }
         // Hoists that carry original Flow code must be registered explicitly.
         struct Types(bool);
         impl Visit for Types {
@@ -1663,31 +1273,15 @@ impl TypedPlanner<'_> {
     }
     fn insert(&mut self, position: usize, items: &[Root<'_>]) -> Result<TextEdit> {
         let mut code = String::from("\n");
-        let mut sections = Vec::new();
         for item in items {
-            let generated = self.generated(*item)?;
-            let start = code.len();
-            code.push_str(&generated);
+            code.push_str(&self.generated(*item)?);
             code.push('\n');
-            if let Some(origin) = self.registered(*item)?.and_then(|item| item.origin) {
-                if self.file.src.get(origin.0..origin.1).is_none() {
-                    bail!("authored module source origin is not a valid original range")
-                }
-                sections.push((start..code.len(), origin.0..origin.1));
-            }
         }
-        let edit = TextEdit {
+        Ok(TextEdit {
             start: position,
             end: position,
             new_text: code,
-        };
-        if !sections.is_empty() {
-            self.inserted_origins.push(InsertedOrigin {
-                edit: edit.clone(),
-                sections,
-            })
-        }
-        Ok(edit)
+        })
     }
 }
 #[cfg(test)]
@@ -1717,8 +1311,6 @@ mod tests {
             &parsed.module,
             &changed,
             &parsed.comments,
-            &[],
-            &[],
             parsed.syntax.into(),
         )
         .unwrap();
@@ -1730,8 +1322,6 @@ mod tests {
             &parsed.module,
             &parsed.module,
             &parsed.comments,
-            &[],
-            &[],
             parsed.syntax.into(),
         )
         .unwrap();
@@ -1754,8 +1344,6 @@ mod tests {
             &parsed.module,
             &transformed,
             &parsed.comments,
-            &[],
-            &[],
             parsed.syntax.into(),
         )
         .unwrap_err();
@@ -1776,7 +1364,7 @@ mod tests {
             let original_range=source_range(&parsed.file,import.src.span).unwrap();
             import.src.value="./theme/tokens.stylex".into();
             import.src.raw=None;
-            let output=emit(&parsed.file,&parsed.module,&transformed,&parsed.comments,&[],&[],parsed.syntax.into()).unwrap();
+            let output=emit(&parsed.file,&parsed.module,&transformed,&parsed.comments,parsed.syntax.into()).unwrap();
             let expected=format!("{}\"./theme/tokens.stylex\"{}",&source[..original_range.start],&source[original_range.end..]);
             assert_eq!(output.code,expected);
             assert_eq!(output.edits.len(),1);
@@ -1866,8 +1454,6 @@ mod tests {
             &parsed.module,
             &transformed,
             &parsed.comments,
-            &[],
-            &[],
             parsed.syntax.into(),
         )
         .unwrap();
@@ -1908,8 +1494,6 @@ mod tests {
             &parsed.module,
             &transformed,
             &parsed.comments,
-            &[],
-            &[],
             parsed.syntax.into(),
         )
         .unwrap();
@@ -1932,8 +1516,6 @@ mod tests {
             &parsed.module,
             &transformed,
             &parsed.comments,
-            &[],
-            &[],
             parsed.syntax.into(),
         )
         .unwrap_err();

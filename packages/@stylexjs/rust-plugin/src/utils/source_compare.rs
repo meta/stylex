@@ -4,7 +4,7 @@
 
 use std::borrow::Cow;
 use swc_core::common::{util::take::Take, EqIgnoreSpan, SyntaxContext};
-use swc_core::ecma::ast::{Expr, Ident, Module, ModuleItem, Number, SimpleAssignTarget};
+use swc_core::ecma::ast::{Expr, Ident, Module, Number, SimpleAssignTarget};
 use swc_core::ecma::visit::{Visit, VisitMut, VisitMutWith, VisitWith};
 
 #[cfg(test)]
@@ -45,11 +45,16 @@ fn module_equivalent(actual: Cow<'_, Module>, expected: &Module) -> bool {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn expressions_equivalent(actual: &Expr, expected: &Expr) -> bool {
     equivalent(Cow::Borrowed(actual), expected)
 }
 
-pub(crate) fn items_equivalent(actual: &ModuleItem, expected: &ModuleItem) -> bool {
+#[cfg(test)]
+pub(crate) fn items_equivalent(
+    actual: &swc_core::ecma::ast::ModuleItem,
+    expected: &swc_core::ecma::ast::ModuleItem,
+) -> bool {
     equivalent(Cow::Borrowed(actual), expected)
 }
 

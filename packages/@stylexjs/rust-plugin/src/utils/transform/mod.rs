@@ -518,7 +518,7 @@ fn transform_on_stack(
             rewrite_alias_imports(&mut parsed.module, filename, rewriter)?;
         }
 
-        let emitted = emit_module_with_origins(&parsed, &original_module, &[], &[])?;
+        let emitted = emit_module_with_origins(&parsed, &original_module)?;
         // A map from an earlier transform of this file composes with ours, so
         // the result maps to the original source.
         let emitted = render::compose_input_source_map(

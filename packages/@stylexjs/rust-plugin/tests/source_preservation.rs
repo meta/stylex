@@ -13,7 +13,7 @@ mod shared {
 mod source_engine;
 mod source_edits {
     pub use crate::source_engine::{
-        apply_source_edits, emit_source_preserving_with_syntax, source_range, AuthoredModuleItem,
+        apply_source_edits, emit_source_preserving_with_syntax, source_range,
         SourcePreservingOutput, TextEdit,
     };
     use swc_core::common::{comments::SingleThreadedComments, SourceFile};
@@ -24,32 +24,11 @@ mod source_edits {
         transformed: &Module,
         comments: &SingleThreadedComments,
     ) -> anyhow::Result<SourcePreservingOutput> {
-        emit_source_preserving_with_origins(file, original, transformed, comments, &[], &[])
-    }
-    pub fn emit_source_preserving_with_edits(
-        file: &SourceFile,
-        original: &Module,
-        transformed: &Module,
-        comments: &SingleThreadedComments,
-        edits: &[TextEdit],
-    ) -> anyhow::Result<SourcePreservingOutput> {
-        emit_source_preserving_with_origins(file, original, transformed, comments, edits, &[])
-    }
-    pub fn emit_source_preserving_with_origins(
-        file: &SourceFile,
-        original: &Module,
-        transformed: &Module,
-        comments: &SingleThreadedComments,
-        edits: &[TextEdit],
-        items: &[AuthoredModuleItem],
-    ) -> anyhow::Result<SourcePreservingOutput> {
         emit_source_preserving_with_syntax(
             file,
             original,
             transformed,
             comments,
-            edits,
-            items,
             crate::parser::syntax_for_file(&file.name.to_string()),
         )
     }
@@ -511,141 +490,6 @@ fn v3_map_has_utf16_columns_sources_content_and_modified_range_boundaries() {
 }
 
 #[test]
-fn authored_flow_expressions_keep_generated_flow_syntax_without_ts_codegen() {
-    let source = "opaque type Id: string = string;\nconst dynamic = stylex.create({root:{color:'red'}});\nconst untouched = '\\uD800';";
-    let parsed = parse_module(source, "authored.js").unwrap();
-    let mut transformed = parsed.module.clone();
-    let ModuleItem::Stmt(Stmt::Decl(Decl::Var(var))) = &mut transformed.body[1] else {
-        panic!();
-    };
-    let range = source_range(&parsed.file, var.decls[0].init.as_ref().unwrap().span()).unwrap();
-    let authored = "(input: {| +value: ?number |}) => ({value: (input.value: ?number)})";
-    var.decls[0].init = Some(parse_expr(authored, "generated.js").unwrap());
-    let result = source_edits::emit_source_preserving_with_edits(
-        &parsed.file,
-        &parsed.module,
-        &transformed,
-        &parsed.comments,
-        &[TextEdit {
-            start: range.start,
-            end: range.end,
-            new_text: authored.into(),
-        }],
-    )
-    .unwrap();
-    assert!(result.code.contains(authored));
-    assert!(result
-        .code
-        .starts_with("opaque type Id: string = string;\nconst dynamic = "));
-    assert!(result.code.ends_with("const untouched = '\\uD800';"));
-    assert!(parse_module(&result.code, "authored.js").is_ok());
-}
-
-#[test]
-fn explicit_authored_edit_supplies_provenance_for_rewritten_expression_statements() {
-    let parsed = parse_module("stylex.props(styles.root);", "statement.js").unwrap();
-    let mut transformed = parsed.module.clone();
-    let ModuleItem::Stmt(Stmt::Expr(statement)) = &parsed.module.body[0] else {
-        panic!();
-    };
-    let range = source_range(&parsed.file, statement.expr.span()).unwrap();
-    transformed.visit_mut_with(&mut CompileCalls);
-    let result = source_edits::emit_source_preserving_with_edits(
-        &parsed.file,
-        &parsed.module,
-        &transformed,
-        &parsed.comments,
-        &[TextEdit {
-            start: range.start,
-            end: range.end,
-            new_text: "{className: 'x123'}".into(),
-        }],
-    )
-    .unwrap();
-    assert!(result.code.contains("className: 'x123'"));
-    assert!(result.code.ends_with(';'));
-}
-
-#[test]
-fn authored_edits_retain_removed_comments_and_reject_partial_comment_copies() {
-    let parsed = parse_module(
-        "const styles=stylex.create({/*one*/root:{/*two*/color:'red'}});",
-        "comments.js",
-    )
-    .unwrap();
-    let mut transformed = parsed.module.clone();
-    let ModuleItem::Stmt(Stmt::Decl(Decl::Var(var))) = &parsed.module.body[0] else {
-        panic!();
-    };
-    let range = source_range(&parsed.file, var.decls[0].init.as_ref().unwrap().span()).unwrap();
-    transformed.visit_mut_with(&mut CompileCalls);
-    let edit = TextEdit {
-        start: range.start,
-        end: range.end,
-        new_text: "{root: {color: 'x123', $$css: true}}".into(),
-    };
-    let result = source_edits::emit_source_preserving_with_edits(
-        &parsed.file,
-        &parsed.module,
-        &transformed,
-        &parsed.comments,
-        std::slice::from_ref(&edit),
-    )
-    .unwrap();
-    assert!(result.code.find("/*one*/").unwrap() < result.code.find("/*two*/").unwrap());
-    let partial = TextEdit {
-        new_text: "/*one*/ {root: {color: 'x123', $$css: true}}".into(),
-        ..edit
-    };
-    assert!(source_edits::emit_source_preserving_with_edits(
-        &parsed.file,
-        &parsed.module,
-        &transformed,
-        &parsed.comments,
-        &[partial]
-    )
-    .unwrap_err()
-    .to_string()
-    .contains("comment"));
-}
-
-#[test]
-fn rejects_wrong_authored_ranges_and_ast_mismatches() {
-    let parsed = parse_module(
-        "const styles=stylex.create({root:{color:'red'}});",
-        "wrong.js",
-    )
-    .unwrap();
-    let mut transformed = parsed.module.clone();
-    let ModuleItem::Stmt(Stmt::Decl(Decl::Var(var))) = &parsed.module.body[0] else {
-        panic!();
-    };
-    let range = source_range(&parsed.file, var.decls[0].init.as_ref().unwrap().span()).unwrap();
-    transformed.visit_mut_with(&mut CompileCalls);
-    for edit in [
-        TextEdit {
-            start: range.start + 1,
-            end: range.end,
-            new_text: "false".into(),
-        },
-        TextEdit {
-            start: range.start,
-            end: range.end,
-            new_text: "false".into(),
-        },
-    ] {
-        assert!(source_edits::emit_source_preserving_with_edits(
-            &parsed.file,
-            &parsed.module,
-            &transformed,
-            &parsed.comments,
-            &[edit]
-        )
-        .is_err());
-    }
-}
-
-#[test]
 fn typescript_and_tsx_annotations_are_not_reprinted_around_edited_calls() {
     let ts = "interface Props { readonly value: number };\nconst styles = stylex.create({root:{color:'red'}}) satisfies Props;";
     let result = compile(ts, "typed.ts");
@@ -715,31 +559,6 @@ fn escaped_directives_cannot_be_replaced_with_unescaped_active_directives() {
         )
         .is_err());
     }
-}
-
-#[test]
-fn authored_parenthesis_only_difference_keeps_raw_flow_quotes_and_formatting() {
-    let parsed = parse_module("const x=old();", "parentheses.js").unwrap();
-    let mut transformed = parsed.module.clone();
-    let ModuleItem::Stmt(Stmt::Decl(Decl::Var(var))) = &mut transformed.body[0] else {
-        panic!();
-    };
-    let range = source_range(&parsed.file, var.decls[0].init.as_ref().unwrap().span()).unwrap();
-    let code = "{ value: (arg: ?number), note: 'untouched' }";
-    var.decls[0].init = Some(parse_expr(&format!("({})", code), "generated.js").unwrap());
-    let result = source_edits::emit_source_preserving_with_edits(
-        &parsed.file,
-        &parsed.module,
-        &transformed,
-        &parsed.comments,
-        &[TextEdit {
-            start: range.start,
-            end: range.end,
-            new_text: code.into(),
-        }],
-    )
-    .unwrap();
-    assert!(result.code.contains(code));
 }
 
 #[test]
@@ -820,269 +639,6 @@ fn nonfinite_numeric_mutations_fail_without_json_null_normalization() {
 }
 
 #[test]
-fn generated_typed_hoists_use_registered_code_and_original_range_source_maps() {
-    let source = "const before=1;\nconst value=factory();";
-    let parsed = parse_module(source, "hoist.js").unwrap();
-    let mut transformed = parsed.module.clone();
-    let code = "const hoisted = (arg: {| +value: ?number |}) => (arg.value: ?number);";
-    let mut item = parse_module(code, "generated.js")
-        .unwrap()
-        .module
-        .body
-        .remove(0);
-    dummy_root(&mut item);
-    let start = source.find("factory()").unwrap();
-    let raw = source_edits::AuthoredModuleItem {
-        item: item.clone(),
-        code: code.into(),
-        origin: Some((start, start + "factory()".len())),
-    };
-    transformed.body.insert(0, item);
-    let result = source_edits::emit_source_preserving_with_origins(
-        &parsed.file,
-        &parsed.module,
-        &transformed,
-        &parsed.comments,
-        &[],
-        &[raw],
-    )
-    .unwrap();
-    assert!(result.code.contains(code));
-    assert!(result.code.ends_with(source));
-    let origin_column = source[..start]
-        .rsplit('\n')
-        .next()
-        .unwrap()
-        .encode_utf16()
-        .count();
-    assert!(decoded_points(&result.map).contains(&(1, 0, 1, origin_column)));
-}
-
-#[test]
-fn registered_typed_hoists_can_be_lexically_pruned_after_their_snapshot() {
-    let parsed = parse_module("const before=1;", "pruned.js").unwrap();
-    let code = "const hoisted = {unused: 'x', dynamic: (arg: ?number) => (arg: ?number)};";
-    let mut item = parse_module(code, "generated.js")
-        .unwrap()
-        .module
-        .body
-        .remove(0);
-    dummy_root(&mut item);
-    let raw = source_edits::AuthoredModuleItem {
-        item: item.clone(),
-        code: code.into(),
-        origin: None,
-    };
-    let ModuleItem::Stmt(Stmt::Decl(Decl::Var(var))) = &mut item else {
-        panic!();
-    };
-    let Expr::Object(object) = &mut **var.decls[0].init.as_mut().unwrap() else {
-        panic!();
-    };
-    object.props.remove(0);
-    let mut transformed = parsed.module.clone();
-    transformed.body.insert(0, item);
-    let result = source_edits::emit_source_preserving_with_origins(
-        &parsed.file,
-        &parsed.module,
-        &transformed,
-        &parsed.comments,
-        &[],
-        &[raw],
-    )
-    .unwrap();
-    assert!(result.code.contains("(arg: ?number) => (arg: ?number)"));
-    assert!(!result.code.contains("unused"));
-}
-
-#[test]
-fn captured_native_corpus_source_edits_reproduce_every_parseable_target_ast() {
-    let Some(path) = std::env::var_os("STYLEX_PARITY_CORPUS_PATH") else {
-        return;
-    };
-    let data: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-    struct Rewrite<'a> {
-        file: &'a swc_core::common::SourceFile,
-        names: std::collections::HashSet<String>,
-        edits: Vec<TextEdit>,
-    }
-    impl VisitMut for Rewrite<'_> {
-        fn visit_mut_expr(&mut self, expr: &mut Expr) {
-            let targeted = if let Expr::Call(call) = expr {
-                match &call.callee {
-                    Callee::Expr(callee) => match &**callee {
-                        Expr::Ident(id) => self.names.contains(id.sym.as_ref()),
-                        Expr::Member(member) => {
-                            matches!(&*member.obj, Expr::Ident(id) if self.names.contains(id.sym.as_ref()))
-                        }
-                        _ => false,
-                    },
-                    _ => false,
-                }
-            } else {
-                false
-            };
-            let range = if targeted {
-                Some(source_range(self.file, expr.span()).unwrap())
-            } else {
-                None
-            };
-            expr.visit_mut_children_with(self);
-            if let Some(range) = range {
-                self.edits.push(TextEdit {
-                    start: range.start,
-                    end: range.end,
-                    new_text: "0".into(),
-                });
-                *expr = Expr::Lit(Lit::Num(Number {
-                    span: DUMMY_SP,
-                    value: 0.0,
-                    raw: None,
-                }));
-            }
-        }
-    }
-    let mut exercised = 0;
-    let mut parser_rejected = Vec::new();
-    for record in data["failures"].as_array().unwrap() {
-        let source = record["source"].as_str().unwrap();
-        let parsed = ["corpus.js", "corpus.ts", "corpus.tsx"]
-            .iter()
-            .find_map(|filename| parse_module(source, filename).ok());
-        let Some(parsed) = parsed else {
-            parser_rejected.push(record["index"].clone());
-            continue;
-        };
-        let mut names = std::collections::HashSet::from(["stylex".to_owned()]);
-        for item in &parsed.module.body {
-            if let ModuleItem::ModuleDecl(ModuleDecl::Import(import)) = item {
-                if import
-                    .src
-                    .value
-                    .as_str()
-                    .is_some_and(|source| source == "stylex" || source == "@stylexjs/stylex")
-                {
-                    for specifier in &import.specifiers {
-                        let local = match specifier {
-                            ImportSpecifier::Default(import) => &import.local,
-                            ImportSpecifier::Namespace(import) => &import.local,
-                            ImportSpecifier::Named(import) => &import.local,
-                        };
-                        names.insert(local.sym.to_string());
-                    }
-                }
-            }
-        }
-        let mut transformed = parsed.module.clone();
-        let mut rewrite = Rewrite {
-            file: &parsed.file,
-            names,
-            edits: Vec::new(),
-        };
-        transformed.visit_mut_with(&mut rewrite);
-        source_edits::emit_source_preserving_with_edits(
-            &parsed.file,
-            &parsed.module,
-            &transformed,
-            &parsed.comments,
-            &rewrite.edits,
-        )
-        .unwrap_or_else(|error| {
-            panic!(
-                "corpus index {} [{}]: {}",
-                record["index"], record["test"], error
-            )
-        });
-        exercised += 1;
-    }
-    eprintln!(
-        "captured corpus: {} parseable source targets verified; parser-rejected records {:?}",
-        exercised, parser_rejected
-    );
-    assert_eq!(
-        exercised,
-        data["failures"].as_array().unwrap().len(),
-        "every captured source target must be verified; rejected {:?}",
-        parser_rejected
-    );
-}
-
-#[test]
-fn authored_noops_and_ancestor_rewrites_do_not_require_spurious_source_edits() {
-    let parsed = parse_module("const value=1;", "noop.js").unwrap();
-    let ModuleItem::Stmt(Stmt::Decl(Decl::Var(var))) = &parsed.module.body[0] else {
-        panic!();
-    };
-    let range = source_range(&parsed.file, var.decls[0].init.as_ref().unwrap().span()).unwrap();
-    let result = source_edits::emit_source_preserving_with_edits(
-        &parsed.file,
-        &parsed.module,
-        &parsed.module,
-        &parsed.comments,
-        &[TextEdit {
-            start: range.start,
-            end: range.end,
-            new_text: "(1)".into(),
-        }],
-    )
-    .unwrap();
-    assert_eq!(result.code, parsed.file.src.as_str());
-    assert!(result.edits.is_empty());
-    let mut regenerated = parsed.module.clone();
-    let ModuleItem::Stmt(Stmt::Decl(Decl::Var(var))) = &mut regenerated.body[0] else {
-        panic!();
-    };
-    var.decls[0].init = Some(Box::new(Expr::Lit(Lit::Num(Number {
-        span: DUMMY_SP,
-        value: 1.0,
-        raw: None,
-    }))));
-    let result = source_edits::emit_source_preserving_with_edits(
-        &parsed.file,
-        &parsed.module,
-        &regenerated,
-        &parsed.comments,
-        &[TextEdit {
-            start: range.start,
-            end: range.end,
-            new_text: "(1)".into(),
-        }],
-    )
-    .unwrap();
-    assert_eq!(result.code, parsed.file.src.as_str());
-    assert!(result.edits.is_empty());
-    let parsed = parse_module("const value=outer(inner());", "ancestor.js").unwrap();
-    let mut transformed = parsed.module.clone();
-    let ModuleItem::Stmt(Stmt::Decl(Decl::Var(var))) = &mut transformed.body[0] else {
-        panic!();
-    };
-    let Expr::Call(call) = &**var.decls[0].init.as_ref().unwrap() else {
-        panic!();
-    };
-    let range = source_range(&parsed.file, call.args[0].expr.span()).unwrap();
-    var.decls[0].init = Some(Box::new(Expr::Lit(Lit::Num(Number {
-        span: DUMMY_SP,
-        value: 0.0,
-        raw: None,
-    }))));
-    let result = source_edits::emit_source_preserving_with_edits(
-        &parsed.file,
-        &parsed.module,
-        &transformed,
-        &parsed.comments,
-        &[TextEdit {
-            start: range.start,
-            end: range.end,
-            new_text: "2".into(),
-        }],
-    )
-    .unwrap();
-    assert!(!result.code.contains("outer"));
-    assert!(!result.code.contains("inner"));
-}
-
-#[test]
 fn explicit_tsx_script_grammar_is_retained_through_source_emission_and_maps() {
     let grammar = swc_ecma_parser::Syntax::Typescript(swc_ecma_parser::TsSyntax {
         tsx: true,
@@ -1098,8 +654,6 @@ fn explicit_tsx_script_grammar_is_retained_through_source_emission_and_maps() {
             &parsed.module,
             &transformed,
             &parsed.comments,
-            &[],
-            &[],
             parsed.syntax,
         )
         .unwrap();
@@ -1129,8 +683,6 @@ fn real_decorators_enums_and_using_are_preserved_around_transformed_calls() {
         &parsed.module,
         &transformed,
         &parsed.comments,
-        &[],
-        &[],
         options,
     )
     .unwrap();
@@ -1159,8 +711,6 @@ fn script_mode_postflight_keeps_sloppy_grammar_source_and_source_maps() {
         &parsed.module,
         &transformed,
         &parsed.comments,
-        &[],
-        &[],
         options,
     )
     .unwrap();
@@ -1175,55 +725,6 @@ fn script_mode_postflight_keeps_sloppy_grammar_source_and_source_maps() {
         "commonjs.js",
         parsed.syntax,
         parsed.source_type
-    )
-    .is_ok());
-}
-
-#[test]
-fn authored_script_hoists_keep_sloppy_function_grammar_without_module_reparse() {
-    let syntax = syntax_for_file("commonjs.js");
-    let original = parser::parse_module_with_options(
-        "var before=1;",
-        "commonjs.js",
-        syntax,
-        parser::SourceType::Script,
-    )
-    .unwrap();
-    let code = "const hoisted = function () { with (object) { var value = 010; } };";
-    let mut item =
-        parser::parse_module_with_options(code, "generated.js", syntax, parser::SourceType::Script)
-            .unwrap()
-            .module
-            .body
-            .remove(0);
-    dummy_root(&mut item);
-    let raw = source_engine::AuthoredModuleItem {
-        item: item.clone(),
-        code: code.into(),
-        origin: None,
-    };
-    let mut transformed = original.module.clone();
-    transformed.body.insert(0, item);
-    let options = parser::parser_modes::ParseOptions {
-        syntax: original.syntax,
-        source_type: original.source_type,
-    };
-    let output = source_engine::emit_source_preserving_with_syntax(
-        &original.file,
-        &original.module,
-        &transformed,
-        &original.comments,
-        &[],
-        &[raw],
-        options,
-    )
-    .unwrap();
-    assert!(output.code.contains(code));
-    assert!(parser::parse_module_with_options(
-        &output.code,
-        "commonjs.js",
-        syntax,
-        parser::SourceType::Script
     )
     .is_ok());
 }
@@ -1526,8 +1027,6 @@ fn script_html_comments_remain_ordinary_comments_around_source_edits() {
         &parsed.module,
         &transformed,
         &parsed.comments,
-        &[],
-        &[],
         parser::parser_modes::ParseOptions {
             syntax: parsed.syntax,
             source_type: parsed.source_type,
