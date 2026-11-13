@@ -53,6 +53,14 @@ fn json_to_expr(value: Value) -> Expr {
   }
 }
 
+/// Runs the transform over `original` and compares its JSON with `expected`, key order included.
+fn assert_transform(original: Value, expected: Value) {
+  assert_eq!(
+    serde_json::to_string(&transformed_styles(original)).unwrap(),
+    serde_json::to_string(&expected).unwrap()
+  );
+}
+
 fn convert_atom_to_string(atom: &Wtf8Atom) -> String {
   atom
     .as_str()
@@ -130,22 +138,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap()
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -166,22 +159,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap()
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -210,23 +188,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap(),
-      "Nested queries should be transformed correctly"
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -257,23 +219,7 @@ mod media_query_transformer {
       "padding": "10px"
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap(),
-      "Nested queries with additional properties should be transformed correctly"
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -312,23 +258,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap(),
-      "Complex object with multiple properties should be handled correctly"
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -353,23 +283,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap(),
-      "Multiple max-width queries should be transformed into ranges"
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -392,23 +306,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap(),
-      "Multiple min-width queries should be transformed into ranges with .99px boundaries"
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -435,23 +333,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap(),
-      "Multiple height queries should be transformed into ranges"
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -478,23 +360,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap(),
-      "Min/max height queries should preserve existing ranges"
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -515,23 +381,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap(),
-      "Single word conditions should include negations"
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -552,23 +402,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap(),
-      "Comma-separated media queries should handle OR logic with negations"
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -587,23 +421,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap(),
-      "Single queries should not be modified"
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -622,23 +440,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap(),
-      "Legacy media query syntax should be ignored"
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -665,23 +467,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap(),
-      "Mixed width/height queries should preserve height conditions"
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -708,23 +494,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap(),
-      "Mixed queries with only height changing should transform height ranges"
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -749,23 +519,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap(),
-      "Mixed width disjoint ranges should be transformed with negation logic"
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -792,23 +546,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap(),
-      "Mixed width many disjoint ranges should be transformed with negation logic"
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -835,23 +573,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap(),
-      "Mixed width ranges with intersections should use OR logic"
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -876,23 +598,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap(),
-      "Mixed width intersecting ranges should split with OR logic"
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -919,23 +625,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap(),
-      "Mixed width many intersecting ranges should split with complex OR logic"
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -960,23 +650,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap(),
-      "Mixed width overlapping ranges should split at boundaries"
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -997,23 +671,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap(),
-      "Complex AND combinations should handle negations correctly"
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -1034,23 +692,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap(),
-      "Combination of keywords and rules should handle negations correctly"
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -1075,22 +717,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap()
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -1115,22 +742,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap()
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -1156,22 +768,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap()
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
@@ -1197,22 +794,7 @@ mod media_query_transformer {
       }
     });
 
-    let input_props = if let Value::Object(obj) = original_styles {
-      obj
-        .into_iter()
-        .map(|(k, v)| create_key_value_prop(&k, v))
-        .collect::<Vec<_>>()
-    } else {
-      vec![]
-    };
-
-    let result = last_media_query_wins_transform(&input_props);
-    let result_json = key_value_prop_to_json(&result);
-
-    assert_eq!(
-      serde_json::to_string(&result_json).unwrap(),
-      serde_json::to_string(&expected_styles).unwrap()
-    );
+    assert_transform(original_styles, expected_styles);
   }
 
   #[test]
