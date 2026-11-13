@@ -44,6 +44,9 @@ fb7cf2d616969dd5d1f4f49fc89af090c4ffffb5 crates/stylex-styleq
 - Left out: upstream benches, integration-test directories, docs and JS tooling,
   and the `[[bench]]`/`[[test]]` tables naming them. The `tests/` directories in
   `stylex-css`, `stylex-css-parser` and `stylex-evaluator` are ours.
+- Removed: the `stylex-css-parser` value-type and property parsers (colours,
+  transforms, shapes, shadows and the like) and their tests. The compiler calls
+  only its media-query parser, which needs `length`, `calc` and `common_types`.
 - Workspace package, dependency and lint tables are copied from upstream into
   `../Cargo.toml`; `rust-version` is 1.96 (upstream 1.97).
 - `rustfmt.toml` carries upstream's stable formatting options;
