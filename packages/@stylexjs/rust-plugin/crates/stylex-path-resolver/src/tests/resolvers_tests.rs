@@ -52,13 +52,42 @@ fn fixture(test_path: &PathBuf, part: &str) -> PathBuf {
   .clean()
 }
 
+/// `resolve_path` for `part` of the fixture at `test_path`, run from that fixture.
+#[allow(dead_code)]
+fn resolve(test_path: &PathBuf, part: &str) -> String {
+  crate::resolvers::resolve_path(
+    fixture(test_path, part).as_path(),
+    get_root_dir(test_path).as_path(),
+    &mut std::collections::HashMap::default(),
+  )
+}
+
+/// `resolve_file_path` with no extensions override; an unresolved import is the empty path.
+#[allow(dead_code)]
+fn resolve_file(
+  import: &str,
+  source: &str,
+  root: &str,
+  aliases: &rustc_hash::FxHashMap<String, Vec<String>>,
+) -> PathBuf {
+  crate::resolvers::resolve_file_path(
+    import,
+    source,
+    root,
+    aliases,
+    None,
+    &mut std::collections::HashMap::default(),
+  )
+  .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod resolve_path_pnpm_tests {
   use serial_test::serial;
 
   use crate::resolvers::{
     resolve_path,
-    tests::{fixture, get_root_dir},
+    tests::{fixture, get_root_dir, resolve},
   };
 
   use std::{collections::HashMap, path::PathBuf};
@@ -69,20 +98,12 @@ mod resolve_path_pnpm_tests {
     let test_path = PathBuf::from("workspace-pnpm");
 
     assert_eq!(
-      resolve_path(
-        fixture(&test_path, "test/index.js").as_path(),
-        get_root_dir(&test_path).as_path(),
-        &mut HashMap::default(),
-      ),
+      resolve(&test_path, "test/index.js"),
       "test/index.js"
     );
 
     assert_eq!(
-      resolve_path(
-        fixture(&test_path, "index.js").as_path(),
-        get_root_dir(&test_path).as_path(),
-        &mut HashMap::default(),
-      ),
+      resolve(&test_path, "index.js"),
       "index.js"
     );
   }
@@ -93,11 +114,7 @@ mod resolve_path_pnpm_tests {
   fn resolve_work_dir_not_existed_packages() {
     let test_path = PathBuf::from("workspace-pnpm");
 
-    resolve_path(
-      fixture(&test_path, "index.jsx").as_path(),
-      get_root_dir(&test_path).as_path(),
-      &mut HashMap::default(),
-    );
+    resolve(&test_path, "index.jsx");
   }
 
   #[test]
@@ -106,15 +123,7 @@ mod resolve_path_pnpm_tests {
     let test_path = PathBuf::from("workspace-pnpm");
 
     assert_eq!(
-      resolve_path(
-        fixture(
-          &test_path,
-          "node_modules/@stylex/open-props/lib/colors.stylex.js"
-        )
-        .as_path(),
-        get_root_dir(&test_path).as_path(),
-        &mut HashMap::default(),
-      ),
+      resolve(&test_path, "node_modules/@stylex/open-props/lib/colors.stylex.js"),
       "node_modules/@stylex/open-props/lib/colors.stylex.js"
     );
   }
@@ -127,15 +136,7 @@ mod resolve_path_pnpm_tests {
   fn resolve_work_dir_not_existed_external_package_file_with_namespace() {
     let test_path = PathBuf::from("workspace-pnpm");
 
-    resolve_path(
-      fixture(
-        &test_path,
-        "node_modules/@stylex/open-props/lib/spaces.stylex.js",
-      )
-      .as_path(),
-      get_root_dir(&test_path).as_path(),
-      &mut HashMap::default(),
-    );
+    resolve(&test_path, "node_modules/@stylex/open-props/lib/spaces.stylex.js");
   }
 
   #[test]
@@ -146,15 +147,7 @@ mod resolve_path_pnpm_tests {
   fn resolve_work_dir_not_existed_external_package_with_namespace() {
     let test_path = PathBuf::from("workspace-pnpm");
 
-    resolve_path(
-      fixture(
-        &test_path,
-        "node_modules/@stylex/close-props/lib/colors.stylex.js",
-      )
-      .as_path(),
-      get_root_dir(&test_path).as_path(),
-      &mut HashMap::default(),
-    );
+    resolve(&test_path, "node_modules/@stylex/close-props/lib/colors.stylex.js");
   }
 
   #[test]
@@ -163,11 +156,7 @@ mod resolve_path_pnpm_tests {
     let test_path = PathBuf::from("workspace-pnpm");
 
     assert_eq!(
-      resolve_path(
-        fixture(&test_path, "node_modules/stylex-lib/colors.stylex.js").as_path(),
-        get_root_dir(&test_path).as_path(),
-        &mut HashMap::default(),
-      ),
+      resolve(&test_path, "node_modules/stylex-lib/colors.stylex.js"),
       "node_modules/stylex-lib/colors.stylex.js"
     );
   }
@@ -284,7 +273,7 @@ mod resolve_path_npm_tests {
 
   use crate::resolvers::{
     resolve_path,
-    tests::{fixture, get_root_dir},
+    tests::{fixture, get_root_dir, resolve},
   };
 
   use std::{collections::HashMap, path::PathBuf};
@@ -295,20 +284,12 @@ mod resolve_path_npm_tests {
     let test_path = PathBuf::from("workspace-npm/apps/web");
 
     assert_eq!(
-      resolve_path(
-        fixture(&test_path, "test/index.js").as_path(),
-        get_root_dir(&test_path).as_path(),
-        &mut HashMap::default(),
-      ),
+      resolve(&test_path, "test/index.js"),
       "test/index.js"
     );
 
     assert_eq!(
-      resolve_path(
-        fixture(&test_path, "index.js").as_path(),
-        get_root_dir(&test_path).as_path(),
-        &mut HashMap::default(),
-      ),
+      resolve(&test_path, "index.js"),
       "index.js"
     );
 
@@ -321,11 +302,7 @@ mod resolve_path_npm_tests {
   fn resolve_work_dir_not_existed_packages() {
     let test_path = PathBuf::from("workspace-npm/apps/web");
 
-    resolve_path(
-      fixture(&test_path, "index.jsx").as_path(),
-      get_root_dir(&test_path).as_path(),
-      &mut HashMap::default(),
-    );
+    resolve(&test_path, "index.jsx");
   }
 
   #[test]
@@ -334,15 +311,7 @@ mod resolve_path_npm_tests {
     let test_path = PathBuf::from("workspace-npm");
 
     assert_eq!(
-      resolve_path(
-        fixture(
-          &test_path,
-          "node_modules/@stylex/open-props/lib/colors.stylex.js"
-        )
-        .as_path(),
-        get_root_dir(&test_path).as_path(),
-        &mut HashMap::default(),
-      ),
+      resolve(&test_path, "node_modules/@stylex/open-props/lib/colors.stylex.js"),
       "node_modules/@stylex/open-props/lib/colors.stylex.js"
     );
   }
@@ -355,15 +324,7 @@ mod resolve_path_npm_tests {
   fn resolve_work_dir_not_existed_external_package_file_with_namespace() {
     let test_path = PathBuf::from("workspace-npm/apps/web");
 
-    resolve_path(
-      fixture(
-        &test_path,
-        "node_modules/@stylex/open-props/lib/spaces.stylex.js",
-      )
-      .as_path(),
-      get_root_dir(&test_path).as_path(),
-      &mut HashMap::default(),
-    );
+    resolve(&test_path, "node_modules/@stylex/open-props/lib/spaces.stylex.js");
   }
 
   #[test]
@@ -374,15 +335,7 @@ mod resolve_path_npm_tests {
   fn resolve_work_dir_not_existed_external_package_with_namespace() {
     let test_path = PathBuf::from("workspace-npm/apps/web");
 
-    resolve_path(
-      fixture(
-        &test_path,
-        "node_modules/@stylex/close-props/lib/colors.stylex.js",
-      )
-      .as_path(),
-      get_root_dir(&test_path).as_path(),
-      &mut HashMap::default(),
-    );
+    resolve(&test_path, "node_modules/@stylex/close-props/lib/colors.stylex.js");
   }
 
   #[test]
@@ -391,11 +344,7 @@ mod resolve_path_npm_tests {
     let test_path = PathBuf::from("workspace-npm");
 
     assert_eq!(
-      resolve_path(
-        fixture(&test_path, "node_modules/stylex-lib/colors.stylex.js").as_path(),
-        get_root_dir(&test_path).as_path(),
-        &mut HashMap::default(),
-      ),
+      resolve(&test_path, "node_modules/stylex-lib/colors.stylex.js"),
       "node_modules/stylex-lib/colors.stylex.js"
     );
   }
@@ -511,8 +460,8 @@ mod resolve_path_exports_tests {
   use serial_test::serial;
 
   use crate::resolvers::{
-    resolve_file_path, resolve_path,
-    tests::{fixture, get_root_dir},
+    resolve_path,
+    tests::{fixture, get_root_dir, resolve, resolve_file},
   };
   use rustc_hash::FxHashMap;
 
@@ -524,15 +473,7 @@ mod resolve_path_exports_tests {
     let test_path = PathBuf::from("exports");
 
     assert_eq!(
-      resolve_path(
-        fixture(
-          &test_path,
-          "node_modules/stylex-lib-dist-main/dist/index.jsx"
-        )
-        .as_path(),
-        get_root_dir(&test_path).as_path(),
-        &mut HashMap::default(),
-      ),
+      resolve(&test_path, "node_modules/stylex-lib-dist-main/dist/index.jsx"),
       "node_modules/stylex-lib-dist-main/dist/index.jsx"
     );
   }
@@ -542,15 +483,7 @@ mod resolve_path_exports_tests {
   fn external_package_module_exports() {
     let test_path = PathBuf::from("exports");
     assert_eq!(
-      resolve_path(
-        fixture(
-          &test_path,
-          "node_modules/stylex-lib-dist-module/dist/index.jsx"
-        )
-        .as_path(),
-        get_root_dir(&test_path).as_path(),
-        &mut HashMap::default(),
-      ),
+      resolve(&test_path, "node_modules/stylex-lib-dist-module/dist/index.jsx"),
       "node_modules/stylex-lib-dist-module/dist/index.jsx"
     );
   }
@@ -561,15 +494,7 @@ mod resolve_path_exports_tests {
     let test_path = PathBuf::from("exports");
 
     assert_eq!(
-      resolve_path(
-        fixture(
-          &test_path,
-          "node_modules/stylex-lib-dist-exports/dist/index.js"
-        )
-        .as_path(),
-        get_root_dir(&test_path).as_path(),
-        &mut HashMap::default(),
-      ),
+      resolve(&test_path, "node_modules/stylex-lib-dist-exports/dist/index.js"),
       "node_modules/stylex-lib-dist-exports/dist/index.js"
     );
   }
@@ -580,28 +505,12 @@ mod resolve_path_exports_tests {
     let test_path = PathBuf::from("exports");
 
     assert_eq!(
-      resolve_path(
-        fixture(
-          &test_path,
-          "node_modules/stylex-lib-dist-exports-commonjs-esm/dist/index.js"
-        )
-        .as_path(),
-        get_root_dir(&test_path).as_path(),
-        &mut HashMap::default(),
-      ),
+      resolve(&test_path, "node_modules/stylex-lib-dist-exports-commonjs-esm/dist/index.js"),
       "node_modules/stylex-lib-dist-exports-commonjs-esm/dist/index.js"
     );
 
     assert_eq!(
-      resolve_path(
-        fixture(
-          &test_path,
-          "node_modules/stylex-lib-dist-exports-commonjs-esm/dist/colors.stylex.cjs"
-        )
-        .as_path(),
-        get_root_dir(&test_path).as_path(),
-        &mut HashMap::default(),
-      ),
+      resolve(&test_path, "node_modules/stylex-lib-dist-exports-commonjs-esm/dist/colors.stylex.cjs"),
       "node_modules/stylex-lib-dist-exports-commonjs-esm/dist/colors.stylex.cjs"
     );
   }
@@ -612,15 +521,7 @@ mod resolve_path_exports_tests {
     let test_path = PathBuf::from("exports");
 
     assert_eq!(
-      resolve_path(
-        fixture(
-          &test_path,
-          "node_modules/stylex-lib-dist-exports-with-main/dist/index.js"
-        )
-        .as_path(),
-        get_root_dir(&test_path).as_path(),
-        &mut HashMap::default(),
-      ),
+      resolve(&test_path, "node_modules/stylex-lib-dist-exports-with-main/dist/index.js"),
       "node_modules/stylex-lib-dist-exports-with-main/dist/index.js"
     );
   }
@@ -631,41 +532,17 @@ mod resolve_path_exports_tests {
     let test_path = PathBuf::from("exports");
 
     assert_eq!(
-      resolve_path(
-        fixture(
-          &test_path,
-          "node_modules/stylex-lib-dist-exports-with-wildcard/src/index.ts"
-        )
-        .as_path(),
-        get_root_dir(&test_path).as_path(),
-        &mut HashMap::default(),
-      ),
+      resolve(&test_path, "node_modules/stylex-lib-dist-exports-with-wildcard/src/index.ts"),
       "node_modules/stylex-lib-dist-exports-with-wildcard/src/index.ts"
     );
 
     assert_eq!(
-      resolve_path(
-        fixture(
-          &test_path,
-          "node_modules/stylex-lib-dist-exports-with-wildcard/src/colors.stylex.ts"
-        )
-        .as_path(),
-        get_root_dir(&test_path).as_path(),
-        &mut HashMap::default(),
-      ),
+      resolve(&test_path, "node_modules/stylex-lib-dist-exports-with-wildcard/src/colors.stylex.ts"),
       "node_modules/stylex-lib-dist-exports-with-wildcard/src/colors.stylex.ts"
     );
 
     assert_eq!(
-      resolve_path(
-        fixture(
-          &test_path,
-          "node_modules/stylex-lib-dist-exports-with-wildcard/src/icons/arrow-right.tsx"
-        )
-        .as_path(),
-        get_root_dir(&test_path).as_path(),
-        &mut HashMap::default(),
-      ),
+      resolve(&test_path, "node_modules/stylex-lib-dist-exports-with-wildcard/src/icons/arrow-right.tsx"),
       "node_modules/stylex-lib-dist-exports-with-wildcard/src/icons/arrow-right.tsx"
     );
   }
@@ -684,15 +561,7 @@ mod resolve_path_exports_tests {
       root_path, "node_modules/stylex-lib-dist-exports-with-wildcard/src/index.ts"
     );
     assert_eq!(
-      resolve_file_path(
-        "stylex-lib-dist-exports-with-wildcard",
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file("stylex-lib-dist-exports-with-wildcard", &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_root)
     );
 
@@ -702,15 +571,7 @@ mod resolve_path_exports_tests {
       root_path, "node_modules/stylex-lib-dist-exports-with-wildcard/src/colors.stylex.ts"
     );
     assert_eq!(
-      resolve_file_path(
-        "stylex-lib-dist-exports-with-wildcard/colors.stylex",
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file("stylex-lib-dist-exports-with-wildcard/colors.stylex", &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_colors)
     );
 
@@ -720,15 +581,7 @@ mod resolve_path_exports_tests {
       root_path, "node_modules/stylex-lib-dist-exports-with-wildcard/src/icons/arrow-right.tsx"
     );
     assert_eq!(
-      resolve_file_path(
-        "stylex-lib-dist-exports-with-wildcard/icons/arrow-right",
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file("stylex-lib-dist-exports-with-wildcard/icons/arrow-right", &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_icon)
     );
   }
@@ -800,28 +653,12 @@ mod resolve_path_exports_tests {
     let local_package_test_path = PathBuf::from("");
 
     assert_eq!(
-      resolve_path(
-        fixture(
-          &test_path,
-          "node_modules/stylex-lib-dist-exports/dist/index.js"
-        )
-        .as_path(),
-        get_root_dir(&test_path).as_path(),
-        &mut HashMap::default(),
-      ),
+      resolve(&test_path, "node_modules/stylex-lib-dist-exports/dist/index.js"),
       "node_modules/stylex-lib-dist-exports/dist/index.js"
     );
 
     assert_eq!(
-      resolve_path(
-        fixture(
-          &test_path,
-          "node_modules/stylex-lib-dist-exports-with-main/dist/index.js"
-        )
-        .as_path(),
-        get_root_dir(&test_path).as_path(),
-        &mut HashMap::default(),
-      ),
+      resolve(&test_path, "node_modules/stylex-lib-dist-exports-with-main/dist/index.js"),
       "node_modules/stylex-lib-dist-exports-with-main/dist/index.js"
     );
 
@@ -920,15 +757,7 @@ mod resolve_path_exports_tests {
   fn resolve_work_dir_not_existed_external_package_exports() {
     let test_path = PathBuf::from("exports");
 
-    resolve_path(
-      fixture(
-        &test_path,
-        "node_modules/stylex-lib-dist-exports/colors.stylex",
-      )
-      .as_path(),
-      get_root_dir(&test_path).as_path(),
-      &mut HashMap::default(),
-    );
+    resolve(&test_path, "node_modules/stylex-lib-dist-exports/colors.stylex");
   }
 
   #[test]
@@ -939,15 +768,7 @@ mod resolve_path_exports_tests {
   fn resolve_work_dir_not_existed_external_package_exports_with_main() {
     let test_path = PathBuf::from("exports");
 
-    resolve_path(
-      fixture(
-        &test_path,
-        "node_modules/stylex-lib-dist-exports-with-main/colors.stylex",
-      )
-      .as_path(),
-      get_root_dir(&test_path).as_path(),
-      &mut HashMap::default(),
-    );
+    resolve(&test_path, "node_modules/stylex-lib-dist-exports-with-main/colors.stylex");
   }
 
   #[test]
@@ -959,11 +780,7 @@ mod resolve_path_exports_tests {
     let test_path = PathBuf::from("exports");
 
     assert_eq!(
-      resolve_path(
-        fixture(&test_path, "node_modules/stylex-lib-dist-exports").as_path(),
-        get_root_dir(&test_path).as_path(),
-        &mut HashMap::default(),
-      ),
+      resolve(&test_path, "node_modules/stylex-lib-dist-exports"),
       "node_modules/stylex-lib-dist-exports/dist/index.js"
     );
   }
@@ -977,11 +794,7 @@ mod resolve_path_exports_tests {
     let test_path = PathBuf::from("exports");
 
     assert_eq!(
-      resolve_path(
-        fixture(&test_path, "node_modules/stylex-lib-dist-exports-with-main").as_path(),
-        get_root_dir(&test_path).as_path(),
-        &mut HashMap::default(),
-      ),
+      resolve(&test_path, "node_modules/stylex-lib-dist-exports-with-main"),
       "node_modules/stylex-lib-dist-exports-with-main/dist/index.js"
     );
   }
@@ -994,15 +807,7 @@ mod resolve_path_exports_tests {
   fn failed_resolve_package_exports_dir_path() {
     let test_path = PathBuf::from("exports");
 
-    resolve_path(
-      fixture(
-        &test_path,
-        "node_modules/stylex-lib-dist-exports/colors.stylex",
-      )
-      .as_path(),
-      get_root_dir(&test_path).as_path(),
-      &mut HashMap::default(),
-    );
+    resolve(&test_path, "node_modules/stylex-lib-dist-exports/colors.stylex");
   }
 
   #[test]
@@ -1013,15 +818,7 @@ mod resolve_path_exports_tests {
   fn failed_resolve_package_exports_dir_path_with_main() {
     let test_path = PathBuf::from("exports");
 
-    resolve_path(
-      fixture(
-        &test_path,
-        "node_modules/stylex-lib-dist-exports-with-main/colors.stylex",
-      )
-      .as_path(),
-      get_root_dir(&test_path).as_path(),
-      &mut HashMap::default(),
-    );
+    resolve(&test_path, "node_modules/stylex-lib-dist-exports-with-main/colors.stylex");
   }
 
   #[test]
@@ -1068,14 +865,15 @@ mod resolve_path_exports_tests {
 }
 #[cfg(test)]
 mod resolve_path_application_pnpm_tests {
+  use super::{resolve_file};
   use serial_test::serial;
 
   use path_clean::PathClean;
   use rustc_hash::FxHashMap;
 
-  use crate::resolvers::{resolve_file_path, tests::get_root_dir};
+  use crate::resolvers::tests::get_root_dir;
 
-  use std::{collections::HashMap, path::PathBuf};
+  use std::path::PathBuf;
 
   #[test]
   #[serial]
@@ -1093,15 +891,7 @@ mod resolve_path_application_pnpm_tests {
     let expected_result = format!("{}/{}", root_path, "src/colors.stylex.js");
 
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
   }
@@ -1122,15 +912,7 @@ mod resolve_path_application_pnpm_tests {
     let expected_result = format!("{}/{}", root_path, "src/components/button.js");
 
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
   }
@@ -1152,15 +934,7 @@ mod resolve_path_application_pnpm_tests {
     let expected_result = format!("{}/{}", root_path, "src/components/button.js");
 
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
   }
@@ -1180,15 +954,7 @@ mod resolve_path_application_pnpm_tests {
     let expected_result = format!("{root_path}/src/colors.stylex.js");
 
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
   }
@@ -1210,15 +976,7 @@ mod resolve_path_application_pnpm_tests {
     let expected_result = format!("{root_path}/src/colors.stylex.js");
 
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
   }
@@ -1240,15 +998,7 @@ mod resolve_path_application_pnpm_tests {
     let expected_result = format!("{root_path}/src/colors.stylex.js");
 
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
   }
@@ -1285,15 +1035,7 @@ mod resolve_path_application_pnpm_tests {
     );
 
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
   }
@@ -1317,15 +1059,7 @@ mod resolve_path_application_pnpm_tests {
     );
 
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
   }
@@ -1348,15 +1082,7 @@ mod resolve_path_application_pnpm_tests {
       root_path, "node_modules/stylex-lib-dist-exports-with-main/dist/colors.stylex.js",
     );
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
   }
@@ -1381,15 +1107,7 @@ mod resolve_path_application_pnpm_tests {
     );
 
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
   }
@@ -1414,15 +1132,7 @@ mod resolve_path_application_pnpm_tests {
     );
 
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
   }
@@ -1447,15 +1157,7 @@ mod resolve_path_application_pnpm_tests {
     );
 
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
   }
@@ -1468,12 +1170,9 @@ mod resolve_path_application_npm_tests {
   use path_clean::PathClean;
   use rustc_hash::FxHashMap;
 
-  use crate::resolvers::{
-    resolve_file_path,
-    tests::{get_root_dir, without_trailing_dirs},
-  };
+  use crate::resolvers::tests::{get_root_dir, resolve_file, without_trailing_dirs};
 
-  use std::{collections::HashMap, path::PathBuf};
+  use std::path::PathBuf;
 
   #[test]
   #[serial]
@@ -1491,15 +1190,7 @@ mod resolve_path_application_npm_tests {
     let expected_result = format!("{}/{}", root_path, "src/colors.stylex.js");
 
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
   }
@@ -1520,15 +1211,7 @@ mod resolve_path_application_npm_tests {
     let expected_result = format!("{}/{}", root_path, "src/components/button.js");
 
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
   }
@@ -1550,15 +1233,7 @@ mod resolve_path_application_npm_tests {
     let expected_result = format!("{}/{}", root_path, "src/components/button.js");
 
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
   }
@@ -1595,15 +1270,7 @@ mod resolve_path_application_npm_tests {
     );
 
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
   }
@@ -1628,15 +1295,7 @@ mod resolve_path_application_npm_tests {
     );
 
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
   }
@@ -1660,15 +1319,7 @@ mod resolve_path_application_npm_tests {
     );
 
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
   }
@@ -1778,12 +1429,13 @@ mod resolve_path_aliases_tests {
 
 #[cfg(test)]
 mod resolve_file_path_aliases_tests {
+  use super::{resolve_file};
   use serial_test::serial;
 
   use rustc_hash::FxHashMap;
-  use std::{collections::HashMap, path::PathBuf};
+  use std::path::PathBuf;
 
-  use crate::resolvers::{resolve_file_path, tests::get_root_dir};
+  use crate::resolvers::tests::get_root_dir;
 
   #[test]
   #[serial]
@@ -1803,15 +1455,7 @@ mod resolve_file_path_aliases_tests {
     let expected_result = format!("{}/{}", root_path, "src/colors.stylex.js");
 
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
   }
@@ -1833,15 +1477,7 @@ mod resolve_file_path_aliases_tests {
     let expected_result = format!("{}/{}", root_path, "src/components/button.js");
 
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
   }
@@ -1864,15 +1500,7 @@ mod resolve_file_path_aliases_tests {
     let expected_result = format!("{}/{}", root_path, "src/components/button.js");
 
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
   }
@@ -1886,13 +1514,10 @@ mod resolve_nested_external_imports_tests {
 
   use crate::{
     package_json::find_closest_node_modules,
-    resolvers::{
-      resolve_file_path,
-      tests::{get_root_dir, without_trailing_dirs},
-    },
+    resolvers::tests::{get_root_dir, resolve_file, without_trailing_dirs},
   };
 
-  use std::{collections::HashMap, path::PathBuf};
+  use std::path::PathBuf;
 
   #[test]
   #[serial]
@@ -1916,15 +1541,7 @@ mod resolve_nested_external_imports_tests {
     );
 
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
   }
@@ -1951,15 +1568,7 @@ mod resolve_nested_external_imports_tests {
     );
 
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
 
@@ -1997,15 +1606,7 @@ mod resolve_nested_external_imports_tests {
     );
 
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
 
@@ -2043,15 +1644,7 @@ mod resolve_nested_external_imports_tests {
     );
 
     assert_eq!(
-      resolve_file_path(
-        import_path_str,
-        source_file_path.as_str(),
-        root_path.as_str(),
-        &aliases,
-        None,
-        &mut HashMap::default(),
-      )
-      .unwrap_or_default(),
+      resolve_file(import_path_str, &source_file_path, &root_path, &aliases),
       PathBuf::from(expected_result)
     );
 
