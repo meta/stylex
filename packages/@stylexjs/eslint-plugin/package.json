@@ -16,6 +16,9 @@
     "build-haste": "rollup --config ./rollup.config.mjs",
     "test": "jest --detectOpenHandles --coverage"
   },
+  "peerDependencies": {
+    "eslint": "^8.40.0 || ^9.0.0 || ^10.0.0"
+  },
   "dependencies": {
     "@csstools/css-tokenizer": "^3.0.3",
     "@stylexjs/shared": "0.19.2",
