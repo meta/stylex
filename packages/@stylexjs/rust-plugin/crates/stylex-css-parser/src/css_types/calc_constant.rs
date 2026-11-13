@@ -44,10 +44,6 @@ impl CalcConstant {
     }
   }
 
-  /// Check if a string is a valid calc constant
-  pub fn is_valid_constant(s: &str) -> bool {
-    Self::all_constants().contains(&s)
-  }
 
   /// Parser for calc constants
   pub fn parser() -> TokenParser<CalcConstant> {

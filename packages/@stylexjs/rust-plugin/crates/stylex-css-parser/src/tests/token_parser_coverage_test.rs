@@ -102,14 +102,6 @@ fn surrounded_by_none_suffix_prefix_fails() {
   assert!((surrounded.run)(&mut tl).is_err());
 }
 
-#[test]
-fn label_method_returns_label() {
-  let parser = tokens::ident();
-  assert_eq!(parser.label(), "Ident");
-
-  let parser2 = TokenParser::always(42).with_label("my_label");
-  assert_eq!(parser2.label(), "my_label");
-}
 
 /// A failing parse logs the position and the error it stopped with.
 #[test]
@@ -142,24 +134,6 @@ fn parse_with_context_error() {
   );
 }
 
-#[test]
-fn separated_by_optional_whitespace_multiple_with_whitespace() {
-  let parser = tokens::ident().map(
-    |t| {
-      if let SimpleToken::Ident(v) = t {
-        v
-      } else {
-        String::new()
-      }
-    },
-    None,
-  );
-  let result = parser
-    .separated_by_optional_whitespace()
-    .parse_to_end("foo bar");
-  assert!(result.is_ok());
-  assert_eq!(result.unwrap(), vec!["foo", "bar"]);
-}
 
 #[test]
 fn one_or_more_static_multiple() {
@@ -215,101 +189,12 @@ fn separated_parser_as_token_parser() {
   assert_eq!(result.unwrap(), vec!["foo", "bar", "baz"]);
 }
 
-#[test]
-fn set_of_separated_by_missing_separator_error() {
-  let p_foo = TokenParser::<String>::string("foo");
-  let p_bar = TokenParser::<String>::string("bar");
-  let parser = TokenParser::<String>::set_of(vec![p_foo, p_bar]).separated_by(tokens::whitespace()); // requires whitespace between elements
 
-  let mut tl = tl(vec![
-    SimpleToken::Ident("foo".to_string()),
-    // no whitespace
-    SimpleToken::Ident("bar".to_string()),
-  ]);
-  let result = (parser.run)(&mut tl);
-  assert!(result.is_err());
-  let msg = result.unwrap_err().to_string();
-  assert!(
-    msg.contains("separator") || msg.contains("SetOf"),
-    "msg: {msg}"
-  );
-}
 
-#[test]
-fn set_of_separated_by_no_parser_matches() {
-  let p_foo = TokenParser::<String>::string("foo");
-  let p_bar = TokenParser::<String>::string("bar");
-  let parser = TokenParser::<String>::set_of(vec![p_foo, p_bar]).separated_by(tokens::whitespace());
 
-  let result = parser.parse("baz qux");
-  assert!(result.is_err());
-}
 
-#[test]
-fn set_of_as_token_parser_no_match() {
-  let p_foo = TokenParser::<String>::string("foo");
-  let p_bar = TokenParser::<String>::string("bar");
-  let parser = TokenParser::<String>::set_of(vec![p_foo, p_bar]).as_token_parser();
-  let result = parser.parse("baz");
-  assert!(result.is_err());
-}
 
-#[test]
-fn sequence_parsers_as_token_parser_fails() {
-  let p_foo = TokenParser::<String>::string("foo");
-  let p_bar = TokenParser::<String>::string("bar");
-  let parser =
-    TokenParser::<String>::sequence_with_separators(vec![p_foo, p_bar]).as_token_parser();
-  let mut tl = tl(vec![
-    SimpleToken::Ident("foo".to_string()),
-    SimpleToken::Ident("baz".to_string()), // not "bar"
-  ]);
-  let result = (parser.run)(&mut tl);
-  assert!(result.is_err());
-}
 
-#[test]
-fn sequence_separated_by_both_attempts_fail() {
-  let p_foo = TokenParser::<String>::string("foo");
-  let p_bar = TokenParser::<String>::string("bar");
-  let parser = TokenParser::<String>::sequence_with_separators(vec![p_foo, p_bar])
-    .separated_by(tokens::whitespace());
-
-  let mut tl = tl(vec![
-    SimpleToken::Ident("foo".to_string()),
-    SimpleToken::Whitespace,
-    // nothing after separator — bar fails
-  ]);
-  let result = (parser.run)(&mut tl);
-  assert!(result.is_err());
-}
-
-#[test]
-fn sequence_separated_by_no_separator_and_parser_fails() {
-  let p_foo = TokenParser::<String>::string("foo");
-  let p_bar = TokenParser::<String>::string("bar");
-  let parser = TokenParser::<String>::sequence_with_separators(vec![p_foo, p_bar])
-    .separated_by(tokens::whitespace());
-
-  let mut tl = tl(vec![
-    SimpleToken::Ident("foo".to_string()),
-    // no whitespace between foo and baz
-    SimpleToken::Ident("baz".to_string()),
-  ]);
-  let result = (parser.run)(&mut tl);
-  assert!(result.is_err());
-}
-
-#[test]
-fn sequence_separated_by_first_parser_fails() {
-  let p_foo = TokenParser::<String>::string("foo");
-  let p_bar = TokenParser::<String>::string("bar");
-  let parser = TokenParser::<String>::sequence_with_separators(vec![p_foo, p_bar])
-    .separated_by(tokens::whitespace());
-
-  let result = parser.parse("baz bar");
-  assert!(result.is_err());
-}
 
 #[test]
 fn tokens_struct_comma() {
@@ -430,12 +315,6 @@ fn tokens_struct_whitespace() {
   assert!((parser.run)(&mut tl).is_ok());
 }
 
-#[test]
-fn tokens_struct_at_keyword() {
-  let parser = Tokens::at_keyword();
-  let mut tl = tl(vec![SimpleToken::AtKeyword("media".to_string())]);
-  assert!((parser.run)(&mut tl).is_ok());
-}
 
 #[test]
 fn token_parser_tokens_accessor() {
@@ -506,17 +385,6 @@ fn or_label_optional_when_other_is_optional_label() {
   );
 }
 
-#[test]
-fn sequence_separated_by_separator_consumed_retry_success() {
-  let p_foo = TokenParser::<String>::string("foo");
-  let p_always = TokenParser::always("always".to_string());
-  let parser = TokenParser::<String>::sequence_with_separators(vec![p_foo, p_always])
-    .separated_by(tokens::whitespace());
-
-  let result = parser.parse_to_end("foo ");
-  assert!(result.is_ok());
-  assert_eq!(result.unwrap(), vec!["foo", "always"]);
-}
 
 #[test]
 fn set_of_incomplete_error_err_rewinds_and_returns_error() {
@@ -564,49 +432,8 @@ fn flexible_sequence_first_right_err_path() {
 
 // token(): the Err arm is unreachable, as consume_next_token always returns Ok.
 
-#[test]
-fn sequence_separated_by_retry_ok_value_path() {
-  // A parser that fails past the separator but succeeds at it forces the retry.
-  let p_foo = TokenParser::<String>::string("foo");
-  // This parser succeeds if and only if the next token is Whitespace.
-  let p_needs_whitespace = tokens::whitespace().map(|_| "ws".to_string(), None);
-  let parser = TokenParser::<String>::sequence_with_separators(vec![p_foo, p_needs_whitespace])
-    .separated_by(tokens::whitespace());
-  let mut tl = tl(vec![
-    SimpleToken::Ident("foo".to_string()),
-    SimpleToken::Whitespace,
-  ]);
-  let result = (parser.run)(&mut tl);
-  assert!(result.is_ok());
-  let vals = result.unwrap();
-  assert_eq!(vals[0], "foo");
-  assert_eq!(vals[1], "ws");
-}
 
-#[test]
-fn set_of_separated_by_two_elements_complete() {
-  let p_a = TokenParser::<String>::string("alpha");
-  let p_b = TokenParser::<String>::string("beta");
-  let parser = TokenParser::<String>::set_of(vec![p_a, p_b]).separated_by(tokens::whitespace());
-  let result = parser.parse_to_end("alpha beta");
-  assert!(result.is_ok());
-  let vals = result.unwrap();
-  assert!(vals.contains(&"alpha".to_string()));
-  assert!(vals.contains(&"beta".to_string()));
-}
 
-#[test]
-fn set_of_as_token_parser_two_elements_complete() {
-  let p_a = TokenParser::<String>::string("x");
-  let p_b = TokenParser::<String>::string("y");
-  let parser = TokenParser::<String>::set_of(vec![p_a, p_b]).as_token_parser();
-  let mut tl = tl(vec![
-    SimpleToken::Ident("x".to_string()),
-    SimpleToken::Ident("y".to_string()),
-  ]);
-  let result = (parser.run)(&mut tl);
-  assert!(result.is_ok());
-}
 
 #[test]
 fn flexible_sequence_optional_err_with_separator_consumed() {

@@ -16,19 +16,6 @@ fn test_media_query_display() {
   assert_eq!(format!("{}", query), "@media (min-width: 768px)");
 }
 
-#[test]
-fn test_has_balanced_parens() {
-  assert!(MediaQuery::has_balanced_parens("(min-width: 768px)"));
-  assert!(MediaQuery::has_balanced_parens(
-    "(min-width: 768px) and (max-width: 1200px)"
-  ));
-  assert!(MediaQuery::has_balanced_parens("screen"));
-  assert!(MediaQuery::has_balanced_parens(""));
-
-  assert!(!MediaQuery::has_balanced_parens("(min-width: 768px"));
-  assert!(!MediaQuery::has_balanced_parens("min-width: 768px)"));
-  assert!(!MediaQuery::has_balanced_parens("((min-width: 768px)"));
-}
 
 #[test]
 fn test_validate_media_query_success() {

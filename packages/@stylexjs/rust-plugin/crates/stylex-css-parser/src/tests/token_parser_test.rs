@@ -210,21 +210,8 @@ mod test_token_parser {
 
   #[cfg(test)]
   mod sequence_parsers_basic {
-    use super::*;
+    
 
-    #[test]
-    fn as_token_parser_without_separator() {
-      let p_foo = TokenParser::<String>::string("foo");
-      let p_colon = tokens::colon().map(|_| ":".to_string(), None);
-      let p_bar = TokenParser::<String>::string("bar");
-
-      let parser = TokenParser::<String>::sequence_with_separators(vec![p_foo, p_colon, p_bar])
-        .as_token_parser();
-
-      let result = parser.parse_to_end("foo:bar");
-      assert!(result.is_ok());
-      assert_eq!(result.unwrap(), vec!["foo", ":", "bar"]);
-    }
   }
 
   #[cfg(test)]

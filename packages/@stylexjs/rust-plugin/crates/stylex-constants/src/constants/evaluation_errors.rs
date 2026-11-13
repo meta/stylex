@@ -44,8 +44,6 @@ pub static UNDEFINED_CONST: &str = "Referenced constant is not defined.";
 
 pub static OBJECT_METHOD: &str = "Unsupported object method.\n\n";
 
-/// An author's arrow, with every argument bound, whose body produced no compile-time value.
-pub static FUNCTION_BODY_WITHOUT_VALUE: &str = "The function's body has no compile-time value.\n\n";
 
 /// A call to a global or StyleX function with an argument the engine bridge cannot carry.
 pub fn uncoercible_value(callee: &str) -> String {
@@ -272,22 +270,7 @@ pub static BLOCKED_PROPERTY_ACCESS: &str = concat!(
   "is blocked to prevent arbitrary code execution.\n"
 );
 
-/// A call of a string-compiling function (`Function` and kin, `eval`); backstop behind
-/// [`BLOCKED_PROPERTY_ACCESS`]. Text and line breaks match Babel's.
-pub static BLOCKED_FUNCTION_CALL: &str = concat!(
-  "Calling this function is not allowed during compilation.\n",
-  "Functions that compile strings into code, such as 'Function' and 'eval', are blocked to\n",
-  "prevent arbitrary code execution.\n"
-);
 
-/// A binding that would shadow a name the printed fold reserves for its own checks.
-pub fn reserved_compiler_name(name: &str) -> String {
-  format!(
-    "Cannot fold an expression that binds '{}' at compile time.\n\
-     The compiler reserves that name for its own use in the source it evaluates.\n\n",
-    name
-  )
-}
 
 /// A read of `constructor`, `call`, `apply` or `bind`, which leads to the function graph.
 pub fn escaping_property(property: &str) -> String {

@@ -62,43 +62,11 @@ impl CssWideKeyword {
       .map(Self::ident_to_keyword, Some("to_keyword"))
   }
 
-  /// Parser specifically for 'inherit'
-  pub fn inherit_parser() -> TokenParser<CssWideKeyword> {
-    Self::parser().where_fn(
-      |keyword| matches!(keyword, CssWideKeyword::Inherit),
-      Some("inherit"),
-    )
-  }
 
-  /// Parser specifically for 'initial'
-  pub fn initial_parser() -> TokenParser<CssWideKeyword> {
-    Self::parser().where_fn(
-      |keyword| matches!(keyword, CssWideKeyword::Initial),
-      Some("initial"),
-    )
-  }
 
-  /// Parser specifically for 'unset'
-  pub fn unset_parser() -> TokenParser<CssWideKeyword> {
-    Self::parser().where_fn(
-      |keyword| matches!(keyword, CssWideKeyword::Unset),
-      Some("unset"),
-    )
-  }
 
-  /// Parser specifically for 'revert'
-  pub fn revert_parser() -> TokenParser<CssWideKeyword> {
-    Self::parser().where_fn(
-      |keyword| matches!(keyword, CssWideKeyword::Revert),
-      Some("revert"),
-    )
-  }
 }
 
-/// CSS 'auto' keyword
-pub fn auto_parser() -> TokenParser<String> {
-  TokenParser::<String>::string("auto").map(|_| "auto".to_string(), Some("auto_keyword"))
-}
 
 /// CSS variable reference: var(--name)
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -227,17 +195,6 @@ pub enum NumberOrPercentage {
   Percentage(Percentage),
 }
 
-impl NumberOrPercentage {
-  /// This value as a fraction: a number as itself, a percentage divided by 100.
-  /// Unlike upstream `numberOrPercentage`, a negative number stays negative (see
-  /// [`crate::css_types::alpha_value::parse_alpha_token`]).
-  pub fn as_fraction(&self) -> f64 {
-    match self {
-      NumberOrPercentage::Number(number) => number.value,
-      NumberOrPercentage::Percentage(percentage) => percentage.value / 100.0,
-    }
-  }
-}
 
 #[cfg_attr(coverage_nightly, coverage(off))]
 impl Display for NumberOrPercentage {
@@ -249,13 +206,6 @@ impl Display for NumberOrPercentage {
   }
 }
 
-/// Parser for number or percentage values
-pub fn number_or_percentage_parser() -> TokenParser<NumberOrPercentage> {
-  TokenParser::one_of(vec![
-    Number::parser().map(NumberOrPercentage::Number, Some("number")),
-    Percentage::parser().map(NumberOrPercentage::Percentage, Some("percentage")),
-  ])
-}
 
 #[cfg(test)]
 #[path = "../tests/css_types/common_types_tests.rs"]

@@ -20,32 +20,8 @@ fn ident_to_keyword_wildcard_arm_panics() {
 
 // ── Specific-keyword parsers (initial / unset / revert) ──
 
-#[test]
-fn initial_parser_rejects_inherit() {
-  assert!(
-    CssWideKeyword::initial_parser()
-      .parse_to_end("inherit")
-      .is_err()
-  );
-}
 
-#[test]
-fn unset_parser_rejects_revert() {
-  assert!(
-    CssWideKeyword::unset_parser()
-      .parse_to_end("revert")
-      .is_err()
-  );
-}
 
-#[test]
-fn revert_parser_rejects_unset() {
-  assert!(
-    CssWideKeyword::revert_parser()
-      .parse_to_end("unset")
-      .is_err()
-  );
-}
 
 // ── CssVariable::extract_ident_string ──
 

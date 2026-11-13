@@ -155,21 +155,6 @@ pub fn write_js_number(out: &mut impl fmt::Write, value: f64) -> fmt::Result {
   Ok(())
 }
 
-/// Writes `values` into `out` as a `", "`-separated list, each spelled as JS spells it.
-pub fn write_js_number_list(
-  out: &mut impl fmt::Write,
-  values: impl IntoIterator<Item = f64>,
-) -> fmt::Result {
-  for (index, value) in values.into_iter().enumerate() {
-    if index > 0 {
-      out.write_str(", ")?;
-    }
-
-    write_js_number(out, value)?;
-  }
-
-  Ok(())
-}
 
 /// Renders an `f64` exactly as JS `String(Number)` does.
 pub fn to_js_string(value: f64) -> String {

@@ -392,11 +392,6 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
     err_opt.map_or(result, Err)
   }
 
-  /// Enhanced labeling method for better debugging
-  pub fn with_label(mut self, new_label: impl Into<String>) -> Self {
-    self.label = new_label.into();
-    self
-  }
 
   /// Parser that always succeeds with the given value.
   pub fn always(value: T) -> TokenParser<T> {
@@ -416,14 +411,6 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
     )
   }
 
-  pub fn separated_by_optional_whitespace(self) -> TokenParser<Vec<T>>
-  where
-    T: Clone + Debug + 'static,
-  {
-    self
-      .separated_by(tokens::whitespace().optional())
-      .one_or_more()
-  }
 
   /// Try multiple parsers in order.
   pub fn one_of(parsers: Vec<TokenParser<T>>) -> TokenParser<T> {
@@ -471,12 +458,6 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
     )
   }
 
-  /// Parse a sequence of parsers with separator support (returns builder)
-  pub fn sequence_with_separators<U: Clone + Debug + 'static>(
-    parsers: Vec<TokenParser<U>>,
-  ) -> SequenceParsers<U> {
-    SequenceParsers::new(parsers)
-  }
 
   /// Sequence of required (`Left`) and optional (`Right`) parsers with separators.
   pub fn flexible_sequence_separated_by<U: Clone + Debug + 'static, S: Clone + Debug + 'static>(
@@ -565,10 +546,6 @@ impl<T: Clone + Debug + 'static> TokenParser<T> {
     )
   }
 
-  /// Parse a set of parsers in any order; chain `.separated_by()` on the result.
-  pub fn set_of<U: Clone + Debug + 'static>(parsers: Vec<TokenParser<U>>) -> SetOfParsers<U> {
-    SetOfParsers::new(parsers)
-  }
 
   /// Parse zero or more occurrences.
   pub fn zero_or_more(parser: TokenParser<T>) -> TokenParser<Vec<T>> {
@@ -1298,10 +1275,6 @@ impl Tokens {
     TokenParser::<SimpleToken>::token(SimpleToken::Whitespace, Some("Whitespace"))
   }
 
-  /// Parse an at-keyword token
-  pub fn at_keyword() -> TokenParser<SimpleToken> {
-    TokenParser::<SimpleToken>::token(SimpleToken::AtKeyword(String::new()), Some("AtKeyword"))
-  }
 }
 
 impl<T: Clone + Debug + 'static> TokenParser<T> {

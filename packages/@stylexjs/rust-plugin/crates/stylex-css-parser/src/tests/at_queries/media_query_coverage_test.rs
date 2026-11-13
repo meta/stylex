@@ -115,34 +115,9 @@ fn parser_no_at_prefix_parses_just_query() {
   assert_eq!(parsed("screen").to_string(), "@media screen");
 }
 
-#[test]
-fn has_balanced_parens_accepts_a_closed_query_and_refuses_an_open_one() {
-  assert!(MediaQuery::has_balanced_parens("(min-width: 300px)"));
-  assert!(!MediaQuery::has_balanced_parens("(min-width: 300px"));
-}
 
-/// A trailing backslash escapes nothing, so the query is unbalanced.
-#[test]
-fn a_query_ending_in_a_backslash_is_unbalanced() {
-  assert!(!MediaQuery::has_balanced_parens("(min-width: 300px)\\"));
-  assert!(!MediaQuery::has_balanced_parens("\\"));
-}
 
-/// An escaped quote does not end the string, so the parenthesis still closes.
-#[test]
-fn a_backslash_inside_a_string_escapes_the_quote_after_it() {
-  assert!(MediaQuery::has_balanced_parens(
-    "(content: \"a\\\"b\") and (min-width: 1px)"
-  ));
-  assert!(MediaQuery::has_balanced_parens("(content: 'it\\'s')"));
-}
 
-/// A string ending in a backslash never closes, so the query is unbalanced.
-#[test]
-fn a_string_ending_in_a_backslash_is_unbalanced() {
-  assert!(!MediaQuery::has_balanced_parens("(content: \"a\\"));
-  assert!(!MediaQuery::has_balanced_parens("(content: \"a\\\")"));
-}
 
 #[test]
 fn validate_media_query_syntax_error_path() {

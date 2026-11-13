@@ -1,11 +1,5 @@
 use super::*;
 
-#[test]
-fn test_basic_tokenization() {
-  let mut list = TokenList::new("color: red;\nbackground: rgb(1, 2, 3)");
-  assert!(list.peek().unwrap().is_some());
-  assert!(!list.get_all_tokens().is_empty());
-}
 
 #[test]
 fn test_rewind_and_slice() {

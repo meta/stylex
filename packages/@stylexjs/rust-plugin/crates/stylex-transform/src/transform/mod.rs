@@ -68,13 +68,6 @@ impl<C> StyleXTransformBuilder<C>
 where
   C: Comments,
 {
-  /// Source map of the test input, so debug annotations cite authored lines instead of the
-  /// printed AST.
-  #[doc(hidden)]
-  pub fn with_source_map(mut self, source_map: Lrc<SourceMap>) -> Self {
-    self.source_map = Some(source_map);
-    self
-  }
 
   pub fn with_pass(mut self, pass: PluginPass) -> Self {
     self.plugin_pass = pass;
@@ -145,33 +138,14 @@ where
     self
   }
 
-  /// Maximum evaluation steps (not source nesting levels) before the evaluator refuses to fold.
-  pub fn with_max_evaluation_depth(mut self, val: usize) -> Self {
-    self.ensure_config().max_evaluation_depth = Some(val);
-    self
-  }
 
-  /// Maximum UTF-16 code units of string one fold may build or carry.
-  pub fn with_max_folded_characters(mut self, val: usize) -> Self {
-    self.ensure_config().max_folded_characters = Some(val);
-    self
-  }
 
-  /// Maximum array elements and object properties one fold may build or carry.
-  pub fn with_max_folded_entries(mut self, val: usize) -> Self {
-    self.ensure_config().max_folded_entries = Some(val);
-    self
-  }
 
   pub fn with_treeshake_compensation(mut self, val: bool) -> Self {
     self.ensure_config().treeshake_compensation = Some(val);
     self
   }
 
-  pub fn with_runtime_injection_option(mut self, val: RuntimeInjection) -> Self {
-    self.ensure_config().runtime_injection = Some(val);
-    self
-  }
 
   pub fn with_enable_logical_styles_polyfill(mut self, val: bool) -> Self {
     self.ensure_config().enable_logical_styles_polyfill = Some(val);
@@ -223,10 +197,6 @@ where
     self
   }
 
-  pub fn with_defined_stylex_css_variables(mut self, val: FxHashMap<String, String>) -> Self {
-    self.ensure_config().defined_stylex_css_variables = Some(val);
-    self
-  }
 
   pub fn with_env(mut self, val: IndexMap<String, EnvEntry>) -> Self {
     self.ensure_config().env = Some(val);

@@ -482,11 +482,6 @@ impl MediaQuery {
     )
   }
 
-  /// Whether every syntactic parenthesis in `input` closes (upstream `_hasBalancedParens`).
-  /// Parens inside strings or escaped as `\(` are skipped, unlike upstream.
-  pub fn has_balanced_parens(input: &str) -> bool {
-    scan_query_structure(input).parens_balanced
-  }
 }
 
 /// Maximum media query nesting depth; see [`stylex_utils::nesting::MAX_NESTING_DEPTH`].

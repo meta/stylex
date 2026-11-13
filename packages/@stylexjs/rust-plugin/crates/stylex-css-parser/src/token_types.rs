@@ -6,7 +6,6 @@ use crate::CssResult;
 use cssparser::{Parser, Token as CssToken};
 use log::error;
 use stylex_macros::stylex_panic;
-use stylex_utils::number::to_js_string;
 
 /// Simple token representation
 #[derive(Debug, Clone, PartialEq)]
@@ -33,37 +32,6 @@ pub enum SimpleToken {
   Whitespace,
   Comment(String),
   Unknown(String),
-}
-
-impl SimpleToken {
-  /// Extract token value
-  pub fn extract_value(&self) -> Option<String> {
-    match self {
-      SimpleToken::Function(name) => Some(name.clone()),
-      SimpleToken::Ident(value) => Some(value.clone()),
-      SimpleToken::String(value) => Some(value.clone()),
-      SimpleToken::Hash(value) => Some(value.clone()),
-      SimpleToken::AtKeyword(value) => Some(value.clone()),
-      SimpleToken::Comment(value) => Some(value.clone()),
-      // Through `to_js_string`, so exponents are spelled as JavaScript spells them.
-      SimpleToken::Number(value) => Some(to_js_string(*value)),
-      SimpleToken::Percentage(value) => Some(to_js_string(*value)),
-      SimpleToken::Dimension { value, unit } => Some(format!("{}{}", to_js_string(*value), unit)),
-      SimpleToken::Delim(ch) => Some(ch.to_string()),
-      SimpleToken::Unknown(value) => Some(value.clone()),
-      _ => None, // No extractable value for structural tokens
-    }
-  }
-
-  /// Extract numeric value for Number and Percentage tokens
-  pub fn extract_number(&self) -> Option<f64> {
-    match self {
-      SimpleToken::Number(value) => Some(*value),
-      SimpleToken::Percentage(value) => Some(*value),
-      SimpleToken::Dimension { value, .. } => Some(*value),
-      _ => None,
-    }
-  }
 }
 
 /// The number at the start of `text`, re-read at `f64` (`cssparser` stores `f32`, so `1.2`
@@ -377,10 +345,6 @@ impl TokenList {
     self.current_index >= self.tokens.len()
   }
 
-  /// Get all tokens
-  pub fn get_all_tokens(&mut self) -> Vec<SimpleToken> {
-    self.tokens.clone()
-  }
 
   /// Get a slice of tokens from start to end index
   pub fn slice(&mut self, start: usize, end: Option<usize>) -> Vec<SimpleToken> {

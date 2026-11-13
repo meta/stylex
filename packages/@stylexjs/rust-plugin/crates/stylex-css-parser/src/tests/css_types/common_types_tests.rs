@@ -14,14 +14,6 @@ fn test_css_variable_display() {
   assert_eq!(var.to_string(), "var(--main-color)");
 }
 
-#[test]
-fn test_css_wide_keyword_parser() {
-  let _parser = CssWideKeyword::parser();
-  let _inherit = CssWideKeyword::inherit_parser();
-  let _initial = CssWideKeyword::initial_parser();
-  let _unset = CssWideKeyword::unset_parser();
-  let _revert = CssWideKeyword::revert_parser();
-}
 
 #[test]
 fn test_number_or_percentage_display() {
@@ -32,23 +24,7 @@ fn test_number_or_percentage_display() {
   assert_eq!(pct.to_string(), "50%");
 }
 
-#[test]
-fn test_inherit_parser() {
-  let result = CssWideKeyword::inherit_parser()
-    .parse_to_end("inherit")
-    .unwrap();
-  assert_eq!(result, CssWideKeyword::Inherit);
-  assert!(
-    CssWideKeyword::inherit_parser()
-      .parse_to_end("initial")
-      .is_err()
-  );
-}
 
-#[test]
-fn test_auto_parser_rejects_other() {
-  assert!(auto_parser().parse_to_end("none").is_err());
-}
 
 #[test]
 fn test_css_variable_parser() {

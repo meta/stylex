@@ -9,18 +9,6 @@ fn test_calc_constant_display() {
   assert_eq!(CalcConstant::NaN.to_string(), "NaN");
 }
 
-#[test]
-fn test_calc_constant_is_valid() {
-  assert!(CalcConstant::is_valid_constant("pi"));
-  assert!(CalcConstant::is_valid_constant("e"));
-  assert!(CalcConstant::is_valid_constant("infinity"));
-  assert!(CalcConstant::is_valid_constant("-infinity"));
-  assert!(CalcConstant::is_valid_constant("NaN"));
-
-  assert!(!CalcConstant::is_valid_constant("invalid"));
-  assert!(!CalcConstant::is_valid_constant("PI"));
-  assert!(!CalcConstant::is_valid_constant(""));
-}
 
 #[test]
 fn test_calc_constant_parser_creation() {
