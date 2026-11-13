@@ -95,6 +95,23 @@ export const styles = stylex.create({
     expect(result).not.toBeNull();
   });
 
+  test('returns a source map of the original file', async () => {
+    const plugin = unplugin.raw({});
+    if (typeof plugin.buildStart === 'function') {
+      plugin.buildStart();
+    }
+    const source = `
+      import * as stylex from '@stylexjs/stylex';
+      const styles = stylex.create({ foo: { color: 'red' } });
+      export default styles;
+    `;
+    const result = await plugin.transform(source, '/virtual/example.js');
+    expect(result.map).not.toBeNull();
+    expect(result.map.sources).toEqual(['example.js']);
+    expect(result.map.sourcesContent).toEqual([source]);
+    expect(result.map.mappings).not.toBe('');
+  });
+
   test('writes fallback CSS asset when no CSS bundle entry exists', async () => {
     const plugin = unplugin.rollup({
       runtimeInjection: false,
