@@ -514,6 +514,23 @@ eslintTester.run('stylex-valid-styles', rule.default, {
          },
        },
      })`,
+
+    // test for progress elements
+    `import * as stylex from '@stylexjs/stylex';
+     stylex.create({
+       default: {
+         '::-webkit-progress-bar': {
+           appearance: 'none',
+         },
+         '::-webkit-progress-value': {
+           appearance: 'none',
+         },
+         '::-moz-progress-bar': {
+           appearance: 'none',
+         },
+       },
+     })`,
+
     // test for color
     `import * as stylex from '@stylexjs/stylex';
      stylex.create({
@@ -872,6 +889,31 @@ eslintTester.run('stylex-valid-styles', rule.default, {
     stylex.create({
       anchor: {
         positionTryFallbacks: \`\${fallback1}, \${fallback2}\`,
+      },
+    });
+    `,
+    // test for firstThatWorks
+    `
+    import stylex from '@stylexjs/stylex';
+    stylex.create({
+      default: {
+        position: stylex.firstThatWorks('sticky', 'fixed'),
+      },
+    });
+    `,
+    `
+    import * as stylex from '@stylexjs/stylex';
+    stylex.create({
+      default: {
+        display: stylex.firstThatWorks('grid', 'flex'),
+      },
+    });
+    `,
+    `
+    import { create, firstThatWorks } from '@stylexjs/stylex';
+    create({
+      default: {
+        position: firstThatWorks('sticky', 'fixed'),
       },
     });
     `,
@@ -2581,7 +2623,7 @@ This property is not supported in legacy StyleX resolution.`,
 auto
 a number literal or math expression
 a number ending in px, mm, in, pc, pt
-a number ending in ch, em, ex, ic, rem, vh, vw, vmin, vmax, svh, dvh, lvh, svw, dvw, ldw, cqw, cqh, cqmin, cqmax
+a number ending in ch, em, ex, ic, rem, vh, vw, vmin, vmax, svh, dvh, lvh, svw, dvw, lvw, cqw, cqh, cqmin, cqmax
 A string literal representing a percentage (e.g. 100%)
 null
 initial
@@ -2641,7 +2683,7 @@ revert`,
             'fit-content\n' +
             'auto\n' +
             'a number ending in px, mm, in, pc, pt\n' +
-            'a number ending in ch, em, ex, ic, rem, vh, vw, vmin, vmax, svh, dvh, lvh, svw, dvw, ldw, cqw, cqh, cqmin, cqmax\n' +
+            'a number ending in ch, em, ex, ic, rem, vh, vw, vmin, vmax, svh, dvh, lvh, svw, dvw, lvw, cqw, cqh, cqmin, cqmax\n' +
             'A string literal representing a percentage (e.g. 100%)\n' +
             'null\n' +
             'initial\n' +
@@ -2671,7 +2713,7 @@ revert`,
 auto
 a number literal or math expression
 a number ending in px, mm, in, pc, pt
-a number ending in ch, em, ex, ic, rem, vh, vw, vmin, vmax, svh, dvh, lvh, svw, dvw, ldw, cqw, cqh, cqmin, cqmax
+a number ending in ch, em, ex, ic, rem, vh, vw, vmin, vmax, svh, dvh, lvh, svw, dvw, lvw, cqw, cqh, cqmin, cqmax
 A string literal representing a percentage (e.g. 100%)
 null
 initial
@@ -2697,7 +2739,7 @@ revert`,
 auto
 a number literal or math expression
 a number ending in px, mm, in, pc, pt
-a number ending in ch, em, ex, ic, rem, vh, vw, vmin, vmax, svh, dvh, lvh, svw, dvw, ldw, cqw, cqh, cqmin, cqmax
+a number ending in ch, em, ex, ic, rem, vh, vw, vmin, vmax, svh, dvh, lvh, svw, dvw, lvw, cqw, cqh, cqmin, cqmax
 A string literal representing a percentage (e.g. 100%)
 null
 initial
@@ -2763,6 +2805,58 @@ revert`,
 none
 a CSS Variable
 a \`positionTry(...)\` function call, a reference to it, or a list of references
+null
+initial
+inherit
+unset
+revert`,
+        },
+      ],
+    },
+    // test for firstThatWorks with an invalid argument value
+    {
+      code: `
+        import stylex from '@stylexjs/stylex';
+        stylex.create({
+          default: {
+            position: stylex.firstThatWorks('invalid-value', 'fixed'),
+          },
+        });
+      `,
+      errors: [
+        {
+          message: `position value must be one of:
+static
+relative
+absolute
+sticky
+fixed
+null
+initial
+inherit
+unset
+revert`,
+        },
+      ],
+    },
+    // test for firstThatWorks with an invalid argument value in second position
+    {
+      code: `
+        import stylex from '@stylexjs/stylex';
+        stylex.create({
+          default: {
+            position: stylex.firstThatWorks('fixed', 'invalid-value'),
+          },
+        });
+      `,
+      errors: [
+        {
+          message: `position value must be one of:
+static
+relative
+absolute
+sticky
+fixed
 null
 initial
 inherit

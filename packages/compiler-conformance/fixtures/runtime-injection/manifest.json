@@ -1,0 +1,7 @@
+{
+  "description": "With `runtimeInjection`, generated rules are also injected at runtime through an imported inject helper.",
+  "entry": "input.js",
+  "pluginOptions": {
+    "runtimeInjection": true
+  }
+}

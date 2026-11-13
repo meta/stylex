@@ -24,6 +24,7 @@ export type UserOptions = StyleXOptions & {
   legacyDisableLayers?: boolean;
   lightningcssOptions?: LightningcssOptions;
   cssInjectionTarget?: (filepath: string) => boolean;
+  externalPackages?: ReadonlyArray<string>;
   devPersistToDisk?: boolean;
   devMode?: 'full' | 'css-only' | 'off';
 };

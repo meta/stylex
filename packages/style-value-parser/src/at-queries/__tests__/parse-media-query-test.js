@@ -156,13 +156,28 @@ describe('style-value-parser/at-queries', () => {
         expect(parsed).toMatchInlineSnapshot(`
           MediaQuery {
             "queries": {
-              "key": "all",
-              "not": true,
-              "type": "media-keyword",
+              "rule": {
+                "rules": [
+                  {
+                    "key": "all",
+                    "not": false,
+                    "only": false,
+                    "type": "media-keyword",
+                  },
+                  {
+                    "keyValue": "monochrome",
+                    "type": "word-rule",
+                  },
+                ],
+                "type": "and",
+              },
+              "type": "not",
             },
           }
         `);
-        expect(parsed.toString()).toMatchInlineSnapshot('"@media not all"');
+        expect(parsed.toString()).toMatchInlineSnapshot(
+          '"@media not all and (monochrome)"',
+        );
       });
     });
 
@@ -945,13 +960,28 @@ describe('style-value-parser/at-queries', () => {
         expect(parsed).toMatchInlineSnapshot(`
           MediaQuery {
             "queries": {
-              "key": "all",
-              "not": true,
-              "type": "media-keyword",
+              "rule": {
+                "rules": [
+                  {
+                    "key": "all",
+                    "not": false,
+                    "only": false,
+                    "type": "media-keyword",
+                  },
+                  {
+                    "keyValue": "monochrome",
+                    "type": "word-rule",
+                  },
+                ],
+                "type": "and",
+              },
+              "type": "not",
             },
           }
         `);
-        expect(parsed.toString()).toMatchInlineSnapshot('"@media not all"');
+        expect(parsed.toString()).toMatchInlineSnapshot(
+          '"@media not all and (monochrome)"',
+        );
       });
 
       test('@media screen and (min-width: 400px)', () => {
@@ -2033,13 +2063,38 @@ describe('style-value-parser/at-queries', () => {
         expect(parsed).toMatchInlineSnapshot(`
           MediaQuery {
             "queries": {
-              "key": "all",
-              "not": true,
-              "type": "media-keyword",
+              "rule": {
+                "rules": [
+                  {
+                    "key": "all",
+                    "not": false,
+                    "only": false,
+                    "type": "media-keyword",
+                  },
+                  {
+                    "keyValue": "monochrome",
+                    "type": "word-rule",
+                  },
+                  {
+                    "key": "min-width",
+                    "type": "pair",
+                    "value": {
+                      "signCharacter": undefined,
+                      "type": "integer",
+                      "unit": "px",
+                      "value": 600,
+                    },
+                  },
+                ],
+                "type": "and",
+              },
+              "type": "not",
             },
           }
         `);
-        expect(parsed.toString()).toMatchInlineSnapshot('"@media not all"');
+        expect(parsed.toString()).toMatchInlineSnapshot(
+          '"@media not all and (monochrome) and (min-width: 600px)"',
+        );
       });
 
       test('@media (max-width: 1440px) and (not (max-width: 1024px)) and (not (max-width: 768px)) and (not (max-width: 458px))', () => {
