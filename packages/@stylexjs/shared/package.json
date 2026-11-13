@@ -14,8 +14,8 @@
     "test": "jest --coverage --passWithNoTests"
   },
   "devDependencies": {
-    "@babel/cli": "^7.23.9",
-    "@babel/core": "^7.23.9"
+    "@babel/cli": "^8.1.0",
+    "@babel/core": "^8.1.0"
   },
   "files": [
     "lib/*"
