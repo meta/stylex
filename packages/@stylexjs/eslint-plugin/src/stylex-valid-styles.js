@@ -570,7 +570,10 @@ const stylexValidStyles = {
             styleXFirstThatWorksImports.has(callee.name))
         ) {
           for (const arg of valueNode.arguments) {
-            if (arg.type === 'SpreadElement') {
+            if (
+              arg.type === 'SpreadElement' ||
+              isStylexResolvedVarsToken(arg, stylexResolvedVarsTokenImports)
+            ) {
               continue;
             }
             const argCheck = validateStyleValue(

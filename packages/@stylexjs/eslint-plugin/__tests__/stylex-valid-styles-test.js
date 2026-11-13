@@ -917,6 +917,15 @@ eslintTester.run('stylex-valid-styles', rule.default, {
       },
     });
     `,
+    `
+    import * as stylex from '@stylexjs/stylex';
+    import { tokens } from './tokens.stylex';
+    stylex.create({
+      default: {
+        opacity: stylex.firstThatWorks(tokens.button.opacity, '1'),
+      },
+    });
+    `,
     // test for ternary and logical expressions
     {
       code: `
@@ -2846,6 +2855,33 @@ revert`,
         stylex.create({
           default: {
             position: stylex.firstThatWorks('fixed', 'invalid-value'),
+          },
+        });
+      `,
+      errors: [
+        {
+          message: `position value must be one of:
+static
+relative
+absolute
+sticky
+fixed
+null
+initial
+inherit
+unset
+revert`,
+        },
+      ],
+    },
+    // test for firstThatWorks with a token followed by an invalid argument value
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        import { tokens } from './tokens.stylex';
+        stylex.create({
+          default: {
+            position: stylex.firstThatWorks(tokens.position, 'invalid-value'),
           },
         });
       `,
