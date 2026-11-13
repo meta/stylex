@@ -35,7 +35,10 @@ export const isNumber: RuleCheck = makeVariableCheckingRule(
 
     if (node.type === 'Identifier' && context) {
       // $FlowFixMe[prop-missing] Flow libdefs doesn't know SourceCode has `getScope`
-      const scope = getSourceCode(context).getScope(node);
+      let scope = getSourceCode(context).getScope(node);
+      while (scope.upper != null && !scope.set.has(node.name)) {
+        scope = scope.upper;
+      }
       const variable = scope.set.get(node.name);
       const def = variable?.defs?.[0];
 

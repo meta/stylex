@@ -34,17 +34,29 @@ Push the branch up for review:
 git push origin release/<version>
 ```
 
-Once the branch has been merged, update `main` and the git-tag.
+Once the branch has been merged, update `main` and push the release tag.
 
 ```shell
 git checkout main
 git pull origin main
 git tag -am <version> "<version>"
-git push --tags origin main
+git push origin <version>
 ```
 
-To publish the release:
+The [publish workflow](../.github/workflows/publish.yml) builds the tagged
+commit, publishes every package to npm and creates the GitHub release. It can
+also be run manually from the Actions tab by picking the release tag in "Use
+workflow from". Leave "dry run" checked to try it without publishing.
+
+If the workflow can't be used, publish from your machine with Node 22:
 
 ```shell
 npm run release -- --pkg-version <version> --publish --otp 123456
 ```
+
+### One-time setup
+
+Each npm package needs a
+[trusted publisher](https://docs.npmjs.com/trusted-publishers) for repository
+`meta/stylex`, workflow `publish.yml` and environment `npm-publish`. The `fb`
+npm user should also be invited to each package.

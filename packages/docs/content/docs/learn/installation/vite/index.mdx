@@ -68,7 +68,7 @@ function DevStyleXInjectImpl() {
   useEffect(() => {
     if (import.meta.env.DEV) {
       // @ts-ignore
-      import('virtual:stylex:css-only');
+      import('virtual:stylex:runtime');
     }
   }, []);
   return <link rel="stylesheet" href="/virtual:stylex.css" />;

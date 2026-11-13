@@ -390,6 +390,172 @@ describe('Media Query Transformer', () => {
     expect(JSON.stringify(result)).toBe(JSON.stringify(expectedStyles));
   });
 
+  test('a leading not negates the whole query', () => {
+    const originalStyles = {
+      filter: {
+        default: 'grayscale(1)',
+        '@media not all and (monochrome)': 'none',
+      },
+      color: {
+        default: 'black',
+        '@media not screen and (min-width: 100px)': 'red',
+      },
+    };
+
+    expect(lastMediaQueryWinsTransform(originalStyles)).toMatchInlineSnapshot(`
+      {
+        "color": {
+          "@media not screen and (min-width: 100px)": "red",
+          "default": "black",
+        },
+        "filter": {
+          "@media not all and (monochrome)": "none",
+          "default": "grayscale(1)",
+        },
+      }
+    `);
+  });
+
+  test('a leading not followed by a later query', () => {
+    const originalStyles = {
+      color: {
+        default: 'black',
+        '@media not all and (monochrome)': 'blue',
+        '@media (min-width: 500px)': 'red',
+      },
+    };
+
+    expect(lastMediaQueryWinsTransform(originalStyles)).toMatchInlineSnapshot(`
+      {
+        "color": {
+          "@media (min-width: 500px)": "red",
+          "@media (not (min-width: 500px)) and (not (monochrome))": "blue",
+          "default": "black",
+        },
+      }
+    `);
+  });
+
+  test('a later query with a leading not', () => {
+    const originalStyles = {
+      color: {
+        default: 'black',
+        '@media (min-width: 500px)': 'red',
+        '@media not all and (monochrome)': 'blue',
+      },
+      width: {
+        default: '100%',
+        '@media (max-width: 900px)': '80%',
+        '@media not print and (min-width: 600px)': '60%',
+      },
+    };
+
+    expect(lastMediaQueryWinsTransform(originalStyles)).toMatchInlineSnapshot(`
+      {
+        "color": {
+          "@media (min-width: 500px) and (monochrome)": "red",
+          "@media not all and (monochrome)": "blue",
+          "default": "black",
+        },
+        "width": {
+          "@media not print and (min-width: 600px)": "60%",
+          "@media print and (max-width: 900px) and (min-width: 600px)": "80%",
+          "default": "100%",
+        },
+      }
+    `);
+  });
+
+  test('a leading not over an or condition stays linear in size', () => {
+    const originalStyles = {
+      color: {
+        default: 'black',
+        '@media (min-width: 10px)': 'red',
+        '@media not screen and ((min-width: 100px) or (min-width: 200px) or (min-width: 300px) or (min-width: 400px))':
+          'blue',
+      },
+    };
+
+    expect(lastMediaQueryWinsTransform(originalStyles)).toMatchInlineSnapshot(`
+      {
+        "color": {
+          "@media not screen and ((min-width: 100px) or (min-width: 200px) or (min-width: 300px) or (min-width: 400px))": "blue",
+          "@media screen and (min-width: 100px) and (min-width: 10px), screen and (min-width: 200px) and (min-width: 10px), screen and (min-width: 300px) and (min-width: 10px), screen and (min-width: 400px) and (min-width: 10px)": "red",
+          "default": "black",
+        },
+      }
+    `);
+  });
+
+  test('a leading not over mixed and/or conditions', () => {
+    const originalStyles = {
+      color: {
+        default: 'black',
+        '@media not all and (min-width: 500px) and ((max-width: 900px) or (max-height: 600px))':
+          'blue',
+      },
+      width: {
+        default: '100%',
+        '@media (min-width: 10px)': '80%',
+        '@media not all and (min-width: 500px) and ((max-width: 900px) or (max-height: 600px))':
+          '60%',
+      },
+    };
+
+    expect(lastMediaQueryWinsTransform(originalStyles)).toMatchInlineSnapshot(`
+      {
+        "color": {
+          "@media not all and (min-width: 500px) and ((max-width: 900px) or (max-height: 600px))": "blue",
+          "default": "black",
+        },
+        "width": {
+          "@media (max-width: 900px) and (min-width: 10px) and (min-width: 500px), (max-height: 600px) and (min-width: 10px) and (min-width: 500px)": "80%",
+          "@media not all and (min-width: 500px) and ((max-width: 900px) or (max-height: 600px))": "60%",
+          "default": "100%",
+        },
+      }
+    `);
+  });
+
+  test('an or condition inside an and keeps its parentheses', () => {
+    const originalStyles = {
+      color: {
+        default: 'black',
+        '@media (min-width: 1px) and ((max-width: 200px) or (max-height: 600px))':
+          'blue',
+      },
+    };
+
+    expect(lastMediaQueryWinsTransform(originalStyles)).toMatchInlineSnapshot(`
+      {
+        "color": {
+          "@media (min-width: 1px) and ((max-width: 200px) or (max-height: 600px))": "blue",
+          "default": "black",
+        },
+      }
+    `);
+  });
+
+  test('a media type from a negated later query is moved to the front', () => {
+    const originalStyles = {
+      color: {
+        default: 'black',
+        '@media (max-width: 900px)': 'red',
+        '@media not print, (max-width: 100px)': 'blue',
+      },
+    };
+
+    expect(lastMediaQueryWinsTransform(originalStyles)).toMatchInlineSnapshot(`
+      {
+        "color": {
+          "@media not print, (max-width: 100px)": "blue",
+          "@media print and (max-width: 900px) and (not (max-width: 100px))": "red",
+          "default": "black",
+        },
+      }
+    `);
+  });
+
   test('basic usage: does not modify single queries', () => {
     const originalStyles = {
       gridColumn: {

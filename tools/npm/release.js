@@ -19,6 +19,9 @@ const args = yargs(hideBin(process.argv))
   .option('commit', {
     type: 'boolean',
   })
+  .option('dry-run', {
+    type: 'boolean',
+  })
   .option('otp', {
     type: 'string',
   })
@@ -29,16 +32,35 @@ const args = yargs(hideBin(process.argv))
   })
   .option('publish', {
     type: 'boolean',
+  })
+  .option('skip-install', {
+    type: 'boolean',
   }).argv;
 
 const commit = args.commit;
+const dryRun = args['dry-run'];
 const otp = args.otp;
 const pkgVersion = args['pkg-version'];
 const publish = args.publish;
+const skipInstall = args['skip-install'];
+
+const repoRoot = path.join(__dirname, '../..');
+
+const expectedNodeMajor = fs
+  .readFileSync(path.join(repoRoot, '.nvmrc'), 'utf8')
+  .trim()
+  .replace(/^v/, '')
+  .split('.')[0];
+const nodeMajor = process.versions.node.split('.')[0];
+if (nodeMajor !== expectedNodeMajor) {
+  console.error(
+    `Releases must use Node ${expectedNodeMajor} (see .nvmrc), but this is Node ${process.versions.node}. Run \`nvm use\` and try again.`,
+  );
+  process.exit(1);
+}
 
 console.log(`Creating release version "${pkgVersion}"`);
 
-const repoRoot = path.join(__dirname, '../..');
 const packageJsonData = require('../../package.json');
 
 // Collect workspaces and package manifests
@@ -76,6 +98,22 @@ if (workspaces.length === 0) {
   process.exit(1);
 }
 
+if (publish) {
+  const mismatched = workspaces.filter(
+    ({ packageJson }) =>
+      !packageJson.private && packageJson.version !== pkgVersion,
+  );
+  if (mismatched.length > 0) {
+    console.error(
+      `Refusing to publish ${pkgVersion} because these packages have a different version:`,
+    );
+    mismatched.forEach(({ packageJson }) => {
+      console.error(`  ${packageJson.name}@${packageJson.version}`);
+    });
+    process.exit(1);
+  }
+}
+
 // update each package version and its dependencies
 const workspaceNames = workspaces.map(({ packageJson }) => packageJson.name);
 workspaces.forEach(({ packageJson, packageJsonPath }) => {
@@ -109,7 +147,9 @@ process.chdir(path.join(__dirname, '../..'));
 
 // This repo uses yarn (see `packageManager` and CI). Running `npm install`
 // here would generate a stray `package-lock.json`, so install with yarn.
-execSync('yarn install', { stdio: 'inherit' });
+if (!skipInstall) {
+  execSync('yarn install', { stdio: 'inherit' });
+}
 
 // Commit changes
 if (commit) {
@@ -141,6 +181,9 @@ if (publish) {
   const publishArgs = ['publish', '--access', 'public'];
   if (otp != null) {
     publishArgs.push('--otp', otp);
+  }
+  if (dryRun) {
+    publishArgs.push('--dry-run');
   }
   // publish public packages
   const failed = [];

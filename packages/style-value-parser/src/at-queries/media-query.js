@@ -261,7 +261,17 @@ const mediaAndRulesParser: TokenParser<MediaAndRules | MediaQueryRule> =
       <T>(rules: $ReadOnlyArray<T>): implies rules is $ReadOnlyArray<T> =>
         Array.isArray(rules) && rules.length > 1,
     )
-    .map((rules) => (rules.length === 1 ? rules[0] : { type: 'and', rules }));
+    .map((rules) => {
+      if (rules.length === 1) return rules[0];
+      const [first, ...rest] = rules;
+      if (first.type === 'media-keyword' && first.not) {
+        return {
+          type: 'not',
+          rule: { type: 'and', rules: [{ ...first, not: false }, ...rest] },
+        };
+      }
+      return { type: 'and', rules };
+    });
 
 // update mediaOrRulesParser to use lazy notParser reference
 const mediaOrRulesParser: TokenParser<MediaOrRules | MediaQueryRule> =
@@ -617,10 +627,28 @@ function containsMediaKeyword(node: MediaQueryRule): boolean {
   }
 }
 
+function isLeadingNotQuery(node: MediaQueryRule): boolean {
+  if (node.type !== 'not' || node.rule.type !== 'and') {
+    return false;
+  }
+  const [first, ...rest] = node.rule.rules;
+  return (
+    first.type === 'media-keyword' &&
+    !first.not &&
+    !rest.some(containsMediaKeyword)
+  );
+}
+
 // Rewrites an already-normalized media AST so that media types are expressed as
 // valid CSS: a single positive anchoring media type per query, distributing
 // over `or` branches and dropping branches that can never match.
-function resolveMediaTypes(node: MediaQueryRule): MediaQueryRule {
+function resolveMediaTypes(
+  node: MediaQueryRule,
+  isQueryList: boolean = false,
+): MediaQueryRule {
+  if (isQueryList && isLeadingNotQuery(node)) {
+    return node;
+  }
   if (!containsMediaKeyword(node)) {
     return node;
   }
@@ -628,7 +656,7 @@ function resolveMediaTypes(node: MediaQueryRule): MediaQueryRule {
     case 'or': {
       const rules: Array<MediaQueryRule> = [];
       for (const child of node.rules) {
-        for (const r of flattenOrRule(resolveMediaTypes(child))) {
+        for (const r of flattenOrRule(resolveMediaTypes(child, isQueryList))) {
           if (!isNeverRule(r)) {
             rules.push(r);
           }
@@ -640,7 +668,10 @@ function resolveMediaTypes(node: MediaQueryRule): MediaQueryRule {
       return { type: 'or', rules };
     }
     case 'and': {
-      const resolved = node.rules.map(resolveMediaTypes);
+      const resolved = node.rules.flatMap((rule) => {
+        const r = resolveMediaTypes(rule);
+        return r.type === 'and' ? r.rules : [r];
+      });
 
       // Distribute over a nested `or` so each branch anchors its own media type.
       const orIndex = resolved.findIndex((r) => r.type === 'or');
@@ -701,14 +732,15 @@ function resolveMediaTypes(node: MediaQueryRule): MediaQueryRule {
       return { type: 'and', rules };
     }
     case 'not': {
-      const inner = resolveMediaTypes(node.rule);
-      if (inner.type === 'media-keyword') {
-        return resolveMediaTypes({ ...inner, not: !inner.not });
-      }
-      if (inner.type === 'and' || inner.type === 'or') {
+      const inner = node.rule;
+      if (
+        inner.type === 'media-keyword' ||
+        inner.type === 'and' ||
+        inner.type === 'or'
+      ) {
         return resolveMediaTypes(negateRule(inner));
       }
-      return { type: 'not', rule: inner };
+      return { type: 'not', rule: resolveMediaTypes(inner) };
     }
     default:
       return node;
@@ -718,7 +750,7 @@ function resolveMediaTypes(node: MediaQueryRule): MediaQueryRule {
 export class MediaQuery {
   queries: MediaQueryRule;
   constructor(queries: MediaQueryRule) {
-    this.queries = resolveMediaTypes(MediaQuery.normalize(queries));
+    this.queries = resolveMediaTypes(MediaQuery.normalize(queries), true);
   }
   toString(): string {
     return `@media ${this.#toString(this.queries, true)}`;
@@ -764,6 +796,9 @@ export class MediaQuery {
         );
       }
       case 'not':
+        if (isTopLevel && isLeadingNotQuery(queries)) {
+          return `not ${this.#toString(queries.rule)}`;
+        }
         return queries.rule &&
           (queries.rule.type === 'and' ||
             queries.rule.type === 'or' ||
@@ -771,7 +806,15 @@ export class MediaQuery {
           ? `(not (${this.#toString(queries.rule)}))`
           : `(not ${this.#toString(queries.rule)})`;
       case 'and':
-        return queries.rules.map((rule) => this.#toString(rule)).join(' and ');
+        return queries.rules
+          .map((rule) =>
+            queries.rules.length > 1 &&
+            rule.type === 'or' &&
+            rule.rules.length > 1
+              ? `(${this.#toString(rule)})`
+              : this.#toString(rule),
+          )
+          .join(' and ');
       case 'or': {
         const validRules = queries.rules.filter(
           (r) => !(r.type === 'or' && r.rules.length === 0),
@@ -786,7 +829,7 @@ export class MediaQuery {
             const result = !isTopLevel ? `(${ruleString})` : ruleString;
             return result;
           }
-          return this.#toString(rule);
+          return this.#toString(rule, isTopLevel);
         });
 
         return isTopLevel

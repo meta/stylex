@@ -2553,6 +2553,84 @@ describe('@stylexjs/babel-plugin', () => {
           `);
         });
 
+        test('media queries with a leading not and last query wins', () => {
+          const { code, metadata } = transform(
+            `
+            import * as stylex from '@stylexjs/stylex';
+            export const styles = stylex.create({
+              root: {
+                filter: {
+                  default: 'grayscale(1)',
+                  '@media not all and (monochrome)': 'none',
+                },
+                backgroundColor: {
+                  default: 'red',
+                  '@media not screen and (min-width: 100px)': 'blue',
+                  '@media (min-width: 500px)': 'purple',
+                }
+              },
+            });
+          `,
+            { enableMediaQueryOrder: true },
+          );
+          expect(code).toMatchInlineSnapshot(`
+            "import * as stylex from '@stylexjs/stylex';
+            export const styles = {
+              root: {
+                ku685b: "xifi7vn x342vwv",
+                kWkggS: "xrkmrrc x8tgh9g x132kqxt",
+                $$css: true
+              }
+            };"
+          `);
+          expect(metadata).toMatchInlineSnapshot(`
+            {
+              "stylex": [
+                [
+                  "xifi7vn",
+                  {
+                    "ltr": ".xifi7vn{filter:grayscale(1)}",
+                    "rtl": null,
+                  },
+                  3000,
+                ],
+                [
+                  "x342vwv",
+                  {
+                    "ltr": "@media not all and (monochrome){.x342vwv.x342vwv{filter:none}}",
+                    "rtl": null,
+                  },
+                  3200,
+                ],
+                [
+                  "xrkmrrc",
+                  {
+                    "ltr": ".xrkmrrc{background-color:red}",
+                    "rtl": null,
+                  },
+                  3000,
+                ],
+                [
+                  "x8tgh9g",
+                  {
+                    "ltr": "@media print and (not (min-width: 500px)), (max-width: 99.98px){.x8tgh9g.x8tgh9g{background-color:blue}}",
+                    "rtl": null,
+                  },
+                  3200,
+                ],
+                [
+                  "x132kqxt",
+                  {
+                    "ltr": "@media (min-width: 500px){.x132kqxt.x132kqxt{background-color:purple}}",
+                    "rtl": null,
+                  },
+                  3200,
+                ],
+              ],
+            }
+          `);
+        });
+
         test('media queries without last query wins', () => {
           const { code, metadata } = transform(
             `
