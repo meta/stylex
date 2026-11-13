@@ -820,7 +820,9 @@ function _evaluate(path: NodePath<>, state: State): any {
     }
   }
 
-  if (path.isUnaryExpression({ prefix: true })) {
+  // Unary operators are always prefix in JS. Don't require `prefix: true`, since
+  // some tools (e.g. React Compiler) emit negative numbers with `prefix: false`.
+  if (path.isUnaryExpression()) {
     if (path.node.operator === 'void') {
       // we don't need to evaluate the argument to know what this will return
       return undefined;

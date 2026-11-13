@@ -1583,6 +1583,63 @@ describe('@stylexjs/babel-plugin', () => {
             }
           `);
         });
+
+        test('use negative number', () => {
+          const source = `
+            import * as stylex from '@stylexjs/stylex';
+            export const styles = stylex.create({
+              root: {
+                marginBlock: -4,
+              }
+            });
+          `;
+          const { code, metadata } = transform(source);
+          expect(code).toMatchInlineSnapshot(`
+            "import * as stylex from '@stylexjs/stylex';
+            export const styles = {
+              root: {
+                kqGvvJ: "x1k49i25",
+                $$css: true
+              }
+            };"
+          `);
+          expect(metadata).toMatchInlineSnapshot(`
+            {
+              "stylex": [
+                [
+                  "x1k49i25",
+                  {
+                    "ltr": ".x1k49i25{margin-block:-4px}",
+                    "rtl": null,
+                  },
+                  2000,
+                ],
+              ],
+            }
+          `);
+
+          // React Compiler emits negative numbers as UnaryExpression nodes
+          // with `prefix: false`, which must evaluate the same way.
+          const prefixFalse = transformSync(source, {
+            babelrc: false,
+            plugins: [
+              () => ({
+                visitor: {
+                  Program(path) {
+                    path.traverse({
+                      UnaryExpression(p) {
+                        p.node.prefix = false;
+                      },
+                    });
+                  },
+                },
+              }),
+              stylexPlugin,
+            ],
+          });
+          expect(prefixFalse.code).toEqual(code);
+          expect(prefixFalse.metadata.stylex).toEqual(metadata.stylex);
+        });
       });
 
       describe('function value: stylex.firstThatWorks()', () => {
