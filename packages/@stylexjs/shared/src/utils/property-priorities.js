@@ -734,12 +734,17 @@ const RELATIONAL_SELECTORS = {
     /^:where\(\.[0-9a-zA-Z_-]+(:[a-zA-Z-]+)\s+~\s+\*,\s+:has\(~\s\.[0-9a-zA-Z_-]+(:[a-zA-Z-]+)\)\)$/,
 };
 
-const PSEUDO_PART_REGEX = /::[a-zA-Z-]+|:[a-zA-Z-]+(?:\([^)]*\))?/g;
+const PSEUDO_PART_REGEX = /::[a-zA-Z-]+|:[a-zA-Z-]+(\()?/g;
 
 // We only handle chains of simple pseudo-classes and pseudo-elements and opt out of functional pseudo-classes
 function getCompoundPseudoPriority(key: string): number | void {
-  const parts = key.match(PSEUDO_PART_REGEX);
-  if (!parts || parts.length <= 1 || parts.some((p) => p.includes('('))) return;
+  const lastClose = key.lastIndexOf(')');
+  const parts = [];
+  for (const match of key.matchAll(PSEUDO_PART_REGEX)) {
+    if (match[1] != null && match.index + match[0].length <= lastClose) return;
+    parts.push(match[1] != null ? match[0].slice(0, -1) : match[0]);
+  }
+  if (parts.length <= 1) return;
 
   let total = 0;
 
