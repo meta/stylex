@@ -2442,7 +2442,7 @@ describe('@stylexjs/babel-plugin', () => {
             "import * as stylex from '@stylexjs/stylex';
             export const styles = {
               root: {
-                kWkggS: "xrkmrrc xdm03ys xb3e2qq x856a2w",
+                kWkggS: "xrkmrrc x1vx6251 x10oicgq x856a2w",
                 $$css: true
               }
             };"
@@ -2459,17 +2459,17 @@ describe('@stylexjs/babel-plugin', () => {
                   3000,
                 ],
                 [
-                  "xdm03ys",
+                  "x1vx6251",
                   {
-                    "ltr": "@media (min-width: 500.01px) and (max-width: 900px){.xdm03ys.xdm03ys{background-color:blue}}",
+                    "ltr": "@media (min-width: 500.02px) and (max-width: 900px){.x1vx6251.x1vx6251{background-color:blue}}",
                     "rtl": null,
                   },
                   3200,
                 ],
                 [
-                  "xb3e2qq",
+                  "x10oicgq",
                   {
-                    "ltr": "@media (min-width: 400.01px) and (max-width: 500px){.xb3e2qq.xb3e2qq{background-color:purple}}",
+                    "ltr": "@media (min-width: 400.02px) and (max-width: 500px){.x10oicgq.x10oicgq{background-color:purple}}",
                     "rtl": null,
                   },
                   3200,

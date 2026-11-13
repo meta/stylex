@@ -43,21 +43,46 @@ export type MediaQueryRule =
   | MediaAndRules
   | MediaOrRules;
 
+// Turns the value of an exclusive bound, such as `width > X` or
+// `not (max-width: X)`, into the value of an inclusive min-/max- feature.
+// Chromium matches min-/max- features within 1/64px (LayoutUnit::Epsilon()),
+// so `min-width: 600.01px` and `max-width: 599.99px` both still match at
+// 600px. px widths therefore move by 0.02px instead of 0.01. The bound never
+// moves past a whole number, so a breakpoint written just off one, such as
+// `not (max-width: 599.99px)`, still becomes `min-width: 600px`.
+function exclusiveBoundValue(
+  value: number,
+  dim: string,
+  unit: string,
+  isMax: boolean,
+): number {
+  const epsilon = dim === 'width' && unit.toLowerCase() === 'px' ? 0.02 : 0.01;
+  let bound = isMax ? value - epsilon : value + epsilon;
+  if (!Number.isInteger(value)) {
+    bound = isMax
+      ? Math.max(bound, Math.floor(value))
+      : Math.min(bound, Math.ceil(value));
+  }
+  // Drop float noise such as 0.12000000000000001.
+  return Math.round(bound * 10000) / 10000;
+}
+
 // helper to adjust the numeric value when no equality sign is present.
 function adjustDimension(
   dimension: Length,
   op: string,
   eq: string | void,
   isMaxWidth: boolean = false,
+  key: string = '',
 ): Length {
   let adjustedValue = dimension.value;
-  const epsilon = 0.01;
   if (eq !== '=') {
-    if (isMaxWidth) {
-      adjustedValue -= epsilon;
-    } else {
-      adjustedValue += epsilon;
-    }
+    adjustedValue = exclusiveBoundValue(
+      adjustedValue,
+      key,
+      dimension.unit,
+      isMaxWidth,
+    );
   }
   return { ...dimension, value: adjustedValue };
 }
@@ -148,7 +173,13 @@ const mediaInequalityRuleParser: TokenParser<MediaRulePair> =
       // for forward inequality, e.g. (width < 1250px) becomes max-width
       const finalKey = op === '>' ? `min-${key}` : `max-${key}`;
       const isMaxWidth = finalKey.startsWith('max-');
-      const adjustedDimension = adjustDimension(dimension, op, eq, isMaxWidth);
+      const adjustedDimension = adjustDimension(
+        dimension,
+        op,
+        eq,
+        isMaxWidth,
+        key,
+      );
       return {
         type: 'pair',
         key: finalKey,
@@ -178,7 +209,13 @@ const mediaInequalityRuleParserReversed: TokenParser<MediaRulePair> =
       // reversed inequality: (1250px > width) becomes max-width
       const finalKey = op === '>' ? `max-${key}` : `min-${key}`;
       const isMaxWidth = finalKey.startsWith('max-');
-      const adjustedDimension = adjustDimension(dimension, op, eq, isMaxWidth);
+      const adjustedDimension = adjustDimension(
+        dimension,
+        op,
+        eq,
+        isMaxWidth,
+        key,
+      );
       return {
         type: 'pair',
         key: finalKey,
@@ -221,8 +258,8 @@ const doubleInequalityRuleParser: TokenParser<MediaAndRules> =
       const upperKey = op2 === '>' ? `min-${key}` : `max-${key}`;
       const lowerIsMaxWidth = lowerKey.startsWith('max-');
       const upperIsMaxWidth = upperKey.startsWith('max-');
-      const lowerValue = adjustDimension(lower, op, eq, lowerIsMaxWidth);
-      const upperValue = adjustDimension(upper, op2, eq2, upperIsMaxWidth);
+      const lowerValue = adjustDimension(lower, op, eq, lowerIsMaxWidth, key);
+      const upperValue = adjustDimension(upper, op2, eq2, upperIsMaxWidth, key);
       return {
         type: 'and',
         rules: [
@@ -366,11 +403,6 @@ function isNumericLength(val: mixed): boolean {
 function mergeIntervalsForAnd(
   rules: Array<MediaQueryRule>,
 ): Array<MediaQueryRule> {
-  const epsilon: number = 0.01;
-  // Chromium rounds a max-width ending in .99px up to the next whole pixel.
-  // Keep the generated range exclusive at integer breakpoints without
-  // widening the gap more than necessary.
-  const maxWidthEpsilon: number = 0.02;
   const dimensions = ['width', 'height'];
   const intervals: { [dim: string]: Array<[number, number]> } = {
     width: [],
@@ -448,13 +480,13 @@ function mergeIntervalsForAnd(
         if (rule.rule.key === `min-${dim}`) {
           intervals[dim].push([
             -Infinity,
-            val.value -
-              (dim === 'width' && val.unit.toLowerCase() === 'px'
-                ? maxWidthEpsilon
-                : epsilon),
+            exclusiveBoundValue(val.value, dim, val.unit, true),
           ]);
         } else {
-          intervals[dim].push([val.value + epsilon, Infinity]);
+          intervals[dim].push([
+            exclusiveBoundValue(val.value, dim, val.unit, false),
+            Infinity,
+          ]);
         }
         break;
       }
