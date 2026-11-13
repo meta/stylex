@@ -35,3 +35,14 @@ export function LLMStylingFile() {
     />
   );
 }
+
+export function LLMMigrationFile() {
+  const content = getFileContent('stylex-migration-css-modules.md');
+  return (
+    <ScrollableCodeBlock
+      content={content}
+      maxHeight={400}
+      title="stylex-migration-css-modules.md"
+    />
+  );
+}
