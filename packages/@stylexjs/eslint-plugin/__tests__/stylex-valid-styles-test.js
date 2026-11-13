@@ -457,6 +457,15 @@ eslintTester.run('stylex-valid-styles', rule.default, {
        },
      })`,
     `import * as stylex from '@stylexjs/stylex';
+     function Component() {
+       const FOO = 5;
+       return stylex.create({
+         default: (offset) => ({
+           scrollMarginTop: FOO + offset,
+         }),
+       });
+     }`,
+    `import * as stylex from '@stylexjs/stylex';
      const x = 5;
      stylex.create({
        default: {
