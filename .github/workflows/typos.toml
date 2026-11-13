@@ -6,9 +6,21 @@ extend-exclude = [
   "packages/**/__tests__/",
   # Fixture data has lots of typos
   "packages/benchmarks/**/fixtures/",
+  # Vendored third-party crate
+  # Vendored StyleX SWC crates: upstream identifiers and test data
+  "packages/@stylexjs/rust-plugin/crates/",
+  # Third-party crate names and verbatim license texts
+  "packages/@stylexjs/rust-plugin/LICENSE_PROVENANCE.json",
+  "packages/@stylexjs/rust-plugin/RUST_DEPENDENCY_LICENSES.md",
+  "packages/@stylexjs/rust-plugin/scripts/licenses-supplement.json",
+  "packages/@stylexjs/rust-plugin/THIRD_PARTY_NOTICES.md",
 ]
 
 [default.extend-words]
 # Ignore false-positives
 stylex = "stylex"
 nd = "nd"
+
+[default.extend-identifiers]
+# A generated StyleX variable hash used in test fixtures
+kLKAdn = "kLKAdn"

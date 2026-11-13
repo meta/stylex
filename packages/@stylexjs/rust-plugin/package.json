@@ -1,0 +1,63 @@
+{
+  "name": "@stylexjs/rust-plugin",
+  "version": "0.19.1",
+  "private": true,
+  "description": "Native Rust compiler for StyleX.",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./babel": {
+      "types": "./babel.d.ts",
+      "default": "./babel.js"
+    }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/meta/stylex.git"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build:native": "node scripts/build.cjs",
+    "test:native": "node scripts/test.cjs",
+    "test:parity": "node scripts/parity.cjs",
+    "bench": "node scripts/benchmark.cjs",
+    "prepack": "npm run build:native"
+  },
+  "dependencies": {
+    "@babel/code-frame": "^7.27.1",
+    "@dual-bundle/import-meta-resolve": "^4.1.0"
+  },
+  "peerDependencies": {
+    "@babel/core": "^7.26.8"
+  },
+  "peerDependenciesMeta": {
+    "@babel/core": {
+      "optional": true
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "babel.js",
+    "babel.d.ts",
+    "plugin/*.js",
+    "host.js",
+    "native/*.node",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md",
+    "crates/LICENSE",
+    "crates/NOTICE.md",
+    "crates/PROVENANCE.md",
+    "RUST_DEPENDENCY_LICENSES.md",
+    "LICENSE_PROVENANCE.json"
+  ],
+  "preferUnplugged": true,
+  "sideEffects": false
+}

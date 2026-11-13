@@ -1,0 +1,37 @@
+[package]
+description = "CSS generation, normalization and validation for StyleX SWC plugin"
+edition.workspace = true
+license.workspace = true
+name = "stylex_css"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+
+[lib]
+crate-type = ["rlib"]
+doctest = false
+
+[dependencies]
+icu_collator.workspace = true
+log.workspace = true
+postcss_value_parser = { path = "../postcss-value-parser" }
+stylex_constants = { path = "../stylex-constants" }
+stylex_css_parser = { path = "../stylex-css-parser" }
+stylex_enums = { path = "../stylex-enums" }
+stylex_macros = { path = "../stylex-macros" }
+stylex_regex = { path = "../stylex-regex" }
+stylex_structures = { path = "../stylex-structures" }
+stylex_types = { path = "../stylex-types" }
+stylex_utils = { path = "../stylex-utils" }
+
+[dev-dependencies]
+criterion.workspace = true
+ctor.workspace = true
+pretty_env_logger.workspace = true
+swc_malloc.workspace = true
+
+
+
+[lints]
+workspace = true

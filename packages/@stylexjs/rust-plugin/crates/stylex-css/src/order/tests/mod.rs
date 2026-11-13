@@ -1,0 +1,1 @@
+mod legacy_expand_shorthands_constants_test;

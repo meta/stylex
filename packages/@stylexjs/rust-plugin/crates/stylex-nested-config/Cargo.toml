@@ -1,0 +1,29 @@
+[package]
+description = "Nested config flattening for the StyleX SWC plugin"
+edition.workspace = true
+license.workspace = true
+name = "stylex_nested_config"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+
+[lib]
+crate-type = ["rlib"]
+doctest = false
+
+[dependencies]
+indexmap.workspace = true
+swc_core = { workspace = true, features = ["ecma_ast"] }
+
+stylex_ast = { path = "../stylex-ast" }
+stylex_enums = { path = "../stylex-enums" }
+stylex_macros = { path = "../stylex-macros" }
+stylex_structures = { path = "../stylex-structures" }
+
+[dev-dependencies]
+ctor.workspace = true
+pretty_env_logger.workspace = true
+
+[lints]
+workspace = true

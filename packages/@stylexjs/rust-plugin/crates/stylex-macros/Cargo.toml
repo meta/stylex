@@ -1,0 +1,22 @@
+[package]
+description = "Macros for StyleX NAPI-RS compiler"
+edition.workspace = true
+license.workspace = true
+name = "stylex_macros"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+
+[lib]
+crate-type = ["rlib"]
+doctest = false
+
+[dependencies]
+colored.workspace = true
+log.workspace = true
+
+stylex_constants = { path = "../stylex-constants" }
+
+[lints]
+workspace = true

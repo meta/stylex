@@ -1,0 +1,174 @@
+[package]
+name = "stylex_rust_compiler"
+edition = "2021"
+license = "MIT"
+version = "0.19.1"
+rust-version.workspace = true
+
+[lib]
+name = "stylex_swc_plugin"
+crate-type = ["cdylib", "rlib"]
+
+
+[features]
+default = []
+node = ["dep:napi", "dep:napi-derive", "dep:napi-build", "dep:swc_malloc"]
+# Test-only N-API diagnostics (compilerFunctionCount), for the Node suites.
+# Never enabled by npm builds; CI builds with STYLEX_NATIVE_TEST_HOOKS=1.
+test-hooks = ["node"]
+
+[dependencies]
+anyhow = "1.0.98"
+indexmap = { version = "2.10.0", features = ["serde"] }
+regex = "1.11.1"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = { version = "1.0.140", features = ["preserve_order"] }
+ryu-js = "1.0.2"
+stacker = "0.1.23"
+icu_collator = { workspace = true }
+icu_locale_core = "2.3.0"
+# The native frontend and the vendored StyleX core share one SWC version.
+swc_core = { workspace = true, features = [
+  "common",
+  "common_sourcemap",
+  "ecma_ast",
+  "ecma_ast_serde",
+  "ecma_codegen",
+  "ecma_parser",
+  "ecma_parser_typescript",
+  "ecma_parser_unstable",
+  "ecma_visit",
+  "ecma_transforms",
+] }
+swc_ecma_parser = { workspace = true, features = ["flow", "unstable", "typescript"] }
+stylex_structures = { path = "crates/stylex-structures" }
+stylex_state = { path = "crates/stylex-state" }
+stylex_transform = { path = "crates/stylex-transform" }
+stylex_types = { path = "crates/stylex-types" }
+stylex_enums = { path = "crates/stylex-enums" }
+stylex_macros = { path = "crates/stylex-macros" }
+stylex_constants = { path = "crates/stylex-constants" }
+stylex_css = { path = "crates/stylex-css" }
+stylex_css_parser = { path = "crates/stylex-css-parser" }
+stylex_evaluator = { path = "crates/stylex-evaluator" }
+stylex_diagnostics = { path = "crates/stylex-diagnostics" }
+rustc-hash = { workspace = true }
+log = { workspace = true }
+napi = { version = "3.9.0", default-features = false, features = ["napi8", "serde-json"], optional = true }
+napi-derive = { version = "3.5.0", optional = true }
+# The Node addon's global allocator, as SWC's own Node bindings choose it per
+# target (mimalloc on Linux glibc x86_64/aarch64, macOS and Windows; the system
+# allocator elsewhere). Only the addon links it: Rust API users keep theirs.
+# The addon tunes it at load (src/node.rs, `allocator_tuning`).
+swc_malloc = { workspace = true, optional = true }
+
+[build-dependencies]
+napi-build = { version = "2.3.0", optional = true }
+
+[dev-dependencies]
+pretty_assertions = "1.4.1"
+
+# The Node addon is built as a cdylib-only final artifact (scripts/build.cjs:
+# `cargo rustc --crate-type cdylib`), which is what lets fat LTO run: rustc
+# performs LTO only for a final artifact, and the package's `rlib` crate type
+# (kept for the Rust API and tests) would otherwise make it skip LTO entirely.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+strip = "symbols"
+
+[workspace]
+resolver = "2"
+members = [".", "crates/*"]
+
+# The vendored StyleX core crates (crates/*) are the public stylex-swc-plugin
+# workspace at tag 0.19.2 (6e7d3983); see crates/PROVENANCE.md. Their
+# manifests inherit these settings. Upstream declares rust-version 1.97; the
+# selected crates have been checked to build on 1.96, which this repository pins.
+[workspace.package]
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/facebook/stylex"
+rust-version = "1.96"
+version = "0.19.2"
+
+[workspace.dependencies]
+anyhow = "1.0.102"
+colored = { version = "3.1.1" }
+criterion = { version = "0.8", features = ["html_reports"] }
+cssparser = { version = "0.38.0" }
+ctor = "1.0.7"
+derive_more = { version = "2.1.1", features = ["display"] }
+fancy-regex = "0.19.0"
+# Root collation for the pseudo-key comparator. Six of its crates are new to
+# this workspace; the other 26 in its tree already arrive through SWC's
+# `idna_adapter`. `crates/stylex-css/src/utils/pre_rule.rs` costs the choice
+# against the alternative it was measured against.
+# `unstable` is an empty marker feature -- it pulls no extra crates -- and it
+# gates `CollatorBorrowed::new_root`, the only constructor for root collation
+# that cannot fail. `Collator::try_new` returns a `Result` whose `Err` means the
+# compiled CLDR data this crate carries is absent, which is a build-time
+# dependency rather than a runtime state: unreachable, untestable, and therefore
+# an uncoverable region in a workspace that excludes nothing from coverage.
+# `new_root` has no such arm. See `crates/stylex-css/src/utils/pre_rule.rs`.
+#
+# The cost is an API the crate reserves the right to change in a minor release.
+# `Cargo.lock` is committed, so that can only surface on a deliberate
+# `cargo update`, and the failure is a compile error naming this line rather than
+# anything silent.
+icu_collator = { version = "2.3.1", features = ["unstable"] }
+# Already in the graph through `icu_collator`, with these features; named here
+# for `String.prototype.normalize`, so no package is added.
+icu_normalizer = { version = "2.3.0", default-features = false, features = ["compiled_data", "utf16_iter"] }
+indexmap = { version = "2.14.0", features = ["serde"] }
+insta = { version = "1.47.2" }
+log = "0.4.32"
+murmur2 = { version = "0.1.0" }
+once_cell = { version = "1.21.4" }
+path-clean = { version = "1.0.1" }
+phf = { version = "0.14.0" }
+pretty_env_logger = "0.5.0"
+radix_fmt = { version = "1.0.0" }
+rustc-hash = "2.1.2"
+serde = "1.0.228"
+serde_json = "1.0.150"
+serial_test = { version = "4.0.1" }
+# Already in the graph through SWC, which uses it for the same reason: a list
+# that is a handful of items in every real case does not need the heap. Named
+# here so the span cache key can sort its names on the stack.
+smallvec = { version = "1.15.1" }
+# Already in the graph through swc_ecma_parser, which grows the stack for the same
+# reason: a recursive walk over a nested expression must not be bounded by the
+# thread's stack. Named here so the evaluator can depend on it directly.
+stacker = "0.1.24"
+swc_compiler_base = { version = "67.0.0" }
+swc_config = { version = "6.0.0" }
+swc_core = { version = "84.0.3" }
+swc_ecma_parser = { version = "47.0.1" }
+url = "2.5.8"
+# The Node addon's global allocator (root `node` feature): mimalloc where SWC's
+# own Node bindings use it, the system allocator elsewhere.
+swc_malloc = { version = "1.2.5" }
+swc_sourcemap = { version = "10.0.2" }
+testing = "28.0.1"
+thiserror = "2.0.18"
+# The structural key's hasher. 128-bit output in one pass, where two salted
+# `DefaultHasher` states cost two -- see `stylex-utils/src/hash.rs`.
+xxhash-rust = { version = "0.8.15", features = ["xxh3"] }
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
+
+# Workspace-wide clippy gates. Rules enforced here:
+# - performance: avoid hidden allocations / clones in hot paths
+# - correctness: prefer explicit conversion paths and idiomatic iterators
+# Test code can opt out via `#[cfg_attr(test, allow(<lint>))]` on the offender.
+
+[workspace.lints.clippy]
+cloned_instead_of_copied = "warn"
+format_in_format_args = "warn"
+inefficient_to_string = "warn"
+manual_string_new = "warn"
+needless_collect = "warn"
+redundant_clone = "warn"
