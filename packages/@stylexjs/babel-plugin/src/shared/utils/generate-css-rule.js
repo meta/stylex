@@ -14,6 +14,7 @@ import { defaultOptions } from './default-options';
 
 import generateLtr from '../physical-rtl/generate-ltr';
 import generateRtl from '../physical-rtl/generate-rtl';
+import { LOGICAL_BORDER_RADIUS_TO_PHYSICAL } from '../physical-rtl/logical-border-radius';
 import { getPriority } from '@stylexjs/shared';
 
 const THUMB_VARIANTS = [
@@ -28,6 +29,7 @@ function buildNestedCSSRule(
   pseudos: $ReadOnlyArray<string>,
   atRules: $ReadOnlyArray<string>,
   constRules: $ReadOnlyArray<string>,
+  ancestorSelector: string = '',
 ): string {
   // Pseudo-elements (::before, ::after, etc.) must come after pseudo-classes
   // in the selector. e.g. `.class:hover::before` not `.class::before:hover`
@@ -52,11 +54,16 @@ function buildNestedCSSRule(
   const hasWhere = pseudo.includes(':where(');
   const extraClassForWhere = hasWhere ? `.${className}` : '';
 
-  let selectorForAtRules =
+  const classNameSelector =
     `.${className}` +
     extraClassForWhere +
     combinedAtRules.map(() => `.${className}`).join('') +
     pseudo;
+
+  let selectorForAtRules =
+    ancestorSelector === ''
+      ? classNameSelector
+      : `${ancestorSelector} ${classNameSelector}`;
 
   if (pseudos.includes('::thumb')) {
     selectorForAtRules = THUMB_VARIANTS.map(
@@ -68,6 +75,53 @@ function buildNestedCSSRule(
     (acc, combinedAtRules) => `${combinedAtRules}{${acc}}`,
     `${selectorForAtRules}{${decls}}`,
   );
+}
+
+function wrapInAtRules(css: string, atRules: $ReadOnlyArray<string>): string {
+  return atRules.reduce((acc, atRule) => `${atRule}{${acc}}`, css);
+}
+
+function buildLogicalRadiusFallback(
+  className: string,
+  key: string,
+  pairs: $ReadOnlyArray<[string, string]>,
+  ltrDecls: string,
+  pseudos: $ReadOnlyArray<string>,
+  atRules: $ReadOnlyArray<string>,
+  constRules: $ReadOnlyArray<string>,
+): string | null {
+  const physical = LOGICAL_BORDER_RADIUS_TO_PHYSICAL[key];
+  if (physical == null) {
+    return null;
+  }
+
+  const ltrFallbackDecls = pairs
+    .map(([, value]) => `${physical.ltr}:${value}`)
+    .join(';');
+  const rtlFallbackDecls = pairs
+    .map(([, value]) => `${physical.rtl}:${value}`)
+    .join(';');
+
+  const ltrFallback = buildNestedCSSRule(
+    className,
+    ltrFallbackDecls,
+    pseudos,
+    [],
+    [],
+    "html:not([dir='rtl'])",
+  );
+  const rtlFallback = buildNestedCSSRule(
+    className,
+    rtlFallbackDecls,
+    pseudos,
+    [],
+    [],
+    "html[dir='rtl']",
+  );
+  const nativeRule = buildNestedCSSRule(className, ltrDecls, pseudos, [], []);
+
+  const wrapped = `@media all{@supports not (${key}: 0){${ltrFallback}${rtlFallback}}${nativeRule}}`;
+  return wrapInAtRules(wrapped, atRules.concat(constRules));
 }
 
 export function generateCSSRule(
@@ -92,13 +146,23 @@ export function generateCSSRule(
     .map((pair) => pair.join(':'))
     .join(';');
 
-  const ltrRule = buildNestedCSSRule(
-    className,
-    ltrDecls,
-    pseudos,
-    atRules,
-    constRules,
-  );
+  const logicalRadiusFallback =
+    options.styleResolution === 'legacy-expand-shorthands' &&
+    options.enableLogicalStylesPolyfill
+      ? buildLogicalRadiusFallback(
+          className,
+          key,
+          pairs,
+          ltrDecls,
+          pseudos,
+          atRules,
+          constRules,
+        )
+      : null;
+
+  const ltrRule =
+    logicalRadiusFallback ??
+    buildNestedCSSRule(className, ltrDecls, pseudos, atRules, constRules);
   const rtlRule = !rtlDecls
     ? null
     : buildNestedCSSRule(className, rtlDecls, pseudos, atRules, constRules);

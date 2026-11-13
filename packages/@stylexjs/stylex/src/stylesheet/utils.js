@@ -26,6 +26,49 @@ export function addSpecificityLevel(cssText: string, index: number): string {
     .map(() => ':not(#\\#)')
     .join('');
 
+  if (index === 0) {
+    return cssText;
+  }
+
+  // Radius fallbacks contain several nested rules in one insertable block, so
+  // every selector in the block needs the specificity bump.
+  if (cssText.includes('@media all{')) {
+    let result = '';
+    let cursor = 0;
+    while (cursor < cssText.length) {
+      const openCurly = cssText.indexOf('{', cursor);
+      if (openCurly === -1) {
+        result += cssText.slice(cursor);
+        break;
+      }
+
+      const prelude = cssText.slice(cursor, openCurly);
+      const boundary = Math.max(
+        prelude.lastIndexOf('{'),
+        prelude.lastIndexOf('}'),
+      );
+      const beforeSelector = prelude.slice(0, boundary + 1);
+      const selectorText = prelude.slice(boundary + 1);
+
+      if (selectorText.trimStart().startsWith('@')) {
+        result += `${prelude}{`;
+      } else {
+        const pseudoIndex = selectorText.includes('::')
+          ? selectorText.indexOf('::')
+          : selectorText.length;
+        result +=
+          beforeSelector +
+          selectorText.slice(0, pseudoIndex) +
+          pseudoSelector +
+          selectorText.slice(pseudoIndex) +
+          '{';
+      }
+
+      cursor = openCurly + 1;
+    }
+    return result;
+  }
+
   const lastOpenCurly = cssText.includes('::')
     ? cssText.indexOf('::')
     : cssText.lastIndexOf('{');

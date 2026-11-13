@@ -156,6 +156,16 @@ describe('inject', () => {
       );
     });
 
+    test('handles a media block containing logical radius fallbacks', () => {
+      const cssText =
+        '@media all{@supports not (border-start-start-radius: 0){html:not([dir=rtl]) .radius{border-top-left-radius:5px}html[dir=rtl] .radius{border-top-right-radius:5px}}.radius{border-start-start-radius:5px}}';
+      const result = inject({ ltr: cssText, priority: 3000 });
+
+      expect(result).toMatchInlineSnapshot(
+        '"@media all{@supports not (border-start-start-radius: 0){html:not([dir=rtl]) .radius:not(#\\#):not(#\\#):not(#\\#){border-top-left-radius:5px}html[dir=rtl] .radius:not(#\\#):not(#\\#):not(#\\#){border-top-right-radius:5px}}.radius:not(#\\#):not(#\\#):not(#\\#){border-start-start-radius:5px}}"',
+      );
+    });
+
     test('handles constants for container queries', () => {
       inject({
         ltr: '',
