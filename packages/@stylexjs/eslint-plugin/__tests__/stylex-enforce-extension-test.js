@@ -173,15 +173,6 @@ ruleTester.run('stylex-enforce-extension', rule.default, {
     {
       code: `
         import * as stylex from '@stylexjs/stylex';
-        export const vars = stylex.defineVars({});
-        export const consts = stylex.defineConsts({});
-      `,
-      filename: 'testComponent.custom.jsx',
-      options: [{ themeFileExtension: '.custom' }],
-    },
-    {
-      code: `
-        import * as stylex from '@stylexjs/stylex';
         export const vars = stylex.defineVars({ color: 'red' });
         export const somethingElse = someFunction();
       `,

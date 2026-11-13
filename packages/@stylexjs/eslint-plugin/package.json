@@ -14,7 +14,8 @@
     "build": "babel src/ --out-dir lib/",
     "prebuild-haste": "gen-types -i src/ -o lib/",
     "build-haste": "rollup --config ./rollup.config.mjs",
-    "test": "jest --detectOpenHandles --coverage"
+    "test": "jest --detectOpenHandles --coverage && npm run test:oxlint",
+    "test:oxlint": "node --test scripts/test-oxlint.mjs"
   },
   "peerDependencies": {
     "eslint": "^8.40.0 || ^9.0.0 || ^10.0.0"
