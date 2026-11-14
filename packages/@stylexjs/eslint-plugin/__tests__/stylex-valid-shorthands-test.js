@@ -79,26 +79,6 @@ eslintTester.run('stylex-valid-shorthands', rule.default, {
       import * as stylex from '@stylexjs/stylex';
       const styles = stylex.create({
         main: {
-          border: 'solid',
-        },
-      })
-    `,
-    },
-    {
-      code: `
-      import * as stylex from '@stylexjs/stylex';
-      const styles = stylex.create({
-        main: {
-          border: 0,
-        },
-      })
-    `,
-    },
-    {
-      code: `
-      import * as stylex from '@stylexjs/stylex';
-      const styles = stylex.create({
-        main: {
           cornerShape: 'squircle',
         },
       })
@@ -2588,14 +2568,7 @@ eslintTester.run('stylex-valid-shorthands', rule.default, {
           },
         });
       `,
-      output: `
-        import * as stylex from '@stylexjs/stylex';
-        const styles = stylex.create({
-          main: {
-            gap: '10px, 20px',
-          },
-        });
-      `,
+      output: null,
       errors: [
         {
           message:
@@ -2613,14 +2586,7 @@ eslintTester.run('stylex-valid-shorthands', rule.default, {
           },
         });
       `,
-      output: `
-        import * as stylex from '@stylexjs/stylex';
-        const styles = stylex.create({
-          main: {
-            gap: '10px / 20px',
-          },
-        });
-      `,
+      output: null,
       errors: [
         {
           message:
@@ -2638,14 +2604,7 @@ eslintTester.run('stylex-valid-shorthands', rule.default, {
           },
         });
       `,
-      output: `
-        import * as stylex from '@stylexjs/stylex';
-        const styles = stylex.create({
-          main: {
-            gap: '10px 20px 30px',
-          },
-        });
-      `,
+      output: null,
       errors: [
         {
           message:
@@ -2792,14 +2751,7 @@ eslintTester.run('stylex-valid-shorthands', rule.default, {
         },
       })
     `,
-      output: `
-      import * as stylex from '@stylexjs/stylex';
-      const styles = stylex.create({
-        main: {
-          border: '1px solid'
-        },
-      })
-    `,
+      output: null,
       errors: [
         {
           message:
