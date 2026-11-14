@@ -1054,6 +1054,25 @@ eslintTester.run('stylex-valid-styles', rule.default, {
         });
       `,
     },
+    // textDecorationThickness accepts keywords, percentages and math
+    // functions (#252)
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          auto: { textDecorationThickness: 'auto' },
+          fromFont: { textDecorationThickness: 'from-font' },
+          percentage: { textDecorationThickness: '10%' },
+          calc: { textDecorationThickness: 'calc(1px + 0.1em)' },
+          hover: {
+            textDecorationThickness: {
+              default: '1px',
+              ':hover': 'max(3px, 0.1875rem, 0.12em)',
+            },
+          },
+        });
+      `,
+    },
     {
       code: `
         import * as stylex from '@stylexjs/stylex';
@@ -2794,10 +2813,11 @@ revert`,
             columnGap: "10",
             lineHeight: "10",
             outlineWidth: "10",
+            textDecorationThickness: "10",
           },
         });
       `,
-      errors: Array(31).fill({}),
+      errors: Array(32).fill({}),
     },
     {
       code: `

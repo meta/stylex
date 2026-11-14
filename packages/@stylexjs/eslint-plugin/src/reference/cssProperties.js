@@ -2255,7 +2255,11 @@ const CSSProperties = {
     'dashed',
     'wavy',
   ) as RuleCheck,
-  textDecorationThickness: makeUnionRule(isNumber, isLength) as RuleCheck,
+  textDecorationThickness: makeUnionRule(
+    isNumber,
+    isLength,
+    isNonNumericString,
+  ) as RuleCheck,
 
   textEmphasis: textEmphasis,
   textEmphasisColor: textEmphasisColor,
