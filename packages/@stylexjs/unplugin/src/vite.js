@@ -35,6 +35,7 @@ function attachViteHooks(plugin) {
 
   return {
     ...plugin,
+    sharedDuringBuild: true,
     config(config) {
       if (!stylexPackages || stylexPackages.length === 0) return;
       const addExcludes = (existing = []) =>
@@ -54,11 +55,17 @@ function attachViteHooks(plugin) {
       };
     },
     configResolved(config) {
+      plugin.__stylexSetSharedStore?.(
+        config.command === 'serve'
+          ? shared
+          : { rulesById: new Map(), version: 0 },
+      );
       try {
         viteOutDir = config.build?.outDir || viteOutDir;
       } catch {}
     },
     configureServer(server) {
+      plugin.__stylexSetSharedStore?.(shared);
       viteServer = server;
       if (devMode === 'full') {
         server.middlewares.use(devInjectMiddleware);
@@ -158,6 +165,7 @@ function attachViteHooks(plugin) {
       } catch {}
     },
     generateBundle(_opts, bundle) {
+      cssInjectedInGenerateBundle = false;
       const css = plugin.__stylexCollectCss?.();
       if (!css) return;
       const target = pickCssAssetFromRollupBundle(bundle, cssInjectionTarget);
