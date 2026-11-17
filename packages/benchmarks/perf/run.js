@@ -13,6 +13,7 @@ const { hideBin } = require('yargs/helpers');
 
 const createTests = require('./tests/transform-create-tests');
 const createThemeTests = require('./tests/transform-create-theme-tests');
+const runtimePropsTests = require('./tests/runtime-props-tests');
 
 // run.js --outfile filename.js
 const argv = yargs(hideBin(process.argv)).option('outfile', {
@@ -41,6 +42,7 @@ console.log('Running "perf" benchmark, please wait...');
 // Run tests
 createTests(options);
 createThemeTests(options);
+runtimePropsTests(options);
 
 const aggregatedResultsString = JSON.stringify(aggregatedResults, null, 2);
 
