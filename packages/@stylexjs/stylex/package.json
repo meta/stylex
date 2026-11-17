@@ -37,9 +37,6 @@
     "build-haste": "shx rm -rf lib && rewrite-imports -i src/ -o lib/",
     "test": "cross-env BABEL_ENV=test jest --coverage"
   },
-  "dependencies": {
-    "styleq": "0.2.1"
-  },
   "devDependencies": {
     "@babel/cli": "^7.26.4",
     "@babel/core": "^7.26.8",
@@ -59,7 +56,8 @@
     "babel-plugin-syntax-hermes-parser": "^0.36.1",
     "cross-env": "^10.1.0",
     "rollup": "^4.59.0",
-    "scripts": "0.19.2"
+    "scripts": "0.19.2",
+    "styleq": "0.2.1"
   },
   "files": [
     "lib/*"
