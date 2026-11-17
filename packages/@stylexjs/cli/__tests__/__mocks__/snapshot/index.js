@@ -20,6 +20,8 @@ const styles = {
     kZKoxP: "x1egiwwb",
     keoZOQ: "xlrshdv",
     keTefX: "x1hm9lzh",
+    koQZXg: null,
+    km5ZXQ: null,
     $$css: true
   }
 };

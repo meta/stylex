@@ -1180,10 +1180,26 @@ describe('@stylexjs/babel-plugin', () => {
             };
             const _temp2 = {
               kmVPX3: "xe8ttls",
+              kg3NbH: null,
+              kuDDbn: null,
+              kE3dHu: null,
+              kP0aTx: null,
+              kpe85a: null,
+              k8WAf4: null,
+              kLKAdn: null,
+              kGO01o: null,
               $$css: true
             };
             const _temp3 = {
               kaIpWk: "x12oqio5",
+              krdFHd: null,
+              kfmiAY: null,
+              kVL7Gh: null,
+              kT0f0o: null,
+              kIxVMA: null,
+              ksF3WI: null,
+              kqGeR4: null,
+              kYm2EN: null,
               $$css: true
             };
             function Button({
@@ -1675,6 +1691,14 @@ describe('@stylexjs/babel-plugin', () => {
         export const styles = {
           foo: {
             kmVPX3: "x14odnwx",
+            kg3NbH: null,
+            kuDDbn: null,
+            kE3dHu: null,
+            kP0aTx: null,
+            kpe85a: null,
+            k8WAf4: null,
+            kLKAdn: null,
+            kGO01o: null,
             $$css: true
           }
         };
@@ -1737,17 +1761,26 @@ describe('@stylexjs/babel-plugin', () => {
             k1K539: "x1fqp7bg",
             k71WvV: "x1sa5p1d",
             keTefX: "xqsn43r",
+            koQZXg: null,
+            km5ZXQ: null,
             keoZOQ: "x1ok221b",
             $$css: true
           },
           override: {
             kogj98: "x1ghz6dp",
+            kUOVxO: null,
+            keTefX: null,
+            koQZXg: null,
+            k71WvV: null,
+            km5ZXQ: null,
+            kqGvvJ: null,
+            keoZOQ: null,
             k1K539: "xiv7p99",
             $$css: true
           }
         };
         const result = {
-          className: "x1sa5p1d xqsn43r x1ok221b x1ghz6dp xiv7p99"
+          className: "x1ghz6dp xiv7p99"
         };"
       `);
     });
@@ -2934,10 +2967,22 @@ describe('@stylexjs/babel-plugin', () => {
           sidebar: {
             "boxSizing-kB7OPa": "x9f619",
             "gridArea-kJuA4N": "x1yc5d2u",
+            "gridRow-kbNqZ1": null,
+            "gridRowStart-k1lYIM": null,
+            "gridRowEnd-kpJH7q": null,
+            "gridColumn-kBCFzs": null,
+            "gridColumnStart-kEXP64": null,
+            "gridColumnEnd-kWZpDQ": null,
             $$css: "@stylexjs/babel-plugin::4"
           },
           content: {
             "gridArea-kJuA4N": "x1fdo2jl",
+            "gridRow-kbNqZ1": null,
+            "gridRowStart-k1lYIM": null,
+            "gridRowEnd-kpJH7q": null,
+            "gridColumn-kBCFzs": null,
+            "gridColumnStart-kEXP64": null,
+            "gridColumnEnd-kWZpDQ": null,
             $$css: "@stylexjs/babel-plugin::8"
           },
           root: {
