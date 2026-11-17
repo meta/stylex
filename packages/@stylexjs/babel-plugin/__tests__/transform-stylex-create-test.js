@@ -5400,6 +5400,139 @@ describe('@stylexjs/babel-plugin', () => {
           `);
         });
       });
+      describe('functions outlined by React Compiler', () => {
+        // React Compiler moves `(bar) => ({...})` out of components into a
+        // top-level `function _temp(bar) { return {...}; }` declaration.
+        test('function declaration referenced as a dynamic style', () => {
+          const { code, metadata } = transform(`
+            import * as stylex from '@stylexjs/stylex';
+            export function Component() {
+              const styles = stylex.create({
+                root: {
+                  display: 'flex',
+                },
+                foo: _temp,
+              });
+              return stylex.props(styles.root, styles.foo('red'));
+            }
+            function _temp(bar) {
+              return {
+                backgroundColor: bar,
+                height: '100px',
+              };
+            }
+          `);
+          expect(code).toMatchInlineSnapshot(`
+            "import * as stylex from '@stylexjs/stylex';
+            const _temp2 = {
+              kZKoxP: "xpyat2d",
+              "$$css": true
+            };
+            const _styles = {
+              root: {
+                k1xSpc: "x78zum5",
+                $$css: true
+              },
+              foo: bar => [_temp2, bar !== undefined && {
+                kWkggS: bar != null ? "xl8spv7" : "",
+                $$css: true
+              }, {
+                "--x-backgroundColor": bar != null ? bar : undefined
+              }]
+            };
+            export function Component() {
+              const styles = _styles;
+              return stylex.props(styles.root, styles.foo('red'));
+            }
+            function _temp(bar) {
+              return {
+                backgroundColor: bar,
+                height: '100px'
+              };
+            }"
+          `);
+          expect(metadata).toMatchInlineSnapshot(`
+            {
+              "stylex": [
+                [
+                  "x78zum5",
+                  {
+                    "ltr": ".x78zum5{display:flex}",
+                    "rtl": null,
+                  },
+                  3000,
+                ],
+                [
+                  "xl8spv7",
+                  {
+                    "ltr": ".xl8spv7{background-color:var(--x-backgroundColor)}",
+                    "rtl": null,
+                  },
+                  3000,
+                ],
+                [
+                  "xpyat2d",
+                  {
+                    "ltr": ".xpyat2d{height:100px}",
+                    "rtl": null,
+                  },
+                  4000,
+                ],
+                [
+                  "--x-backgroundColor",
+                  {
+                    "ltr": "@property --x-backgroundColor { syntax: "*"; inherits: false;}",
+                    "rtl": null,
+                  },
+                  0,
+                ],
+              ],
+            }
+          `);
+        });
+
+        test('generates the same CSS as the equivalent inline arrow function', () => {
+          const outlined = transform(`
+            import * as stylex from '@stylexjs/stylex';
+            export const styles = stylex.create({
+              foo: _temp,
+            });
+            function _temp(bar) {
+              return {
+                backgroundColor: bar,
+                height: '100px',
+              };
+            }
+          `);
+          const inline = transform(`
+            import * as stylex from '@stylexjs/stylex';
+            export const styles = stylex.create({
+              foo: (bar) => ({
+                backgroundColor: bar,
+                height: '100px',
+              }),
+            });
+          `);
+          expect(outlined.metadata).toEqual(inline.metadata);
+        });
+
+        test('function declaration with more than a single return is not supported', () => {
+          expect(() =>
+            transform(`
+              import * as stylex from '@stylexjs/stylex';
+              export const styles = stylex.create({
+                foo: _temp,
+              });
+              function _temp(bar) {
+                const color = bar;
+                return {
+                  backgroundColor: color,
+                };
+              }
+            `),
+          ).toThrow();
+        });
+      });
     });
 
     describe('options `debug:true`', () => {
