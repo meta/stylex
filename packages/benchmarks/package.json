@@ -11,6 +11,7 @@
   "dependencies": {
     "@stylexjs/babel-plugin": "0.19.2",
     "@stylexjs/rollup-plugin": "0.19.2",
+    "@stylexjs/stylex": "0.19.2",
     "benchmark": "^2.1.4",
     "brotli-size": "^4.0.0",
     "clean-css": "^5.3.3",
