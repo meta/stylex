@@ -62,7 +62,7 @@ export type {
   PositionTry,
 };
 
-import { styleq } from 'styleq';
+import { merge } from './merge';
 
 const errorForFn = (name: string) =>
   new Error(
@@ -150,19 +150,19 @@ export function props(
   'data-style-src'?: string,
   style?: Readonly<{ [key: string]: string | number }>,
 }> {
-  const [className, style, dataStyleSrc] = styleq(styles);
+  const [className, style, dataStyleSrc] = merge(styles);
   const result: {
     className?: string,
     'data-style-src'?: string,
     style?: Readonly<{ [key: string]: string | number }>,
   } = {};
-  if (className != null && className !== '') {
+  if (className !== '') {
     result.className = className;
   }
-  if (style != null && Object.keys(style).length > 0) {
+  if (style != null) {
     result.style = style;
   }
-  if (dataStyleSrc != null && dataStyleSrc !== '') {
+  if (dataStyleSrc !== '') {
     result['data-style-src'] = dataStyleSrc;
   }
   return result;
@@ -384,7 +384,7 @@ export const legacyMerge: IStyleX = /*@__PURE__*/ (function () {
   function _legacyMerge(
     ...styles: ReadonlyArray<StyleXArray<?CompiledStyles | boolean>>
   ): string {
-    const [className] = styleq(styles);
+    const [className] = merge(styles);
     return className;
   }
 
