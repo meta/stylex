@@ -23,7 +23,7 @@ function isPercentage(node: Node, _variables?: Variables): RuleResponse {
     const val = node.value;
     if (
       typeof val === 'string' &&
-      val.match(new RegExp('^([-,+]?\\d+(\\.\\d+)?%)$'))
+      /^[+-]?\d+(\.\d+)?%$/.test(val)
     ) {
       return undefined;
     }
