@@ -34,7 +34,9 @@ export default function normalizeTimings(
     if (!dimension || dimension.unit !== 'ms' || value < 10) {
       return;
     }
-    node.value = value / 1000 + 's';
+    // `33.3 / 1000` is 0.033299999999999996 in floating point; 15 significant
+    // digits drop that noise without losing any digit a CSS time can carry.
+    node.value = Number((value / 1000).toPrecision(15)) + 's';
   });
   return ast;
 }
