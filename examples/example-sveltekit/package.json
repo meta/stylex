@@ -17,7 +17,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@sveltejs/adapter-auto": "^7.0.0",
-    "@sveltejs/adapter-vercel": "^5.7.2",
+    "@sveltejs/adapter-vercel": "^6.3.5",
     "@sveltejs/kit": "^2.60.1",
     "@sveltejs/vite-plugin-svelte": "^6.2.1",
     "@stylexjs/eslint-plugin": "0.19.2",
