@@ -2911,6 +2911,42 @@ describe('@stylexjs/babel-plugin', () => {
     });
 
     describe('dynamic styles', () => {
+      test('keeps shorthand resets as null with application-order', () => {
+        const { code } = transform(
+          `
+          import * as stylex from '@stylexjs/stylex';
+          export const styles = stylex.create({
+            root: (padding) => ({
+              padding,
+            })
+          });
+        `,
+          { styleResolution: 'application-order' },
+        );
+        expect(code).toMatchInlineSnapshot(`
+          "import * as stylex from '@stylexjs/stylex';
+          const _temp = {
+            kg3NbH: null,
+            kuDDbn: null,
+            kE3dHu: null,
+            kP0aTx: null,
+            kpe85a: null,
+            k8WAf4: null,
+            kLKAdn: null,
+            kGO01o: null,
+            "$$css": true
+          };
+          export const styles = {
+            root: padding => [_temp, padding !== undefined && {
+              kmVPX3: padding != null ? "x1fozly0" : "",
+              $$css: true
+            }, {
+              "--x-padding": (val => typeof val === "number" ? val + "px" : val != null ? val : undefined)(padding)
+            }]
+          };"
+        `);
+      });
+
       describe('safe conditional checks', () => {
         test('template literal expressions', () => {
           const { code, metadata } = transform(`

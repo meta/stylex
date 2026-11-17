@@ -379,6 +379,13 @@ export default function transformStyleXCreate(
                   return;
                 }
 
+                if (t.isNullLiteral(objProp.value)) {
+                  staticProps.push(
+                    t.objectProperty(objProp.key, t.nullLiteral()),
+                  );
+                  return;
+                }
+
                 const classList = t.isStringLiteral(objProp.value)
                   ? objProp.value.value.split(' ')
                   : [];
