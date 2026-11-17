@@ -22,7 +22,7 @@ import {
 import { Length } from '../length';
 import { Angle } from '../angle';
 
-describe.skip('Test CSS Type: <filter-function>', () => {
+describe('Test CSS Type: <filter-function>', () => {
   test('parses blur filter', () => {
     expect(FilterFunction.parser.parse('blur(5px)')).toEqual(
       new BlurFilterFunction(new Length(5, 'px')),
@@ -81,5 +81,24 @@ describe.skip('Test CSS Type: <filter-function>', () => {
     expect(() => FilterFunction.parser.parseToEnd('invalid()')).toThrow();
     expect(() => FilterFunction.parser.parseToEnd('blur()')).toThrow();
     expect(() => FilterFunction.parser.parseToEnd('brightness(abc)')).toThrow();
+    expect(() => FilterFunction.parser.parseToEnd('unknown(2)')).toThrow();
+    expect(() => FilterFunction.parser.parseToEnd('unknown(5px)')).toThrow();
+    expect(() => FilterFunction.parser.parseToEnd('unknown(90deg)')).toThrow();
+  });
+
+  test('keeps the function name when serializing', () => {
+    for (const filter of [
+      'blur(5px)',
+      'brightness(1.5)',
+      'contrast(2)',
+      'grayscale(0.5)',
+      'hue-rotate(90deg)',
+      'invert(1)',
+      'opacity(0.75)',
+      'saturate(1.2)',
+      'sepia(0.3)',
+    ]) {
+      expect(FilterFunction.parser.parseToEnd(filter).toString()).toBe(filter);
+    }
   });
 });
