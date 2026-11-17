@@ -1,0 +1,18 @@
+{
+  "private": true,
+  "name": "compiler-conformance",
+  "version": "0.19.1",
+  "description": "Implementation-neutral golden fixtures describing the StyleX compiler contract.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/facebook/stylex.git"
+  },
+  "license": "MIT",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "dependencies": {
+    "@babel/parser": "^7.29.0"
+  }
+}

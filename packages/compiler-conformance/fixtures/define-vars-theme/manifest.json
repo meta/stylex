@@ -1,0 +1,9 @@
+{
+  "description": "stylex.defineVars() and stylex.createTheme() emit CSS custom properties, including a media-query override. The entry is a `.stylex.js` file so that `commonJS` module resolution derives a canonical name for it; that name is `<package name>:<path within the package>`, so the generated hashes depend on the fixture's location inside this package but not on where the repository is checked out.",
+  "entry": "input.stylex.js",
+  "pluginOptions": {
+    "unstable_moduleResolution": {
+      "type": "commonJS"
+    }
+  }
+}

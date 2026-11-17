@@ -11,5 +11,5 @@ export type ValueWithDefault<out T> =
   | T
   | Readonly<{
       default: ValueWithDefault<T>,
-      [string]: ValueWithDefault<T>,
+      [key: string]: ValueWithDefault<T>,
     }>;

@@ -75,6 +75,10 @@ type CSSPropertiesWithExtras = Partial<
       '::-moz-range-thumb'?: CSSProperties;
       '::-moz-range-track'?: CSSProperties;
       '::-moz-range-progress'?: CSSProperties;
+      // For progress elements
+      '::-webkit-progress-bar'?: CSSProperties;
+      '::-webkit-progress-value'?: CSSProperties;
+      '::-moz-progress-bar'?: CSSProperties;
     }
   >
 >;

@@ -1,0 +1,7 @@
+{
+  "description": "An option of the wrong type reports a non-fatal diagnostic on the error channel while the transform still succeeds.",
+  "entry": "input.js",
+  "pluginOptions": {
+    "enableFontSizePxToRem": "true"
+  }
+}

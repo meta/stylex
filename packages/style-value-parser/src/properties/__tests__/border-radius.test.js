@@ -388,9 +388,7 @@ describe('Test CSS property shorthand: `border-radius`', () => {
         '10px 20px 30px 40px / 40px 30px 20px 10px',
       );
       expect(roundTrip('10px / 20px')).toBe('10px / 20px');
-      expect(roundTrip('10px 20px / 30px 40px')).toBe(
-        '10px 20px / 30px 40px',
-      );
+      expect(roundTrip('10px 20px / 30px 40px')).toBe('10px 20px / 30px 40px');
     });
   });
 });

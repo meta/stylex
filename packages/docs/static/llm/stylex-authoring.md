@@ -382,7 +382,7 @@ Use `stylex.viewTransitionClass()` to customize View Transition API animations:
 
 ```tsx
 import * as stylex from '@stylexjs/stylex';
-import { unstable_ViewTransition as ViewTransition } from 'react';
+import { ViewTransition } from 'react';
 
 const fadeInUp = stylex.keyframes({
   from: { opacity: 0, transform: 'translateY(-30px)' },

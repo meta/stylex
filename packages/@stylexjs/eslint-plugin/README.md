@@ -39,21 +39,16 @@ opening your ESLint configuration file and adding the plugin and rules.
 
 ## All the rules
 
-### @stylexjs/valid-styles
+### `@stylexjs/valid-styles`
 
 StyleX requires styles that are statically analyzable. This rule will detect
 invalid styles that StyleX cannot handle and provides basic type checking for
 style values.
 
-#### Disallowed CSS properties and suggested fixes
-
-Listed are common CSS properties that are **not allowed** in StyleX, along with
-their **suggested replacements**.
-
-### @stylexjs/sort-keys
+### `@stylexjs/sort-keys`
 
 This rule helps to sort the StyleX property keys according to
-[property priorities](https://github.com/facebook/stylex/blob/main/packages/%40stylexjs/babel-plugin/src/shared/utils/property-priorities.js).
+[property priorities](https://github.com/facebook/stylex/blob/main/packages/%40stylexjs/shared/src/utils/property-priorities.js).
 
 #### Config options
 
@@ -73,7 +68,7 @@ queries are resolved by source order (the last matching query wins). Sorting
 `enableMediaQueryOrder: true` here to keep the rule from reordering media
 queries and let you control the cascade through their authored order.
 
-### @stylexjs/valid-shorthands
+### `@stylexjs/valid-shorthands`
 
 This ESLint rule enforces the use of individual longhand CSS properties in place
 of multivalue shorthands when using `create` for reasons of consistency
@@ -121,7 +116,7 @@ This rule has a few custom config options that can be set.
 }
 ```
 
-### @stylexjs/enforce-extension
+### `@stylexjs/enforce-extension`
 
 This rule ensures consistent naming for StyleX theme files that export variables
 using `defineVars` or `defineConsts`.

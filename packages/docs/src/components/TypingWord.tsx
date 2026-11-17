@@ -9,7 +9,6 @@
 
 import { vars } from '@/theming/vars.stylex';
 import * as stylex from '@stylexjs/stylex';
-import { Fragment } from 'react';
 
 const WORDS = [
   'expressive',
@@ -19,23 +18,33 @@ const WORDS = [
   'themeable',
 ];
 
+function punctuation(index: number): string {
+  if (index < WORDS.length - 2) {
+    return ', ';
+  }
+  if (index === WORDS.length - 2) {
+    return ' and ';
+  }
+  return '';
+}
+
 export default function TypingWord() {
   return (
     <span {...stylex.props(styles.container)} aria-hidden="true">
       {WORDS.map((word, index) => (
-        <Fragment key={word}>
-          <span {...stylex.props(styles.word)}>
-            {word}
-            <span {...stylex.props(styles.hidden)}>
-              {index < WORDS.length - 2
-                ? ', '
-                : index === WORDS.length - 2
-                  ? ' and '
-                  : ''}
-            </span>
-          </span>
-        </Fragment>
+        <span key={word} {...stylex.props(styles.word, styles.sizer)}>
+          {word}
+          <span {...stylex.props(styles.hidden)}>{punctuation(index)}</span>
+        </span>
       ))}
+      <span {...stylex.props(styles.reveal)}>
+        {WORDS.map((word, index) => (
+          <span key={word} {...stylex.props(styles.word)}>
+            {word}
+            <span {...stylex.props(styles.hidden)}>{punctuation(index)}</span>
+          </span>
+        ))}
+      </span>
     </span>
   );
 }
@@ -93,6 +102,7 @@ const hidden = stylex.keyframes({
 const TIME = 8;
 const styles = stylex.create({
   container: {
+    position: 'relative',
     display: 'inline-grid',
     gridTemplateColumns: '1fr',
     overflow: 'hidden',
@@ -107,6 +117,16 @@ const styles = stylex.create({
     animationTimingFunction: 'ease-out',
     animationDelay: `${TIME / 2}s`,
     animationIterationCount: 'infinite',
+  },
+  sizer: {
+    visibility: 'hidden',
+  },
+  reveal: {
+    position: 'absolute',
+    inset: 0,
+    display: 'grid',
+    gridTemplateColumns: '1fr',
+    overflow: 'hidden',
   },
   word: {
     gridArea: '1 / 1',

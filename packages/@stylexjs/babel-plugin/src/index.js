@@ -12,6 +12,7 @@ import type { PluginObj } from '@babel/core';
 import type { StyleXOptions } from './utils/state-manager';
 
 import * as t from '@babel/types';
+import { getPriority } from '@stylexjs/shared';
 import { MediaQuery } from 'style-value-parser';
 import type { MediaQueryRule } from 'style-value-parser';
 import StateManager from './utils/state-manager';
@@ -676,6 +677,12 @@ function compareWidthSortKeys(
     : b.bound.value - a.bound.value;
 }
 
+// A `--<key>` custom property name, up to the first CSS delimiter.
+const CUSTOM_PROPERTY_KEY = '--[^\\s,:;)(}{\'"]+';
+// `var(--key, fallback)` is not matched, so those stay overridable.
+const VAR_USAGE_REGEX = new RegExp(`var\\(${CUSTOM_PROPERTY_KEY}\\)`, 'g');
+const OVERRIDE_KEY_REGEX = new RegExp(`(${CUSTOM_PROPERTY_KEY}):`, 'g');
+
 function processStylexRules(
   rules: Array<Rule>,
   config?:
@@ -760,6 +767,38 @@ function processStylexRules(
     constsMap.set(key, resolveConstant(value));
   }
 
+  // A `defineConsts` at-rule used as a condition key in `stylex.create()` is
+  // compiled as a `var(--hash){…}` wrapper, and its share of the rule's priority
+  // comes from that placeholder, which `getPriority` cannot tell from a
+  // selector. Now that the constant's value is known, give it the share the
+  // literal at-rule gets, so the rule sorts (and lands in the layer) exactly as
+  // if it were written inline. Variable and theme rules count at-rules in their
+  // own fractional priorities, which never include the placeholder's share, so
+  // they are left as they are.
+  const constWrapperPattern = /var\(--[A-Za-z0-9_-]+\)(?=\{)/g;
+  const adjustConstAtRulePriority = (
+    rule: unknown,
+    priority: number,
+  ): number => {
+    if (typeof rule !== 'string' || constsMap.size === 0) {
+      return priority;
+    }
+    let adjusted = priority;
+    for (const match of rule.matchAll(constWrapperPattern)) {
+      const placeholder = match[0];
+      const value = constsMap.get(placeholder);
+      const placeholderShare = getPriority(placeholder);
+      if (
+        typeof value === 'string' &&
+        value.startsWith('@') &&
+        adjusted >= placeholderShare
+      ) {
+        adjusted += getPriority(value) - placeholderShare;
+      }
+    }
+    return adjusted;
+  };
+
   // Parsing is expensive and the comparator runs O(n log n) times. Key on the
   // at-rule chain, not the whole rule — every rule has a distinct class name,
   // so a full-rule key would never hit.
@@ -781,27 +820,51 @@ function processStylexRules(
     return key;
   };
 
+  const hasConsts = constsMap.size > 0;
+
   const sortedRules: Array<Rule> = nonConstantRules
     .map(([key, { ...styleObj }, priority]): Rule => {
+      if (!hasConsts) {
+        return [key, styleObj, priority];
+      }
+
+      const adjustedPriority = adjustConstAtRulePriority(
+        styleObj.ltr,
+        priority,
+      );
       Object.keys(styleObj).forEach((dir) => {
         let original = styleObj[dir];
-        for (const [varRef, constValue] of constsMap.entries()) {
-          if (typeof original !== 'string') continue;
+        if (typeof original !== 'string' || !original.includes('--')) {
+          return;
+        }
+
+        // resolveConstant already collapsed alias chains, so one pass is enough.
+        original = original.replace(VAR_USAGE_REGEX, (match) => {
+          const constValue = constsMap.get(match);
+          return constValue == null ? match : String(constValue);
+        });
+
+        // Rewrite `--key:` overrides (#1219) in one pass so rewrites can't cascade.
+        original = original.replace(OVERRIDE_KEY_REGEX, (match, cssVar) => {
+          const constValue = constsMap.get(`var(${cssVar})`);
+          if (constValue == null) {
+            return match;
+          }
           const replacement = String(constValue);
-          original = original.replaceAll(varRef, () => replacement);
           if (replacement.startsWith('var(') && replacement.endsWith(')')) {
             const inside = replacement.slice(4, -1).trim();
             const commaIdx = inside.indexOf(',');
             const targetName = (
               commaIdx >= 0 ? inside.slice(0, commaIdx) : inside
             ).trim();
-            const constName = varRef.slice(4, -1);
-            original = original.replaceAll(`${constName}:`, `${targetName}:`);
+            return `${targetName}:`;
           }
-          styleObj[dir] = original;
-        }
+          return match;
+        });
+
+        styleObj[dir] = original;
       });
-      return [key, styleObj, priority];
+      return [key, styleObj, adjustedPriority];
     })
     .sort(
       (

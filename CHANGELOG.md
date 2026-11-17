@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.19.2 (Nov 11, 2026)
+- Fix `positionTry` emitting every declaration twice and stop adding ancestor
+  selectors and specificity to `@position-try` rules.
+- Stop appending `px` to unitless numbers in `fontSizeAdjust`, `keyframes`, and
+  `viewTransitionClass`.
+- Keep the unit on uppercase zero time, angle, and `fr` values.
+- Keep custom property rules inside `@layer` and fix compiler bugs with dynamic
+  styles, `url()` values, `defineConsts`, and `stylex.attrs`.
+- Fix media queries with a leading `not` and several value parser serialization
+  bugs.
+- `unplugin`: clear CSS when a module drops its StyleX import, preserve SSR link
+  attributes, fix Rspack injection, and honor custom `importSources`.
+- `postcss-plugin`: clear stale rules on rebuild, skip Babel-ignored files, and
+  retry failed transforms.
+- ESLint: validate `firstThatWorks` arguments and allow the `page` property and
+  `stylex.env` member keys.
+
 ## 0.19.1 (Sep 15, 2026)
 - Expand StyleX DevTools to Firefox and Safari, with improved style inspection,
   overrides, and metadata export.

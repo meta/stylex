@@ -1,0 +1,4 @@
+{
+  "description": "stylex.create() with static declarations compiles to a style object and two atomic CSS rules.",
+  "entry": "input.js"
+}

@@ -11,6 +11,7 @@
 
 jest.autoMockOff();
 
+import fs from 'fs';
 import path from 'path';
 import { transformSync } from '@babel/core';
 import stylexPlugin from '../src/index';
@@ -59,6 +60,26 @@ function transformWithInlineConsts(source, opts = {}) {
   });
 
   return { code, metadata };
+}
+
+// Compiles one file of __fixtures__ (or `source` under that file name) and
+// returns its rules.
+function transformFixtureRules(filename, source) {
+  const fixtureDir = path.join(__dirname, '__fixtures__');
+  const file = path.join(fixtureDir, filename);
+  return transformSync(source ?? fs.readFileSync(file, 'utf8'), {
+    filename: file,
+    parserOpts: { sourceType: 'module' },
+    babelrc: false,
+    plugins: [
+      [
+        stylexPlugin,
+        {
+          unstable_moduleResolution: { rootDir: fixtureDir, type: 'commonJS' },
+        },
+      ],
+    ],
+  }).metadata.stylex;
 }
 
 function transformWithAliasedInlineConsts(source, opts = {}) {
@@ -426,6 +447,94 @@ describe('@stylexjs/babel-plugin', () => {
             ],
           ],
         }
+      `);
+    });
+
+    test('an imported at-rule constant sorts like the at-rule it names', () => {
+      // The constant reaches stylex.create() as its `var(--hash)` placeholder;
+      // once processStylexRules knows its value, the rule must sort as if the
+      // media query were written inline: the coarse reset before the
+      // attribute rule.
+      const constants = transformFixtureRules('constants.stylex.js');
+      const rules = (condition) => {
+        const created = transformFixtureRules(
+          'main.stylex.js',
+          `
+            import * as stylex from '@stylexjs/stylex';
+            import { breakpoints } from './constants.stylex';
+            export const styles = stylex.create({
+              overlay: {
+                backgroundImage: {
+                  default: null,
+                  ':active': {
+                    default: 'linear-gradient(red, red)',
+                    ${condition}: 'none',
+                  },
+                  '[data-press="on"]': 'linear-gradient(blue, blue)',
+                },
+              },
+            });
+          `,
+        );
+        return stylexPlugin
+          .processStylexRules([...constants, ...created], {
+            useLayers: false,
+            legacyDisableLayers: true,
+          })
+          .split('\n')
+          .filter((line) => line.includes('background-image'))
+          .map((line) => line.replace(/\.x[a-z0-9]+/g, '.x'));
+      };
+
+      const constant = rules('[breakpoints.small]');
+      expect(constant).toEqual(rules("'@media (max-width: 600px)'"));
+      expect(constant).toMatchInlineSnapshot(`
+        [
+          ".x:active{background-image:linear-gradient(red,red)}",
+          "@media (max-width: 600px){.x.x:active{background-image:none}}",
+          ".x[data-press="on"]{background-image:linear-gradient(blue,blue)}",
+        ]
+      `);
+    });
+
+    test('variable and theme rules under an imported at-rule constant keep their priorities', () => {
+      // defineVars and createTheme count at-rules in their own fractional
+      // priorities, which never include the placeholder's share.
+      const constants = transformFixtureRules('constants.stylex.js');
+      const vars = transformFixtureRules('themeVars.stylex.js');
+      const theme = transformFixtureRules(
+        'main.stylex.js',
+        `
+          import * as stylex from '@stylexjs/stylex';
+          import { breakpoints } from './constants.stylex';
+          import { themeVars } from './themeVars.stylex';
+          export const theme = stylex.createTheme(themeVars, {
+            accent: { default: 'green', [breakpoints.small]: 'yellow' },
+          });
+        `,
+      );
+      const rules = [...constants, ...vars, ...theme];
+      expect(stylexPlugin.processStylexRules(rules, { useLayers: true }))
+        .toMatchInlineSnapshot(`
+        "
+        @layer priority1;
+        @layer priority1{
+        :root, .x1mmh4rn{--x1jwwzce:blue;}
+        @media (max-width: 600px){:root, .x1mmh4rn{--x1jwwzce:red;}}
+        .x14qsmo4.x14qsmo4, .x14qsmo4.x14qsmo4:root{--x1jwwzce:green;}
+        @media (max-width: 600px){.x14qsmo4.x14qsmo4, .x14qsmo4.x14qsmo4:root{--x1jwwzce:yellow;}}
+        }"
+      `);
+      expect(
+        stylexPlugin.processStylexRules(rules, {
+          useLayers: false,
+          legacyDisableLayers: true,
+        }),
+      ).toMatchInlineSnapshot(`
+        ":root, .x1mmh4rn{--x1jwwzce:blue;}
+        @media (max-width: 600px){:root, .x1mmh4rn{--x1jwwzce:red;}}
+        .x14qsmo4.x14qsmo4, .x14qsmo4.x14qsmo4:root{--x1jwwzce:green;}
+        @media (max-width: 600px){.x14qsmo4.x14qsmo4, .x14qsmo4.x14qsmo4:root{--x1jwwzce:yellow;}}"
       `);
     });
 

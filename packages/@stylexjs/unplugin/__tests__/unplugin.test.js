@@ -29,6 +29,58 @@ describe('@stylexjs/unplugin', () => {
     expect(result).toBeNull();
   });
 
+  // Regression: https://github.com/facebook/stylex/issues/2015
+  // After a successful transform, replacing the module with code that has no
+  // StyleX import used to skip cleanup (shouldHandle early-return). Removing
+  // the last style while keeping the import already cleared CSS; dropping the
+  // import must do the same.
+  test('clears collected CSS when a module drops its StyleX import', async () => {
+    const plugin = unpluginFactory(
+      {
+        dev: true,
+        runtimeInjection: false,
+        devPersistToDisk: false,
+      },
+      { framework: 'vite' },
+    );
+    plugin.buildStart();
+
+    const id = '/virtual/import-removal-example.ts';
+    const original = `import * as stylex from '@stylexjs/stylex';
+export const styles = stylex.create({
+  marker: { outlineWidth: 37, outlineOffset: 71 },
+});
+`;
+
+    await plugin.transform.call({}, original, id);
+    expect(plugin.__stylexCollectCss()).toEqual(
+      expect.stringContaining('37px'),
+    );
+    expect(plugin.__stylexCollectCss()).toEqual(
+      expect.stringContaining('71px'),
+    );
+
+    await plugin.transform.call(
+      {},
+      'import * as stylex from "@stylexjs/stylex";\nexport const styles = null;\n',
+      id,
+    );
+    expect(plugin.__stylexCollectCss()).toBe('');
+
+    await plugin.transform.call({}, original, id);
+    expect(plugin.__stylexCollectCss()).toEqual(
+      expect.stringContaining('37px'),
+    );
+
+    const result = await plugin.transform.call(
+      {},
+      'export const styles = null;\n',
+      id,
+    );
+    expect(result).toBeNull();
+    expect(plugin.__stylexCollectCss()).toBe('');
+  });
+
   test('still transforms built-in imports when a custom importSource is set', async () => {
     const plugin = unplugin.raw({ importSources: ['custom-stylex'] });
     if (typeof plugin.buildStart === 'function') {

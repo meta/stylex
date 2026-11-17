@@ -381,6 +381,7 @@ const stylexValidStyles = {
     const styleXCreateImports = new Set<string>();
     const styleXKeyframesImports = new Set<string>();
     const styleXPositionTryImports = new Set<string>();
+    const styleXFirstThatWorksImports = new Set<string>();
     const styleXWhenImports = new Set<string>();
     const styleXEnvImports = new Set<string>();
 
@@ -555,6 +556,37 @@ const stylexValidStyles = {
           return rightCheck;
         }
         return null;
+      }
+
+      if (valueNode.type === 'CallExpression') {
+        const callee = valueNode.callee;
+        if (
+          (callee.type === 'MemberExpression' &&
+            callee.object.type === 'Identifier' &&
+            styleXDefaultImports.has(callee.object.name) &&
+            callee.property.type === 'Identifier' &&
+            callee.property.name === 'firstThatWorks') ||
+          (callee.type === 'Identifier' &&
+            styleXFirstThatWorksImports.has(callee.name))
+        ) {
+          for (const arg of valueNode.arguments) {
+            if (arg.type === 'SpreadElement') {
+              continue;
+            }
+            const argCheck = validateStyleValue(
+              arg,
+              varsWithFnArgs,
+              style,
+              styleKey,
+              propertyKey,
+              ruleChecker,
+            );
+            if (argCheck != null) {
+              return argCheck;
+            }
+          }
+          return null;
+        }
       }
 
       if (
@@ -1136,6 +1168,12 @@ const stylexValidStyles = {
                 specifier.imported.name === 'positionTry'
               ) {
                 styleXPositionTryImports.add(specifier.local.name);
+              }
+              if (
+                specifier.type === 'ImportSpecifier' &&
+                specifier.imported.name === 'firstThatWorks'
+              ) {
+                styleXFirstThatWorksImports.add(specifier.local.name);
               }
               if (
                 specifier.type === 'ImportSpecifier' &&

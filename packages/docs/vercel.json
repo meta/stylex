@@ -1,4 +1,16 @@
 {
     "installCommand": "cd ../.. && yarn install",
-    "buildCommand": "yarn run build"
+    "buildCommand": "yarn run build",
+    "redirects": [
+        {
+            "source": "/docs/learn/ecosystem",
+            "destination": "/docs/ecosystem",
+            "permanent": true
+        },
+        {
+            "source": "/docs/learn/acknowledgements",
+            "destination": "/docs/acknowledgements",
+            "permanent": true
+        }
+    ]
 }
