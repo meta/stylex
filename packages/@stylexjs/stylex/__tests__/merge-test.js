@@ -44,6 +44,25 @@ describe('merge', () => {
     expect(merge([b])).toEqual(['w1', null, 'b.js:2']);
   });
 
+  test('reuses big styles merged after an inline style', () => {
+    const big = {
+      color: 'c',
+      margin: 'm',
+      marginTop: null,
+      padding: 'p',
+      opacity: 'o',
+      width: 'w',
+      $$css: true,
+    };
+    const override = { color: 'c2', $$css: true };
+    for (let i = 0; i < 3; i++) {
+      const dynamic = [{ width: 'w2', $$css: true }, { '--w': `${i}px` }];
+      expect(merge([big, dynamic])).toEqual(styleq([big, dynamic]));
+      expect(merge([big, override])).toEqual(styleq([big, override]));
+      expect(merge([big])).toEqual(styleq([big]));
+    }
+  });
+
   test('handles many distinct properties', () => {
     const many = {};
     for (let i = 0; i < 2000; i++) {
