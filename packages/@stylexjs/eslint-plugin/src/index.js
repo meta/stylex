@@ -39,4 +39,29 @@ const rules: {
   'valid-styles': validStyles,
 };
 
-export { rules };
+const plugin = {
+  rules,
+};
+
+const configs: {
+  recommended: {
+    plugins: { [string]: typeof plugin },
+    rules: { [string]: string },
+  },
+} = {
+  recommended: {
+    plugins: {
+      '@stylexjs': plugin,
+    },
+    rules: {
+      '@stylexjs/valid-styles': 'error',
+      '@stylexjs/valid-shorthands': 'error',
+      '@stylexjs/no-unused': 'error',
+      '@stylexjs/no-legacy-contextual-styles': 'error',
+      '@stylexjs/sort-keys': 'warn',
+      '@stylexjs/no-nonstandard-styles': 'error',
+    },
+  },
+};
+
+export { rules, configs };
