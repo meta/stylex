@@ -32,6 +32,7 @@ function attachViteHooks(plugin) {
   let viteServer = null;
   let viteOutDir = null;
   let cssInjectedInGenerateBundle = false;
+  let cssMinify;
 
   return {
     ...plugin,
@@ -56,6 +57,7 @@ function attachViteHooks(plugin) {
     configResolved(config) {
       try {
         viteOutDir = config.build?.outDir || viteOutDir;
+        cssMinify = config.command === 'build' && !!config.build?.cssMinify;
       } catch {}
     },
     configureServer(server) {
@@ -69,7 +71,7 @@ function attachViteHooks(plugin) {
           res.statusCode = 200;
           res.setHeader('Content-Type', 'text/css');
           res.setHeader('Cache-Control', 'no-store');
-          const css = plugin.__stylexCollectCss?.();
+          const css = plugin.__stylexCollectCss?.({ minify: cssMinify });
           res.end(css || '');
           return;
         }
@@ -158,7 +160,7 @@ function attachViteHooks(plugin) {
       } catch {}
     },
     generateBundle(_opts, bundle) {
-      const css = plugin.__stylexCollectCss?.();
+      const css = plugin.__stylexCollectCss?.({ minify: cssMinify });
       if (!css) return;
       const target = pickCssAssetFromRollupBundle(bundle, cssInjectionTarget);
       if (target) {
@@ -173,7 +175,7 @@ function attachViteHooks(plugin) {
     },
     async writeBundle(options, bundle) {
       if (cssInjectedInGenerateBundle) return;
-      const css = plugin.__stylexCollectCss?.();
+      const css = plugin.__stylexCollectCss?.({ minify: cssMinify });
       if (!css) return;
       const target = pickCssAssetFromRollupBundle(bundle, cssInjectionTarget);
       const outDir =
