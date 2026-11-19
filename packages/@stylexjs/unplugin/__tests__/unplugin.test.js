@@ -793,12 +793,31 @@ export const styles = stylex.create({
       expect(chunk.map.mappings).toBe('AAAA;;AACA');
     });
 
-    test('injectCssImport tolerates chunks without a sourcemap', () => {
+    test('injectCssImport tolerates chunks without a usable sourcemap', () => {
       const chunk = { code: "import './dep.js';\nconst x = 1;" };
       injectCssImport(chunk, './a.stylex.css');
       expect(chunk.code).toBe(
         "import './dep.js';\nimport './a.stylex.css';\nconst x = 1;",
       );
+      const empty = {
+        code: "import './dep.js';\nconst x = 1;",
+        map: {},
+      };
+      injectCssImport(empty, './a.stylex.css');
+      expect(empty.code).toBe(
+        "import './dep.js';\nimport './a.stylex.css';\nconst x = 1;",
+      );
+      expect(empty.map).toEqual({});
+    });
+
+    test('injectCssImport clamps the sourcemap shift at the end of the file', () => {
+      const chunk = {
+        code: "import './dep.js';\n",
+        map: { mappings: 'AAAA' },
+      };
+      injectCssImport(chunk, './a.stylex.css');
+      expect(chunk.code).toBe("import './dep.js';\nimport './a.stylex.css';\n");
+      expect(chunk.map.mappings).toBe('AAAA;');
     });
 
     test('injectCssImport places the import after the last leading import', () => {
