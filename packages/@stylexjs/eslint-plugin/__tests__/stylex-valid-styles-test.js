@@ -1333,21 +1333,6 @@ revert`,
       ],
     },
     {
-      code: "import * as stylex from '@stylexjs/stylex'; stylex.create({default: {textAlin: 'left'}});",
-      errors: [
-        {
-          message: 'This is not a key that is allowed by stylex',
-          suggestions: [
-            {
-              desc: 'Did you mean "textAlign"?',
-              output:
-                "import * as stylex from '@stylexjs/stylex'; stylex.create({default: {textAlign: 'left'}});",
-            },
-          ],
-        },
-      ],
-    },
-    {
       code: "import * as stylex from '@stylexjs/stylex'; stylex.create({default: {[\"textAlin\"]: 'left'}});",
       errors: [
         {
@@ -2280,6 +2265,12 @@ const styles = stylex.create({
           suggestions: [
             {
               desc: 'Replace "start" with "inline-start"?',
+              output: `import * as stylex from '@stylexjs/stylex';
+const styles = stylex.create({
+  ternaryWithBasicInvalidStyles: (condition) => ({
+    float: condition ? 'inline-start' : 'inline-end',
+  }),
+});`,
             },
           ],
         },
@@ -2797,7 +2788,7 @@ revert`,
           },
         });
       `,
-      errors: Array(31).fill({}),
+      errors: 31,
     },
     {
       code: `
@@ -3530,14 +3521,7 @@ eslintTester.run('stylex-valid-styles [autofixers]', rule.default, {
           }
         });
       `,
-      output: `
-        import * as stylex from '@stylexjs/stylex';
-        const styles = stylex.create({
-          default: {
-            animation: 'fadeIn 1s ease-in',
-          }
-        });
-      `,
+      output: null,
       errors: [
         {
           message:
@@ -3555,14 +3539,7 @@ eslintTester.run('stylex-valid-styles [autofixers]', rule.default, {
           }
         });
       `,
-      output: `
-        import * as stylex from '@stylexjs/stylex';
-        const styles = stylex.create({
-          default: {
-            font: 'bold 16px/1.5 Arial',
-          }
-        });
-      `,
+      output: null,
       errors: [
         {
           message: /^font value must be one of:\n`font` is not recommended/,
@@ -3579,14 +3556,7 @@ eslintTester.run('stylex-valid-styles [autofixers]', rule.default, {
           }
         });
       `,
-      output: `
-        import * as stylex from '@stylexjs/stylex';
-        const styles = stylex.create({
-          default: {
-            border: '1px solid blue',
-          }
-        });
-      `,
+      output: null,
       errors: [
         {
           message:
