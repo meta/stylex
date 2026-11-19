@@ -184,7 +184,8 @@ The unplugin adds:
 - `lightningcssOptions` (`object`): passthrough options for `lightningcss`.
 - `cssInjectionTarget` (`(fileName: string) => boolean`): pick which emitted CSS
   asset to append to. Defaults to preferring `index.css`/`style.css` or the
-  first CSS asset; falls back to creating `stylex.css` if none exist.
+  first CSS asset; falls back to creating `stylex.css` if none exist. Only used
+  for aggregated CSS, not per-chunk stylesheets.
 - `cssCodeSplit` (`boolean`, default `false`): when `true`, each output chunk
   gets its own stylesheet next to it (`foo.js` -> `foo.stylex.css`), wired with
   a side-effect import after the chunk's other imports (so StyleX rules win

@@ -145,7 +145,7 @@ esbuild.build({
   `targets`, `exclude`, etc. See [Browserslist & CSS lowering](#browserslist--css-lowering).
 - `cssInjectionTarget`: `(fileName: string) => boolean` to pick a CSS asset to
   append to. Defaults to `index.css`, `style.css`, or the first `.css` asset.
-  Only used when `cssCodeSplit` is `false` (the default).
+  Only used for aggregated CSS, not per-chunk stylesheets.
 - `cssCodeSplit`: boolean, defaults to `false`. When `true`, each output chunk
   gets its own stylesheet next to it (`foo.js` -> `foo.stylex.css`), wired with
   a side-effect import after the chunk's other imports (so StyleX rules win

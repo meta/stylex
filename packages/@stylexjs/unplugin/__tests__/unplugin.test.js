@@ -1065,6 +1065,55 @@ export const styles = stylex.create({
       ).toHaveLength(2);
     });
 
+    test('keeps numbering past two occupied stylesheet paths', async () => {
+      const plugin = makeCodeSplitPlugin();
+      plugin.buildStart();
+      await plugin.transform.call({}, STYLE_A, ID_A);
+      const bundle = {
+        'dist/a.js': {
+          type: 'chunk',
+          fileName: 'dist/a.js',
+          code: "import './a.stylex.css';\nimport './a1.stylex.css';\nexport {};\n",
+          modules: { [ID_A]: {} },
+        },
+        'dist/a.stylex.css': {
+          type: 'asset',
+          fileName: 'dist/a.stylex.css',
+          source: '/* user css */',
+        },
+        'dist/a1.stylex.css': {
+          type: 'asset',
+          fileName: 'dist/a1.stylex.css',
+          source: '/* more user css */',
+        },
+      };
+      const warnings = [];
+      const ctx = {
+        ...makeBundleContext(bundle),
+        warn: (message) => warnings.push(message),
+      };
+      plugin.generateBundle.call(ctx, { format: 'es' }, bundle);
+
+      // Both user files stay untouched; the chunk's CSS moves to a2.
+      expect(bundle['dist/a.stylex.css'].source).toBe('/* user css */');
+      expect(bundle['dist/a1.stylex.css'].source).toBe('/* more user css */');
+      expect(bundle['dist/a2.stylex.css'].source).toContain(
+        'padding-top: 17px',
+      );
+      expect(bundle['dist/a.js'].code).toContain("import './a2.stylex.css';");
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain('"dist/a.stylex.css" already exists');
+      expect(warnings[0]).toContain('"dist/a2.stylex.css"');
+
+      // A repeated pass reuses a2 instead of spawning a3.
+      plugin.generateBundle.call(ctx, { format: 'es' }, bundle);
+      expect(bundle['dist/a3.stylex.css']).toBeUndefined();
+      expect(warnings).toHaveLength(1);
+      expect(
+        bundle['dist/a.js'].code.match(/import '\.\/a2\.stylex\.css';/g),
+      ).toHaveLength(1);
+    });
+
     test('falls back to the aggregated stylesheet when the output format is not ESM', async () => {
       const plugin = unplugin.rollup(CSS_CODE_SPLIT_OPTIONS);
       plugin.buildStart();
