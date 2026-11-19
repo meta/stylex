@@ -301,6 +301,7 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
     const result = await transformAsync(inputCode, {
       babelrc: false,
       filename,
+      sourceMaps: true,
       presets,
       plugins: [
         ...plugins,
