@@ -12,15 +12,54 @@ version: 2
 updates:
   # JavaScript/TypeScript dependencies across the monorepo (root + workspaces).
   - package-ecosystem: 'npm'
-    directories:
-      - '/'
-      - '/packages/**'
-      - '/examples/**'
+    directory: '/'
     schedule:
       interval: 'weekly'
-    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 10
     groups:
+      flow-hermes:
+        patterns:
+          - 'flow-*'
+          - 'hermes-*'
+          - '*hermes-parser*'
+          - '@babel/preset-flow'
+      babel:
+        patterns:
+          - '@babel/*'
+      react:
+        patterns:
+          - 'react'
+          - 'react-dom'
+          - '@types/react'
+          - '@types/react-dom'
+          - 'react-server-dom-webpack'
+      prettier:
+        patterns:
+          - 'prettier'
+      storybook:
+        patterns:
+          - 'storybook'
+          - '@storybook/*'
+          - 'eslint-plugin-storybook'
+      vitest:
+        patterns:
+          - 'vitest'
+          - '@vitest/*'
+      typescript-eslint:
+        patterns:
+          - 'typescript-eslint'
+          - '@typescript-eslint/*'
       npm-dependencies:
+        update-types:
+          - 'minor'
+          - 'patch'
+        patterns:
+          - '*'
+      npm-dependencies-major:
+        update-types:
+          - 'major'
         patterns:
           - '*'
 
