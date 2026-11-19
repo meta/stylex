@@ -167,7 +167,9 @@ function attachViteHooks(plugin) {
             ? target.source
             : target.source?.toString() || '';
         const nextSource = current ? current + '\n' + css : css;
-        replaceCssAssetWithHashedCopy(this, bundle, target, nextSource);
+        replaceCssAssetWithHashedCopy(this, bundle, target, nextSource, {
+          isVite: true,
+        });
         cssInjectedInGenerateBundle = true;
       }
     },
