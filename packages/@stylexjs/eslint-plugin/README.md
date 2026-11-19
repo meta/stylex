@@ -278,3 +278,65 @@ This rule disallows using `className` or `style` props on elements that spread
   "validImports": ["stylex", "@stylexjs/stylex"]
 }
 ```
+
+### `@stylexjs/no-raw-media-queries`
+
+This rule disallows raw media query strings within `stylex.create` calls. It
+helps keep breakpoints consistent across a codebase by requiring media queries
+to be defined once with
+[`stylex.defineConsts`](https://stylexjs.com/docs/api/javascript/defineConsts/)
+and referenced as shared constants.
+
+#### Invalid example
+
+```js
+const styles = stylex.create({
+  root: {
+    width: {
+      default: '100%',
+      '@media (max-width: 600px)': '50%',
+    },
+  },
+});
+```
+
+#### Instead...
+
+```js
+// breakpoints.stylex.js
+export const breakpoints = stylex.defineConsts({
+  small: '@media (max-width: 600px)',
+});
+```
+
+```js
+import { breakpoints } from './breakpoints.stylex';
+
+const styles = stylex.create({
+  root: {
+    width: {
+      default: '100%',
+      [breakpoints.small]: '50%',
+    },
+  },
+});
+```
+
+#### Config options
+
+```json
+{
+  "validImports": ["stylex", "@stylexjs/stylex"],
+  "allowedMediaQueries": []
+}
+```
+
+Use `allowedMediaQueries` to permit specific raw media query strings, which can
+be useful while migrating a codebase incrementally. Entries are compared as
+exact strings, so they must match the source character for character:
+
+```json
+{
+  "allowedMediaQueries": ["@media print"]
+}
+```
