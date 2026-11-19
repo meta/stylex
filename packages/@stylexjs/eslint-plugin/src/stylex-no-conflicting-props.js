@@ -18,9 +18,15 @@ type JSXIdentifier = {
   +name: string,
 };
 
+type JSXExpressionContainer = {
+  +type: 'JSXExpressionContainer',
+  +expression: Node | { +type: 'JSXEmptyExpression' },
+};
+
 type JSXAttribute = {
   +type: 'JSXAttribute',
   +name: JSXIdentifier | { +type: string },
+  +value?: Node | JSXExpressionContainer | null,
 };
 
 type JSXSpreadAttribute = {
@@ -30,15 +36,22 @@ type JSXSpreadAttribute = {
 
 type JSXOpeningElement = {
   +type: 'JSXOpeningElement',
+  +name: JSXIdentifier | { +type: string },
   +attributes: $ReadOnlyArray<JSXAttribute | JSXSpreadAttribute>,
 };
+
+const STYLEX_PROPS_CONFLICTING_PROPS_MESSAGE =
+  'The `{{propName}}` prop should not be used when spreading `stylex.props()` to avoid conflicts.';
+
+const STYLEX_SHORTHAND_CONFLICTING_PROPS_MESSAGE =
+  'The `{{propName}}` prop should not be used with the `{{sxPropName}}` StyleX prop to avoid conflicts.';
 
 const stylexNoConflictingProps = {
   meta: {
     type: 'problem',
     docs: {
       description:
-        'Disallow using `className` or `style` props on elements that spread `stylex.props()`',
+        'Disallow using `className` or `style` props on elements that spread `stylex.props()` or use StyleX JSX shorthand',
       category: 'Best Practices',
       recommended: true,
     },
@@ -62,14 +75,20 @@ const stylexNoConflictingProps = {
             },
             default: ['stylex', '@stylexjs/stylex'],
           },
+          sxPropName: {
+            oneOf: [{ type: 'string' }, { enum: [false] }],
+            default: 'sx',
+          },
         },
         additionalProperties: false,
       },
     ],
   },
   create(context: Rule.RuleContext): { ... } {
-    const { validImports: importsToLookFor = ['stylex', '@stylexjs/stylex'] } =
-      context.options[0] || {};
+    const {
+      validImports: importsToLookFor = ['stylex', '@stylexjs/stylex'],
+      sxPropName = 'sx',
+    } = context.options[0] || {};
 
     const importTracker = createImportTracker(importsToLookFor);
 
@@ -85,6 +104,30 @@ const stylexNoConflictingProps = {
       );
     }
 
+    function isLowercaseHostElement(node: JSXOpeningElement): boolean {
+      return (
+        node.name.type === 'JSXIdentifier' &&
+        typeof node.name.name === 'string' &&
+        node.name.name[0] === node.name.name[0].toLowerCase()
+      );
+    }
+
+    function hasStylexShorthandProp(node: JSXOpeningElement): boolean {
+      return (
+        typeof sxPropName === 'string' &&
+        isLowercaseHostElement(node) &&
+        node.attributes.some(
+          (attr) =>
+            attr.type === 'JSXAttribute' &&
+            attr.name.type === 'JSXIdentifier' &&
+            attr.name.name === sxPropName &&
+            attr.value != null &&
+            attr.value.type === 'JSXExpressionContainer' &&
+            attr.value.expression.type !== 'JSXEmptyExpression',
+        )
+      );
+    }
+
     return {
       ImportDeclaration: importTracker.ImportDeclaration,
 
@@ -96,9 +139,15 @@ const stylexNoConflictingProps = {
             isStylexPropsCallee(attr.argument.callee),
         );
 
-        if (!hasStylexPropsSpread) {
+        const hasStylexShorthand = hasStylexShorthandProp(node);
+
+        if (!hasStylexPropsSpread && !hasStylexShorthand) {
           return;
         }
+
+        const message = hasStylexShorthand
+          ? STYLEX_SHORTHAND_CONFLICTING_PROPS_MESSAGE
+          : STYLEX_PROPS_CONFLICTING_PROPS_MESSAGE;
 
         for (const attr of node.attributes) {
           if (
@@ -109,9 +158,8 @@ const stylexNoConflictingProps = {
             context.report({
               // $FlowFixMe[incompatible-type]
               node: attr,
-              message:
-                'The `{{propName}}` prop should not be used when spreading `stylex.props()` to avoid conflicts.',
-              data: { propName: attr.name.name },
+              message,
+              data: { propName: attr.name.name, sxPropName },
             });
           } else if (
             attr.type === 'JSXSpreadAttribute' &&
@@ -127,9 +175,8 @@ const stylexNoConflictingProps = {
                 context.report({
                   // $FlowFixMe[incompatible-type]
                   node: prop,
-                  message:
-                    'The `{{propName}}` prop should not be used when spreading `stylex.props()` to avoid conflicts.',
-                  data: { propName: prop.key.name },
+                  message,
+                  data: { propName: prop.key.name, sxPropName },
                 });
               }
             }

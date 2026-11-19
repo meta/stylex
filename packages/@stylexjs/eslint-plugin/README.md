@@ -261,7 +261,8 @@ specifications.
 ### `@stylexjs/no-conflicting-props`
 
 This rule disallows using `className` or `style` props on elements that spread
-`stylex.props()` to avoid conflicts and unexpected behavior.
+`stylex.props()` or use StyleX JSX shorthand to avoid conflicts and unexpected
+behavior.
 
 #### Invalid examples
 
@@ -269,12 +270,20 @@ This rule disallows using `className` or `style` props on elements that spread
 <div {...stylex.props(styles.foo)} className="extra" />
 
 <div {...stylex.props(styles.foo)} style={{ color: 'red' }} />
+
+<div sx={styles.foo} className="extra" />
+
+<div sx={styles.foo} style={{ color: 'red' }} />
 ```
 
 #### Config options
 
 ```json
 {
-  "validImports": ["stylex", "@stylexjs/stylex"]
+  "validImports": ["stylex", "@stylexjs/stylex"],
+  "sxPropName": "sx"
 }
 ```
+
+Set `sxPropName` to a string to check a custom JSX shorthand prop, or `false` to
+disable JSX shorthand checks.
