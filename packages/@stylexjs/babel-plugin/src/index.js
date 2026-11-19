@@ -506,17 +506,23 @@ function getLogicalFloatVars(rules: Array<Rule>): string {
     : '';
 }
 
-type WidthBound = $ReadOnly<{ kind: 'min' | 'max', value: number }>;
+type WidthBound = $ReadOnly<{
+  kind: 'min' | 'max',
+  value: number,
+  unit: string,
+}>;
 
 // A rule's width bound plus the at-rule context it sits in. Only rules with
 // an identical context are comparable: a breakpoint nested under `@supports`
 // says nothing about one nested under a different condition.
 type WidthSortKey = $ReadOnly<{ context: string, bound: WidthBound }>;
 
-// The `min-width`/`max-width` px bounds a media query imposes, or null if it
+// The `min-width`/`max-width` bounds a media query imposes, or null if it
 // has none to sort by: `not` and `or` can widen the matched range or split it
-// in two, and rem/em bounds are unreadable at build time. Zero counts as a
-// bound whatever unit it carries, or none at all.
+// in two. The unit is carried so the sort only compares like with like: px
+// and rem aren't commensurable without a known root font-size, but two rem
+// bounds (or two px bounds) have a fixed order whatever the root size is.
+// Zero counts as a bound whatever unit it carries, or none at all.
 function collectWidthBounds(rule: MediaQueryRule): Array<WidthBound> | null {
   if (rule.type === 'pair') {
     // Media feature names are ASCII case-insensitive.
@@ -529,11 +535,12 @@ function collectWidthBounds(rule: MediaQueryRule): Array<WidthBound> | null {
     }
 
     const v = rule.value;
-    // Zero is the one length that needs no unit. Any other unitless number is
-    // invalid CSS for a media feature — the browser drops the whole query — so
-    // leave those unsorted rather than assume px.
+    // Zero is the one length that needs no unit; canonicalize it so a bare
+    // `0` sorts with the lengths. Any other unitless number is invalid CSS
+    // for a media feature — the browser drops the whole query — so leave
+    // those unsorted rather than guess a unit.
     if (v === 0) {
-      return [{ kind, value: 0 }];
+      return [{ kind, value: 0, unit: 'px' }];
     }
 
     if (
@@ -541,11 +548,17 @@ function collectWidthBounds(rule: MediaQueryRule): Array<WidthBound> | null {
       typeof v === 'object' &&
       // A `Fraction` value (e.g. `aspect-ratio`) is array-shaped, not a length.
       !Array.isArray(v) &&
-      typeof v.value === 'number' &&
-      // Units are ASCII case-insensitive, and zero is zero in any unit.
-      (v.value === 0 || String(v.unit).toLowerCase() === 'px')
+      typeof v.value === 'number'
     ) {
-      return [{ kind, value: v.value }];
+      // Units are ASCII case-insensitive, and zero is zero in any unit. Any
+      // real length unit (px, rem, em, …) is monotonic within itself, so it
+      // is sortable against its own kind; a missing unit on a non-zero value
+      // is not.
+      const unit = v.value === 0 ? 'px' : String(v.unit ?? '').toLowerCase();
+      if (unit === '') {
+        return null;
+      }
+      return [{ kind, value: v.value, unit }];
     }
     return null;
   }
@@ -650,8 +663,13 @@ function declaredPropertyName(rule: string): string {
 
 // A total ordering over width sort keys, so the sort stays consistent no
 // matter which pairs get compared: rules with a bound first, then grouped by
-// at-rule context, then `min-width` ascending ahead of `max-width` descending
-// — the conventional mobile-first order.
+// at-rule context, then by unit, then `min-width` ascending ahead of
+// `max-width` descending — the conventional mobile-first order.
+//
+// Grouping by unit is what lets rem (or em) breakpoints sort by value: two
+// bounds in the same unit have a fixed order for any root font-size, but px
+// and rem can't be interleaved without knowing that size, so different units
+// are kept in separate blocks rather than compared by their bare numbers.
 function compareWidthSortKeys(
   a: WidthSortKey | null,
   b: WidthSortKey | null,
@@ -666,6 +684,10 @@ function compareWidthSortKeys(
 
   if (a.context !== b.context) {
     return a.context.localeCompare(b.context);
+  }
+
+  if (a.bound.unit !== b.bound.unit) {
+    return a.bound.unit.localeCompare(b.bound.unit);
   }
 
   if (a.bound.kind !== b.bound.kind) {
