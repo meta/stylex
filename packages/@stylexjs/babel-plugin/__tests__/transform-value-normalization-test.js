@@ -105,6 +105,42 @@ describe('@stylexjs/babel-plugin', () => {
       expect(code).not.toContain('calc(0 + 1%)');
     });
 
+    test('0 flex-basis keeps its unit unless it follows two flex factors', () => {
+      // In `flex`, a unitless 0 is read as a flex factor: `1 0` means
+      // flex-shrink 0 and flex-basis 0%, not flex-basis 0px.
+      expect(
+        transform(`
+          import stylex from 'stylex';
+          const styles = stylex.create({
+            a: { flex: '1 0px' },
+            b: { flex: '0px' },
+            c: { flex: '0px 1' },
+            d: { flex: '1 1 0px' },
+          });
+        `),
+      ).toMatchInlineSnapshot(`
+        "import _inject from "@stylexjs/stylex/lib/stylex-inject";
+        var _inject2 = _inject;
+        import stylex from 'stylex';
+        _inject2({
+          ltr: ".xoq9y23{flex:1 0px}",
+          priority: 2000
+        });
+        _inject2({
+          ltr: ".xa2kbsg{flex:0px}",
+          priority: 2000
+        });
+        _inject2({
+          ltr: ".x1xihlyl{flex:0px 1}",
+          priority: 2000
+        });
+        _inject2({
+          ltr: ".x1cqoux5{flex:1 1 0}",
+          priority: 2000
+        });"
+      `);
+    });
+
     test('preserves resource paths inside url()', () => {
       expect(
         transform(`

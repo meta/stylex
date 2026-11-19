@@ -17,6 +17,32 @@ const fraction = 'fr';
 const percentage = '%';
 
 /**
+ * In the `flex` shorthand a unitless zero is read as a flex factor unless it
+ * follows two flex factors, so `flex: 1 0px` (flex-shrink 1, flex-basis 0px)
+ * and `flex: 1 0` (flex-shrink 0, flex-basis 0%) mean different things.
+ * https://drafts.csswg.org/css-flexbox-1/#flex-property
+ */
+function keepsFlexBasisUnit(
+  key: unknown,
+  nodes: ReadonlyArray<PostCSSValueASTNode>,
+  index: number,
+): boolean {
+  if (key !== 'flex') {
+    return false;
+  }
+  const preceding = nodes
+    .slice(0, index)
+    .filter((node) => node.type !== 'space');
+  return !(
+    preceding.length === 2 &&
+    preceding.every((node) => {
+      const dimension = node.type === 'word' && parser.unit(node.value);
+      return dimension !== false && dimension.unit === '';
+    })
+  );
+}
+
+/**
  * Remove units in zero values, except when required: in angles, timings, fractions, and percentages,
  * in which case make them consistent 0deg, 0s, 0fr, and 0%.
  */
@@ -31,7 +57,7 @@ export default function normalizeZeroDimensions(
 
   let endFunction = 0;
 
-  ast.walk((node) => {
+  ast.walk((node, index) => {
     if (node.type === 'function') {
       endFunction = Math.max(endFunction, node.sourceEndIndex ?? 0);
     }
@@ -59,7 +85,7 @@ export default function normalizeZeroDimensions(
       node.value = '0fr';
     } else if (unit === percentage) {
       node.value = '0%';
-    } else if (!endFunction) {
+    } else if (!endFunction && !keepsFlexBasisUnit(key, ast.nodes, index)) {
       node.value = '0';
     }
   });
