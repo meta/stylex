@@ -81,6 +81,10 @@ When omitted, the plugin auto-discovers source files under `cwd` and direct
 dependencies that use StyleX (checking `dependencies`, `peerDependencies`, and
 `optionalDependencies`).
 
+Setting `include` turns off auto-discovery. List your own source files and any
+dependencies that ship StyleX source, including paths inside `node_modules`.
+Auto-discovery only checks direct dependencies, not their dependencies.
+
 ---
 
 ### useCSSLayers
