@@ -26,6 +26,8 @@ const invalidConstsFilenameWithoutRestrictedExports = (suggestedExtension) =>
   `Only variables from \`stylex.defineConsts()\` can be exported from a file with a \`${suggestedExtension}\` extension.`;
 const invalidExportFromConstsFiles =
   'Files that export variables from `stylex.defineConsts()` must not export anything else.';
+const aliasedExport = (exportedName, localName) =>
+  `\`${exportedName}\` is another name for \`${localName}\`. StyleX derives variable names from the export name, so importing \`${exportedName}\` references variables that are never defined. Export each \`stylex.defineVars()\`, \`stylex.defineConsts()\`, or \`stylex.defineMarker()\` result under exactly one name.`;
 const invalidDefaultExport = (type) =>
   `Default exports are not allowed for variables from \`stylex.${type}()\`. Use named exports instead.`;
 
@@ -1022,6 +1024,106 @@ ruleTester.run('stylex-enforce-extension', rule.default, {
       options: [{ enforceDefineConstsExtension: true }],
       errors: [{ message: invalidExportFromConstsFiles }],
     },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        export const vars = stylex.defineVars({ color: 'red' });
+        const helper = someFunction();
+        export { helper };
+      `,
+      filename: 'myComponent.stylex.jsx',
+      errors: [{ message: invalidExportFromThemeFiles }],
+    },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        export const vars = stylex.defineVars({ color: 'red' });
+        export { helper } from './helper';
+      `,
+      filename: 'myComponent.stylex.jsx',
+      errors: [{ message: invalidExportFromThemeFiles }],
+    },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        export const consts = stylex.defineConsts({ color: 'red' });
+        const helper = someFunction();
+        export { helper };
+      `,
+      filename: 'myComponent.stylex.const.jsx',
+      options: [{ enforceDefineConstsExtension: true }],
+      errors: [{ message: invalidExportFromConstsFiles }],
+    },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        export const vars = stylex.defineVars({ color: 'red' });
+        export * from './helpers';
+      `,
+      filename: 'myComponent.stylex.jsx',
+      errors: [{ message: invalidExportFromThemeFiles }],
+    },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        export * as helpers from './helpers';
+        export const vars = stylex.defineVars({ color: 'red' });
+      `,
+      filename: 'myComponent.stylex.jsx',
+      errors: [
+        { message: invalidFilenameWithoutRestrictedExports('.stylex.jsx') },
+        { message: invalidExportFromThemeFiles },
+      ],
+    },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        export const consts = stylex.defineConsts({ color: 'red' });
+        export * from './helpers';
+      `,
+      filename: 'myComponent.stylex.const.jsx',
+      options: [{ enforceDefineConstsExtension: true }],
+      errors: [{ message: invalidExportFromConstsFiles }],
+    },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        export const themeNested = stylex.unstable_defineConstsNested({
+          color: { primary: 'red' },
+        });
+        export { themeNested as theme };
+      `,
+      filename: 'theme.stylex.jsx',
+      errors: [{ message: aliasedExport('theme', 'themeNested') }],
+    },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        export const vars = stylex.defineVars({ color: 'red' });
+        export const colors = vars;
+      `,
+      filename: 'theme.stylex.jsx',
+      errors: [{ message: aliasedExport('colors', 'vars') }],
+    },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        export const marker = stylex.defineMarker();
+        export { marker as cardMarker };
+      `,
+      filename: 'markers.stylex.jsx',
+      errors: [{ message: aliasedExport('cardMarker', 'marker') }],
+    },
+    {
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        export const vars = stylex.defineVars({ color: 'red' });
+        export const colors = vars;
+      `,
+      filename: 'theme.stylex.jsx',
+      options: [{ legacyAllowMixedExports: true }],
+      errors: [{ message: aliasedExport('colors', 'vars') }],
+    },
   ],
 });
 
@@ -1083,6 +1185,17 @@ typeExportRuleTester.run(
       `,
         filename: 'colors.stylex.ts',
       },
+      {
+        code: `
+        import * as stylex from '@stylexjs/stylex';
+        export const colors = stylex.defineVars({
+          primary: 'blue',
+          secondary: 'green',
+        });
+        export type * from './types';
+      `,
+        filename: 'colors.stylex.ts',
+      },
     ],
 
     invalid: [
@@ -1092,6 +1205,17 @@ typeExportRuleTester.run(
         export const colors = stylex.defineVars({ primary: 'blue' });
         export type Colors = keyof typeof colors;
         export const helper = someFunction();
+      `,
+        filename: 'colors.stylex.ts',
+        errors: [{ message: invalidExportFromThemeFiles }],
+      },
+      {
+        code: `
+        import * as stylex from '@stylexjs/stylex';
+        type Colors = keyof typeof colors;
+        const helper = someFunction();
+        export const colors = stylex.defineVars({ primary: 'blue' });
+        export { type Colors, helper };
       `,
         filename: 'colors.stylex.ts',
         errors: [{ message: invalidExportFromThemeFiles }],
