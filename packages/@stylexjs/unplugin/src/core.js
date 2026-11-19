@@ -127,6 +127,136 @@ export function replaceCssAssetWithHashedCopy(ctx, bundle, asset, nextSource) {
   delete bundle[oldFileName];
 }
 
+const CSS_CODE_SPLIT_FRAMEWORKS = ['rollup', 'vite', 'rolldown'];
+
+// The stylesheet mirrors the chunk's path: path/to/a.js -> path/to/a.stylex.css
+export function perChunkAssetName(chunkFileName) {
+  const ext = path.posix.extname(chunkFileName);
+  return (
+    chunkFileName.slice(0, chunkFileName.length - ext.length) + '.stylex.css'
+  );
+}
+
+// A relative specifier from the chunk to its stylesheet, always `./`-prefixed.
+export function cssImportSpecifier(chunkFileName, cssFileName) {
+  const specifier = path.posix.relative(
+    path.posix.dirname(chunkFileName),
+    cssFileName,
+  );
+  return specifier.startsWith('.') ? specifier : `./${specifier}`;
+}
+
+// Inserts the import after the chunk's imports — or at the top when there
+// are none — so earlier user stylesheets cannot override StyleX rules.
+// NOTE: mutates `chunk.code` without fixing `chunk.map`, so the sourcemap is
+// off by one line below the import.
+export function injectCssImport(chunk, specifier) {
+  const importStatement = `import '${specifier}';`;
+  // Preserve the chunk's existing line endings.
+  const newline = chunk.code.includes('\r\n') ? '\r\n' : '\n';
+  const lines = chunk.code.split(/\r?\n/);
+  let i = 0;
+  if (lines[0]?.startsWith('#!')) i = 1;
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    if (line === '' || line.startsWith('//')) {
+      i++;
+      continue;
+    }
+    // Directive prologue ('use client';) — the import must stay below it.
+    if (/^(['"]).*\1;?$/.test(line)) {
+      i++;
+      continue;
+    }
+    if (line.startsWith('/*')) {
+      // Skip the block comment, but stop if code follows the closing `*/`.
+      while (i < lines.length && !lines[i].includes('*/')) i++;
+      if (i >= lines.length) break;
+      const rest = lines[i].slice(lines[i].indexOf('*/') + 2).trim();
+      if (rest !== '') break;
+      i++;
+      continue;
+    }
+    break;
+  }
+  // Skip the chunk's imports — they may span lines — so the stylesheet
+  // loads after any user CSS imported above.
+  let inImport = false;
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    if (inImport) {
+      i++;
+      if (line.includes(';')) inImport = false;
+      continue;
+    }
+    if (line === 'import' || /^import[\s'"{*]/.test(line)) {
+      i++;
+      if (!line.includes(';')) inImport = true;
+      continue;
+    }
+    break;
+  }
+  lines.splice(i, 0, importStatement);
+  chunk.code = lines.join(newline);
+}
+
+// True when the chunk already carries the exact import (idempotency).
+function chunkHasCssImport(chunk, specifier) {
+  return chunk.code.includes(`import '${specifier}';`);
+}
+
+// <stem>.stylex.css, falling back to <stem>1.stylex.css, <stem>2...
+// when the path is taken; a file already carrying the rules is reused.
+function pickCssFileName(ctx, bundle, chunkFileName, css) {
+  const base = perChunkAssetName(chunkFileName);
+  const stem = base.slice(0, base.length - '.stylex.css'.length);
+  let fileName = base;
+  let n = 0;
+  while (bundle[fileName]) {
+    const existing = bundle[fileName];
+    const current =
+      typeof existing.source === 'string'
+        ? existing.source
+        : existing.source?.toString() || '';
+    if (existing.type === 'asset' && current.includes(css)) return fileName;
+    n += 1;
+    fileName = `${stem}${n}.stylex.css`;
+  }
+  if (n > 0) {
+    ctx.warn?.(
+      `"${base}" already exists; emitting the chunk's StyleX CSS as "${fileName}" instead.`,
+    );
+  }
+  return fileName;
+}
+
+// A stylesheet per chunk (shared when identical); ESM only. Returns
+// whether it ran so adapters can skip their aggregated fallback.
+export function emitCssPerChunk(ctx, options, bundle, plugin) {
+  if (!plugin.__stylexCssCodeSplit) return false;
+  if (options?.format !== 'es' && options?.format !== 'esm') return false; // needs ESM
+  // Identical CSS (identical class names) shares one stylesheet.
+  const fileNameByCss = new Map();
+  for (const chunk of Object.values(bundle)) {
+    if (!chunk || chunk.type !== 'chunk') continue;
+    const css = plugin.__stylexCollectCss?.(Object.keys(chunk.modules || {}));
+    if (!css) continue;
+    let cssFileName = fileNameByCss.get(css);
+    if (!cssFileName) {
+      // Explicit fileName lands it next to the chunk, skipping assetFileNames.
+      cssFileName = pickCssFileName(ctx, bundle, chunk.fileName, css);
+      fileNameByCss.set(css, cssFileName);
+      if (!bundle[cssFileName]) {
+        ctx.emitFile({ type: 'asset', fileName: cssFileName, source: css });
+      }
+    }
+    const specifier = cssImportSpecifier(chunk.fileName, cssFileName);
+    if (chunkHasCssImport(chunk, specifier)) continue; // an earlier pass already wired it
+    injectCssImport(chunk, specifier);
+  }
+  return true;
+}
+
 function readJSON(file) {
   try {
     const content = fs.readFileSync(file, 'utf8');
@@ -238,6 +368,7 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
     useCSSLayers = false,
     lightningcssOptions,
     cssInjectionTarget,
+    cssCodeSplit: _cssCodeSplit,
     externalPackages = [],
     // Persist rules to disk in dev to bridge multiple plugin containers/processes.
     // Off by default; enable if your dev setup runs separate Node processes per environment.
@@ -247,6 +378,11 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
     treeshakeCompensation = ['vite', 'rollup', 'rolldown'].includes(framework),
     ...stylexOptions
   } = userOptions;
+
+  const cssCodeSplit =
+    _cssCodeSplit === true && // opt-in only
+    !stylexOptions.runtimeInjection && // runtimeInjection wins
+    CSS_CODE_SPLIT_FRAMEWORKS.includes(framework); // supported adapters only
 
   const gateImportSources = [...BUILT_IN_IMPORT_SOURCES, ...importSources];
 
@@ -359,7 +495,7 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
     }
   }
 
-  function collectCss() {
+  function collectCss(moduleIds) {
     const merged = new Map();
     if (devPersistToDisk) {
       try {
@@ -374,7 +510,18 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
       for (const [k, v] of shared.entries()) merged.set(k, v);
     } catch {}
     for (const [k, v] of stylexRulesById.entries()) merged.set(k, v);
-    const allRules = Array.from(merged.values()).flat();
+    const allRules = [];
+    for (const id of moduleIds ?? Array.from(merged.keys())) {
+      // Some adapters normalise ids differently (e.g. Vite script sub-blocks);
+      // fall back to the query-stripped id so the chunk doesn't lose its CSS.
+      let rules = merged.get(id);
+      if (!rules && id.includes('?')) {
+        rules = merged.get(id.split('?')[0]);
+      }
+      if (rules) {
+        for (const rule of rules) allRules.push(rule);
+      }
+    }
     return processCollectedRulesToCSS(allRules, {
       useCSSLayers,
       lightningcssOptions,
@@ -516,6 +663,7 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
   plugin.__stylexResetState = resetState;
   plugin.__stylexGetSharedStore = getSharedStore;
   plugin.__stylexDevMode = devMode;
+  plugin.__stylexCssCodeSplit = cssCodeSplit;
   plugin.__stylexCssInjectionTarget = cssInjectionTarget;
   plugin.__stylexPackages = stylexPackages;
   return plugin;

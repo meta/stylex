@@ -19,6 +19,7 @@ import {
 import {
   INDEX_CSS_RE,
   STYLE_CSS_RE,
+  emitCssPerChunk,
   pickCssAssetFromRollupBundle,
   replaceCssAssetWithHashedCopy,
   unpluginFactory,
@@ -32,6 +33,7 @@ function attachViteHooks(plugin) {
   let viteServer = null;
   let viteOutDir = null;
   let cssInjectedInGenerateBundle = false;
+  let emittedPerChunkCss = false;
 
   return {
     ...plugin,
@@ -157,7 +159,14 @@ function attachViteHooks(plugin) {
         });
       } catch {}
     },
-    generateBundle(_opts, bundle) {
+    generateBundle(options, bundle) {
+      // Reset the injection flag per output too, but only with cssCodeSplit
+      // on — off must behave as before.
+      emittedPerChunkCss = emitCssPerChunk(this, options, bundle, plugin);
+      if (plugin.__stylexCssCodeSplit) {
+        cssInjectedInGenerateBundle = false;
+      }
+      if (emittedPerChunkCss) return;
       const css = plugin.__stylexCollectCss?.();
       if (!css) return;
       const target = pickCssAssetFromRollupBundle(bundle, cssInjectionTarget);
@@ -172,7 +181,7 @@ function attachViteHooks(plugin) {
       }
     },
     async writeBundle(options, bundle) {
-      if (cssInjectedInGenerateBundle) return;
+      if (emittedPerChunkCss || cssInjectedInGenerateBundle) return;
       const css = plugin.__stylexCollectCss?.();
       if (!css) return;
       const target = pickCssAssetFromRollupBundle(bundle, cssInjectionTarget);
