@@ -259,15 +259,15 @@ describe('individual testing of util functions', () => {
   const config = {
     input: './source',
     output: './src',
-    cssBundleName: 'stylex_bundle.css',
+    styleXBundleName: 'stylex_bundle.css',
   };
   test('file to relative css path', async () => {
     const mockFileName = './src/pages/home/page.js';
     const relativePath = getRelativePath(
       mockFileName,
-      path.join(config.output, config.cssBundleName),
+      path.join(config.output, config.styleXBundleName),
     );
-    expect(relativePath).toEqual(`../../${config.cssBundleName}`);
+    expect(relativePath).toEqual(`../../${config.styleXBundleName}`);
   });
 });
 
