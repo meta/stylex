@@ -244,7 +244,13 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
     devPersistToDisk = false,
     // Dev integration mode: 'full' (runtime + html), 'css-only' (serve CSS endpoint only), 'off'
     devMode = 'full',
-    treeshakeCompensation = ['vite', 'rollup', 'rolldown'].includes(framework),
+    treeshakeCompensation = [
+      'vite',
+      'rollup',
+      'rolldown',
+      'esbuild',
+      'bun',
+    ].includes(framework),
     ...stylexOptions
   } = userOptions;
 
