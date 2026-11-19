@@ -1,0 +1,11 @@
+{
+  "name": "application-pnpm",
+  "version": "0.18.3",
+  "dependencies": {
+    "@stylex/lib-exports-dist-pnpm": "*",
+    "@stylex/lib-exports-pnpm": "*",
+    "stylex-lib-dist-exports-with-main": "*",
+    "stylex-lib-dist-main": "*",
+    "stylex-lib-pnpm": "*"
+  }
+}

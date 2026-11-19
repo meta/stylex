@@ -1,0 +1,28 @@
+[package]
+description = "Lookup indices the StyleX state manager answers its position questions from"
+edition.workspace = true
+license.workspace = true
+name = "stylex_state_index"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+
+[lib]
+crate-type = ["rlib"]
+doctest = false
+
+[dependencies]
+rustc-hash.workspace = true
+swc_core = { workspace = true, features = ["common", "ecma_ast", "ecma_visit"] }
+
+stylex_ast = { path = "../stylex-ast" }
+stylex_utils = { path = "../stylex-utils" }
+
+[dev-dependencies]
+ctor.workspace = true
+pretty_env_logger.workspace = true
+swc_core = { workspace = true, features = ["ecma_parser"] }
+
+[lints]
+workspace = true

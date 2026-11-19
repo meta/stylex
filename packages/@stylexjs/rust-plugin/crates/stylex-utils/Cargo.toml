@@ -1,0 +1,29 @@
+[package]
+description = "Common SWC utilities for the StyleX compiler plugin"
+edition.workspace = true
+license.workspace = true
+name = "stylex_utils"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+
+[lib]
+crate-type = ["rlib"]
+doctest = false
+
+[dependencies]
+indexmap.workspace = true
+murmur2.workspace = true
+radix_fmt.workspace = true
+rustc-hash.workspace = true
+serde_json.workspace = true
+swc_core = { workspace = true, features = ["common", "ecma_ast", "ecma_utils"] }
+swc_ecma_parser.workspace = true
+xxhash-rust.workspace = true
+
+[dev-dependencies]
+stacker.workspace = true
+
+[lints]
+workspace = true
