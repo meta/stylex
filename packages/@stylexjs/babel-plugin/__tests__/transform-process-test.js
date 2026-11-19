@@ -274,12 +274,12 @@ describe('@stylexjs/babel-plugin', () => {
         html[dir='rtl'] .x1kmio9f:not(#\\#):not(#\\#):not(#\\#){float:right}
         .x18abd1y:not(#\\#):not(#\\#):not(#\\#){outline-color:var(--xkxfyv)}
         .x1skrh0i:not(#\\#):not(#\\#):not(#\\#){text-shadow:1px 2px 3px 4px red}
-        .xfy810d.xfy810d:where(.x-default-marker:focus *):not(#\\#):not(#\\#):not(#\\#){background-color:green}
+        .xfy810d.xfy810d:where(.x-default-marker:focus .xfy810d):not(#\\#):not(#\\#):not(#\\#){background-color:green}
         .xbrh7vm:hover:not(#\\#):not(#\\#):not(#\\#){background-color:blue}
         @media (max-width: 1000px){.xahc4vn.xahc4vn:not(#\\#):not(#\\#):not(#\\#){background-color:yellow}}
         @media (min-width: 320px){.xtj17id.xtj17id:not(#\\#):not(#\\#):not(#\\#){text-shadow:10px 20px 30px 40px green}}
         @media (max-width: 1000px){.x1t4kl4c.x1t4kl4c.x1t4kl4c:where(:has(.x-default-marker:focus)):not(#\\#):not(#\\#):not(#\\#){background-color:purple}}
-        @media (max-width: 1000px){.x975j7z.x975j7z.x975j7z:where(.x-default-marker:active ~ *, :has(~ .x-default-marker:active)):not(#\\#):not(#\\#):not(#\\#){background-color:orange}}"
+        @media (max-width: 1000px){.x975j7z.x975j7z.x975j7z:where(.x-default-marker:active ~ .x975j7z, :has(~ .x-default-marker:active)):not(#\\#):not(#\\#):not(#\\#){background-color:orange}}"
       `);
     });
 
@@ -376,12 +376,12 @@ describe('@stylexjs/babel-plugin', () => {
         html[dir='rtl'] .x1kmio9f{float:right}
         .x18abd1y{outline-color:var(--xkxfyv)}
         .x1skrh0i{text-shadow:1px 2px 3px 4px red}
-        .xfy810d.xfy810d:where(.x-default-marker:focus *){background-color:green}
+        .xfy810d.xfy810d:where(.x-default-marker:focus .xfy810d){background-color:green}
         .xbrh7vm:hover{background-color:blue}
         @media (max-width: 1000px){.xahc4vn.xahc4vn{background-color:yellow}}
         @media (min-width: 320px){.xtj17id.xtj17id{text-shadow:10px 20px 30px 40px green}}
         @media (max-width: 1000px){.x1t4kl4c.x1t4kl4c.x1t4kl4c:where(:has(.x-default-marker:focus)){background-color:purple}}
-        @media (max-width: 1000px){.x975j7z.x975j7z.x975j7z:where(.x-default-marker:active ~ *, :has(~ .x-default-marker:active)){background-color:orange}}
+        @media (max-width: 1000px){.x975j7z.x975j7z.x975j7z:where(.x-default-marker:active ~ .x975j7z, :has(~ .x-default-marker:active)){background-color:orange}}
         }"
       `);
     });
@@ -492,12 +492,12 @@ describe('@stylexjs/babel-plugin', () => {
         html[dir='rtl'] .x1kmio9f{float:right}
         .x18abd1y{outline-color:var(--xkxfyv)}
         .x1skrh0i{text-shadow:1px 2px 3px 4px red}
-        .xfy810d.xfy810d:where(.x-default-marker:focus *){background-color:green}
+        .xfy810d.xfy810d:where(.x-default-marker:focus .xfy810d){background-color:green}
         .xbrh7vm:hover{background-color:blue}
         @media (max-width: 1000px){.xahc4vn.xahc4vn{background-color:yellow}}
         @media (min-width: 320px){.xtj17id.xtj17id{text-shadow:10px 20px 30px 40px green}}
         @media (max-width: 1000px){.x1t4kl4c.x1t4kl4c.x1t4kl4c:where(:has(.x-default-marker:focus)){background-color:purple}}
-        @media (max-width: 1000px){.x975j7z.x975j7z.x975j7z:where(.x-default-marker:active ~ *, :has(~ .x-default-marker:active)){background-color:orange}}
+        @media (max-width: 1000px){.x975j7z.x975j7z.x975j7z:where(.x-default-marker:active ~ .x975j7z, :has(~ .x-default-marker:active)){background-color:orange}}
         }"
       `);
     });
@@ -543,12 +543,12 @@ describe('@stylexjs/babel-plugin', () => {
         html[dir='rtl'] .x1kmio9f{float:right}
         .x18abd1y{outline-color:var(--xkxfyv)}
         .x1skrh0i{text-shadow:1px 2px 3px 4px red}
-        .xfy810d.xfy810d:where(.x-default-marker:focus *){background-color:green}
+        .xfy810d.xfy810d:where(.x-default-marker:focus .xfy810d){background-color:green}
         .xbrh7vm:hover{background-color:blue}
         @media (max-width: 1000px){.xahc4vn.xahc4vn{background-color:yellow}}
         @media (min-width: 320px){.xtj17id.xtj17id{text-shadow:10px 20px 30px 40px green}}
         @media (max-width: 1000px){.x1t4kl4c.x1t4kl4c.x1t4kl4c:where(:has(.x-default-marker:focus)){background-color:purple}}
-        @media (max-width: 1000px){.x975j7z.x975j7z.x975j7z:where(.x-default-marker:active ~ *, :has(~ .x-default-marker:active)){background-color:orange}}
+        @media (max-width: 1000px){.x975j7z.x975j7z.x975j7z:where(.x-default-marker:active ~ .x975j7z, :has(~ .x-default-marker:active)){background-color:orange}}
         }"
       `);
     });
@@ -595,12 +595,12 @@ describe('@stylexjs/babel-plugin', () => {
         html[dir='rtl'] .x1kmio9f{float:right}
         .x18abd1y{outline-color:var(--xkxfyv)}
         .x1skrh0i{text-shadow:1px 2px 3px 4px red}
-        .xfy810d.xfy810d:where(.x-default-marker:focus *){background-color:green}
+        .xfy810d.xfy810d:where(.x-default-marker:focus .xfy810d){background-color:green}
         .xbrh7vm:hover{background-color:blue}
         @media (max-width: 1000px){.xahc4vn.xahc4vn{background-color:yellow}}
         @media (min-width: 320px){.xtj17id.xtj17id{text-shadow:10px 20px 30px 40px green}}
         @media (max-width: 1000px){.x1t4kl4c.x1t4kl4c.x1t4kl4c:where(:has(.x-default-marker:focus)){background-color:purple}}
-        @media (max-width: 1000px){.x975j7z.x975j7z.x975j7z:where(.x-default-marker:active ~ *, :has(~ .x-default-marker:active)){background-color:orange}}
+        @media (max-width: 1000px){.x975j7z.x975j7z.x975j7z:where(.x-default-marker:active ~ .x975j7z, :has(~ .x-default-marker:active)){background-color:orange}}
         }"
       `);
     });
@@ -646,12 +646,12 @@ describe('@stylexjs/babel-plugin', () => {
         html[dir='rtl'] .x1kmio9f{float:right}
         .x18abd1y{outline-color:var(--xkxfyv)}
         .x1skrh0i{text-shadow:1px 2px 3px 4px red}
-        .xfy810d.xfy810d:where(.x-default-marker:focus *){background-color:green}
+        .xfy810d.xfy810d:where(.x-default-marker:focus .xfy810d){background-color:green}
         .xbrh7vm:hover{background-color:blue}
         @media (max-width: 1000px){.xahc4vn.xahc4vn{background-color:yellow}}
         @media (min-width: 320px){.xtj17id.xtj17id{text-shadow:10px 20px 30px 40px green}}
         @media (max-width: 1000px){.x1t4kl4c.x1t4kl4c.x1t4kl4c:where(:has(.x-default-marker:focus)){background-color:purple}}
-        @media (max-width: 1000px){.x975j7z.x975j7z.x975j7z:where(.x-default-marker:active ~ *, :has(~ .x-default-marker:active)){background-color:orange}}
+        @media (max-width: 1000px){.x975j7z.x975j7z.x975j7z:where(.x-default-marker:active ~ .x975j7z, :has(~ .x-default-marker:active)){background-color:orange}}
         }"
       `);
     });
@@ -699,12 +699,12 @@ describe('@stylexjs/babel-plugin', () => {
         html[dir='rtl'] .x1kmio9f{float:right}
         .x18abd1y{outline-color:var(--xkxfyv)}
         .x1skrh0i{text-shadow:1px 2px 3px 4px red}
-        .xfy810d.xfy810d:where(.x-default-marker:focus *){background-color:green}
+        .xfy810d.xfy810d:where(.x-default-marker:focus .xfy810d){background-color:green}
         .xbrh7vm:hover{background-color:blue}
         @media (max-width: 1000px){.xahc4vn.xahc4vn{background-color:yellow}}
         @media (min-width: 320px){.xtj17id.xtj17id{text-shadow:10px 20px 30px 40px green}}
         @media (max-width: 1000px){.x1t4kl4c.x1t4kl4c.x1t4kl4c:where(:has(.x-default-marker:focus)){background-color:purple}}
-        @media (max-width: 1000px){.x975j7z.x975j7z.x975j7z:where(.x-default-marker:active ~ *, :has(~ .x-default-marker:active)){background-color:orange}}
+        @media (max-width: 1000px){.x975j7z.x975j7z.x975j7z:where(.x-default-marker:active ~ .x975j7z, :has(~ .x-default-marker:active)){background-color:orange}}
         }"
       `);
     });
@@ -752,12 +752,12 @@ describe('@stylexjs/babel-plugin', () => {
         html[dir='rtl'] .x1kmio9f{float:right}
         .x18abd1y{outline-color:var(--xkxfyv)}
         .x1skrh0i{text-shadow:1px 2px 3px 4px red}
-        .xfy810d.xfy810d:where(.x-default-marker:focus *){background-color:green}
+        .xfy810d.xfy810d:where(.x-default-marker:focus .xfy810d){background-color:green}
         .xbrh7vm:hover{background-color:blue}
         @media (max-width: 1000px){.xahc4vn.xahc4vn{background-color:yellow}}
         @media (min-width: 320px){.xtj17id.xtj17id{text-shadow:10px 20px 30px 40px green}}
         @media (max-width: 1000px){.x1t4kl4c.x1t4kl4c.x1t4kl4c:where(:has(.x-default-marker:focus)){background-color:purple}}
-        @media (max-width: 1000px){.x975j7z.x975j7z.x975j7z:where(.x-default-marker:active ~ *, :has(~ .x-default-marker:active)){background-color:orange}}
+        @media (max-width: 1000px){.x975j7z.x975j7z.x975j7z:where(.x-default-marker:active ~ .x975j7z, :has(~ .x-default-marker:active)){background-color:orange}}
         }"
       `);
     });
@@ -804,12 +804,12 @@ describe('@stylexjs/babel-plugin', () => {
         html[dir='rtl'] .x1kmio9f{float:right}
         .x18abd1y{outline-color:var(--xkxfyv)}
         .x1skrh0i{text-shadow:1px 2px 3px 4px red}
-        .xfy810d.xfy810d:where(.x-default-marker:focus *){background-color:green}
+        .xfy810d.xfy810d:where(.x-default-marker:focus .xfy810d){background-color:green}
         .xbrh7vm:hover{background-color:blue}
         @media (max-width: 1000px){.xahc4vn.xahc4vn{background-color:yellow}}
         @media (min-width: 320px){.xtj17id.xtj17id{text-shadow:10px 20px 30px 40px green}}
         @media (max-width: 1000px){.x1t4kl4c.x1t4kl4c.x1t4kl4c:where(:has(.x-default-marker:focus)){background-color:purple}}
-        @media (max-width: 1000px){.x975j7z.x975j7z.x975j7z:where(.x-default-marker:active ~ *, :has(~ .x-default-marker:active)){background-color:orange}}
+        @media (max-width: 1000px){.x975j7z.x975j7z.x975j7z:where(.x-default-marker:active ~ .x975j7z, :has(~ .x-default-marker:active)){background-color:orange}}
         }"
       `);
     });
@@ -897,12 +897,12 @@ describe('@stylexjs/babel-plugin', () => {
         html[dir='rtl'] .x1kmio9f{float:right}
         .x18abd1y{outline-color:var(--xkxfyv)}
         .x1skrh0i{text-shadow:1px 2px 3px 4px red}
-        .xfy810d.xfy810d:where(.x-default-marker:focus *){background-color:green}
+        .xfy810d.xfy810d:where(.x-default-marker:focus .xfy810d){background-color:green}
         .xbrh7vm:hover{background-color:blue}
         @media (max-width: 1000px){.xahc4vn.xahc4vn{background-color:yellow}}
         @media (min-width: 320px){.xtj17id.xtj17id{text-shadow:10px 20px 30px 40px green}}
         @media (max-width: 1000px){.x1t4kl4c.x1t4kl4c.x1t4kl4c:where(:has(.x-default-marker:focus)){background-color:purple}}
-        @media (max-width: 1000px){.x975j7z.x975j7z.x975j7z:where(.x-default-marker:active ~ *, :has(~ .x-default-marker:active)){background-color:orange}}"
+        @media (max-width: 1000px){.x975j7z.x975j7z.x975j7z:where(.x-default-marker:active ~ .x975j7z, :has(~ .x-default-marker:active)){background-color:orange}}"
       `);
     });
 
@@ -1189,12 +1189,12 @@ describe('@stylexjs/babel-plugin', () => {
         /* @rtl begin */.x1kmio9f{float:right}/* @rtl end */
         .x18abd1y{outline-color:var(--xkxfyv)}
         .x1skrh0i{text-shadow:1px 2px 3px 4px red}
-        .xfy810d.xfy810d:where(.x-default-marker:focus *){background-color:green}
+        .xfy810d.xfy810d:where(.x-default-marker:focus .xfy810d){background-color:green}
         .xbrh7vm:hover{background-color:blue}
         @media (max-width: 1000px){.xahc4vn.xahc4vn{background-color:yellow}}
         @media (min-width: 320px){.xtj17id.xtj17id{text-shadow:10px 20px 30px 40px green}}
         @media (max-width: 1000px){.x1t4kl4c.x1t4kl4c.x1t4kl4c:where(:has(.x-default-marker:focus)){background-color:purple}}
-        @media (max-width: 1000px){.x975j7z.x975j7z.x975j7z:where(.x-default-marker:active ~ *, :has(~ .x-default-marker:active)){background-color:orange}}"
+        @media (max-width: 1000px){.x975j7z.x975j7z.x975j7z:where(.x-default-marker:active ~ .x975j7z, :has(~ .x-default-marker:active)){background-color:orange}}"
       `);
     });
 
@@ -1231,12 +1231,12 @@ describe('@stylexjs/babel-plugin', () => {
         /* @rtl begin */.x1kmio9f{float:right}/* @rtl end */
         .x1skrh0i{text-shadow:1px 2px 3px 4px red}
         .xrkmrrc{background-color:red}
-        .xfy810d.xfy810d:where(.x-default-marker:focus *){background-color:green}
+        .xfy810d.xfy810d:where(.x-default-marker:focus .xfy810d){background-color:green}
         .xbrh7vm:hover{background-color:blue}
         @media (max-width: 1000px){.xahc4vn.xahc4vn{background-color:yellow}}
         @media (min-width: 320px){.xtj17id.xtj17id{text-shadow:10px 20px 30px 40px green}}
         @media (max-width: 1000px){.x1t4kl4c.x1t4kl4c.x1t4kl4c:where(:has(.x-default-marker:focus)){background-color:purple}}
-        @media (max-width: 1000px){.x975j7z.x975j7z.x975j7z:where(.x-default-marker:active ~ *, :has(~ .x-default-marker:active)){background-color:orange}}"
+        @media (max-width: 1000px){.x975j7z.x975j7z.x975j7z:where(.x-default-marker:active ~ .x975j7z, :has(~ .x-default-marker:active)){background-color:orange}}"
       `);
     });
 

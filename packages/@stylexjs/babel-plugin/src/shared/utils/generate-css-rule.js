@@ -14,13 +14,32 @@ import { defaultOptions } from './default-options';
 
 import generateLtr from '../physical-rtl/generate-ltr';
 import generateRtl from '../physical-rtl/generate-rtl';
-import { getPriority } from '@stylexjs/shared';
+import {
+  buildRelationalSelector,
+  getPriority,
+  parseRelationalSelector,
+} from '@stylexjs/shared';
 
 const THUMB_VARIANTS = [
   '::-webkit-slider-thumb',
   '::-moz-range-thumb',
   '::-ms-thumb',
 ];
+
+/**
+ * Swaps the `*` in a relational `stylex.when.*` selector for the rule's own class.
+ *
+ * The rule already requires that class, so the same elements match, and `:where()`
+ * keeps the specificity at zero. It matters because browsers work out what to
+ * restyle from the selector inside `:where()`, without narrowing it by the outer
+ * class, so a `*` restyles the marker's whole subtree when the marker changes.
+ */
+function narrowRelationalSubject(pseudo: string, className: string): string {
+  const relational = parseRelationalSelector(pseudo);
+  return relational != null
+    ? buildRelationalSelector(relational, `.${className}`)
+    : pseudo;
+}
 
 function buildNestedCSSRule(
   className: string,
@@ -38,7 +57,7 @@ function buildNestedCSSRule(
       if (p.startsWith('::')) {
         acc.elements += p;
       } else {
-        acc.classes += p;
+        acc.classes += narrowRelationalSubject(p, className);
       }
       return acc;
     },
