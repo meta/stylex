@@ -68,7 +68,8 @@ export function evaluateStyleXCreateArg(
     const key = keyResult.value;
 
     const valPath = prop.get('value');
-    if (!valPath.isArrowFunctionExpression()) {
+    const dynamicStyleFn = getDynamicStyleFunction(valPath);
+    if (dynamicStyleFn == null) {
       const val = evaluate(valPath, traversalState, functions);
       if (!val.confident) {
         return val;
@@ -76,7 +77,7 @@ export function evaluateStyleXCreateArg(
       value[key] = val.value;
       continue;
     }
-    const fnPath: NodePath<t.ArrowFunctionExpression> = valPath;
+    const fnPath = dynamicStyleFn;
     const allParams: Array<
       NodePath<t.Identifier | t.SpreadElement | t.Pattern>,
       // $FlowFixMe[incompatible-type]
@@ -92,8 +93,8 @@ export function evaluateStyleXCreateArg(
       )
       .map((param) => param.node);
 
-    const fnBody = fnPath.get('body');
-    if (!fnBody.isObjectExpression()) {
+    const fnBody = getDynamicStyleFunctionBody(fnPath);
+    if (fnBody == null || !fnBody.isObjectExpression()) {
       // We only allow arrow functions without block bodies.
       return evaluate(path, traversalState, functions);
     }
@@ -284,8 +285,65 @@ function evaluateObjKey(
   };
 }
 
+type DynamicStyleFunction = NodePath<
+  t.ArrowFunctionExpression | t.FunctionDeclaration,
+>;
+
+// Dynamic styles are usually written as inline arrow functions. However, tools
+// that run before StyleX may move them out of the `stylex.create` call. For
+// example, React Compiler outlines `(color) => ({ color })` inside a component
+// into a top-level `function _temp(color) { return { color }; }` and replaces
+// the property value with `_temp`. Accept a reference to such a function
+// declaration as long as its body is a single `return` of an object.
+function getDynamicStyleFunction(
+  valPath: NodePath<>,
+): null | DynamicStyleFunction {
+  if (valPath.isArrowFunctionExpression()) {
+    return valPath;
+  }
+  if (!valPath.isIdentifier()) {
+    return null;
+  }
+  const binding = valPath.scope.getBinding(valPath.node.name);
+  if (binding == null || binding.kind !== 'hoisted' || !binding.constant) {
+    return null;
+  }
+  const fnPath = binding.path;
+  if (
+    !fnPath.isFunctionDeclaration() ||
+    fnPath.node.async ||
+    fnPath.node.generator ||
+    getDynamicStyleFunctionBody(fnPath) == null
+  ) {
+    return null;
+  }
+  return fnPath;
+}
+
+function getDynamicStyleFunctionBody(
+  fnPath: DynamicStyleFunction,
+): null | NodePath<> {
+  const body: NodePath<> = fnPath.get('body');
+  if (!body.isBlockStatement()) {
+    return fnPath.isArrowFunctionExpression() ? body : null;
+  }
+  if (fnPath.isArrowFunctionExpression()) {
+    // We only allow arrow functions without block bodies.
+    return null;
+  }
+  const statements = body.get('body');
+  if (statements.length !== 1 || !statements[0].isReturnStatement()) {
+    return null;
+  }
+  const argument = statements[0].get('argument');
+  if (argument.node == null || !argument.isObjectExpression()) {
+    return null;
+  }
+  return argument;
+}
+
 function validateDynamicStyleParams(
-  path: NodePath<t.ArrowFunctionExpression>,
+  path: DynamicStyleFunction,
   params: Array<NodePath<t.Identifier | t.SpreadElement | t.Pattern>>,
 ) {
   if (params.some((param) => !param.isIdentifier())) {
