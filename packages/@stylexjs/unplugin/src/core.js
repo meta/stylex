@@ -148,8 +148,8 @@ export function cssImportSpecifier(chunkFileName, cssFileName) {
 
 // Inserts the import after the chunk's imports — or at the top when there
 // are none — so earlier user stylesheets cannot override StyleX rules.
-// NOTE: mutates `chunk.code` without fixing `chunk.map`, so the sourcemap is
-// off by one line below the import.
+// NOTE: mutates `chunk.code` and shifts `chunk.map` one line down below
+// the import.
 export function injectCssImport(chunk, specifier) {
   const importStatement = `import '${specifier}';`;
   // Preserve the chunk's existing line endings.
@@ -198,6 +198,12 @@ export function injectCssImport(chunk, specifier) {
   }
   lines.splice(i, 0, importStatement);
   chunk.code = lines.join(newline);
+  // Shift the sourcemap one line down below the import.
+  if (chunk.map && typeof chunk.map.mappings === 'string') {
+    const mapLines = chunk.map.mappings.split(';');
+    mapLines.splice(i, 0, '');
+    chunk.map.mappings = mapLines.join(';');
+  }
 }
 
 // True when the chunk already carries the exact import (idempotency).

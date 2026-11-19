@@ -150,9 +150,10 @@ esbuild.build({
   gets its own stylesheet next to it (`foo.js` -> `foo.stylex.css`), wired with
   a side-effect import after the chunk's other imports (so StyleX rules win
   the cascade), instead of one aggregated stylesheet. Identical CSS shares one
-  stylesheet; a taken path falls back to `foo1.stylex.css` and warns. Rollup,
-  Vite and Rolldown with ESM output only; `runtimeInjection` takes precedence.
-  Meant for library builds that consumers re-bundle.
+  stylesheet; a taken path falls back to `foo1.stylex.css` and warns (an asset
+  already carrying the rules is reused). Rollup, Vite and Rolldown with
+  browser-facing ESM output only; `runtimeInjection` takes precedence. Meant
+  for library builds that consumers re-bundle.
 - `externalPackages`: package names inside `node_modules` that should be treated
   like app code (useful if they ship StyleX). They are excluded from Vite
   dependency optimization.
