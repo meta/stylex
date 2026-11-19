@@ -33,7 +33,7 @@ module.exports = function createPlugin() {
     include,
     exclude,
     useCSSLayers = false,
-    styleResolution = 'property-specificity',
+    styleResolution = 'application-order',
     importSources,
   }) => {
     const effectiveBabelConfig = getEffectiveBabelConfig({

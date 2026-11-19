@@ -203,9 +203,13 @@ describe('rollup-plugin-stylex', () => {
           kKVMdj: "xeuoslp",
           kWkggS: "x1gykpug",
           krdFHd: "xu4yf9m",
+          kIxVMA: null,
+          ksF3WI: null,
           k1xSpc: "x78zum5",
           kZKoxP: "x1egiwwb",
           keTefX: "x1hm9lzh",
+          koQZXg: null,
+          km5ZXQ: null,
           keoZOQ: "xlrshdv",
           $$css: true
         }
@@ -330,9 +334,13 @@ describe('rollup-plugin-stylex', () => {
             "animationName-kKVMdj": "xeuoslp",
             "backgroundColor-kWkggS": "x1gykpug",
             "borderStartStartRadius-krdFHd": "xu4yf9m",
+            "borderTopLeftRadius-kIxVMA": null,
+            "borderTopRightRadius-ksF3WI": null,
             "display-k1xSpc": "x78zum5",
             "height-kZKoxP": "x1egiwwb",
             "marginInlineStart-keTefX": "x1hm9lzh",
+            "marginLeft-koQZXg": null,
+            "marginRight-km5ZXQ": null,
             "marginTop-keoZOQ": "xlrshdv",
             $$css: "@stylexjs/rollup-plugin:__tests__/__fixtures__/index.js:24"
           }

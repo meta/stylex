@@ -932,14 +932,17 @@ describe('@stylexjs/babel-plugin', () => {
         .mockImplementation(() => {});
 
       expect(() => {
-        transform(`
+        transform(
+          `
           import * as stylex from '@stylexjs/stylex';
           const styles = stylex.create({
             root: {
               border: '1px solid red',
             },
           });
-        `);
+        `,
+          { styleResolution: 'property-specificity' },
+        );
       }).not.toThrow();
 
       // Should not log any warning in silent mode (default)
@@ -959,7 +962,10 @@ describe('@stylexjs/babel-plugin', () => {
             },
           });
         `,
-          { propertyValidationMode: 'throw' },
+          {
+            propertyValidationMode: 'throw',
+            styleResolution: 'property-specificity',
+          },
         );
       }).toThrow('border is not supported');
     });
@@ -979,7 +985,10 @@ describe('@stylexjs/babel-plugin', () => {
             },
           });
         `,
-          { propertyValidationMode: 'warn' },
+          {
+            propertyValidationMode: 'warn',
+            styleResolution: 'property-specificity',
+          },
         );
       }).not.toThrow();
 
@@ -1005,7 +1014,10 @@ describe('@stylexjs/babel-plugin', () => {
             },
           });
         `,
-          { propertyValidationMode: 'silent' },
+          {
+            propertyValidationMode: 'silent',
+            styleResolution: 'property-specificity',
+          },
         );
       }).not.toThrow();
 
@@ -1026,7 +1038,10 @@ describe('@stylexjs/babel-plugin', () => {
             },
           });
         `,
-          { propertyValidationMode: 'silent' },
+          {
+            propertyValidationMode: 'silent',
+            styleResolution: 'property-specificity',
+          },
         );
       }).not.toThrow();
     });
@@ -1042,7 +1057,10 @@ describe('@stylexjs/babel-plugin', () => {
             },
           });
         `,
-          { propertyValidationMode: 'silent' },
+          {
+            propertyValidationMode: 'silent',
+            styleResolution: 'property-specificity',
+          },
         );
       }).not.toThrow();
     });

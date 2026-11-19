@@ -647,6 +647,14 @@ describe('@stylexjs/babel-plugin', () => {
         "import * as stylex from '@stylexjs/stylex';
         import { colors } from './constants.stylex';
         const _temp = {
+          kg3NbH: null,
+          kuDDbn: null,
+          kE3dHu: null,
+          kP0aTx: null,
+          kpe85a: null,
+          k8WAf4: null,
+          kLKAdn: null,
+          kGO01o: null,
           kMwMTN: "xy1iwrb",
           "$$css": true
         };

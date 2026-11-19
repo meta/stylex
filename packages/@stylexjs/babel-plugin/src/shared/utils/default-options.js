@@ -23,7 +23,7 @@ export const defaultOptions: StyleXOptions = {
   enableLogicalStylesPolyfill: false,
   enableLTRRTLComments: false,
   enableMinifiedKeys: true,
-  styleResolution: 'property-specificity',
+  styleResolution: 'application-order',
   // runtimeInjection: false,
   importSources: [],
   treeshakeCompensation: false,
