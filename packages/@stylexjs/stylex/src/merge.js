@@ -154,9 +154,7 @@ export function merge(styles: $ReadOnlyArray<mixed>): MergeResult {
           markAll(pending, current);
           pending = null;
         }
-        // Shapes are stored by single-style calls, and for bigger objects read
-        // with the cache off below. Storing one for every merged object costs
-        // more than it saves when objects are reused less.
+        // Shapes come from single-style calls and big objects read uncached.
         const shape = shapes.get(style);
         const added: Array<number> | null = nextCache != null ? [] : null;
         if (shape !== undefined) {
@@ -203,9 +201,7 @@ export function merge(styles: $ReadOnlyArray<mixed>): MergeResult {
               warnInvalid(key, value);
             }
           }
-          // After an inline style, as in dynamic styles, the cache is off and
-          // static objects are read on every call. Store a shape for the bigger
-          // ones. New dynamic objects only have a key or two.
+          // Uncached reads store shapes for objects with more than 4 keys.
           if (nextCache == null && count > 4) {
             shapeOf(style, false);
           }
