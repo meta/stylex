@@ -8,7 +8,7 @@
  */
 
 import { createUnplugin } from 'unplugin';
-import { transformAsync } from '@babel/core';
+import { loadPartialConfigAsync, transformAsync } from '@babel/core';
 import stylexBabelPlugin from '@stylexjs/babel-plugin';
 import flowSyntaxPlugin from '@babel/plugin-syntax-flow';
 import jsxSyntaxPlugin from '@babel/plugin-syntax-jsx';
@@ -60,9 +60,13 @@ export function pickCssAssetFromRollupBundle(bundle, choose) {
   return best || assets[0];
 }
 
-function processCollectedRulesToCSS(rules, options) {
+function processCollectedRulesToCSS(
+  rules,
+  options,
+  processRules = stylexBabelPlugin.processStylexRules,
+) {
   if (!rules || rules.length === 0) return '';
-  const collectedCSS = stylexBabelPlugin.processStylexRules(rules, {
+  const collectedCSS = processRules(rules, {
     useLayers: options.useCSSLayers ?? false,
     enableLTRRTLComments: options?.enableLTRRTLComments,
   });
@@ -230,6 +234,7 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
   // framework :: 'rollup' | 'vite' | 'rolldown' | 'farm' | 'unloader'
   const framework = metaOptions?.framework;
   const {
+    compiler = 'babel',
     dev = process.env.NODE_ENV === 'development' ||
       process.env.BABEL_ENV === 'development',
     unstable_moduleResolution = { type: 'commonJS', rootDir: process.cwd() },
@@ -247,6 +252,21 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
     treeshakeCompensation = ['vite', 'rollup', 'rolldown'].includes(framework),
     ...stylexOptions
   } = userOptions;
+
+  if (compiler !== 'babel' && compiler !== 'rust') {
+    throw new TypeError('StyleX compiler must be "babel" or "rust"');
+  }
+  let rustCompiler;
+  let rustBabelPlugin;
+  function getRustCompiler() {
+    rustCompiler ??= requireFromCwd('@stylexjs/rust-plugin');
+    return rustCompiler;
+  }
+  function getStylexBabelPlugin() {
+    if (compiler === 'babel') return stylexBabelPlugin;
+    rustBabelPlugin ??= requireFromCwd('@stylexjs/rust-plugin/babel');
+    return rustBabelPlugin;
+  }
 
   const gateImportSources = [...BUILT_IN_IMPORT_SOURCES, ...importSources];
 
@@ -298,6 +318,56 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
   const DISK_RULES_PATH = path.join(DISK_RULES_DIR, 'rules.json');
 
   async function runBabelTransform(inputCode, filename, callerName) {
+    const caller = {
+      name: callerName,
+      supportsStaticESM: true,
+      supportsDynamicImport: true,
+      supportsTopLevelAwait: !inputCode.includes('require('),
+      supportsExportNamespaceFrom: true,
+    };
+    // The Babel route below also loads the project's root babel.config. The
+    // native route may only replace it when no such configuration applies.
+    if (
+      compiler === 'rust' &&
+      plugins.length === 0 &&
+      presets.length === 0 &&
+      !(await hasProjectBabelConfig(filename, caller))
+    ) {
+      let result;
+      try {
+        result = await getRustCompiler().transform(inputCode, {
+          ...stylexOptions,
+          importSources,
+          treeshakeCompensation,
+          dev,
+          unstable_moduleResolution,
+          filename,
+          sourceMaps: true,
+          // The same grammar the Babel path selects below.
+          __syntax: /\.jsx?/.test(path.extname(filename)) ? 'flow' : 'tsx',
+        });
+      } catch (error) {
+        // Report syntax errors exactly as the Babel path would.
+        if (error?.code === 'BABEL_PARSE_ERROR') {
+          await transformAsync(inputCode, {
+            babelrc: false,
+            configFile: false,
+            filename,
+            code: false,
+            plugins: [
+              /\.jsx?/.test(path.extname(filename))
+                ? flowSyntaxPlugin
+                : [typescriptSyntaxPlugin, { isTSX: true }],
+              jsxSyntaxPlugin,
+            ],
+          });
+        }
+        throw error;
+      }
+      for (const warning of result.warnings || []) console.warn(warning);
+      for (const error of result.errors || []) console.error(error);
+      return result;
+    }
     const result = await transformAsync(inputCode, {
       babelrc: false,
       filename,
@@ -308,7 +378,7 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
           ? flowSyntaxPlugin
           : [typescriptSyntaxPlugin, { isTSX: true }],
         jsxSyntaxPlugin,
-        stylexBabelPlugin.withOptions({
+        getStylexBabelPlugin().withOptions({
           ...stylexOptions,
           importSources,
           treeshakeCompensation,
@@ -316,19 +386,25 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
           unstable_moduleResolution,
         }),
       ],
-      caller: {
-        name: callerName,
-        supportsStaticESM: true,
-        supportsDynamicImport: true,
-        supportsTopLevelAwait: !inputCode.includes('require('),
-        supportsExportNamespaceFrom: true,
-      },
+      caller,
     });
 
     if (!result || result.code == null) {
       return { code: inputCode, map: null, metadata: {} };
     }
     return result;
+  }
+
+  // Whether Babel resolves a project configuration file (babel.config.*) for
+  // this file, exactly as the Babel route's transformAsync call would. A file
+  // the configuration ignores is left untouched by both routes.
+  async function hasProjectBabelConfig(filename, caller) {
+    const partial = await loadPartialConfigAsync({
+      babelrc: false,
+      filename,
+      caller,
+    });
+    return partial == null || partial.config != null;
   }
 
   function escapeReg(src) {
@@ -375,11 +451,17 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
     } catch {}
     for (const [k, v] of stylexRulesById.entries()) merged.set(k, v);
     const allRules = Array.from(merged.values()).flat();
-    return processCollectedRulesToCSS(allRules, {
-      useCSSLayers,
-      lightningcssOptions,
-      enableLTRRTLComments: stylexOptions?.enableLTRRTLComments,
-    });
+    return processCollectedRulesToCSS(
+      allRules,
+      {
+        useCSSLayers,
+        lightningcssOptions,
+        enableLTRRTLComments: stylexOptions?.enableLTRRTLComments,
+      },
+      compiler === 'rust'
+        ? getRustCompiler().processStylexRules
+        : stylexBabelPlugin.processStylexRules,
+    );
   }
 
   async function persistRulesToDisk(id, rules) {
