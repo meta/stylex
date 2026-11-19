@@ -11,6 +11,20 @@ import type { MediaQueryRule } from './media-query';
 
 import { MediaQuery } from './media-query.js';
 
+// Every property that varies by media query repeats the same few query
+// strings, and parsing one is far more expensive than looking it up. The parsed
+// queries are only read afterwards: combining them builds new nodes.
+const parsedMediaQueries: Map<string, MediaQuery> = new Map();
+
+function parseMediaQuery(key: string): MediaQuery {
+  let parsed = parsedMediaQueries.get(key);
+  if (parsed === undefined) {
+    parsed = MediaQuery.parser.parseToEnd(key);
+    parsedMediaQueries.set(key, parsed);
+  }
+  return parsed;
+}
+
 export function lastMediaQueryWinsTransform(styles: Object): Object {
   return dfsProcessQueries(styles, 0);
 }
@@ -82,7 +96,7 @@ function dfsProcessQueries(
 
     for (let i = mediaKeys.length - 1; i > 0; i--) {
       // Skip last iteration
-      const mediaQuery = MediaQuery.parser.parseToEnd(mediaKeys[i]);
+      const mediaQuery = parseMediaQuery(mediaKeys[i]);
       negations.push(mediaQuery);
       accumulatedNegations.push([...negations]); // Clone array before pushing
     }
@@ -93,7 +107,7 @@ function dfsProcessQueries(
       const currentKey = mediaKeys[i];
       const currentValue = result[currentKey];
 
-      const baseMediaQuery = MediaQuery.parser.parseToEnd(currentKey);
+      const baseMediaQuery = parseMediaQuery(currentKey);
       const reversedNegations = [...accumulatedNegations[i]].reverse();
 
       const combinedQuery = combineMediaQueryWithNegations(
