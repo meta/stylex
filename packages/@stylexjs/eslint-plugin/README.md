@@ -258,6 +258,42 @@ specifications.
 }
 ```
 
+### `@stylexjs/enforce-module-scope`
+
+This rule requires statically-compiled StyleX APIs to be called at module scope
+rather than inside a function, component, or class. The compiler can hoist
+some of these calls out of nested scopes, but defining them at module scope
+makes it clear that they cannot depend on runtime values.
+
+The rule applies to `create`, `createTheme`, `keyframes`, `defineVars`, `defineConsts`, `defineMarker`, `positionTry`, `viewTransitionClass`, `unstable_defineVarsNested`, `unstable_defineConstsNested`, and `unstable_createThemeNested`.
+
+This rule is not enabled by default. To enable it:
+
+```json
+{
+  "rules": {
+    "@stylexjs/enforce-module-scope": "error"
+  }
+}
+```
+
+#### Invalid examples
+
+```jsx
+function Component() {
+  const styles = stylex.create({ root: { color: 'red' } });
+  return <div {...stylex.props(styles.root)} />;
+}
+```
+
+#### Config options
+
+```json
+{
+  "validImports": ["stylex", "@stylexjs/stylex"]
+}
+```
+
 ### `@stylexjs/no-conflicting-props`
 
 This rule disallows using `className` or `style` props on elements that spread
