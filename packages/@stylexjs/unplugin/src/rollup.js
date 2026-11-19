@@ -13,6 +13,7 @@ import { createRollupPlugin } from 'unplugin';
 import {
   INDEX_CSS_RE,
   STYLE_CSS_RE,
+  emitCssPerChunk,
   pickCssAssetFromRollupBundle,
   replaceCssAssetWithHashedCopy,
   unpluginFactory,
@@ -20,10 +21,14 @@ import {
 
 export function attachRollupHooks(plugin) {
   const cssInjectionTarget = plugin.__stylexCssInjectionTarget;
+  let emittedPerChunkCss = false;
 
   return {
     ...plugin,
-    generateBundle(_opts, bundle) {
+    generateBundle(options, bundle) {
+      // generateBundle runs once per output.
+      emittedPerChunkCss = emitCssPerChunk(this, options, bundle, plugin);
+      if (emittedPerChunkCss) return;
       const css = plugin.__stylexCollectCss?.();
       if (!css) return;
       const target = pickCssAssetFromRollupBundle(bundle, cssInjectionTarget);
@@ -37,6 +42,7 @@ export function attachRollupHooks(plugin) {
       }
     },
     async writeBundle(options, bundle) {
+      if (emittedPerChunkCss) return;
       const css = plugin.__stylexCollectCss?.();
       if (!css) return;
       const target = pickCssAssetFromRollupBundle(bundle, cssInjectionTarget);
