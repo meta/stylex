@@ -44,7 +44,7 @@ export default async function handler(request: Request) {
     typeof import('./entry.ssr')
   >('ssr', 'index');
 
-  return ssr.generateHTML(request, fetchServer);
+  return ssr.generateHTML(request, await fetchServer(request));
 }
 
 if (import.meta.hot) {
