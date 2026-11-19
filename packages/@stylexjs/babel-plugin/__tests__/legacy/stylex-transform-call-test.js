@@ -369,9 +369,9 @@ describe('@stylexjs/babel-plugin', () => {
           foo: {
             kmVPX3: "x14odnwx",
             kg3NbH: null,
-            kuDDbn: null,
+            kZCmMZ: null,
             kE3dHu: null,
-            kP0aTx: null,
+            kwRFfy: null,
             kpe85a: null,
             k8WAf4: null,
             kLKAdn: null,
@@ -475,9 +475,9 @@ describe('@stylexjs/babel-plugin', () => {
           foo: {
             kmVPX3: "x14odnwx",
             kg3NbH: null,
-            kuDDbn: null,
+            kZCmMZ: null,
             kE3dHu: null,
-            kP0aTx: null,
+            kwRFfy: null,
             kpe85a: null,
             k8WAf4: null,
             kLKAdn: null,
@@ -982,7 +982,7 @@ describe('@stylexjs/babel-plugin', () => {
             ltr: ".xe2zdcy{padding-inline-start:10px}",
             priority: 3000
           });
-          "x2vl965 x1i3ajwb xe2zdcy";"
+          "x1i3ajwb xe2zdcy";"
         `);
       });
 
@@ -1019,7 +1019,7 @@ describe('@stylexjs/babel-plugin', () => {
             ltr: ".x1i3ajwb{padding:2px}",
             priority: 1000
           });
-          "x2vl965 x1i3ajwb";"
+          "x1i3ajwb";"
         `);
       });
 
@@ -2437,6 +2437,62 @@ describe('@stylexjs/babel-plugin', () => {
         });
         const styles = {};
         stylex.props(styles.unknown);"
+      `);
+    });
+
+    test('paddingInline overrides earlier paddingInlineEnd with application-order', () => {
+      expect(
+        transform(`
+          import * as stylex from '@stylexjs/stylex';
+          const styles = stylex.create({
+            base: { paddingInlineEnd: 20 },
+            reset: { paddingInline: 0 },
+          });
+          stylex.props(styles.base, styles.reset);
+        `),
+      ).toMatchInlineSnapshot(`
+        "import _inject from "@stylexjs/stylex/lib/stylex-inject";
+        var _inject2 = _inject;
+        import * as stylex from '@stylexjs/stylex';
+        _inject2({
+          ltr: ".x1xnnf8n{padding-inline-end:20px}",
+          priority: 3000
+        });
+        _inject2({
+          ltr: ".xnjsko4{padding-inline:0}",
+          priority: 2000
+        });
+        ({
+          className: "xnjsko4"
+        });"
+      `);
+    });
+
+    test('padding overrides earlier paddingInlineStart with application-order', () => {
+      expect(
+        transform(`
+          import * as stylex from '@stylexjs/stylex';
+          const styles = stylex.create({
+            base: { paddingInlineStart: 20 },
+            reset: { padding: 0 },
+          });
+          stylex.props(styles.base, styles.reset);
+        `),
+      ).toMatchInlineSnapshot(`
+        "import _inject from "@stylexjs/stylex/lib/stylex-inject";
+        var _inject2 = _inject;
+        import * as stylex from '@stylexjs/stylex';
+        _inject2({
+          ltr: ".x106a9eq{padding-inline-start:20px}",
+          priority: 3000
+        });
+        _inject2({
+          ltr: ".x1717udv{padding:0}",
+          priority: 1000
+        });
+        ({
+          className: "x1717udv"
+        });"
       `);
     });
   });

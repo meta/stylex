@@ -1181,9 +1181,9 @@ describe('@stylexjs/babel-plugin', () => {
             const _temp2 = {
               kmVPX3: "xe8ttls",
               kg3NbH: null,
-              kuDDbn: null,
+              kZCmMZ: null,
               kE3dHu: null,
-              kP0aTx: null,
+              kwRFfy: null,
               kpe85a: null,
               k8WAf4: null,
               kLKAdn: null,
@@ -1692,9 +1692,9 @@ describe('@stylexjs/babel-plugin', () => {
           foo: {
             kmVPX3: "x14odnwx",
             kg3NbH: null,
-            kuDDbn: null,
+            kZCmMZ: null,
             kE3dHu: null,
-            kP0aTx: null,
+            kwRFfy: null,
             kpe85a: null,
             k8WAf4: null,
             kLKAdn: null,
@@ -2188,7 +2188,7 @@ describe('@stylexjs/babel-plugin', () => {
             priority: 3000
           });
           ({
-            className: "x2vl965 x1i3ajwb xe2zdcy"
+            className: "x1i3ajwb xe2zdcy"
           });"
         `);
       });
@@ -2227,7 +2227,7 @@ describe('@stylexjs/babel-plugin', () => {
             priority: 1000
           });
           ({
-            className: "x2vl965 x1i3ajwb"
+            className: "x1i3ajwb"
           });"
         `);
       });

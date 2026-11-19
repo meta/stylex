@@ -648,9 +648,9 @@ describe('@stylexjs/babel-plugin', () => {
         import { colors } from './constants.stylex';
         const _temp = {
           kg3NbH: null,
-          kuDDbn: null,
+          kZCmMZ: null,
           kE3dHu: null,
-          kP0aTx: null,
+          kwRFfy: null,
           kpe85a: null,
           k8WAf4: null,
           kLKAdn: null,
