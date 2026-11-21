@@ -46,7 +46,7 @@ declare class WatchmanClient {
     config:
       | ['watch-project', string]
       | ['clock', Watcher]
-      | ['subscribe', Watcher, 'jsFileChanged', Subscription],
+      | ['subscribe', Watcher, string, Subscription],
     callback: (error: any, response: Response) => void,
   ): void;
 
