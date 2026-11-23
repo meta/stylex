@@ -47,6 +47,7 @@ import transformStyleXCreateThemeNested from './visitors/stylex-create-theme-nes
 import { createUtilityStylesVisitor } from '@stylexjs/atoms/babel-transform';
 import { convertObjectToAST } from './utils/js-to-ast';
 import styleXCreateSet from './shared/stylex-create';
+import { compareStrings } from './shared/utils/compare-strings';
 import { getProgramPath, hoistExpression } from './utils/ast-helpers';
 import { injectDevClassNames } from './utils/dev-classname';
 
@@ -665,7 +666,7 @@ function compareWidthSortKeys(
   }
 
   if (a.context !== b.context) {
-    return a.context.localeCompare(b.context);
+    return compareStrings(a.context, b.context);
   }
 
   if (a.bound.kind !== b.bound.kind) {
@@ -875,9 +876,10 @@ function processStylexRules(
         if (priorityComparison !== 0) return priorityComparison;
 
         if (useLegacyClassnamesSort) {
-          return classname1.localeCompare(classname2);
+          return compareStrings(classname1, classname2);
         } else {
-          const nameComparison = declaredPropertyName(rule1).localeCompare(
+          const nameComparison = compareStrings(
+            declaredPropertyName(rule1),
             declaredPropertyName(rule2),
           );
           if (nameComparison !== 0) return nameComparison;
@@ -894,9 +896,9 @@ function processStylexRules(
 
           const property1 = rule1.slice(rule1.lastIndexOf('{'));
           const property2 = rule2.slice(rule2.lastIndexOf('{'));
-          const propertyComparison = property1.localeCompare(property2);
+          const propertyComparison = compareStrings(property1, property2);
           if (propertyComparison !== 0) return propertyComparison;
-          return rule1.localeCompare(rule2);
+          return compareStrings(rule1, rule2);
         }
       },
     );
