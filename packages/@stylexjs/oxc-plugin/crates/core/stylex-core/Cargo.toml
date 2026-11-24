@@ -1,0 +1,37 @@
+[package]
+description = "Front-end boundary of the parser-independent StyleX core: plain values in, class names and CSS rules out"
+edition.workspace = true
+license.workspace = true
+name = "stylex_core"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lib]
+crate-type = ["rlib"]
+doctest = false
+
+[dependencies]
+indexmap.workspace = true
+log.workspace = true
+rustc-hash.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+stylex_constants = { path = "../stylex-constants" }
+stylex_css = { path = "../stylex-css" }
+stylex_css_parser = { path = "../stylex-css-parser" }
+stylex_enums = { path = "../stylex-enums" }
+stylex_macros = { path = "../stylex-macros" }
+stylex_regex = { path = "../stylex-regex" }
+stylex_structures = { path = "../stylex-structures" }
+stylex_styleq = { path = "../stylex-styleq" }
+stylex_stylesheet = { path = "../stylex-stylesheet" }
+stylex_types = { path = "../stylex-types" }
+stylex_utils = { path = "../stylex-utils" }
+stylex_value = { path = "../stylex-value" }
+
+[dev-dependencies]
+pretty_assertions = "1.4.1"
+
+[lints]
+workspace = true

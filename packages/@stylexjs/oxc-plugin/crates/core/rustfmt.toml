@@ -1,0 +1,12 @@
+# The formatting of the vendored core (upstream rustfmt.toml, stable options).
+edition = "2024"
+max_width = 100
+newline_style = "Unix"
+tab_spaces = 2
+merge_derives = true
+reorder_imports = true
+use_small_heuristics = "Default"
+fn_params_layout = "Tall"
+match_block_trailing_comma = true
+use_field_init_shorthand = true
+use_try_shorthand = true

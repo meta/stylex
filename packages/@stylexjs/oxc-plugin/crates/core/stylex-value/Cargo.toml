@@ -1,0 +1,19 @@
+[package]
+description = "Plain JavaScript values for the parser-independent StyleX core"
+edition.workspace = true
+license.workspace = true
+name = "stylex_value"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lib]
+crate-type = ["rlib"]
+doctest = false
+
+[dependencies]
+indexmap.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

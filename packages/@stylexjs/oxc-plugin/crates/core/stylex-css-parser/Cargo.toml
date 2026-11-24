@@ -1,0 +1,32 @@
+[package]
+description = "CSS value parser"
+edition.workspace = true
+license.workspace = true
+name = "stylex_css_parser"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+
+[lib]
+crate-type = ["rlib"]
+doctest = false
+
+[dependencies]
+cssparser.workspace = true
+log.workspace = true
+rustc-hash.workspace = true
+serde_json = { workspace = true, features = ["preserve_order"] }
+thiserror.workspace = true
+
+stylex_macros = { path = "../stylex-macros" }
+stylex_utils = { path = "../stylex-utils" }
+stylex_value = { path = "../stylex-value" }
+
+[dev-dependencies]
+
+
+
+
+[lints]
+workspace = true

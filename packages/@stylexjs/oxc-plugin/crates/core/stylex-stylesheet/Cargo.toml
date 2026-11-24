@@ -1,0 +1,27 @@
+[package]
+description = "processStylexRules: sorts, dedupes and prints the rules a StyleX compile collected"
+edition.workspace = true
+license.workspace = true
+name = "stylex_stylesheet"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lib]
+crate-type = ["rlib"]
+doctest = false
+
+[dependencies]
+icu_collator.workspace = true
+icu_locale_core = "2.3.0"
+indexmap.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+ryu-js = "1.0.2"
+stylex_css = { path = "../stylex-css" }
+stylex_css_parser = { path = "../stylex-css-parser" }
+stylex_utils = { path = "../stylex-utils" }
+
+[lints]
+workspace = true
