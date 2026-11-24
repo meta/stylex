@@ -6,9 +6,13 @@ extend-exclude = [
   "packages/**/__tests__/",
   # Fixture data has lots of typos
   "packages/benchmarks/**/fixtures/",
+  # Crates carved from the SWC port: upstream identifiers and test data
+  "packages/@stylexjs/oxc-plugin/crates/core/",
 ]
 
 [default.extend-words]
 # Ignore false-positives
 stylex = "stylex"
 nd = "nd"
+# hermes-parser's runtime error text, kept verbatim by the oxc plugin's Flow lowering
+succesfully = "succesfully"

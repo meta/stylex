@@ -4,6 +4,7 @@
 .*/example-*/.*
 .*/lib/.*
 .*/malformed_package_json/.*
+<PROJECT_ROOT>/packages/@stylexjs/oxc-plugin/.*
 
 [include]
 
