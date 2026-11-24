@@ -1,0 +1,60 @@
+[package]
+name = "stylex_oxc"
+version = "0.0.1"
+edition = "2024"
+license = "MIT"
+description = "StyleX front end on oxc: parse, evaluate, compile through the core, splice"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["mimalloc", "flow"]
+# The addon's global allocator. Most of a transform is small allocations (host).
+mimalloc = ["dep:mimalloc"]
+# The Flow front end through crates/flow_blank (needs RUSTC_BOOTSTRAP=flow_parser until
+# flow_parser drops #![feature(never_type)]). On by default, like the Babel setups StyleX ships.
+flow = ["dep:flow_blank"]
+
+[dependencies]
+oxc_allocator.workspace = true
+oxc_parser.workspace = true
+oxc_ast.workspace = true
+oxc_span.workspace = true
+oxc_syntax.workspace = true
+oxc_ast_visit.workspace = true
+oxc_str.workspace = true
+oxc_semantic.workspace = true
+oxc_diagnostics.workspace = true
+indexmap = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+regex = "1"
+# SIMD substring search over whole files (transform.rs). Already in the tree through regex.
+memchr = "2"
+# SIMD UTF-16 to UTF-8 for the input code at the napi boundary (host.rs utf8_of).
+encoding_rs = "0.8"
+napi.workspace = true
+napi-derive.workspace = true
+# Core crates, carved from PR #2008 (see crates/core/PROVENANCE.md).
+stylex_css = { path = "../core/stylex-css" }
+stylex_css_parser = { path = "../core/stylex-css-parser" }
+stylex_structures = { path = "../core/stylex-structures" }
+stylex_types = { path = "../core/stylex-types" }
+stylex_utils = { path = "../core/stylex-utils" }
+stylex_constants = { path = "../core/stylex-constants" }
+stylex_stylesheet = { path = "../core/stylex-stylesheet" }
+stylex_enums = { path = "../core/stylex-enums" }
+flow_blank = { path = "../flow_blank", optional = true }
+mimalloc = { version = "0.1", default-features = false, optional = true }
+
+[dev-dependencies]
+# Tests link the rlib without Node. noop turns the napi glue off for test builds only.
+napi = { workspace = true, features = ["noop"] }
+napi-derive = { workspace = true, features = ["noop"] }
+
+[build-dependencies]
+napi-build.workspace = true
+
+[lints]
+workspace = true

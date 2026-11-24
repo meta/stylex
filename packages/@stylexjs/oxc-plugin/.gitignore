@@ -1,0 +1,5 @@
+/target/
+/js/*.node
+/.build/
+/tools/perf/results/
+/node_modules/

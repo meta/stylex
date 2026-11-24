@@ -1,0 +1,29 @@
+[package]
+name = "flow_blank"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Flow type blanking on Flow's Rust parser. Offsets stay identical."
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "flow_blank"
+path = "src/main.rs"
+
+[dependencies]
+# Flow's Rust parser (facebook/flow, MIT), not on crates.io yet. It still needs
+# RUSTC_BOOTSTRAP=flow_parser, which scripts/build.cjs sets.
+flow_parser = { git = "https://github.com/facebook/flow", rev = "040f4188a1df8d7b4c91ac4998848a47dc702ed4" }
+oxc_allocator.workspace = true
+oxc_parser.workspace = true
+oxc_ast.workspace = true
+oxc_span.workspace = true
+oxc_codegen.workspace = true
+oxc_ast_visit.workspace = true
+oxc_syntax.workspace = true
+dupe = "0.9.1"
+
+[lints]
+workspace = true

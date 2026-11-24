@@ -1,0 +1,70 @@
+# @stylexjs/oxc-plugin: a prototype StyleX compiler on oxc.
+# crates/core/*   parser-independent StyleX core, carved from facebook/stylex PR #2008
+#                 (crates from Dwlad90/stylex-swc-plugin, MIT; see crates/core/NOTICE.md).
+# crates/stylex_oxc  the oxc front end and napi addon.
+# crates/flow_blank  Flow type blanking on Flow's Rust parser.
+[workspace]
+resolver = "2"
+members = ["crates/core/*", "crates/stylex_oxc", "crates/flow_blank"]
+exclude = ["crates/core/docs"]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/facebook/stylex"
+rust-version = "1.97"
+version = "0.19.2"
+
+[workspace.dependencies]
+colored = { version = "3.1.1" }
+cssparser = { version = "0.38.0" }
+ctor = "1.0.7"
+derive_more = { version = "2.1.1", features = ["display"] }
+fancy-regex = "0.19.0"
+icu_collator = { version = "2.3.1", features = ["unstable"] }
+indexmap = { version = "2.14.0", features = ["serde"] }
+log = "0.4.32"
+murmur2 = { version = "0.1.0" }
+once_cell = { version = "1.21.4" }
+path-clean = { version = "1.0.1" }
+phf = { version = "0.14.0" }
+pretty_env_logger = "0.5.0"
+radix_fmt = { version = "1.0.0" }
+regex = "1.11.1"
+rustc-hash = "2.1.2"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = { version = "1.0.150", features = ["preserve_order"] }
+serial_test = { version = "4.0.1" }
+stacker = "0.1.24"
+thiserror = "2.0.18"
+xxhash-rust = { version = "0.8.15", features = ["xxh3"] }
+
+# oxc front end
+oxc_allocator = "=0.158.0"
+oxc_parser = "=0.158.0"
+oxc_ast = "=0.158.0"
+oxc_span = "=0.158.0"
+oxc_syntax = "=0.158.0"
+oxc_ast_visit = "=0.158.0"
+oxc_codegen = "=0.158.0"
+oxc_str = "=0.158.0"
+oxc_semantic = { version = "=0.158.0", default-features = false }
+oxc_diagnostics = "=0.158.0"
+napi = { version = "3.9.0", default-features = false, features = ["napi8", "serde-json"] }
+napi-derive = "3.5.0"
+napi-build = "2.3.0"
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
+
+[workspace.lints.clippy]
+cloned_instead_of_copied = "warn"
+format_in_format_args = "warn"
+inefficient_to_string = "warn"
+manual_string_new = "warn"
+needless_collect = "warn"
+redundant_clone = "warn"
+
+[profile.release]
+opt-level = 3
+debug = false

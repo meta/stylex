@@ -1,0 +1,36 @@
+{
+  "name": "@stylexjs/oxc-plugin",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Prototype StyleX compiler on oxc, with a Babel plugin drop-in.",
+  "main": "js/index.js",
+  "exports": {
+    ".": "./js/index.js",
+    "./babel": "./js/babel.js"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/meta/stylex.git",
+    "directory": "packages/@stylexjs/oxc-plugin"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "node scripts/build.cjs",
+    "build:pgo": "node scripts/build-pgo.cjs",
+    "test": "node scripts/test.cjs",
+    "test:parity": "node scripts/parity.cjs",
+    "fuzz": "node tools/fuzz/run.cjs --candidate js/index.js",
+    "perf": "node tools/perf/run.cjs --compilers candidate,babel"
+  },
+  "peerDependencies": {
+    "@babel/core": "^7.26.8"
+  },
+  "peerDependenciesMeta": {
+    "@babel/core": {
+      "optional": true
+    }
+  }
+}
