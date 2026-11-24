@@ -1,0 +1,12 @@
+// @flow
+import * as stylex from '@stylexjs/stylex';
+enum Status { Active, Off }
+enum Num of number { One = 1 }
+const styles = stylex.create({ root: { color: 'red' } });
+component Button(label: string, 'data-testid' as testId: string = 'x', ...rest: Props) renders Foo {
+  return <div {...stylex.props(styles.root)} data-testid={testId}>{label}</div>;
+}
+hook useThing(x: number): number { return x; }
+const m = match (x) { 1 => 'one', {kind: 'a', const v} => v, _ => 'other' };
+declare export default class Foo {}
+declare export var y: number;

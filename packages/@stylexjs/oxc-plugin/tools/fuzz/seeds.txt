@@ -1,0 +1,4 @@
+# Regression seeds, rerun every cycle: <seed> <count>. Add a seed that found a real failure.
+final-1-1795482116 5000
+20261124T024812Z 20000
+20261124T050229Z 20000
