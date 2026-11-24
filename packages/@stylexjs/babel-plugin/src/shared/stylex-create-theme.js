@@ -16,6 +16,7 @@ import {
   wrapWithAtRules,
 } from './stylex-vars-utils';
 import { isCSSType } from './types';
+import { compareStringsWithDefaultFirst } from './utils/compare-strings';
 import { defaultOptions } from './utils/default-options';
 
 // It takes an object of variables with their values and the original set of variables to override
@@ -50,8 +51,8 @@ export default function styleXCreateTheme(
 
   // Sort @-rules to get a consistent unique hash value
   // But also put "default" first
-  const sortedAtRules = Object.keys(rulesByAtRule).sort((a, b) =>
-    a === 'default' ? -1 : b === 'default' ? 1 : a.localeCompare(b),
+  const sortedAtRules = Object.keys(rulesByAtRule).sort(
+    compareStringsWithDefaultFirst,
   );
 
   const atRulesStringForHash = sortedAtRules
