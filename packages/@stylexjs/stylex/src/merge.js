@@ -46,7 +46,7 @@ function idFor(key: string): number {
 
 const shapes: WeakMap<StyleObject, Shape> = new WeakMap();
 
-function shapeOf(style: StyleObject): Shape {
+function shapeOf(style: StyleObject, warn: boolean = true): Shape {
   const cached = shapes.get(style);
   if (cached !== undefined) {
     return cached;
@@ -67,7 +67,7 @@ function shapeOf(style: StyleObject): Shape {
       if (value !== null) {
         className = className ? className + ' ' + value : value;
       }
-    } else {
+    } else if (warn) {
       warnInvalid(key, value);
     }
   }
@@ -154,8 +154,7 @@ export function merge(styles: $ReadOnlyArray<mixed>): MergeResult {
           markAll(pending, current);
           pending = null;
         }
-        // Shapes are only stored by single-style calls. Storing one for every
-        // merged object costs more than it saves when objects are reused less.
+        // Shapes come from single-style calls and big objects read uncached.
         const shape = shapes.get(style);
         const added: Array<number> | null = nextCache != null ? [] : null;
         if (shape !== undefined) {
@@ -178,7 +177,9 @@ export function merge(styles: $ReadOnlyArray<mixed>): MergeResult {
               : shape.debug;
           }
         } else {
+          let count = 0;
           for (const key in style) {
+            count++;
             const value = style[key];
             if (key === '$$css') {
               if (value !== true) {
@@ -199,6 +200,10 @@ export function merge(styles: $ReadOnlyArray<mixed>): MergeResult {
             } else {
               warnInvalid(key, value);
             }
+          }
+          // Uncached reads store shapes for objects with more than 4 keys.
+          if (nextCache == null && count > 4) {
+            shapeOf(style, false);
           }
         }
         if (nextCache != null && added !== null) {
