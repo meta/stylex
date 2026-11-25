@@ -1,0 +1,29 @@
+[package]
+description = "Loose CSS declaration-value scanner that preserves the author's own characters"
+edition.workspace = true
+license.workspace = true
+name = "postcss_value_parser"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+
+# No `cdylib`: there is no `extern "C"` surface here and nothing links this as a
+# dynamic library, so building one cost every workspace build for nothing.
+[lib]
+crate-type = ["rlib"]
+doctest = false
+
+# No dependencies, and that is the point: the scanner is a self-contained port
+# of one library, and anything it reached for would be a chance to behave
+# differently from it. Dev dependencies are a separate question -- nothing under
+# `[dev-dependencies]` reaches the shipped scanner or can change what it emits.
+[dependencies]
+
+[dev-dependencies]
+criterion.workspace = true
+swc_malloc.workspace = true
+
+
+[lints]
+workspace = true

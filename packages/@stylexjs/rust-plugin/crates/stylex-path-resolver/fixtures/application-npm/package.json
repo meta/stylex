@@ -1,0 +1,8 @@
+{
+  "name": "application-pnpm",
+  "version": "0.18.3",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}

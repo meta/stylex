@@ -46,6 +46,8 @@ module.exports = {
     '**/*.d.ts',
     '**/pages.gen.ts',
     '**/devtools-extension/extension/**',
+    // Test fixtures of the vendored StyleX SWC crates
+    'packages/@stylexjs/rust-plugin/crates/**/fixtures/**',
   ],
   overrides: [
     {

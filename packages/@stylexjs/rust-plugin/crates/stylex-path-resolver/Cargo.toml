@@ -1,0 +1,37 @@
+[package]
+description = "Path resolver for StyleX SWC plugin"
+edition.workspace = true
+license.workspace = true
+name = "stylex_path_resolver"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+
+[lib]
+crate-type = ["rlib"]
+doctest = false
+
+[dependencies]
+ctor.workspace = true
+fancy-regex.workspace = true
+indexmap.workspace = true
+log.workspace = true
+once_cell.workspace = true
+path-clean = { workspace = true }
+pretty_env_logger.workspace = true
+rustc-hash.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+stylex_macros = { path = "../stylex-macros" }
+
+oxc_resolver = { version = "11.20.0", features = ["yarn_pnp"] }
+package-json = "0.5.0"
+pathdiff = { version = "0.2.3" }
+
+[dev-dependencies]
+serial_test.workspace = true
+
+[lints]
+workspace = true

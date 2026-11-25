@@ -1,0 +1,31 @@
+[package]
+description = "Struct and data model definitions for the StyleX compiler plugin"
+edition.workspace = true
+license.workspace = true
+name = "stylex_structures"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+
+[lib]
+crate-type = ["rlib"]
+doctest = false
+
+[dependencies]
+indexmap.workspace = true
+once_cell.workspace = true
+rustc-hash.workspace = true
+serde.workspace = true
+swc_core = { workspace = true, features = ["common", "ecma_ast", "ecma_utils"] }
+
+stylex_ast = { path = "../stylex-ast" }
+stylex_constants = { path = "../stylex-constants" }
+stylex_enums = { path = "../stylex-enums" }
+stylex_macros = { path = "../stylex-macros" }
+stylex_utils = { path = "../stylex-utils" }
+
+[dev-dependencies]
+
+[lints]
+workspace = true

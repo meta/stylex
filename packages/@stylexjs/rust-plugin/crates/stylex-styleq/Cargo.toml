@@ -1,0 +1,29 @@
+[package]
+description = "StyleQ implementation for the StyleX system"
+edition.workspace = true
+license.workspace = true
+name = "stylex_styleq"
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lib]
+crate-type = ["rlib"]
+doctest = false
+
+[dependencies]
+indexmap.workspace = true
+log.workspace = true
+rustc-hash.workspace = true
+xxhash-rust.workspace = true
+
+stylex_constants = { path = "../stylex-constants" }
+
+[dev-dependencies]
+criterion.workspace = true
+serial_test.workspace = true
+swc_malloc.workspace = true
+
+
+[lints]
+workspace = true
