@@ -325,6 +325,7 @@ describe('@stylexjs/babel-plugin', () => {
             unitless: {
               fontSizeAdjust: 0.545,
               fontWeight: 500,
+              initialLetter: 3.5,
               lineHeight: 1.5,
               opacity: 0.5,
               zoom: 2,
@@ -353,6 +354,10 @@ describe('@stylexjs/babel-plugin', () => {
         });
         _inject2({
           ltr: ".xk50ysn{font-weight:500}",
+          priority: 3000
+        });
+        _inject2({
+          ltr: ".x1veszal{initial-letter:3.5}",
           priority: 3000
         });
         _inject2({
