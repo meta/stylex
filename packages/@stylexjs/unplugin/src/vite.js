@@ -157,19 +157,22 @@ function attachViteHooks(plugin) {
         });
       } catch {}
     },
-    generateBundle(_opts, bundle) {
-      const css = plugin.__stylexCollectCss?.();
-      if (!css) return;
-      const target = pickCssAssetFromRollupBundle(bundle, cssInjectionTarget);
-      if (target) {
-        const current =
-          typeof target.source === 'string'
-            ? target.source
-            : target.source?.toString() || '';
-        const nextSource = current ? current + '\n' + css : css;
-        replaceCssAssetWithHashedCopy(this, bundle, target, nextSource);
-        cssInjectedInGenerateBundle = true;
-      }
+    generateBundle: {
+      order: 'post',
+      handler(_opts, bundle) {
+        const css = plugin.__stylexCollectCss?.();
+        if (!css) return;
+        const target = pickCssAssetFromRollupBundle(bundle, cssInjectionTarget);
+        if (target) {
+          const current =
+            typeof target.source === 'string'
+              ? target.source
+              : target.source?.toString() || '';
+          const nextSource = current ? current + '\n' + css : css;
+          replaceCssAssetWithHashedCopy(this, bundle, target, nextSource);
+          cssInjectedInGenerateBundle = true;
+        }
+      },
     },
     async writeBundle(options, bundle) {
       if (cssInjectedInGenerateBundle) return;
