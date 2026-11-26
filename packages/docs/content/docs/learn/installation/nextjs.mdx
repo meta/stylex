@@ -104,6 +104,38 @@ module.exports = {
 You can skip Babel transforms for anything other than StyleX in your PostCSS
 configuration to speed up CSS generation.
 
+## Using StyleX from a dependency
+
+If you install a package that ships uncompiled StyleX, add it in two places.
+
+1. `transpilePackages`, so Babel compiles its JavaScript:
+
+```js title="next.config.js"
+module.exports = {
+  transpilePackages: ['your-stylex-package'],
+};
+```
+
+2. `include`, so its styles are added to your CSS:
+
+```js title="postcss.config.js"
+include: [
+  'app/**/*.{js,jsx,ts,tsx}',
+  'components/**/*.{js,jsx,ts,tsx}',
+  'node_modules/your-stylex-package/**/*.{js,mjs,cjs}',
+],
+```
+
+If that package uses other StyleX packages, add them to both lists too.
+
+If you miss a step:
+
+- Missing from `transpilePackages`: you get
+  `Unexpected 'stylex.create' call at runtime`, either during `next build` or
+  when the page is requested.
+- Missing from `include`: elements get class names but no styles, and no error
+  is shown.
+
 ## Using the configurations
 
 Once you define these configuration files, Next.js will automatically use Babel
