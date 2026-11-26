@@ -2111,7 +2111,7 @@ describe('style-value-parser/at-queries', () => {
                   "value": {
                     "type": "integer",
                     "unit": "px",
-                    "value": 1024.01,
+                    "value": 1024.02,
                   },
                 },
                 {
@@ -2129,7 +2129,7 @@ describe('style-value-parser/at-queries', () => {
           }
         `);
         expect(parsed.toString()).toMatchInlineSnapshot(
-          '"@media (min-width: 1024.01px) and (max-width: 1440px)"',
+          '"@media (min-width: 1024.02px) and (max-width: 1440px)"',
         );
       });
     });
@@ -2463,13 +2463,13 @@ describe('style-value-parser/at-queries', () => {
                 "signCharacter": undefined,
                 "type": "integer",
                 "unit": "px",
-                "value": 400.01,
+                "value": 400.02,
               },
             },
           }
         `);
         expect(parsed.toString()).toMatchInlineSnapshot(
-          '"@media (min-width: 400.01px)"',
+          '"@media (min-width: 400.02px)"',
         );
       });
 
@@ -2505,13 +2505,13 @@ describe('style-value-parser/at-queries', () => {
                 "signCharacter": undefined,
                 "type": "integer",
                 "unit": "px",
-                "value": 400.01,
+                "value": 400.02,
               },
             },
           }
         `);
         expect(parsed.toString()).toMatchInlineSnapshot(
-          '"@media (min-width: 400.01px)"',
+          '"@media (min-width: 400.02px)"',
         );
       });
 
@@ -2586,7 +2586,7 @@ describe('style-value-parser/at-queries', () => {
                   "value": {
                     "type": "integer",
                     "unit": "px",
-                    "value": 400.01,
+                    "value": 400.02,
                   },
                 },
                 {
@@ -2604,7 +2604,7 @@ describe('style-value-parser/at-queries', () => {
           }
         `);
         expect(parsed.toString()).toMatchInlineSnapshot(
-          '"@media (min-width: 400.01px) and (max-width: 700px)"',
+          '"@media (min-width: 400.02px) and (max-width: 700px)"',
         );
       });
 
@@ -2703,7 +2703,7 @@ describe('style-value-parser/at-queries', () => {
                   "value": {
                     "type": "integer",
                     "unit": "px",
-                    "value": 999.99,
+                    "value": 999.98,
                   },
                 },
               ],
@@ -2712,7 +2712,7 @@ describe('style-value-parser/at-queries', () => {
           }
         `);
         expect(parsed.toString()).toMatchInlineSnapshot(
-          '"@media (min-width: 700px) and (max-width: 999.99px)"',
+          '"@media (min-width: 700px) and (max-width: 999.98px)"',
         );
       });
 
@@ -2730,7 +2730,7 @@ describe('style-value-parser/at-queries', () => {
                   "value": {
                     "type": "integer",
                     "unit": "px",
-                    "value": 700.01,
+                    "value": 700.02,
                   },
                 },
                 {
@@ -2748,7 +2748,7 @@ describe('style-value-parser/at-queries', () => {
           }
         `);
         expect(parsed.toString()).toMatchInlineSnapshot(
-          '"@media (min-width: 700.01px) and (max-width: 1000px)"',
+          '"@media (min-width: 700.02px) and (max-width: 1000px)"',
         );
       });
 
@@ -2766,7 +2766,7 @@ describe('style-value-parser/at-queries', () => {
                   "value": {
                     "type": "integer",
                     "unit": "px",
-                    "value": 700.01,
+                    "value": 700.02,
                   },
                 },
                 {
@@ -2775,7 +2775,7 @@ describe('style-value-parser/at-queries', () => {
                   "value": {
                     "type": "integer",
                     "unit": "px",
-                    "value": 999.99,
+                    "value": 999.98,
                   },
                 },
               ],
@@ -2784,7 +2784,58 @@ describe('style-value-parser/at-queries', () => {
           }
         `);
         expect(parsed.toString()).toMatchInlineSnapshot(
-          '"@media (min-width: 700.01px) and (max-width: 999.99px)"',
+          '"@media (min-width: 700.02px) and (max-width: 999.98px)"',
+        );
+      });
+
+      // Chromium matches min-/max-width within 1/64px, so a bound 0.01px away
+      // from the breakpoint would still match at the breakpoint it excludes.
+      test('@media (width < 600px) excludes 600px', () => {
+        const parsed = MediaQuery.parser.parseToEnd('@media (width < 600px)');
+        expect(parsed.toString()).toMatchInlineSnapshot(
+          '"@media (max-width: 599.98px)"',
+        );
+      });
+
+      test('@media (width > 600px) excludes 600px', () => {
+        const parsed = MediaQuery.parser.parseToEnd('@media (width > 600px)');
+        expect(parsed.toString()).toMatchInlineSnapshot(
+          '"@media (min-width: 600.02px)"',
+        );
+      });
+
+      test('@media (620px < width <= 900px) excludes 620px', () => {
+        const parsed = MediaQuery.parser.parseToEnd(
+          '@media (620px < width <= 900px)',
+        );
+        expect(parsed.toString()).toMatchInlineSnapshot(
+          '"@media (min-width: 620.02px) and (max-width: 900px)"',
+        );
+      });
+
+      // A bound written just off a whole pixel stays on that pixel.
+      test('@media (width > 599.99px) starts at 600px', () => {
+        const parsed = MediaQuery.parser.parseToEnd(
+          '@media (width > 599.99px)',
+        );
+        expect(parsed.toString()).toMatchInlineSnapshot(
+          '"@media (min-width: 600px)"',
+        );
+      });
+
+      test('@media (width < 600.01px) ends at 600px', () => {
+        const parsed = MediaQuery.parser.parseToEnd(
+          '@media (width < 600.01px)',
+        );
+        expect(parsed.toString()).toMatchInlineSnapshot(
+          '"@media (max-width: 600px)"',
+        );
+      });
+
+      test('@media (width > 0.1px) has no float noise', () => {
+        const parsed = MediaQuery.parser.parseToEnd('@media (width > 0.1px)');
+        expect(parsed.toString()).toMatchInlineSnapshot(
+          '"@media (min-width: 0.12px)"',
         );
       });
     });
@@ -2794,7 +2845,7 @@ describe('style-value-parser/at-queries', () => {
       const parsed = MediaQuery.parser.parseToEnd(
         '@media (min-width: 100px) and (not (max-width: 200px))',
       );
-      expect(parsed.toString()).toBe('@media (min-width: 200.01px)');
+      expect(parsed.toString()).toBe('@media (min-width: 200.02px)');
     });
 
     test('@media (min-width: 100px) and (min-width: 200px)', () => {
@@ -2808,7 +2859,7 @@ describe('style-value-parser/at-queries', () => {
       const parsed = MediaQuery.parser.parseToEnd(
         '@media (not (max-width: 200px)) and (not (max-width: 300px))',
       );
-      expect(parsed.toString()).toBe('@media (min-width: 300.01px)');
+      expect(parsed.toString()).toBe('@media (min-width: 300.02px)');
     });
 
     test('@media (min-width: 100px) and not (max-width: 50px)', () => {
@@ -2822,7 +2873,7 @@ describe('style-value-parser/at-queries', () => {
       const parsed = MediaQuery.parser.parseToEnd(
         '@media (min-width: 100px) and (not (max-width: 100px))',
       );
-      expect(parsed.toString()).toBe('@media (min-width: 100.01px)');
+      expect(parsed.toString()).toBe('@media (min-width: 100.02px)');
     });
 
     test('@media (min-width: 100px) and not (max-width: 99.99px)', () => {
@@ -2844,7 +2895,7 @@ describe('style-value-parser/at-queries', () => {
         '@media (max-width: 1440px) and (not (max-width: 1024px)) and (not (max-width: 768px)) and (not (max-width: 458px))',
       );
       expect(parsed.toString()).toBe(
-        '@media (min-width: 1024.01px) and (max-width: 1440px)',
+        '@media (min-width: 1024.02px) and (max-width: 1440px)',
       );
     });
 
@@ -2857,21 +2908,21 @@ describe('style-value-parser/at-queries', () => {
       );
     });
 
-    test('@media (min-width: 100px) and (max-width: 500px) and (not (max-width: 200px)) => (min-width: 200.01px) and (max-width: 500px)', () => {
+    test('@media (min-width: 100px) and (max-width: 500px) and (not (max-width: 200px)) => (min-width: 200.02px) and (max-width: 500px)', () => {
       const parsed = MediaQuery.parser.parseToEnd(
         '@media (min-width: 100px) and (max-width: 500px) and (not (max-width: 200px))',
       );
       expect(parsed.toString()).toBe(
-        '@media (min-width: 200.01px) and (max-width: 500px)',
+        '@media (min-width: 200.02px) and (max-width: 500px)',
       );
     });
 
-    test('@media (min-width: 100px) and (max-width: 500px) and (not (max-width: 200px)) and (not (min-width: 400px)) => (min-width: 200.01px) and (max-width: 399.99px)', () => {
+    test('@media (min-width: 100px) and (max-width: 500px) and (not (max-width: 200px)) and (not (min-width: 400px)) => (min-width: 200.02px) and (max-width: 399.98px)', () => {
       const parsed = MediaQuery.parser.parseToEnd(
         '@media (min-width: 100px) and (max-width: 500px) and (not (max-width: 200px)) and (not (min-width: 400px))',
       );
       expect(parsed.toString()).toBe(
-        '@media (min-width: 200.01px) and (max-width: 399.98px)',
+        '@media (min-width: 200.02px) and (max-width: 399.98px)',
       );
     });
 
