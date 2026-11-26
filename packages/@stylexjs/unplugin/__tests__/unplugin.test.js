@@ -14,6 +14,9 @@ const path = require('node:path');
 const { unplugin } = require('../src');
 const {
   unpluginFactory,
+  perChunkAssetName,
+  cssImportSpecifier,
+  injectCssImport,
   pickCssAssetFromRollupBundle,
 } = require('../src/core');
 const { Features, browserslistToTargets } = require('lightningcss');
@@ -580,6 +583,781 @@ export const styles = stylex.create({
       } finally {
         jest.useRealTimers();
       }
+    });
+  });
+
+  describe('cssCodeSplit option normalization', () => {
+    test('defaults to false', () => {
+      expect(
+        unpluginFactory({}, { framework: 'rollup' }).__stylexCssCodeSplit,
+      ).toBe(false);
+    });
+
+    test('true is kept on the Rollup, Vite and Rolldown adapters', () => {
+      expect(
+        unpluginFactory({ cssCodeSplit: true }, { framework: 'rollup' })
+          .__stylexCssCodeSplit,
+      ).toBe(true);
+      expect(
+        unpluginFactory({ cssCodeSplit: true }, { framework: 'vite' })
+          .__stylexCssCodeSplit,
+      ).toBe(true);
+      expect(
+        unpluginFactory({ cssCodeSplit: true }, { framework: 'rolldown' })
+          .__stylexCssCodeSplit,
+      ).toBe(true);
+    });
+
+    test('true is silently downgraded on unsupported adapters', () => {
+      expect(
+        unpluginFactory({ cssCodeSplit: true }, { framework: 'webpack' })
+          .__stylexCssCodeSplit,
+      ).toBe(false);
+    });
+
+    test('runtimeInjection takes precedence over cssCodeSplit', () => {
+      expect(
+        unpluginFactory(
+          { runtimeInjection: true, cssCodeSplit: true },
+          { framework: 'rollup' },
+        ).__stylexCssCodeSplit,
+      ).toBe(false);
+    });
+
+    test('runtimeInjection alone does not enable cssCodeSplit', () => {
+      expect(
+        unpluginFactory({ runtimeInjection: true }, { framework: 'rollup' })
+          .__stylexCssCodeSplit,
+      ).toBe(false);
+    });
+  });
+
+  describe('cssCodeSplit: per-chunk stylesheets', () => {
+    const ID_A = '/virtual/per-chunk/a.js';
+    const ID_B = '/virtual/per-chunk/b.js';
+    const ID_PLAIN = '/virtual/per-chunk/plain.js';
+
+    const STYLE_A = `
+      import * as stylex from '@stylexjs/stylex';
+      export const styles = stylex.create({ root: { paddingTop: 17 } });
+    `;
+    const STYLE_B = `
+      import * as stylex from '@stylexjs/stylex';
+      export const styles = stylex.create({ root: { paddingBottom: 29 } });
+    `;
+
+    const CSS_CODE_SPLIT_OPTIONS = {
+      cssCodeSplit: true,
+      runtimeInjection: false,
+      devPersistToDisk: false,
+      dev: false,
+    };
+
+    function makeCtx(warnings) {
+      return {
+        warn: (message) => warnings.push(message),
+        emitFile() {
+          return 'ref_1';
+        },
+        getFileName() {
+          return null;
+        },
+      };
+    }
+
+    function makeBundle() {
+      return {
+        'dist/a.js': {
+          type: 'chunk',
+          fileName: 'dist/a.js',
+          code: 'export {};\n',
+          modules: { [ID_A]: {} },
+        },
+        'dist/b.js': {
+          type: 'chunk',
+          fileName: 'dist/b.js',
+          code: 'export {};\n',
+          modules: { [ID_B]: {} },
+        },
+        'dist/plain.js': {
+          type: 'chunk',
+          fileName: 'dist/plain.js',
+          code: 'export {};\n',
+          modules: { [ID_PLAIN]: {} },
+        },
+      };
+    }
+
+    async function transformModules(plugin) {
+      await plugin.transform.call({}, STYLE_A, ID_A);
+      await plugin.transform.call({}, STYLE_B, ID_B);
+      await plugin.transform.call({}, 'export {};\n', ID_PLAIN);
+    }
+
+    // Clear rules leaked from earlier tests.
+    function makeCodeSplitPlugin() {
+      const plugin = unplugin.rollup(CSS_CODE_SPLIT_OPTIONS);
+      plugin.__stylexGetSharedStore().rulesById.clear();
+      return plugin;
+    }
+
+    // Stand-in for the bundler's PluginContext: an explicit fileName lands
+    // verbatim (first emission wins), a name-based emission goes under
+    // `assets/` with numbering on collision.
+    function makeBundleContext(bundle) {
+      const taken = new Set(
+        Object.values(bundle)
+          .filter((file) => file && file.type === 'asset')
+          .map((file) => file.fileName),
+      );
+      const byNameAndSource = new Map();
+      const byRefId = new Map();
+      let nextRefId = 0;
+      return {
+        emitFile(file) {
+          if (file.fileName) {
+            nextRefId += 1;
+            const refId = `ref_${nextRefId}`;
+            if (!bundle[file.fileName]) {
+              taken.add(file.fileName);
+              bundle[file.fileName] = {
+                type: 'asset',
+                fileName: file.fileName,
+                source: file.source,
+              };
+            }
+            byRefId.set(refId, file.fileName);
+            return refId;
+          }
+          const key = `${file.name}\u0000${file.source}`;
+          const existing = byNameAndSource.get(key);
+          if (existing) return existing.refId;
+          const ext = path.posix.extname(file.name);
+          const stem = path.posix.basename(file.name, ext);
+          let fileName = `assets/${stem}${ext}`;
+          let n = 2;
+          while (taken.has(fileName)) {
+            fileName = `assets/${stem}${n}${ext}`;
+            n += 1;
+          }
+          taken.add(fileName);
+          nextRefId += 1;
+          const refId = `ref_${nextRefId}`;
+          byNameAndSource.set(key, { refId, fileName });
+          byRefId.set(refId, fileName);
+          bundle[fileName] = {
+            type: 'asset',
+            fileName,
+            source: file.source,
+          };
+          return refId;
+        },
+        getFileName(refId) {
+          return byRefId.get(refId) ?? null;
+        },
+      };
+    }
+
+    test('derives the stylesheet path and the import specifier from chunk file names', () => {
+      expect(perChunkAssetName('a.js')).toBe('a.stylex.css');
+      expect(perChunkAssetName('dist/a.mjs')).toBe('dist/a.stylex.css');
+      expect(perChunkAssetName('assets/index-B5Jdbbfd.js')).toBe(
+        'assets/index-B5Jdbbfd.stylex.css',
+      );
+      expect(cssImportSpecifier('a.js', 'a.stylex.css')).toBe('./a.stylex.css');
+      expect(cssImportSpecifier('dist/a.js', 'dist/a.stylex.css')).toBe(
+        './a.stylex.css',
+      );
+      expect(cssImportSpecifier('dist/a.js', 'a.stylex.css')).toBe(
+        '../a.stylex.css',
+      );
+    });
+
+    test('injectCssImport places the import at the very top when the chunk has no imports', () => {
+      const chunk = { code: 'const y = 2;\nexport { y };' };
+      injectCssImport(chunk, './b.stylex.css');
+      expect(chunk.code).toBe(
+        "import './b.stylex.css';\nconst y = 2;\nexport { y };",
+      );
+    });
+
+    test('injectCssImport shifts the sourcemap one line below the import', () => {
+      const chunk = {
+        code: "import './dep.js';\nconst x = 1;",
+        map: { mappings: 'AAAA;AACA' },
+      };
+      injectCssImport(chunk, './a.stylex.css');
+      expect(chunk.code).toBe(
+        "import './dep.js';\nimport './a.stylex.css';\nconst x = 1;",
+      );
+      expect(chunk.map.mappings).toBe('AAAA;;AACA');
+    });
+
+    test('injectCssImport tolerates chunks without a usable sourcemap', () => {
+      const chunk = { code: "import './dep.js';\nconst x = 1;" };
+      injectCssImport(chunk, './a.stylex.css');
+      expect(chunk.code).toBe(
+        "import './dep.js';\nimport './a.stylex.css';\nconst x = 1;",
+      );
+      const empty = {
+        code: "import './dep.js';\nconst x = 1;",
+        map: {},
+      };
+      injectCssImport(empty, './a.stylex.css');
+      expect(empty.code).toBe(
+        "import './dep.js';\nimport './a.stylex.css';\nconst x = 1;",
+      );
+      expect(empty.map).toEqual({});
+    });
+
+    test('injectCssImport clamps the sourcemap shift at the end of the file', () => {
+      const chunk = {
+        code: "import './dep.js';\n",
+        map: { mappings: 'AAAA' },
+      };
+      injectCssImport(chunk, './a.stylex.css');
+      expect(chunk.code).toBe("import './dep.js';\nimport './a.stylex.css';\n");
+      expect(chunk.map.mappings).toBe('AAAA;');
+    });
+
+    test('injectCssImport places the import after the last leading import', () => {
+      const chunk = {
+        code: "/*!\n * banner\n */\nimport './one.js';\nimport {\n  a as b,\n} from './dep.js';\nconst x = 1;\nexport { x };",
+      };
+      injectCssImport(chunk, './a.stylex.css');
+      expect(chunk.code).toBe(
+        "/*!\n * banner\n */\nimport './one.js';\nimport {\n  a as b,\n} from './dep.js';\nimport './a.stylex.css';\nconst x = 1;\nexport { x };",
+      );
+    });
+
+    test('injectCssImport places the import after user stylesheets so StyleX wins the cascade', () => {
+      const chunk = {
+        code: "import './d.stylex.css';\nimport './d1.stylex.css';\nexport const styles = {};",
+      };
+      injectCssImport(chunk, './d2.stylex.css');
+      expect(chunk.code).toBe(
+        "import './d.stylex.css';\nimport './d1.stylex.css';\nimport './d2.stylex.css';\nexport const styles = {};",
+      );
+    });
+
+    test('injectCssImport places the import before a comment that closes mid-line', () => {
+      const chunk = { code: '/* c */ const x = 1;' };
+      injectCssImport(chunk, './a.stylex.css');
+      expect(chunk.code).toBe("import './a.stylex.css';\n/* c */ const x = 1;");
+    });
+
+    test('injectCssImport keeps a trailing sourceMappingURL comment as the last line', () => {
+      const chunk = {
+        code: 'import "./dep.js";\nexport const x = 1;\n//# sourceMappingURL=a.js.map',
+      };
+      injectCssImport(chunk, './a.stylex.css');
+      expect(chunk.code).toBe(
+        'import "./dep.js";\nimport \'./a.stylex.css\';\nexport const x = 1;\n//# sourceMappingURL=a.js.map',
+      );
+      expect(chunk.code.endsWith('//# sourceMappingURL=a.js.map')).toBe(true);
+    });
+
+    // The import must land after the prologue, not between its directives.
+    test('injectCssImport keeps a directive prologue above the import', () => {
+      const chunk = {
+        code: "'use client';\nimport './dep.js';\nexport const x = 1;",
+      };
+      injectCssImport(chunk, './a.stylex.css');
+      expect(chunk.code).toBe(
+        "'use client';\nimport './dep.js';\nimport './a.stylex.css';\nexport const x = 1;",
+      );
+    });
+
+    test('injectCssImport keeps hashbangs, comments and multiple directives above the import', () => {
+      const chunk = {
+        code: "#!/usr/bin/env node\n'use client';\n// served pre-rendered\n'use strict';\nimport './dep.js';",
+      };
+      injectCssImport(chunk, './a.stylex.css');
+      expect(chunk.code).toBe(
+        "#!/usr/bin/env node\n'use client';\n// served pre-rendered\n'use strict';\nimport './dep.js';\nimport './a.stylex.css';",
+      );
+    });
+
+    test('emits one stylesheet per chunk and wires a side-effect import', async () => {
+      const plugin = makeCodeSplitPlugin();
+      plugin.buildStart();
+      await transformModules(plugin);
+      const bundle = makeBundle();
+      plugin.generateBundle.call(
+        makeBundleContext(bundle),
+        { format: 'es' },
+        bundle,
+      );
+
+      const aCss = bundle['dist/a.stylex.css'];
+      const bCss = bundle['dist/b.stylex.css'];
+      expect(aCss).toBeDefined();
+      expect(bCss).toBeDefined();
+      expect(aCss.source).toContain('padding-top: 17px');
+      expect(bCss.source).toContain('padding-bottom: 29px');
+      expect(aCss.source).not.toContain('padding-bottom');
+      expect(bCss.source).not.toContain('padding-top');
+      expect(bundle['dist/plain.stylex.css']).toBeUndefined();
+      expect(bundle['dist/a.js'].code).toContain("import './a.stylex.css';");
+      expect(bundle['dist/b.js'].code).toContain("import './b.stylex.css';");
+      expect(bundle['dist/plain.js'].code).not.toContain('.css');
+    });
+
+    test('the Vite adapter emits per-chunk stylesheets as well', async () => {
+      const plugin = unplugin.vite(CSS_CODE_SPLIT_OPTIONS);
+      // Ignore rules collected by earlier tests.
+      plugin.__stylexGetSharedStore().rulesById.clear();
+      if (typeof plugin.buildStart === 'function') {
+        plugin.buildStart();
+      }
+      await transformModules(plugin);
+      const bundle = makeBundle();
+      plugin.generateBundle.call(
+        makeBundleContext(bundle),
+        { format: 'es' },
+        bundle,
+      );
+
+      expect(bundle['dist/a.stylex.css'].source).toContain('padding-top: 17px');
+      expect(bundle['dist/b.stylex.css'].source).toContain(
+        'padding-bottom: 29px',
+      );
+      expect(bundle['dist/a.js'].code).toContain("import './a.stylex.css';");
+      expect(bundle['dist/b.js'].code).toContain("import './b.stylex.css';");
+    });
+
+    test('chunks with identical CSS share one stylesheet', async () => {
+      const plugin = makeCodeSplitPlugin();
+      plugin.buildStart();
+      await plugin.transform.call({}, STYLE_A, ID_A);
+      await plugin.transform.call({}, STYLE_A, ID_B);
+      const bundle = {
+        'dist/a.js': {
+          type: 'chunk',
+          fileName: 'dist/a.js',
+          code: 'export {};\n',
+          modules: { [ID_A]: {} },
+        },
+        'dist/b.js': {
+          type: 'chunk',
+          fileName: 'dist/b.js',
+          code: 'export {};\n',
+          modules: { [ID_B]: {} },
+        },
+      };
+      plugin.generateBundle.call(
+        makeBundleContext(bundle),
+        { format: 'es' },
+        bundle,
+      );
+
+      expect(bundle['dist/a.stylex.css'].source).toContain('padding-top: 17px');
+      expect(bundle['dist/b.stylex.css']).toBeUndefined();
+      expect(bundle['dist/a.js'].code).toContain("import './a.stylex.css';");
+      expect(bundle['dist/b.js'].code).toContain("import './a.stylex.css';");
+    });
+
+    test('emits a stylesheet when the chunk already imports an external .stylex.css file', async () => {
+      const plugin = makeCodeSplitPlugin();
+      plugin.buildStart();
+      await plugin.transform.call(
+        {},
+        `import './vendor.stylex.css';\n${STYLE_A}`,
+        ID_A,
+      );
+      const bundle = {
+        'dist/a.js': {
+          type: 'chunk',
+          fileName: 'dist/a.js',
+          code: "import './vendor.stylex.css';\nexport {};\n",
+          modules: { [ID_A]: {} },
+        },
+      };
+      plugin.generateBundle.call(
+        makeBundleContext(bundle),
+        { format: 'es' },
+        bundle,
+      );
+
+      const aCss = bundle['dist/a.stylex.css'];
+      expect(aCss).toBeDefined();
+      expect(aCss.source).toContain('padding-top: 17px');
+      const code = bundle['dist/a.js'].code;
+      const vendorMatch = /import\s*['"]([^'"]*vendor\.stylex\.css)['"]/.exec(
+        code,
+      );
+      expect(vendorMatch).not.toBeNull();
+      expect(code).toContain("import './a.stylex.css';");
+      expect(code.indexOf("import './a.stylex.css';")).toBeGreaterThan(
+        vendorMatch.index,
+      );
+    });
+
+    test('does not collide with a user asset holding the same basename', async () => {
+      const plugin = makeCodeSplitPlugin();
+      plugin.buildStart();
+      await plugin.transform.call({}, STYLE_A, ID_A);
+      const bundle = {
+        'dist/a.js': {
+          type: 'chunk',
+          fileName: 'dist/a.js',
+          code: 'export {};\n',
+          modules: { [ID_A]: {} },
+        },
+        'assets/a.stylex.css': {
+          type: 'asset',
+          fileName: 'assets/a.stylex.css',
+          source: '/* user css */',
+        },
+      };
+      plugin.generateBundle.call(
+        makeBundleContext(bundle),
+        { format: 'es' },
+        bundle,
+      );
+
+      expect(bundle['assets/a.stylex.css'].source).toBe('/* user css */');
+      expect(bundle['dist/a.stylex.css'].source).toContain('padding-top: 17px');
+      expect(bundle['dist/a.js'].code).toContain("import './a.stylex.css';");
+    });
+
+    test('falls back to a numbered stylesheet when a user asset holds its path', async () => {
+      const plugin = makeCodeSplitPlugin();
+      plugin.buildStart();
+      await plugin.transform.call({}, STYLE_A, ID_A);
+      const bundle = {
+        'dist/a.js': {
+          type: 'chunk',
+          fileName: 'dist/a.js',
+          code: "import './a.stylex.css';\nexport {};\n",
+          modules: { [ID_A]: {} },
+        },
+        'dist/a.stylex.css': {
+          type: 'asset',
+          fileName: 'dist/a.stylex.css',
+          source: '/* user css */',
+        },
+      };
+      const warnings = [];
+      const ctx = {
+        ...makeBundleContext(bundle),
+        warn: (message) => warnings.push(message),
+      };
+      plugin.generateBundle.call(ctx, { format: 'es' }, bundle);
+
+      // The user's file stays untouched; the chunk's CSS moves to a1.
+      expect(bundle['dist/a.stylex.css'].source).toBe('/* user css */');
+      expect(bundle['dist/a1.stylex.css'].source).toContain(
+        'padding-top: 17px',
+      );
+      expect(bundle['dist/a.js'].code).toContain("import './a.stylex.css';");
+      expect(bundle['dist/a.js'].code).toContain("import './a1.stylex.css';");
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain('"dist/a.stylex.css" already exists');
+      expect(warnings[0]).toContain('"dist/a1.stylex.css"');
+
+      // A repeated pass reuses a1 instead of spawning a2.
+      plugin.generateBundle.call(ctx, { format: 'es' }, bundle);
+      expect(bundle['dist/a2.stylex.css']).toBeUndefined();
+      expect(warnings).toHaveLength(1);
+      expect(
+        bundle['dist/a.js'].code.match(/import '\.\/a1?\.stylex\.css';/g),
+      ).toHaveLength(2);
+    });
+
+    test('keeps numbering past two occupied stylesheet paths', async () => {
+      const plugin = makeCodeSplitPlugin();
+      plugin.buildStart();
+      await plugin.transform.call({}, STYLE_A, ID_A);
+      const bundle = {
+        'dist/a.js': {
+          type: 'chunk',
+          fileName: 'dist/a.js',
+          code: "import './a.stylex.css';\nimport './a1.stylex.css';\nexport {};\n",
+          modules: { [ID_A]: {} },
+        },
+        'dist/a.stylex.css': {
+          type: 'asset',
+          fileName: 'dist/a.stylex.css',
+          source: '/* user css */',
+        },
+        'dist/a1.stylex.css': {
+          type: 'asset',
+          fileName: 'dist/a1.stylex.css',
+          source: '/* more user css */',
+        },
+      };
+      const warnings = [];
+      const ctx = {
+        ...makeBundleContext(bundle),
+        warn: (message) => warnings.push(message),
+      };
+      plugin.generateBundle.call(ctx, { format: 'es' }, bundle);
+
+      // Both user files stay untouched; the chunk's CSS moves to a2.
+      expect(bundle['dist/a.stylex.css'].source).toBe('/* user css */');
+      expect(bundle['dist/a1.stylex.css'].source).toBe('/* more user css */');
+      expect(bundle['dist/a2.stylex.css'].source).toContain(
+        'padding-top: 17px',
+      );
+      expect(bundle['dist/a.js'].code).toContain("import './a2.stylex.css';");
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain('"dist/a.stylex.css" already exists');
+      expect(warnings[0]).toContain('"dist/a2.stylex.css"');
+
+      // A repeated pass reuses a2 instead of spawning a3.
+      plugin.generateBundle.call(ctx, { format: 'es' }, bundle);
+      expect(bundle['dist/a3.stylex.css']).toBeUndefined();
+      expect(warnings).toHaveLength(1);
+      expect(
+        bundle['dist/a.js'].code.match(/import '\.\/a2\.stylex\.css';/g),
+      ).toHaveLength(1);
+    });
+
+    test('falls back to the aggregated stylesheet when the output format is not ESM', async () => {
+      const plugin = unplugin.rollup(CSS_CODE_SPLIT_OPTIONS);
+      plugin.buildStart();
+      await transformModules(plugin);
+      const bundle = makeBundle();
+      bundle['assets/index.css'] = {
+        type: 'asset',
+        fileName: 'assets/index.css',
+        source: '/* existing css */',
+      };
+      plugin.generateBundle.call(makeCtx([]), { format: 'cjs' }, bundle);
+
+      expect(bundle['assets/index.css'].source).toContain('padding-top');
+      expect(bundle['assets/index.css'].source).toContain('padding-bottom');
+      expect(bundle['dist/a.stylex.css']).toBeUndefined();
+      expect(bundle['dist/a.js'].code).not.toContain('.css');
+    });
+
+    test('a non-ESM output does not downgrade later ESM outputs', async () => {
+      const plugin = makeCodeSplitPlugin();
+      plugin.buildStart();
+      await transformModules(plugin);
+
+      // First output: CJS, aggregated instead of per chunk.
+      const cjsBundle = makeBundle();
+      cjsBundle['assets/index-W1erjkBN.css'] = {
+        type: 'asset',
+        fileName: 'assets/index-W1erjkBN.css',
+        source: '/* existing css */',
+      };
+      plugin.generateBundle.call(
+        makeBundleContext(cjsBundle),
+        { format: 'cjs' },
+        cjsBundle,
+      );
+
+      const cjsCss = Object.values(cjsBundle).filter(
+        (file) => file.type === 'asset',
+      );
+      expect(cjsCss).toHaveLength(1);
+      expect(cjsCss[0].source).toContain('padding-top');
+      expect(cjsCss[0].source).toContain('padding-bottom');
+      expect(cjsCss.some((file) => file.source === '/* existing css */')).toBe(
+        false,
+      );
+
+      // Later output: ESM — per-chunk again despite the earlier CJS output.
+      const esBundle = makeBundle();
+      esBundle['assets/index-W1erjkBN.css'] = {
+        type: 'asset',
+        fileName: 'assets/index-W1erjkBN.css',
+        source: '/* existing css */',
+      };
+      plugin.generateBundle.call(
+        makeBundleContext(esBundle),
+        { format: 'es' },
+        esBundle,
+      );
+
+      expect(esBundle['dist/a.stylex.css'].source).toContain(
+        'padding-top: 17px',
+      );
+      expect(esBundle['dist/b.stylex.css'].source).toContain(
+        'padding-bottom: 29px',
+      );
+      expect(esBundle['assets/index-W1erjkBN.css'].source).toBe(
+        '/* existing css */',
+      );
+      expect(esBundle['dist/a.js'].code).toContain("import './a.stylex.css';");
+    });
+
+    test("an ESM per-chunk output does not suppress a later output's writeBundle fallback", async () => {
+      const plugin = makeCodeSplitPlugin();
+      plugin.buildStart();
+      await transformModules(plugin);
+
+      // First output: ESM, so stylesheets are emitted per chunk.
+      const esBundle = makeBundle();
+      plugin.generateBundle.call(
+        makeBundleContext(esBundle),
+        { format: 'es' },
+        esBundle,
+      );
+      expect(esBundle['dist/a.stylex.css']).toBeDefined();
+
+      // Second output: CJS, no CSS asset — the writeBundle fallback must
+      // still run.
+      const tempDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'stylex-per-chunk-es-then-cjs-'),
+      );
+      try {
+        const cjsBundle = makeBundle();
+        plugin.generateBundle.call(makeCtx([]), { format: 'cjs' }, cjsBundle);
+        await plugin.writeBundle({ dir: tempDir }, cjsBundle);
+        const outfile = path.join(tempDir, 'assets', 'stylex.css');
+        expect(fs.existsSync(outfile)).toBe(true);
+        const written = fs.readFileSync(outfile, 'utf8');
+        expect(written).toContain('padding-top: 17px');
+        expect(written).toContain('padding-bottom: 29px');
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test("an earlier output's generateBundle injection does not suppress a later output's fallback (Vite)", async () => {
+      const plugin = unplugin.vite(CSS_CODE_SPLIT_OPTIONS);
+      // Ignore rules collected by earlier tests.
+      plugin.__stylexGetSharedStore().rulesById.clear();
+      if (typeof plugin.buildStart === 'function') {
+        plugin.buildStart();
+      }
+      await transformModules(plugin);
+
+      // First output: CJS with an entry stylesheet — the aggregated path runs.
+      const firstBundle = makeBundle();
+      firstBundle['assets/index-W1erjkBN.css'] = {
+        type: 'asset',
+        fileName: 'assets/index-W1erjkBN.css',
+        source: '/* existing css */',
+      };
+      plugin.generateBundle.call(
+        makeBundleContext(firstBundle),
+        { format: 'cjs' },
+        firstBundle,
+      );
+      expect(firstBundle['assets/index-W1erjkBN.css']).toBeUndefined();
+
+      // Second output: CJS, no CSS asset — the writeBundle fallback must
+      // still run.
+      const tempDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'stylex-per-chunk-vite-cjs-'),
+      );
+      try {
+        const secondBundle = makeBundle();
+        plugin.generateBundle.call(
+          makeCtx([]),
+          { format: 'cjs' },
+          secondBundle,
+        );
+        await plugin.writeBundle({ dir: tempDir }, secondBundle);
+        const outfile = path.join(tempDir, 'assets', 'stylex.css');
+        expect(fs.existsSync(outfile)).toBe(true);
+        const written = fs.readFileSync(outfile, 'utf8');
+        expect(written).toContain('padding-top: 17px');
+        expect(written).toContain('padding-bottom: 29px');
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test('runtimeInjection wins over cssCodeSplit and emits no static CSS', async () => {
+      const plugin = unplugin.rollup({
+        ...CSS_CODE_SPLIT_OPTIONS,
+        runtimeInjection: true,
+      });
+      // Ignore rules collected by earlier tests.
+      plugin.__stylexGetSharedStore().rulesById.clear();
+      plugin.buildStart();
+      await transformModules(plugin);
+      const bundle = makeBundle();
+      bundle['assets/index.css'] = {
+        type: 'asset',
+        fileName: 'assets/index.css',
+        source: '/* existing css */',
+      };
+      plugin.generateBundle.call(makeCtx([]), { format: 'es' }, bundle);
+      expect(bundle['assets/index.css'].source).toBe('/* existing css */');
+      expect(bundle['dist/a.stylex.css']).toBeUndefined();
+      expect(bundle['dist/a.js'].code).not.toContain('.css');
+    });
+
+    test('writeBundle skips the aggregate fallback after per-chunk emission', async () => {
+      const plugin = makeCodeSplitPlugin();
+      plugin.buildStart();
+      await transformModules(plugin);
+      const bundle = makeBundle();
+      plugin.generateBundle.call(
+        makeBundleContext(bundle),
+        { format: 'es' },
+        bundle,
+      );
+
+      const tempDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'stylex-per-chunk-write-'),
+      );
+      try {
+        // The fallback must be suppressed after per-chunk emission.
+        await plugin.writeBundle({ dir: tempDir }, {});
+        expect(fs.readdirSync(tempDir)).toEqual([]);
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test('is idempotent when generateBundle runs twice', async () => {
+      const plugin = makeCodeSplitPlugin();
+      plugin.buildStart();
+      await transformModules(plugin);
+      const bundle = makeBundle();
+      const ctx = makeBundleContext(bundle);
+      plugin.generateBundle.call(ctx, { format: 'es' }, bundle);
+      const firstCode = bundle['dist/a.js'].code;
+      const cssAssets = () =>
+        Object.values(bundle).filter((file) => file.type === 'asset');
+      const wiredChunks = () =>
+        Object.values(bundle).filter(
+          (file) => file.type === 'chunk' && file.code.includes("import './"),
+        );
+      expect(cssAssets()).toHaveLength(2);
+      expect(wiredChunks()).toHaveLength(2);
+
+      // Simulate a bundler that fires generateBundle twice.
+      plugin.generateBundle.call(ctx, { format: 'es' }, bundle);
+
+      expect(cssAssets()).toHaveLength(2);
+      expect(wiredChunks()).toHaveLength(2);
+      expect(bundle['dist/a.js'].code).toBe(firstCode);
+    });
+
+    test('a repeated generateBundle keeps the stylesheet stable', async () => {
+      const plugin = makeCodeSplitPlugin();
+      plugin.buildStart();
+      await plugin.transform.call({}, STYLE_A, ID_A);
+      const bundle = {
+        'dist/a.js': {
+          type: 'chunk',
+          fileName: 'dist/a.js',
+          code: 'export {};\n',
+          modules: { [ID_A]: {} },
+        },
+      };
+      const ctx = makeBundleContext(bundle);
+      plugin.generateBundle.call(ctx, { format: 'es' }, bundle);
+      expect(bundle['dist/a.stylex.css'].source).toContain('padding-top: 17px');
+
+      // A second pass must not duplicate anything.
+      plugin.generateBundle.call(ctx, { format: 'es' }, bundle);
+      expect(bundle['dist/a.stylex.css'].source).toContain('padding-top: 17px');
+      expect(
+        Object.values(bundle).filter((file) => file.type === 'asset'),
+      ).toHaveLength(1);
+      expect(
+        bundle['dist/a.js'].code.match(/import '\.\/a\.stylex\.css';/g),
+      ).toHaveLength(1);
     });
   });
 });
