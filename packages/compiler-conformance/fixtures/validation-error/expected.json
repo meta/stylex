@@ -1,0 +1,8 @@
+{
+  "error": {
+    "message": "create() can only accept an object."
+  },
+  "errors": [],
+  "status": "error",
+  "warnings": []
+}

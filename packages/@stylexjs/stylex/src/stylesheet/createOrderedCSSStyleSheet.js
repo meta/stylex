@@ -223,7 +223,9 @@ function getOrderedGroups(obj: { [key: number]: any }) {
 // certain values making cssText more likely to be different from the string
 // that was inserted.
 const selectorPattern = /\s*([,])\s*/g;
-const conditionalRulePattern = /^@(media|supports|container)\s*\([^)]+\)\s*{/;
+// Any conditional prelude, up to its block: a compound query (`… and (…)`), a
+// named container or a media type is still one condition around a rule.
+const conditionalRulePattern = /^@(media|supports|container)\b[^{]*\{/;
 function getSeenRuleKey(cssText: string): string | null {
   if (conditionalRulePattern.test(cssText)) {
     const index = cssText.indexOf('{');

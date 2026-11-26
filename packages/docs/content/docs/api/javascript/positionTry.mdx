@@ -13,10 +13,11 @@ the `positionTryFallbacks` property.
 function positionTry(descriptors: { [key: string]: RawStyles }): string;
 ```
 
-The only properties allowed in a `positionTry` call are `positionAnchor`,
-`positionArea`, inset properties (`top`, `left`, `insetInline`, etc.), margin
-properties, size properties (`height`, `inlineSize`, etc.), and self-alignment
-properties (`alignSelf`, `justifySelf`, `placeSelf`).
+The only properties allowed in a `positionTry` call are `anchorName`,
+`positionAnchor`, `positionArea`, inset properties (`top`, `left`,
+`insetInline`, etc.), margin properties, size properties (`height`,
+`inlineSize`, etc.), and self-alignment properties (`alignSelf`, `justifySelf`,
+`placeSelf`).
 
 You must declare your position-try rules in the same file as where you use them.
 Duplicate declarations will be deduplicated in the generated CSS output.

@@ -70,6 +70,25 @@ describe('createOrderedCSSStyleSheet', () => {
       `);
     });
 
+    test('rules under a compound or named condition are each inserted once', () => {
+      const sheet = createOrderedCSSStyleSheet();
+      const compound =
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)';
+      const named = '@container sidebar (min-width: 400px)';
+      sheet.insert(`${compound} { .a { opacity: 0 } }`, 0);
+      sheet.insert(`${compound} { .b { opacity: 0 } }`, 0);
+      sheet.insert(`${compound} { .a { opacity: 0 } }`, 0);
+      sheet.insert(`${named} { .c { opacity: 0 } }`, 0);
+      sheet.insert(`${named} { .d { opacity: 0 } }`, 0);
+      expect(sheet.getTextContent()).toMatchInlineSnapshot(`
+        "[stylesheet-group="0"]{}
+        @container sidebar (min-width: 400px) { .c { opacity: 0 } }
+        @container sidebar (min-width: 400px) { .d { opacity: 0 } }
+        @media (prefers-reduced-motion: reduce) and (pointer: coarse) { .a { opacity: 0 } }
+        @media (prefers-reduced-motion: reduce) and (pointer: coarse) { .b { opacity: 0 } }"
+      `);
+    });
+
     test('insertion order for same group', () => {
       const sheet = createOrderedCSSStyleSheet();
 

@@ -360,7 +360,7 @@ export default class StateManager {
           z.literal('legacy-expand-shorthands'),
         ),
         options.styleResolution ?? defaultOptions.styleResolution,
-        'property-specificity',
+        'application-order',
         'options.styleResolution',
       );
 

@@ -2380,6 +2380,10 @@ export const pseudoElements: RuleCheck = makeUnionRule(
   makeLiteralRule('::-moz-range-thumb'),
   makeLiteralRule('::-moz-range-track'),
   makeLiteralRule('::-moz-range-progress'),
+  // For progress elements
+  makeLiteralRule('::-webkit-progress-bar'),
+  makeLiteralRule('::-webkit-progress-value'),
+  makeLiteralRule('::-moz-progress-bar'),
 );
 
 export const pseudoClassesAndAtRules: RuleCheck = makeUnionRule(

@@ -33,7 +33,7 @@ following keys which map to a corresponding View Transition pseudo-element:
 
 This method returns the generated class name as a string which can be added
 manually to the elements you want animations customized for, or if you're using
-React can be passed into the experimental
+React can be passed into the
 [`<ViewTransition />`](https://react.dev/reference/react/ViewTransition)
 component.
 
@@ -41,7 +41,7 @@ component.
 
 ```tsx
 import * as stylex from '@stylexjs/stylex';
-import { unstable_ViewTransition as ViewTransition } from 'react';
+import { ViewTransition } from 'react';
 
 const lingeringOldView = stylex.viewTransitionClass({
   new: {

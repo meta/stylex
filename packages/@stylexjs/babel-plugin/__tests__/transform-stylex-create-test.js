@@ -748,22 +748,93 @@ describe('@stylexjs/babel-plugin', () => {
           export const styles = {
             error: {
               kVAM5u: "xs4buau",
+              kzOINU: null,
+              kGJrpR: null,
+              kaZRDh: null,
+              kBCPoo: null,
+              k26BEO: null,
+              k5QoK5: null,
+              kLZC3w: null,
+              kL6WhQ: null,
               ksu8eU: "xn06r42",
+              kJRH4f: null,
+              kVhnKS: null,
+              k4WBpm: null,
+              k8ry5P: null,
+              kSWEuD: null,
+              kDUl1X: null,
+              kPef9Z: null,
+              kfdmCh: null,
               kMzoRj: "xn43iik",
+              kjGldf: null,
+              k2ei4v: null,
+              kZ1KPB: null,
+              ke9TFa: null,
+              kWqL5O: null,
+              kLoX6v: null,
+              kEafiO: null,
+              kt9PQ7: null,
               kogj98: "xe4njm9",
+              kUOVxO: null,
+              keTefX: null,
+              koQZXg: null,
+              k71WvV: null,
+              km5ZXQ: null,
+              kqGvvJ: null,
+              keoZOQ: null,
+              k1K539: null,
               kmVPX3: "x1lmef92",
+              kg3NbH: null,
+              kuDDbn: null,
+              kE3dHu: null,
+              kP0aTx: null,
+              kpe85a: null,
+              k8WAf4: null,
+              kLKAdn: null,
+              kGO01o: null,
               $$css: true
             },
             short: {
-              kt9PQ7: "xa309fb",
-              kfdmCh: "x1q0q8m5",
-              kL6WhQ: "xud65wk",
               kVAM5u: "x1lh7sze",
+              kzOINU: null,
+              kGJrpR: null,
+              kaZRDh: null,
+              kBCPoo: null,
+              k26BEO: null,
+              k5QoK5: null,
+              kLZC3w: null,
+              kL6WhQ: null,
               kaIpWk: "x12oqio5",
+              krdFHd: null,
+              kfmiAY: null,
+              kVL7Gh: null,
+              kT0f0o: null,
+              kIxVMA: null,
+              ksF3WI: null,
+              kqGeR4: null,
+              kYm2EN: null,
               ksu8eU: "x1y0btm7",
+              kJRH4f: null,
+              kVhnKS: null,
+              k4WBpm: null,
+              k8ry5P: null,
+              kSWEuD: null,
+              kDUl1X: null,
+              kPef9Z: null,
+              kfdmCh: null,
               kMzoRj: "xmkeg23",
+              kjGldf: null,
+              k2ei4v: null,
+              kZ1KPB: null,
+              ke9TFa: null,
+              kWqL5O: null,
+              kLoX6v: null,
+              kEafiO: null,
+              kt9PQ7: null,
               keoZOQ: "xxsse2n",
               km5ZXQ: "x1wh8b8d",
+              keTefX: null,
+              k71WvV: null,
               k1K539: "xat24cr",
               kLKAdn: "xexx8yu",
               $$css: true
@@ -812,30 +883,6 @@ describe('@stylexjs/babel-plugin', () => {
                   "rtl": null,
                 },
                 1000,
-              ],
-              [
-                "xa309fb",
-                {
-                  "ltr": ".xa309fb{border-bottom-width:5px}",
-                  "rtl": null,
-                },
-                4000,
-              ],
-              [
-                "x1q0q8m5",
-                {
-                  "ltr": ".x1q0q8m5{border-bottom-style:solid}",
-                  "rtl": null,
-                },
-                4000,
-              ],
-              [
-                "xud65wk",
-                {
-                  "ltr": ".xud65wk{border-bottom-color:red}",
-                  "rtl": null,
-                },
-                4000,
               ],
               [
                 "x1lh7sze",
@@ -2553,6 +2600,84 @@ describe('@stylexjs/babel-plugin', () => {
           `);
         });
 
+        test('media queries with a leading not and last query wins', () => {
+          const { code, metadata } = transform(
+            `
+            import * as stylex from '@stylexjs/stylex';
+            export const styles = stylex.create({
+              root: {
+                filter: {
+                  default: 'grayscale(1)',
+                  '@media not all and (monochrome)': 'none',
+                },
+                backgroundColor: {
+                  default: 'red',
+                  '@media not screen and (min-width: 100px)': 'blue',
+                  '@media (min-width: 500px)': 'purple',
+                }
+              },
+            });
+          `,
+            { enableMediaQueryOrder: true },
+          );
+          expect(code).toMatchInlineSnapshot(`
+            "import * as stylex from '@stylexjs/stylex';
+            export const styles = {
+              root: {
+                ku685b: "xifi7vn x342vwv",
+                kWkggS: "xrkmrrc x8tgh9g x132kqxt",
+                $$css: true
+              }
+            };"
+          `);
+          expect(metadata).toMatchInlineSnapshot(`
+            {
+              "stylex": [
+                [
+                  "xifi7vn",
+                  {
+                    "ltr": ".xifi7vn{filter:grayscale(1)}",
+                    "rtl": null,
+                  },
+                  3000,
+                ],
+                [
+                  "x342vwv",
+                  {
+                    "ltr": "@media not all and (monochrome){.x342vwv.x342vwv{filter:none}}",
+                    "rtl": null,
+                  },
+                  3200,
+                ],
+                [
+                  "xrkmrrc",
+                  {
+                    "ltr": ".xrkmrrc{background-color:red}",
+                    "rtl": null,
+                  },
+                  3000,
+                ],
+                [
+                  "x8tgh9g",
+                  {
+                    "ltr": "@media print and (not (min-width: 500px)), (max-width: 99.98px){.x8tgh9g.x8tgh9g{background-color:blue}}",
+                    "rtl": null,
+                  },
+                  3200,
+                ],
+                [
+                  "x132kqxt",
+                  {
+                    "ltr": "@media (min-width: 500px){.x132kqxt.x132kqxt{background-color:purple}}",
+                    "rtl": null,
+                  },
+                  3200,
+                ],
+              ],
+            }
+          `);
+        });
+
         test('media queries without last query wins', () => {
           const { code, metadata } = transform(
             `
@@ -2833,6 +2958,42 @@ describe('@stylexjs/babel-plugin', () => {
     });
 
     describe('dynamic styles', () => {
+      test('keeps shorthand resets as null with application-order', () => {
+        const { code } = transform(
+          `
+          import * as stylex from '@stylexjs/stylex';
+          export const styles = stylex.create({
+            root: (padding) => ({
+              padding,
+            })
+          });
+        `,
+          { styleResolution: 'application-order' },
+        );
+        expect(code).toMatchInlineSnapshot(`
+          "import * as stylex from '@stylexjs/stylex';
+          const _temp = {
+            kg3NbH: null,
+            kuDDbn: null,
+            kE3dHu: null,
+            kP0aTx: null,
+            kpe85a: null,
+            k8WAf4: null,
+            kLKAdn: null,
+            kGO01o: null,
+            "$$css": true
+          };
+          export const styles = {
+            root: padding => [_temp, padding !== undefined && {
+              kmVPX3: padding != null ? "x1fozly0" : "",
+              $$css: true
+            }, {
+              "--x-padding": (val => typeof val === "number" ? val + "px" : val != null ? val : undefined)(padding)
+            }]
+          };"
+        `);
+      });
+
       describe('safe conditional checks', () => {
         test('template literal expressions', () => {
           const { code, metadata } = transform(`
@@ -2916,7 +3077,23 @@ describe('@stylexjs/babel-plugin', () => {
               kzqmXN: "x5lhr3w",
               kZKoxP: "x16ye13r",
               kogj98: "xb9ncqk",
+              kUOVxO: null,
+              keTefX: null,
+              koQZXg: null,
+              k71WvV: null,
+              km5ZXQ: null,
+              kqGvvJ: null,
+              keoZOQ: null,
+              k1K539: null,
               kmVPX3: "x1fozly0",
+              kg3NbH: null,
+              kuDDbn: null,
+              kE3dHu: null,
+              kP0aTx: null,
+              kpe85a: null,
+              k8WAf4: null,
+              kLKAdn: null,
+              kGO01o: null,
               "$$css": true
             };
             export const styles = {
@@ -3454,7 +3631,23 @@ describe('@stylexjs/babel-plugin', () => {
               kzqmXN: "x5lhr3w",
               kZKoxP: "x16ye13r",
               kogj98: "xb9ncqk",
+              kUOVxO: null,
+              keTefX: null,
+              koQZXg: null,
+              k71WvV: null,
+              km5ZXQ: null,
+              kqGvvJ: null,
+              keoZOQ: null,
+              k1K539: null,
               kmVPX3: "x1fozly0",
+              kg3NbH: null,
+              kuDDbn: null,
+              kE3dHu: null,
+              kP0aTx: null,
+              kpe85a: null,
+              k8WAf4: null,
+              kLKAdn: null,
+              kGO01o: null,
               kGuDYH: "xdmh292",
               kSiTet: "xb4nw82",
               k3aq6I: "xsqj5wx",
@@ -4070,7 +4263,23 @@ describe('@stylexjs/babel-plugin', () => {
               kzqmXN: "x5lhr3w",
               kZKoxP: "x16ye13r",
               kogj98: "xb9ncqk",
+              kUOVxO: null,
+              keTefX: null,
+              koQZXg: null,
+              k71WvV: null,
+              km5ZXQ: null,
+              kqGvvJ: null,
+              keoZOQ: null,
+              k1K539: null,
               kmVPX3: "x1fozly0",
+              kg3NbH: null,
+              kuDDbn: null,
+              kE3dHu: null,
+              kP0aTx: null,
+              kpe85a: null,
+              k8WAf4: null,
+              kLKAdn: null,
+              kGO01o: null,
               "$$css": true
             };
             export const styles = {

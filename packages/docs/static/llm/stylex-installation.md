@@ -198,7 +198,7 @@ import './index.css';
 | `unstable_moduleResolution` | object | undefined | Module resolution strategy for theming APIs |
 | `classNamePrefix` | string | 'x' | Prefix for generated class names |
 | `importSources` | array | ['@stylexjs/stylex'] | Custom import sources for StyleX |
-| `styleResolution` | string | 'property-specificity' | Style merge strategy: 'application-order' (last style wins) or 'property-specificity' (more specific property wins) |
+| `styleResolution` | string | 'application-order' | Style merge strategy: 'application-order' (last style wins) or 'property-specificity' (more specific property wins) |
 
 ### Unplugin and PostCSS options
 

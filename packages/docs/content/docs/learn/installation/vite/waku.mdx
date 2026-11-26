@@ -49,14 +49,14 @@ The easiest way to do this is by using an encapsulated helper that can also be
 used to insert a link tag for your production CSS.
 
 ```tsx
-// src/DevStyleXInject.tsx
+// src/components/DevStyleXInject.tsx
 'use client';
 import { useEffect } from 'react';
 
 function DevStyleXInjectImpl() {
   useEffect(() => {
     if (import.meta.env.DEV) {
-      import('virtual:stylex:runtime');
+      import('virtual:stylex:css-only');
     }
   }, []);
   return <link rel="stylesheet" href="/virtual:stylex.css" />;
@@ -75,18 +75,18 @@ Render `<DevStyleXInject cssHref="/stylex.css" />` in your HTML shell component.
 
 ```tsx
 // src/pages/_layout.tsx (excerpt)
+import type { ReactNode } from 'react';
 import { DevStyleXInject } from '../components/DevStyleXInject';
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <>
-    <head>
-      <DevStyleXInject cssHref="/stylex.css" />
-    </head>
-    <body>
-    <div>
-      {children}
-    </div>
+      <head>
+        <DevStyleXInject cssHref="/stylex.css" />
+      </head>
+      <body>
+        <div>{children}</div>
+      </body>
     </>
   );
 }

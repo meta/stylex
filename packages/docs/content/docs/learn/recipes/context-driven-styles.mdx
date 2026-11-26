@@ -36,7 +36,7 @@ closed state and conditionally applies the appropriate styles.
 ```tsx
 import { useContext } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import { SidebarContext } from './SidebarContext';
+import SidebarContext from './SidebarContext';
 
 export default function Sidebar({ children }) {
   const isOpen = useContext(SidebarContext);

@@ -17,9 +17,9 @@ Common use cases include:
 - Static spacing, font sizes, or colors that don’t need theming
 
 ```ts
-function defineConsts<Consts extends { [key: string]: string }>(
+function defineConsts<Consts extends { [key: string]: number | string }>(
   consts: Consts,
-): Consts<{ [key in keyof Consts]: string }>;
+): Consts;
 ```
 
 ### Example use:

@@ -7,6 +7,7 @@
  * @flow strict
  */
 
+import { compareStringsWithDefaultFirst } from './compare-strings';
 import { arraySort } from './object-utils';
 
 export const sortPseudos = (
@@ -35,7 +36,7 @@ export const sortPseudos = (
     )
     .flatMap((pseudo) => {
       if (Array.isArray(pseudo)) {
-        return arraySort(pseudo, stringComparator);
+        return arraySort(pseudo, compareStringsWithDefaultFirst);
       }
       return [pseudo];
     });
@@ -44,15 +45,3 @@ export const sortPseudos = (
 export const sortAtRules = (
   atRules: $ReadOnlyArray<string>,
 ): $ReadOnlyArray<string> => arraySort(atRules);
-
-// a comparator function that sorts strings alphabetically
-// but where `default` always comes first
-const stringComparator = (a: string, b: string): number => {
-  if (a === 'default') {
-    return -1;
-  }
-  if (b === 'default') {
-    return 1;
-  }
-  return a.localeCompare(b);
-};
