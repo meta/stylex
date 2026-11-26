@@ -266,6 +266,15 @@ describe('@stylexjs/babel-plugin', () => {
       `);
     });
 
+    test('strip leading zeros from negative values', () => {
+      const code = transform(`
+        import stylex from 'stylex';
+        const styles = stylex.create({ x: { marginTop: '-0.5px' } });
+      `);
+      expect(code).toContain('margin-top:-.5px');
+      expect(code).not.toContain('-0.5px');
+    });
+
     test('use double quotes in empty strings', () => {
       expect(
         transform(`
