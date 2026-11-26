@@ -123,13 +123,24 @@ export function merge(styles: $ReadOnlyArray<mixed>): MergeResult {
   // ids from cache hits, marked only if a later style needs them
   let pending: Array<$ReadOnlyArray<number>> | null = null;
 
-  const stack: Array<mixed> = [...styles];
-  while (stack.length > 0) {
-    const item = stack.pop();
+  let stack: Array<mixed> | null = null;
+  let index = styles.length;
+  while (true) {
+    let item;
+    if (stack !== null && stack.length > 0) {
+      item = stack.pop();
+    } else if (index > 0) {
+      item = styles[--index];
+    } else {
+      break;
+    }
     if (item == null || typeof item !== 'object') {
       continue;
     }
     if (Array.isArray(item)) {
+      if (stack === null) {
+        stack = [];
+      }
       for (let i = 0; i < item.length; i++) {
         stack.push(item[i]);
       }
