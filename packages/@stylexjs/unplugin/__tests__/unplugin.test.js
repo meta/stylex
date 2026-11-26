@@ -582,4 +582,231 @@ export const styles = stylex.create({
       }
     });
   });
+
+  // Regression: https://github.com/facebook/stylex/issues/1939
+  // With hashed names (e.g. entryNames: '[name]-[hash]'), changing only StyleX
+  // styles must change the emitted CSS file name, and metafile.outputs bytes
+  // must match the real size of the final file on disk.
+  describe('esbuild adapter hashed CSS output (#1939)', () => {
+    const esbuild = require('esbuild');
+
+    function withTempDir(fn) {
+      const dir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'stylex-unplugin-esbuild-hash-'),
+      );
+      return Promise.resolve(fn(dir)).finally(() =>
+        fs.rmSync(dir, { recursive: true, force: true }),
+      );
+    }
+
+    test('hashed CSS file name changes when only StyleX styles change', () =>
+      withTempDir(async (root) => {
+        const srcDir = path.join(root, 'src');
+        const outDir = path.join(root, 'dist');
+        fs.mkdirSync(srcDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(srcDir, 'global.css'),
+          'body { margin: 0; }\n',
+        );
+
+        async function runBuild(color) {
+          fs.writeFileSync(
+            path.join(srcDir, 'main.js'),
+            `import "./global.css";
+import * as stylex from "@stylexjs/stylex";
+const styles = stylex.create({ box: { color: "${color}" } });
+document.body.className = stylex.props(styles.box).className ?? "";
+`,
+          );
+
+          const result = await esbuild.build({
+            entryPoints: [path.join(srcDir, 'main.js')],
+            bundle: true,
+            outdir: outDir,
+            entryNames: '[name]-[hash]',
+            metafile: true,
+            alias: {
+              '@stylexjs/stylex': require.resolve('@stylexjs/stylex'),
+            },
+            plugins: [
+              unplugin.esbuild({
+                useCSSLayers: true,
+                importSources: ['@stylexjs/stylex'],
+                unstable_moduleResolution: { type: 'commonJS', rootDir: root },
+              }),
+            ],
+          });
+
+          const cssOutputs = Object.keys(result.metafile.outputs).filter((f) =>
+            f.endsWith('.css'),
+          );
+          expect(cssOutputs).toHaveLength(1);
+          const cssKey = cssOutputs[0];
+          const absPath = path.isAbsolute(cssKey)
+            ? cssKey
+            : path.resolve(process.cwd(), cssKey);
+          const content = fs.readFileSync(absPath, 'utf8');
+          const metaBytes = result.metafile.outputs[cssKey].bytes;
+          const diskBytes = Buffer.byteLength(content, 'utf8');
+          return {
+            fileName: path.basename(cssKey),
+            cssKey,
+            metaBytes,
+            diskBytes,
+            content,
+          };
+        }
+
+        const build1 = await runBuild('red');
+        expect(build1.content).toContain('color: red;');
+        expect(build1.metaBytes).toBe(build1.diskBytes);
+
+        const build2 = await runBuild('blue');
+        expect(build2.content).toContain('color: #00f;');
+        expect(build2.metaBytes).toBe(build2.diskBytes);
+
+        // Expected: the CSS file name changes when its StyleX content changes
+        expect(build1.fileName).not.toBe(build2.fileName);
+
+        // Deterministic: identical inputs produce identical file name
+        const build3 = await runBuild('blue');
+        expect(build3.fileName).toBe(build2.fileName);
+      }));
+
+    test('does not rename CSS file when hashed names are not in use', () =>
+      withTempDir(async (root) => {
+        const srcDir = path.join(root, 'src');
+        const outDir = path.join(root, 'dist');
+        fs.mkdirSync(srcDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(srcDir, 'global.css'),
+          'body { margin: 0; }\n',
+        );
+
+        async function runBuild(color) {
+          fs.writeFileSync(
+            path.join(srcDir, 'main.js'),
+            `import "./global.css";
+import * as stylex from "@stylexjs/stylex";
+const styles = stylex.create({ box: { color: "${color}" } });
+document.body.className = stylex.props(styles.box).className ?? "";
+`,
+          );
+
+          const result = await esbuild.build({
+            entryPoints: [path.join(srcDir, 'main.js')],
+            bundle: true,
+            outdir: outDir,
+            entryNames: '[name]',
+            metafile: true,
+            alias: {
+              '@stylexjs/stylex': require.resolve('@stylexjs/stylex'),
+            },
+            plugins: [
+              unplugin.esbuild({
+                useCSSLayers: true,
+                importSources: ['@stylexjs/stylex'],
+                unstable_moduleResolution: { type: 'commonJS', rootDir: root },
+              }),
+            ],
+          });
+
+          const cssOutputs = Object.keys(result.metafile.outputs).filter((f) =>
+            f.endsWith('.css'),
+          );
+          expect(cssOutputs).toHaveLength(1);
+          const cssKey = cssOutputs[0];
+          const absPath = path.isAbsolute(cssKey)
+            ? cssKey
+            : path.resolve(process.cwd(), cssKey);
+          const content = fs.readFileSync(absPath, 'utf8');
+          const metaBytes = result.metafile.outputs[cssKey].bytes;
+          const diskBytes = Buffer.byteLength(content, 'utf8');
+          return {
+            fileName: path.basename(cssKey),
+            cssKey,
+            metaBytes,
+            diskBytes,
+            content,
+          };
+        }
+
+        const build1 = await runBuild('red');
+        expect(build1.fileName).toBe('main.css');
+        expect(build1.metaBytes).toBe(build1.diskBytes);
+
+        const build2 = await runBuild('blue');
+        expect(build2.fileName).toBe('main.css');
+        expect(build2.metaBytes).toBe(build2.diskBytes);
+      }));
+
+    test('updates sourcemap references when CSS file is renamed', () =>
+      withTempDir(async (root) => {
+        const srcDir = path.join(root, 'src');
+        const outDir = path.join(root, 'dist');
+        fs.mkdirSync(srcDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(srcDir, 'global.css'),
+          'body { margin: 0; }\n',
+        );
+
+        fs.writeFileSync(
+          path.join(srcDir, 'main.js'),
+          `import "./global.css";
+import * as stylex from "@stylexjs/stylex";
+const styles = stylex.create({ box: { color: "red" } });
+document.body.className = stylex.props(styles.box).className ?? "";
+`,
+        );
+
+        const result = await esbuild.build({
+          entryPoints: [path.join(srcDir, 'main.js')],
+          bundle: true,
+          outdir: outDir,
+          entryNames: '[name]-[hash]',
+          sourcemap: true,
+          metafile: true,
+          alias: {
+            '@stylexjs/stylex': require.resolve('@stylexjs/stylex'),
+          },
+          plugins: [
+            unplugin.esbuild({
+              useCSSLayers: true,
+              importSources: ['@stylexjs/stylex'],
+              unstable_moduleResolution: { type: 'commonJS', rootDir: root },
+            }),
+          ],
+        });
+
+        const cssOutputs = Object.keys(result.metafile.outputs).filter((f) =>
+          f.endsWith('.css'),
+        );
+        expect(cssOutputs).toHaveLength(1);
+        const cssKey = cssOutputs[0];
+        const absCssPath = path.isAbsolute(cssKey)
+          ? cssKey
+          : path.resolve(process.cwd(), cssKey);
+        const cssContent = fs.readFileSync(absCssPath, 'utf8');
+
+        const mapKey = `${cssKey}.map`;
+        expect(result.metafile.outputs[mapKey]).toBeDefined();
+
+        const absMapPath = path.isAbsolute(mapKey)
+          ? mapKey
+          : path.resolve(process.cwd(), mapKey);
+        expect(fs.existsSync(absMapPath)).toBe(true);
+
+        const expectedMapName = path.basename(absMapPath);
+        expect(cssContent).toContain(
+          `/*# sourceMappingURL=${expectedMapName} */`,
+        );
+
+        // Check that JS output cssBundle reference points to the renamed CSS file
+        const jsOutputs = Object.keys(result.metafile.outputs).filter(
+          (f) => f.endsWith('.js') && !f.endsWith('.map'),
+        );
+        expect(jsOutputs).toHaveLength(1);
+        expect(result.metafile.outputs[jsOutputs[0]].cssBundle).toBe(cssKey);
+      }));
+  });
 });
