@@ -68,6 +68,7 @@ function processCollectedRulesToCSS(rules, options) {
   });
   const { code } = lightningTransform({
     targets: browserslistToTargets(browserslist()),
+    minify: options.minify ?? process.env.NODE_ENV === 'production',
     ...options.lightningcssOptions,
     filename: 'stylex.css',
     code: Buffer.from(collectedCSS),
@@ -359,7 +360,7 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
     }
   }
 
-  function collectCss() {
+  function collectCss({ minify } = {}) {
     const merged = new Map();
     if (devPersistToDisk) {
       try {
@@ -379,6 +380,7 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
       useCSSLayers,
       lightningcssOptions,
       enableLTRRTLComments: stylexOptions?.enableLTRRTLComments,
+      minify,
     });
   }
 
