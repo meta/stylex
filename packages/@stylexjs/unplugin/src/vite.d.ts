@@ -5,8 +5,9 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import type { VitePlugin } from 'unplugin';
 import type { UserOptions } from './core';
 
-declare const plugin: (options?: Partial<UserOptions>) => any;
+declare const plugin: (options?: Partial<UserOptions>) => VitePlugin;
 
 export default plugin;

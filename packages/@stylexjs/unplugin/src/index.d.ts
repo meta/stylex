@@ -6,6 +6,7 @@
  */
 
 import type { UserOptions } from './core';
+import type vite from './vite';
 
 export { unpluginFactory } from './core';
 export type { UserOptions } from './core';
@@ -19,7 +20,7 @@ declare const stylex: {
   rollup: (options?: Partial<UserOptions>) => any;
   rspack: (options?: Partial<UserOptions>) => any;
   unloader: (options?: Partial<UserOptions>) => any;
-  vite: (options?: Partial<UserOptions>) => any;
+  vite: typeof vite;
   webpack: (options?: Partial<UserOptions>) => any;
   raw: typeof import('./core').unpluginFactory;
 };
