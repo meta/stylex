@@ -108,9 +108,9 @@ describe('@stylexjs/babel-plugin', () => {
               0.1,
             ],
             [
-              "xop34xu-1lveb7",
+              "xop34xu-28esbo",
               {
-                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xaaua2w:lightblue;}}",
+                "ltr": "@media screen and (prefers-color-scheme: dark){:root, .xop34xu{--xaaua2w:lightblue;}}",
                 "rtl": null,
               },
               0.2,
@@ -173,9 +173,9 @@ describe('@stylexjs/babel-plugin', () => {
               0.1,
             ],
             [
-              "xop34xu-1lveb7",
+              "xop34xu-28esbo",
               {
-                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xaaua2w:lightblue;}}",
+                "ltr": "@media screen and (prefers-color-scheme: dark){:root, .xop34xu{--xaaua2w:lightblue;}}",
                 "rtl": null,
               },
               0.2,
@@ -285,6 +285,143 @@ describe('@stylexjs/babel-plugin', () => {
       `);
     });
 
+    test('tokens object with overlapping media queries', () => {
+      const { metadata } = transform(`
+        import * as stylex from '@stylexjs/stylex';
+        export const vars = stylex.defineVars({
+          fontSize: {
+            default: '16px',
+            '@media (min-height: 1px)': {
+              default: '20px',
+              '@media (min-width: 1px)': '24px',
+            },
+            '@media (min-width: 2px)': '32px',
+          },
+        });
+      `);
+
+      expect(metadata).toMatchInlineSnapshot(`
+        {
+          "stylex": [
+            [
+              "xop34xu",
+              {
+                "ltr": ":root, .xop34xu{--x1cvykxk:16px;}",
+                "rtl": null,
+              },
+              0.1,
+            ],
+            [
+              "xop34xu-1pknkiz",
+              {
+                "ltr": "@media (max-width: 1.98px) and (min-height: 1px){:root, .xop34xu{--x1cvykxk:20px;}}",
+                "rtl": null,
+              },
+              0.2,
+            ],
+            [
+              "xop34xu-1ouog6w",
+              {
+                "ltr": "@media (min-width: 1px){@media (max-width: 1.98px) and (min-height: 1px){:root, .xop34xu{--x1cvykxk:24px;}}}",
+                "rtl": null,
+              },
+              0.3,
+            ],
+            [
+              "xop34xu-w15jht",
+              {
+                "ltr": "@media (min-width: 2px){:root, .xop34xu{--x1cvykxk:32px;}}",
+                "rtl": null,
+              },
+              0.2,
+            ],
+          ],
+        }
+      `);
+    });
+
+    test('tokens object with overlapping media queries and enableMediaQueryOrder: false', () => {
+      const { metadata } = transform(
+        `
+        import * as stylex from '@stylexjs/stylex';
+        export const vars = stylex.defineVars({
+          fontSize: {
+            default: '16px',
+            '@media (min-height: 1px)': '20px',
+            '@media (min-width: 2px)': '32px',
+          },
+        });
+      `,
+        { enableMediaQueryOrder: false },
+      );
+
+      expect(metadata).toMatchInlineSnapshot(`
+        {
+          "stylex": [
+            [
+              "xop34xu",
+              {
+                "ltr": ":root, .xop34xu{--x1cvykxk:16px;}",
+                "rtl": null,
+              },
+              0.1,
+            ],
+            [
+              "xop34xu-rrzhcy",
+              {
+                "ltr": "@media (min-height: 1px){:root, .xop34xu{--x1cvykxk:20px;}}",
+                "rtl": null,
+              },
+              0.2,
+            ],
+            [
+              "xop34xu-w15jht",
+              {
+                "ltr": "@media (min-width: 2px){:root, .xop34xu{--x1cvykxk:32px;}}",
+                "rtl": null,
+              },
+              0.2,
+            ],
+          ],
+        }
+      `);
+    });
+
+    test('tokens object with a single media query', () => {
+      const { metadata } = transform(`
+        import * as stylex from '@stylexjs/stylex';
+        export const vars = stylex.defineVars({
+          narrow: {
+            default: 'red',
+            '@media (width < 800px)': 'blue',
+          },
+        });
+      `);
+
+      expect(metadata).toMatchInlineSnapshot(`
+        {
+          "stylex": [
+            [
+              "xop34xu",
+              {
+                "ltr": ":root, .xop34xu{--xfjogz3:red;}",
+                "rtl": null,
+              },
+              0.1,
+            ],
+            [
+              "xop34xu-mmpzi6",
+              {
+                "ltr": "@media (max-width: 799.99px){:root, .xop34xu{--xfjogz3:blue;}}",
+                "rtl": null,
+              },
+              0.2,
+            ],
+          ],
+        }
+      `);
+    });
+
     test('literal tokens object', () => {
       const { code, metadata } = transform(`
         import * as stylex from '@stylexjs/stylex';
@@ -380,9 +517,9 @@ describe('@stylexjs/babel-plugin', () => {
               0.1,
             ],
             [
-              "xop34xu-1lveb7",
+              "xop34xu-28esbo",
               {
-                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--otherColor:lightblue;}}",
+                "ltr": "@media screen and (prefers-color-scheme: dark){:root, .xop34xu{--otherColor:lightblue;}}",
                 "rtl": null,
               },
               0.2,
@@ -542,9 +679,9 @@ describe('@stylexjs/babel-plugin', () => {
               0.1,
             ],
             [
-              "xop34xu-1lveb7",
+              "xop34xu-28esbo",
               {
-                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:white;}}",
+                "ltr": "@media screen and (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:white;}}",
                 "rtl": null,
               },
               0.2,

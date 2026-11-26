@@ -15,6 +15,7 @@ import createHash from './hash';
 import { objMap } from './utils/object-utils';
 import { defaultOptions } from './utils/default-options';
 import {
+  applyMediaQueryOrderToValue,
   collectVarsByAtRule,
   getDefaultValue,
   priorityForAtRule,
@@ -36,7 +37,7 @@ export default function styleXDefineVars<Vars: VarsConfig>(
   variables: Vars,
   options: $ReadOnly<{ ...Partial<StyleXOptions>, exportId: string, ... }>,
 ): [VarsObject<Vars>, { [string]: InjectableStyle }] {
-  const { classNamePrefix, exportId } = {
+  const { classNamePrefix, exportId, enableMediaQueryOrder } = {
     ...defaultOptions,
     ...options,
   };
@@ -63,9 +64,19 @@ export default function styleXDefineVars<Vars: VarsConfig>(
         initialValue: getDefaultValue(v.value),
         syntax: v.syntax,
       };
-      return { nameHash, value: v.value };
+      return {
+        nameHash,
+        value: enableMediaQueryOrder
+          ? applyMediaQueryOrderToValue(v.value)
+          : v.value,
+      };
     }
-    return { nameHash, value: value as $FlowFixMe };
+    return {
+      nameHash,
+      value: enableMediaQueryOrder
+        ? applyMediaQueryOrderToValue(value as $FlowFixMe)
+        : (value as $FlowFixMe),
+    };
   });
 
   const themeVariablesObject = objMap(
