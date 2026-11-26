@@ -319,6 +319,16 @@ const styles9 = stylex.create({
   bar: (height: number, width?: number) => ({ height, width }),
 });
 
+// `cursor` should accept arbitrary string
+// See https://github.com/facebook/stylex/issues/1463
+const styles10 = stylex.create({
+  cursorDefault: {
+    cursor: 'url(/images/icons/cursor-default.png), default',
+  },
+});
+
+styles10.cursorDefault satisfies StyleXStyles;
+
 /**
  * MARKER STYLES
  *
