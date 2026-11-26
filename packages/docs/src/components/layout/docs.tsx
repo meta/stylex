@@ -83,7 +83,22 @@ const layoutStyles = stylex.create({
 
 function Sidebar() {
   const { root } = useTreeContext();
-  const [open] = use(SidebarContext);
+  const [open, setOpen] = use(SidebarContext);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (open !== true) return;
+    const mobile = window.matchMedia('(max-width: 767.9px)');
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!mobile.matches || !(target instanceof Element)) return;
+      if (containerRef.current?.contains(target)) return;
+      if (target.closest('[aria-controls="nd-docs-sidebar"]')) return;
+      setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [open, setOpen]);
 
   const children = useMemo(() => {
     function renderItems(items: PageTree.Node[]) {
@@ -101,6 +116,8 @@ function Sidebar() {
 
   return (
     <div
+      id="nd-docs-sidebar"
+      ref={containerRef}
       {...stylex.props(
         sidebarStyles.container,
         open === true && sidebarStyles.open,
