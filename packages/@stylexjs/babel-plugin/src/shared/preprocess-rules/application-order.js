@@ -626,9 +626,9 @@ const shorthands: $ReadOnly<{ [key: string]: (TStyleValue) => TReturn }> = {
   },
   paddingInline: (rawValue: TStyleValue): TReturn => [
     ['paddingInline', rawValue],
-    ['paddingStart', null],
+    ['paddingInlineStart', null],
     ['paddingLeft', null],
-    ['paddingEnd', null],
+    ['paddingInlineEnd', null],
     ['paddingRight', null],
   ],
   paddingBlock: (rawValue: TStyleValue): TReturn => [
