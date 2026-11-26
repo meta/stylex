@@ -10,7 +10,7 @@
 import type { ModuleType, TransformConfig } from './config';
 import type { NodePath } from '@babel/traverse';
 import { getRelativePath } from './files';
-import { findModuleDir } from './modules';
+import { findModuleDir, COMPILED_MODULES_DIR_NAME } from './modules';
 import * as t from '@babel/types';
 
 import * as nodePath from 'node:path';
@@ -100,7 +100,7 @@ export const createModuleImportModifierPlugin = (
                     )
                   : nodePath.join(
                       config.output,
-                      'stylex_compiled_modules',
+                      COMPILED_MODULES_DIR_NAME,
                       module,
                       source.split(module).pop() ?? '',
                     );
