@@ -209,6 +209,18 @@ const stylexNoUnused = {
 
       // Exempt used styles: export const exportStyles = stylex.create({});
       ExportNamedDeclaration(node: ExportNamedDeclaration) {
+        // Exempt used styles: export { exportStyles };
+        // Skip re-exports and type-only exports: no local value is exported
+        if (node.source == null && (node as $FlowFixMe).exportKind !== 'type') {
+          for (const specifier of node.specifiers) {
+            // Skip type-only specifier: export { type exportStyles };
+            if ((specifier as $FlowFixMe).exportKind === 'type') {
+              continue;
+            }
+            stylexProperties.delete(specifier.local.name);
+          }
+        }
+
         const declarations = node.declaration?.declarations;
         if (declarations?.length !== 1) {
           return;
