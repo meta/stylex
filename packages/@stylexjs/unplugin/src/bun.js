@@ -28,18 +28,22 @@ export const createStylexBunPlugin = (userOptions = {}) => {
     options.bunDevCssOutput ||
     path.resolve(process.cwd(), 'dist', 'stylex.dev.css');
   let lastCss = null;
+  let writeQueue = Promise.resolve();
 
-  const writeCss = async () => {
+  const writeCss = (force = false) => {
     const css = plugin.__stylexCollectCss?.() || '';
     const next = css
       ? `:root { --stylex-injection: 0; }\n${css}`
       : ':root { --stylex-injection: 0; }';
-    if (next === lastCss) return;
+    if (!force && next === lastCss) return writeQueue;
     lastCss = next;
-    try {
-      await fsp.mkdir(path.dirname(cssOutput), { recursive: true });
-      await fsp.writeFile(cssOutput, next, 'utf8');
-    } catch {}
+    writeQueue = writeQueue
+      .then(async () => {
+        await fsp.mkdir(path.dirname(cssOutput), { recursive: true });
+        await fsp.writeFile(cssOutput, next, 'utf8');
+      })
+      .catch(() => {});
+    return writeQueue;
   };
 
   return {
@@ -59,11 +63,11 @@ export const createStylexBunPlugin = (userOptions = {}) => {
       if (plugin.buildEnd) {
         build.onEnd(async () => {
           await plugin.buildEnd();
-          await writeCss();
+          await writeCss(true);
         });
       } else {
         build.onEnd(async () => {
-          await writeCss();
+          await writeCss(true);
         });
       }
 
