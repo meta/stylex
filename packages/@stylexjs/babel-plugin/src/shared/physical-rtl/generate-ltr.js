@@ -33,10 +33,6 @@ const inlinePropertyToLTR: $ReadOnly<{
   'border-inline-end-color': ([_key, val]) => ['border-right-color', val],
   'border-inline-start-style': ([_key, val]) => ['border-left-style', val],
   'border-inline-end-style': ([_key, val]) => ['border-right-style', val],
-  'border-start-start-radius': ([_key, val]) => ['border-top-left-radius', val],
-  'border-end-start-radius': ([_k, val]) => ['border-bottom-left-radius', val],
-  'border-start-end-radius': ([_key, val]) => ['border-top-right-radius', val],
-  'border-end-end-radius': ([_key, val]) => ['border-bottom-right-radius', val],
   'inset-inline-start': ([_key, val]) => ['left', val],
   'inset-inline-end': ([_key, val]) => ['right', val],
 };
