@@ -117,6 +117,12 @@ function Sidebar() {
   return (
     <div
       id="nd-docs-sidebar"
+      onClick={(event) => {
+        if (!window.matchMedia('(max-width: 767.9px)').matches) return;
+        if (!(event.target instanceof Element)) return;
+        if (event.target.closest('a') == null) return;
+        setOpen(false);
+      }}
       ref={containerRef}
       {...stylex.props(
         sidebarStyles.container,
