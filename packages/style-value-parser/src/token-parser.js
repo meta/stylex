@@ -71,6 +71,26 @@ type TokenNameToTokenType = {
   UnicodeRange: TokenUnicodeRange,
 };
 
+let canSetStackTraceLimit = true;
+
+function parseError(message: string): Error {
+  const { stackTraceLimit } = Error;
+  if (!canSetStackTraceLimit || typeof stackTraceLimit !== 'number') {
+    return new Error(message);
+  }
+  try {
+    Error.stackTraceLimit = 0;
+  } catch {
+    canSetStackTraceLimit = false;
+    return new Error(message);
+  }
+  try {
+    return new Error(message);
+  } finally {
+    Error.stackTraceLimit = stackTraceLimit;
+  }
+}
+
 export class TokenParser<+T> {
   +run: (input: TokenList) => T | Error;
   +label: string;
@@ -215,7 +235,7 @@ export class TokenParser<+T> {
   }
 
   static never<T>(): TokenParser<T> {
-    return new TokenParser(() => new Error('Never'), 'Never');
+    return new TokenParser(() => parseError('Never'), 'Never');
   }
 
   static always<T>(output: T): TokenParser<T> {
@@ -234,11 +254,11 @@ export class TokenParser<+T> {
       const token = input.consumeNextToken();
       if (token == null) {
         input.setCurrentIndex(currentIndex);
-        return new Error('Expected token');
+        return parseError('Expected token');
       }
       if (token[0] !== tokenType) {
         input.setCurrentIndex(currentIndex);
-        return new Error(`Expected token type ${tokenType}, got ${token[0]}`);
+        return parseError(`Expected token type ${tokenType}, got ${token[0]}`);
       }
       // $FlowFixMe[incompatible-type]
       return token as TT;
@@ -352,7 +372,7 @@ export class TokenParser<+T> {
         input.setCurrentIndex(index);
         errors.push(output);
       }
-      return new Error(
+      return parseError(
         'No parser matched\n' +
           errors.map((err) => '- ' + err.toString()).join('\n'),
       );
@@ -482,7 +502,7 @@ class TokenParserSequence<
         const output: ValuesFromParserTuple<T> | Error = parsers.map(
           <X>(_parser: TokenParser<X>): X | Error => {
             if (failed) {
-              return new Error('already failed');
+              return parseError('already failed');
             }
             let parser = _parser;
 
@@ -610,7 +630,7 @@ class TokenParserSet<
         if (found) {
           continue;
         } else {
-          failed = new Error(
+          failed = parseError(
             `Expected one of ${parsers
               .map((parser) => parser.toString())
               .join(', ')} but got ${errors

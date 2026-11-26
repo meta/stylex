@@ -190,4 +190,42 @@ describe('TokenParser', () => {
       expect(parser.parse('foo foo foo for')).toEqual(['foo', 'foo', 'foo']);
     });
   });
+
+  describe('failed alternatives', () => {
+    const parser = TokenParser.oneOf(
+      TokenParser.tokens.Ident.map((token) => token[4].value),
+      TokenParser.tokens.Number.map((token) => token[4].value),
+    );
+
+    it('restores Error.stackTraceLimit', () => {
+      const { stackTraceLimit } = Error;
+      Error.stackTraceLimit = 37;
+      try {
+        expect(parser.parseToEnd('123')).toEqual(123);
+        expect(Error.stackTraceLimit).toBe(37);
+      } finally {
+        Error.stackTraceLimit = stackTraceLimit;
+      }
+    });
+
+    it('still parses when Error.stackTraceLimit is not writable', () => {
+      const descriptor = Object.getOwnPropertyDescriptor<number>(
+        Error,
+        'stackTraceLimit',
+      );
+      Object.defineProperty(Error, 'stackTraceLimit', {
+        value: Error.stackTraceLimit,
+        writable: false,
+        configurable: true,
+      });
+      try {
+        expect(parser.parseToEnd('123')).toEqual(123);
+        expect(parser.parse('"str"') instanceof Error).toBe(true);
+      } finally {
+        if (descriptor != null) {
+          Object.defineProperty(Error, 'stackTraceLimit', descriptor);
+        }
+      }
+    });
+  });
 });
