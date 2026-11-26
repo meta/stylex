@@ -14,7 +14,43 @@ import { Calc } from '../css-types/calc';
 import { MediaQueryErrors } from './messages';
 
 type Fraction = [number, '/', number];
-type WordRule = 'color' | 'monochrome' | 'grid' | 'color-index';
+// Media features that may be evaluated in a boolean context, e.g. `(hover)`.
+// https://drafts.csswg.org/mediaqueries-5/#mq-boolean-context
+const booleanMediaFeatures = [
+  'color',
+  'monochrome',
+  'grid',
+  'color-index',
+  'width',
+  'height',
+  'aspect-ratio',
+  'resolution',
+  'orientation',
+  'scan',
+  'update',
+  'overflow-block',
+  'overflow-inline',
+  'color-gamut',
+  'dynamic-range',
+  'video-dynamic-range',
+  'inverted-colors',
+  'pointer',
+  'hover',
+  'any-pointer',
+  'any-hover',
+  'scripting',
+  'display-mode',
+  'prefers-reduced-motion',
+  'prefers-reduced-transparency',
+  'prefers-reduced-data',
+  'prefers-contrast',
+  'prefers-color-scheme',
+  'forced-colors',
+] as const;
+type WordRule = (typeof booleanMediaFeatures)[number];
+const booleanMediaFeatureSet: $ReadOnlySet<string> = new Set(
+  booleanMediaFeatures,
+);
 type Length = TokenDimension[4];
 
 type MediaRuleValue = number | Length | string | Fraction;
@@ -85,11 +121,8 @@ const mediaWordRuleParser: TokenParser<MediaWordRule> =
   TokenParser.tokens.Ident.map((token) => token[4].value, '.stringValue')
     .surroundedBy(TokenParser.tokens.OpenParen, TokenParser.tokens.CloseParen)
     .where(
-      (key): implies key is WordRule =>
-        key === 'color' ||
-        key === 'monochrome' ||
-        key === 'grid' ||
-        key === 'color-index',
+      // $FlowFixMe[incompatible-type-guard]
+      (key: string): implies key is WordRule => booleanMediaFeatureSet.has(key),
     )
     .map((key) => ({
       type: 'word-rule',

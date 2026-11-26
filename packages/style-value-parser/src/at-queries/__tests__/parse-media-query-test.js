@@ -922,6 +922,18 @@ describe('style-value-parser/at-queries', () => {
         );
       });
 
+      test.each([
+        '(prefers-reduced-motion)',
+        '(prefers-contrast)',
+        '(hover)',
+        '(any-pointer)',
+        '(forced-colors)',
+        '(hover) and (prefers-reduced-motion)',
+      ])('@media %s', (query) => {
+        const input = `@media ${query}`;
+        expect(MediaQuery.parser.parseToEnd(input).toString()).toBe(input);
+      });
+
       test('@media (monochrome)', () => {
         const input = '@media (monochrome)';
         const parsed = MediaQuery.parser.parseToEnd(input);
