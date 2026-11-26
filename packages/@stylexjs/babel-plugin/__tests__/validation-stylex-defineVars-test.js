@@ -49,6 +49,20 @@ describe('@stylexjs/babel-plugin', () => {
       }).toThrow(messages.unboundCallValue('defineVars'));
     });
 
+    test('invalid media query syntax', () => {
+      expect(() => {
+        transform(`
+          import * as stylex from '@stylexjs/stylex';
+          export const vars = stylex.defineVars({
+            color: {
+              default: 'red',
+              '@media not ((not (min-width: 400px))': 'blue',
+            },
+          });
+        `);
+      }).toThrow(messages.INVALID_MEDIA_QUERY_SYNTAX);
+    });
+
     test('invalid argument: none', () => {
       expect(() => {
         transform(`

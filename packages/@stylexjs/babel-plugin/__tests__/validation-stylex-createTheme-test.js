@@ -107,6 +107,18 @@ describe('@stylexjs/babel-plugin', () => {
 
     /* Values */
 
+    test('invalid media query syntax', () => {
+      expect(() => {
+        transform(`
+          import stylex from 'stylex';
+          const variables = stylex.createTheme(
+            {__varGroupHash__: 'x568ih9', labelColor: 'var(--labelColorHash)'},
+            {labelColor: {default: 'red', '@media not ((not (min-width: 400px))': 'blue'}}
+          );
+        `);
+      }).toThrow(messages.INVALID_MEDIA_QUERY_SYNTAX);
+    });
+
     test('values must be static number or string in stylex.createTheme()', () => {
       // number
       expect(() => {

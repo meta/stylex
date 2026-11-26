@@ -11,6 +11,7 @@ import type { InjectableStyle, StyleXOptions } from './common-types';
 
 import createHash from './hash';
 import {
+  applyMediaQueryOrderToValue,
   collectVarsByAtRule,
   priorityForAtRule,
   wrapWithAtRules,
@@ -33,7 +34,10 @@ export default function styleXCreateTheme(
     );
   }
 
-  const { classNamePrefix } = { ...defaultOptions, ...options };
+  const { classNamePrefix, enableMediaQueryOrder } = {
+    ...defaultOptions,
+    ...options,
+  };
 
   // Create a map of @-rule names and values
   const rulesByAtRule: { [string]: Array<string> } = {};
@@ -42,9 +46,12 @@ export default function styleXCreateTheme(
   const sortedKeys = Object.keys(variables).sort();
 
   for (const key of sortedKeys) {
-    const value = isCSSType(variables[key])
+    const rawValue = isCSSType(variables[key])
       ? variables[key].value
       : variables[key];
+    const value = enableMediaQueryOrder
+      ? applyMediaQueryOrderToValue(rawValue)
+      : rawValue;
     const nameHash = themeVars[key].slice(6, -1);
     collectVarsByAtRule(key, { nameHash, value }, rulesByAtRule);
   }

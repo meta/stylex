@@ -9,6 +9,8 @@
 
 import type { CSSType } from './types';
 
+import { applyMediaQueryOrder } from './utils/media-query-order';
+
 export type VarsConfigValue =
   | string
   | $ReadOnly<{ default: VarsConfigValue, [string]: VarsConfigValue }>;
@@ -18,6 +20,12 @@ export type VarsConfig = $ReadOnly<{
 }>;
 
 const SPLIT_TOKEN = '__$$__';
+
+export function applyMediaQueryOrderToValue(
+  value: VarsConfigValue,
+): VarsConfigValue {
+  return applyMediaQueryOrder({ value }).value;
+}
 
 export function collectVarsByAtRule(
   key: string,

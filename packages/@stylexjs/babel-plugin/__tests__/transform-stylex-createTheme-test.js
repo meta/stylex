@@ -118,7 +118,7 @@ describe('@stylexjs/babel-plugin', () => {
           __varGroupHash__: "xop34xu"
         };
         export const theme = {
-          xop34xu: "x10yrbfs xop34xu",
+          xop34xu: "x1odz0le xop34xu",
           $$css: true
         };"
       `);
@@ -134,9 +134,9 @@ describe('@stylexjs/babel-plugin', () => {
               0.1,
             ],
             [
-              "xop34xu-1lveb7",
+              "xop34xu-28esbo",
               {
-                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;--xaaua2w:rgba(0, 0, 0, 0.8);}}",
+                "ltr": "@media screen and (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;}}",
                 "rtl": null,
               },
               0.2,
@@ -150,33 +150,49 @@ describe('@stylexjs/babel-plugin', () => {
               0.2,
             ],
             [
-              "x10yrbfs",
+              "xop34xu-1lveb7",
               {
-                "ltr": ".x10yrbfs, .x10yrbfs:root{--xwx8imx:green;--xaaua2w:antiquewhite;--xbbre8:6px;}",
+                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xaaua2w:rgba(0, 0, 0, 0.8);}}",
+                "rtl": null,
+              },
+              0.2,
+            ],
+            [
+              "x1odz0le",
+              {
+                "ltr": ".x1odz0le, .x1odz0le:root{--xwx8imx:green;--xaaua2w:antiquewhite;--xbbre8:6px;}",
                 "rtl": null,
               },
               0.5,
             ],
             [
-              "x10yrbfs-1lveb7",
+              "x1odz0le-1lveb7",
               {
-                "ltr": "@media (prefers-color-scheme: dark){.x10yrbfs, .x10yrbfs:root{--xwx8imx:lightgreen;--xaaua2w:floralwhite;}}",
+                "ltr": "@media (prefers-color-scheme: dark){.x1odz0le, .x1odz0le:root{--xaaua2w:floralwhite;}}",
                 "rtl": null,
               },
               0.6000000000000001,
             ],
             [
-              "x10yrbfs-1e6ryz3",
+              "x1odz0le-1e6ryz3",
               {
-                "ltr": "@supports (color: oklab(0 0 0)){@media (prefers-color-scheme: dark){.x10yrbfs, .x10yrbfs:root{--xaaua2w:oklab(0.7 -0.3 -0.4);}}}",
+                "ltr": "@supports (color: oklab(0 0 0)){@media (prefers-color-scheme: dark){.x1odz0le, .x1odz0le:root{--xaaua2w:oklab(0.7 -0.3 -0.4);}}}",
                 "rtl": null,
               },
               0.7,
             ],
             [
-              "x10yrbfs-bdddrq",
+              "x1odz0le-bdddrq",
               {
-                "ltr": "@media print{.x10yrbfs, .x10yrbfs:root{--xwx8imx:transparent;}}",
+                "ltr": "@media print{.x1odz0le, .x1odz0le:root{--xwx8imx:transparent;}}",
+                "rtl": null,
+              },
+              0.6000000000000001,
+            ],
+            [
+              "x1odz0le-28esbo",
+              {
+                "ltr": "@media screen and (prefers-color-scheme: dark){.x1odz0le, .x1odz0le:root{--xwx8imx:lightgreen;}}",
                 "rtl": null,
               },
               0.6000000000000001,
@@ -207,7 +223,7 @@ describe('@stylexjs/babel-plugin', () => {
           __varGroupHash__: "xop34xu"
         };
         export const theme = {
-          xop34xu: "x10yrbfs xop34xu",
+          xop34xu: "x1odz0le xop34xu",
           $$css: true
         };"
       `);
@@ -223,9 +239,9 @@ describe('@stylexjs/babel-plugin', () => {
               0.1,
             ],
             [
-              "xop34xu-1lveb7",
+              "xop34xu-28esbo",
               {
-                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;--xaaua2w:rgba(0, 0, 0, 0.8);}}",
+                "ltr": "@media screen and (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;}}",
                 "rtl": null,
               },
               0.2,
@@ -239,33 +255,49 @@ describe('@stylexjs/babel-plugin', () => {
               0.2,
             ],
             [
-              "x10yrbfs",
+              "xop34xu-1lveb7",
               {
-                "ltr": ".x10yrbfs, .x10yrbfs:root{--xwx8imx:green;--xaaua2w:antiquewhite;--xbbre8:6px;}",
+                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xaaua2w:rgba(0, 0, 0, 0.8);}}",
+                "rtl": null,
+              },
+              0.2,
+            ],
+            [
+              "x1odz0le",
+              {
+                "ltr": ".x1odz0le, .x1odz0le:root{--xwx8imx:green;--xaaua2w:antiquewhite;--xbbre8:6px;}",
                 "rtl": null,
               },
               0.5,
             ],
             [
-              "x10yrbfs-1lveb7",
+              "x1odz0le-1lveb7",
               {
-                "ltr": "@media (prefers-color-scheme: dark){.x10yrbfs, .x10yrbfs:root{--xwx8imx:lightgreen;--xaaua2w:floralwhite;}}",
+                "ltr": "@media (prefers-color-scheme: dark){.x1odz0le, .x1odz0le:root{--xaaua2w:floralwhite;}}",
                 "rtl": null,
               },
               0.6000000000000001,
             ],
             [
-              "x10yrbfs-1e6ryz3",
+              "x1odz0le-1e6ryz3",
               {
-                "ltr": "@supports (color: oklab(0 0 0)){@media (prefers-color-scheme: dark){.x10yrbfs, .x10yrbfs:root{--xaaua2w:oklab(0.7 -0.3 -0.4);}}}",
+                "ltr": "@supports (color: oklab(0 0 0)){@media (prefers-color-scheme: dark){.x1odz0le, .x1odz0le:root{--xaaua2w:oklab(0.7 -0.3 -0.4);}}}",
                 "rtl": null,
               },
               0.7,
             ],
             [
-              "x10yrbfs-bdddrq",
+              "x1odz0le-bdddrq",
               {
-                "ltr": "@media print{.x10yrbfs, .x10yrbfs:root{--xwx8imx:transparent;}}",
+                "ltr": "@media print{.x1odz0le, .x1odz0le:root{--xwx8imx:transparent;}}",
+                "rtl": null,
+              },
+              0.6000000000000001,
+            ],
+            [
+              "x1odz0le-28esbo",
+              {
+                "ltr": "@media screen and (prefers-color-scheme: dark){.x1odz0le, .x1odz0le:root{--xwx8imx:lightgreen;}}",
                 "rtl": null,
               },
               0.6000000000000001,
@@ -295,7 +327,7 @@ describe('@stylexjs/babel-plugin', () => {
           __varGroupHash__: "x1xohuxq"
         };
         export const theme = {
-          x1xohuxq: "x1qn30me x1xohuxq",
+          x1xohuxq: "xn547xa x1xohuxq",
           $$css: true
         };"
       `);
@@ -311,9 +343,9 @@ describe('@stylexjs/babel-plugin', () => {
               0.1,
             ],
             [
-              "x1xohuxq-1lveb7",
+              "x1xohuxq-28esbo",
               {
-                "ltr": "@media (prefers-color-scheme: dark){:root, .x1xohuxq{--xt4ziaz:lightblue;--x1e3it8h:rgba(0, 0, 0, 0.8);}}",
+                "ltr": "@media screen and (prefers-color-scheme: dark){:root, .x1xohuxq{--xt4ziaz:lightblue;}}",
                 "rtl": null,
               },
               0.2,
@@ -327,33 +359,135 @@ describe('@stylexjs/babel-plugin', () => {
               0.2,
             ],
             [
-              "x1qn30me",
+              "x1xohuxq-1lveb7",
               {
-                "ltr": ".x1qn30me, .x1qn30me:root{--xt4ziaz:green;--x1e3it8h:antiquewhite;--x1onrunl:6px;}",
+                "ltr": "@media (prefers-color-scheme: dark){:root, .x1xohuxq{--x1e3it8h:rgba(0, 0, 0, 0.8);}}",
+                "rtl": null,
+              },
+              0.2,
+            ],
+            [
+              "xn547xa",
+              {
+                "ltr": ".xn547xa, .xn547xa:root{--xt4ziaz:green;--x1e3it8h:antiquewhite;--x1onrunl:6px;}",
                 "rtl": null,
               },
               0.5,
             ],
             [
-              "x1qn30me-1lveb7",
+              "xn547xa-1lveb7",
               {
-                "ltr": "@media (prefers-color-scheme: dark){.x1qn30me, .x1qn30me:root{--xt4ziaz:lightgreen;--x1e3it8h:floralwhite;}}",
+                "ltr": "@media (prefers-color-scheme: dark){.xn547xa, .xn547xa:root{--x1e3it8h:floralwhite;}}",
                 "rtl": null,
               },
               0.6000000000000001,
             ],
             [
-              "x1qn30me-1e6ryz3",
+              "xn547xa-1e6ryz3",
               {
-                "ltr": "@supports (color: oklab(0 0 0)){@media (prefers-color-scheme: dark){.x1qn30me, .x1qn30me:root{--x1e3it8h:oklab(0.7 -0.3 -0.4);}}}",
+                "ltr": "@supports (color: oklab(0 0 0)){@media (prefers-color-scheme: dark){.xn547xa, .xn547xa:root{--x1e3it8h:oklab(0.7 -0.3 -0.4);}}}",
                 "rtl": null,
               },
               0.7,
             ],
             [
-              "x1qn30me-bdddrq",
+              "xn547xa-bdddrq",
               {
-                "ltr": "@media print{.x1qn30me, .x1qn30me:root{--xt4ziaz:transparent;}}",
+                "ltr": "@media print{.xn547xa, .xn547xa:root{--xt4ziaz:transparent;}}",
+                "rtl": null,
+              },
+              0.6000000000000001,
+            ],
+            [
+              "xn547xa-28esbo",
+              {
+                "ltr": "@media screen and (prefers-color-scheme: dark){.xn547xa, .xn547xa:root{--xt4ziaz:lightgreen;}}",
+                "rtl": null,
+              },
+              0.6000000000000001,
+            ],
+          ],
+        }
+      `);
+    });
+
+    test('theme object with overlapping media queries', () => {
+      const { metadata } = transformWithFixture(`
+        export const theme = stylex.createTheme(vars, {
+          radius: {
+            default: '6px',
+            '@media (min-height: 1px)': {
+              default: '8px',
+              '@media (min-width: 1px)': '10px',
+            },
+            '@media (min-width: 2px)': '12px',
+          },
+        });
+      `);
+
+      expect(metadata).toMatchInlineSnapshot(`
+        {
+          "stylex": [
+            [
+              "xop34xu",
+              {
+                "ltr": ":root, .xop34xu{--xwx8imx:blue;--xaaua2w:grey;--xbbre8:10;}",
+                "rtl": null,
+              },
+              0.1,
+            ],
+            [
+              "xop34xu-28esbo",
+              {
+                "ltr": "@media screen and (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;}}",
+                "rtl": null,
+              },
+              0.2,
+            ],
+            [
+              "xop34xu-bdddrq",
+              {
+                "ltr": "@media print{:root, .xop34xu{--xwx8imx:white;}}",
+                "rtl": null,
+              },
+              0.2,
+            ],
+            [
+              "xop34xu-1lveb7",
+              {
+                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xaaua2w:rgba(0, 0, 0, 0.8);}}",
+                "rtl": null,
+              },
+              0.2,
+            ],
+            [
+              "x1fp6i2x",
+              {
+                "ltr": ".x1fp6i2x, .x1fp6i2x:root{--xbbre8:6px;}",
+                "rtl": null,
+              },
+              0.5,
+            ],
+            [
+              "x1fp6i2x-1pknkiz",
+              {
+                "ltr": "@media (max-width: 1.98px) and (min-height: 1px){.x1fp6i2x, .x1fp6i2x:root{--xbbre8:8px;}}",
+                "rtl": null,
+              },
+              0.6000000000000001,
+            ],
+            [
+              "x1fp6i2x-1ouog6w",
+              {
+                "ltr": "@media (min-width: 1px){@media (max-width: 1.98px) and (min-height: 1px){.x1fp6i2x, .x1fp6i2x:root{--xbbre8:10px;}}}",
+                "rtl": null,
+              },
+              0.7,
+            ],
+            [
+              "x1fp6i2x-w15jht",
+              {
+                "ltr": "@media (min-width: 2px){.x1fp6i2x, .x1fp6i2x:root{--xbbre8:12px;}}",
                 "rtl": null,
               },
               0.6000000000000001,
@@ -402,9 +536,9 @@ describe('@stylexjs/babel-plugin', () => {
               0.1,
             ],
             [
-              "xop34xu-1lveb7",
+              "xop34xu-28esbo",
               {
-                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--color:lightblue;--otherColor:rgba(0, 0, 0, 0.8);}}",
+                "ltr": "@media screen and (prefers-color-scheme: dark){:root, .xop34xu{--color:lightblue;}}",
                 "rtl": null,
               },
               0.2,
@@ -413,6 +547,14 @@ describe('@stylexjs/babel-plugin', () => {
               "xop34xu-bdddrq",
               {
                 "ltr": "@media print{:root, .xop34xu{--color:white;}}",
+                "rtl": null,
+              },
+              0.2,
+            ],
+            [
+              "xop34xu-1lveb7",
+              {
+                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--otherColor:rgba(0, 0, 0, 0.8);}}",
                 "rtl": null,
               },
               0.2,
@@ -460,7 +602,7 @@ describe('@stylexjs/babel-plugin', () => {
           radius: '6px'
         };
         export const theme = {
-          xop34xu: "x10yrbfs xop34xu",
+          xop34xu: "x1odz0le xop34xu",
           $$css: true
         };"
       `);
@@ -476,9 +618,9 @@ describe('@stylexjs/babel-plugin', () => {
               0.1,
             ],
             [
-              "xop34xu-1lveb7",
+              "xop34xu-28esbo",
               {
-                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;--xaaua2w:rgba(0, 0, 0, 0.8);}}",
+                "ltr": "@media screen and (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;}}",
                 "rtl": null,
               },
               0.2,
@@ -492,33 +634,49 @@ describe('@stylexjs/babel-plugin', () => {
               0.2,
             ],
             [
-              "x10yrbfs",
+              "xop34xu-1lveb7",
               {
-                "ltr": ".x10yrbfs, .x10yrbfs:root{--xwx8imx:green;--xaaua2w:antiquewhite;--xbbre8:6px;}",
+                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xaaua2w:rgba(0, 0, 0, 0.8);}}",
+                "rtl": null,
+              },
+              0.2,
+            ],
+            [
+              "x1odz0le",
+              {
+                "ltr": ".x1odz0le, .x1odz0le:root{--xwx8imx:green;--xaaua2w:antiquewhite;--xbbre8:6px;}",
                 "rtl": null,
               },
               0.5,
             ],
             [
-              "x10yrbfs-1lveb7",
+              "x1odz0le-1lveb7",
               {
-                "ltr": "@media (prefers-color-scheme: dark){.x10yrbfs, .x10yrbfs:root{--xwx8imx:lightgreen;--xaaua2w:floralwhite;}}",
+                "ltr": "@media (prefers-color-scheme: dark){.x1odz0le, .x1odz0le:root{--xaaua2w:floralwhite;}}",
                 "rtl": null,
               },
               0.6000000000000001,
             ],
             [
-              "x10yrbfs-1e6ryz3",
+              "x1odz0le-1e6ryz3",
               {
-                "ltr": "@supports (color: oklab(0 0 0)){@media (prefers-color-scheme: dark){.x10yrbfs, .x10yrbfs:root{--xaaua2w:oklab(0.7 -0.3 -0.4);}}}",
+                "ltr": "@supports (color: oklab(0 0 0)){@media (prefers-color-scheme: dark){.x1odz0le, .x1odz0le:root{--xaaua2w:oklab(0.7 -0.3 -0.4);}}}",
                 "rtl": null,
               },
               0.7,
             ],
             [
-              "x10yrbfs-bdddrq",
+              "x1odz0le-bdddrq",
               {
-                "ltr": "@media print{.x10yrbfs, .x10yrbfs:root{--xwx8imx:transparent;}}",
+                "ltr": "@media print{.x1odz0le, .x1odz0le:root{--xwx8imx:transparent;}}",
+                "rtl": null,
+              },
+              0.6000000000000001,
+            ],
+            [
+              "x1odz0le-28esbo",
+              {
+                "ltr": "@media screen and (prefers-color-scheme: dark){.x1odz0le, .x1odz0le:root{--xwx8imx:lightgreen;}}",
                 "rtl": null,
               },
               0.6000000000000001,
@@ -562,9 +720,9 @@ describe('@stylexjs/babel-plugin', () => {
               0.1,
             ],
             [
-              "xop34xu-1lveb7",
+              "xop34xu-28esbo",
               {
-                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;--xaaua2w:rgba(0, 0, 0, 0.8);}}",
+                "ltr": "@media screen and (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;}}",
                 "rtl": null,
               },
               0.2,
@@ -573,6 +731,14 @@ describe('@stylexjs/babel-plugin', () => {
               "xop34xu-bdddrq",
               {
                 "ltr": "@media print{:root, .xop34xu{--xwx8imx:white;}}",
+                "rtl": null,
+              },
+              0.2,
+            ],
+            [
+              "xop34xu-1lveb7",
+              {
+                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xaaua2w:rgba(0, 0, 0, 0.8);}}",
                 "rtl": null,
               },
               0.2,
@@ -643,9 +809,9 @@ describe('@stylexjs/babel-plugin', () => {
               0.1,
             ],
             [
-              "xop34xu-1lveb7",
+              "xop34xu-28esbo",
               {
-                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;--xaaua2w:rgba(0, 0, 0, 0.8);}}",
+                "ltr": "@media screen and (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;}}",
                 "rtl": null,
               },
               0.2,
@@ -654,6 +820,14 @@ describe('@stylexjs/babel-plugin', () => {
               "xop34xu-bdddrq",
               {
                 "ltr": "@media print{:root, .xop34xu{--xwx8imx:white;}}",
+                "rtl": null,
+              },
+              0.2,
+            ],
+            [
+              "xop34xu-1lveb7",
+              {
+                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xaaua2w:rgba(0, 0, 0, 0.8);}}",
                 "rtl": null,
               },
               0.2,
@@ -713,9 +887,9 @@ describe('@stylexjs/babel-plugin', () => {
               0.1,
             ],
             [
-              "xop34xu-1lveb7",
+              "xop34xu-28esbo",
               {
-                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;--xaaua2w:rgba(0, 0, 0, 0.8);}}",
+                "ltr": "@media screen and (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;}}",
                 "rtl": null,
               },
               0.2,
@@ -724,6 +898,14 @@ describe('@stylexjs/babel-plugin', () => {
               "xop34xu-bdddrq",
               {
                 "ltr": "@media print{:root, .xop34xu{--xwx8imx:white;}}",
+                "rtl": null,
+              },
+              0.2,
+            ],
+            [
+              "xop34xu-1lveb7",
+              {
+                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xaaua2w:rgba(0, 0, 0, 0.8);}}",
                 "rtl": null,
               },
               0.2,
@@ -775,9 +957,9 @@ describe('@stylexjs/babel-plugin', () => {
               0.1,
             ],
             [
-              "xop34xu-1lveb7",
+              "xop34xu-28esbo",
               {
-                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;--xaaua2w:rgba(0, 0, 0, 0.8);}}",
+                "ltr": "@media screen and (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;}}",
                 "rtl": null,
               },
               0.2,
@@ -786,6 +968,14 @@ describe('@stylexjs/babel-plugin', () => {
               "xop34xu-bdddrq",
               {
                 "ltr": "@media print{:root, .xop34xu{--xwx8imx:white;}}",
+                "rtl": null,
+              },
+              0.2,
+            ],
+            [
+              "xop34xu-1lveb7",
+              {
+                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xaaua2w:rgba(0, 0, 0, 0.8);}}",
                 "rtl": null,
               },
               0.2,
@@ -830,7 +1020,7 @@ describe('@stylexjs/babel-plugin', () => {
         };
         const RADIUS = 10;
         export const theme = {
-          xop34xu: "x5gq8ml xop34xu",
+          xop34xu: "x1ttfuy6 xop34xu",
           $$css: true
         };"
       `);
@@ -846,9 +1036,9 @@ describe('@stylexjs/babel-plugin', () => {
               0.1,
             ],
             [
-              "xop34xu-1lveb7",
+              "xop34xu-28esbo",
               {
-                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;--xaaua2w:rgba(0, 0, 0, 0.8);}}",
+                "ltr": "@media screen and (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;}}",
                 "rtl": null,
               },
               0.2,
@@ -862,25 +1052,41 @@ describe('@stylexjs/babel-plugin', () => {
               0.2,
             ],
             [
-              "x5gq8ml",
+              "xop34xu-1lveb7",
               {
-                "ltr": ".x5gq8ml, .x5gq8ml:root{--xwx8imx:green;--xaaua2w:antiquewhite;--xbbre8:20px;}",
+                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xaaua2w:rgba(0, 0, 0, 0.8);}}",
+                "rtl": null,
+              },
+              0.2,
+            ],
+            [
+              "x1ttfuy6",
+              {
+                "ltr": ".x1ttfuy6, .x1ttfuy6:root{--xwx8imx:green;--xaaua2w:antiquewhite;--xbbre8:20px;}",
                 "rtl": null,
               },
               0.5,
             ],
             [
-              "x5gq8ml-1lveb7",
+              "x1ttfuy6-1lveb7",
               {
-                "ltr": "@media (prefers-color-scheme: dark){.x5gq8ml, .x5gq8ml:root{--xwx8imx:lightgreen;--xaaua2w:floralwhite;}}",
+                "ltr": "@media (prefers-color-scheme: dark){.x1ttfuy6, .x1ttfuy6:root{--xaaua2w:floralwhite;}}",
                 "rtl": null,
               },
               0.6000000000000001,
             ],
             [
-              "x5gq8ml-bdddrq",
+              "x1ttfuy6-bdddrq",
               {
-                "ltr": "@media print{.x5gq8ml, .x5gq8ml:root{--xwx8imx:transparent;}}",
+                "ltr": "@media print{.x1ttfuy6, .x1ttfuy6:root{--xwx8imx:transparent;}}",
+                "rtl": null,
+              },
+              0.6000000000000001,
+            ],
+            [
+              "x1ttfuy6-28esbo",
+              {
+                "ltr": "@media screen and (prefers-color-scheme: dark){.x1ttfuy6, .x1ttfuy6:root{--xwx8imx:lightgreen;}}",
                 "rtl": null,
               },
               0.6000000000000001,
@@ -908,7 +1114,7 @@ describe('@stylexjs/babel-plugin', () => {
           __varGroupHash__: "xop34xu"
         };
         export const theme = {
-          xop34xu: "x10yrbfs xop34xu",
+          xop34xu: "x1odz0le xop34xu",
           $$css: true
         };
         export const otherTheme = {
@@ -928,9 +1134,9 @@ describe('@stylexjs/babel-plugin', () => {
               0.1,
             ],
             [
-              "xop34xu-1lveb7",
+              "xop34xu-28esbo",
               {
-                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;--xaaua2w:rgba(0, 0, 0, 0.8);}}",
+                "ltr": "@media screen and (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;}}",
                 "rtl": null,
               },
               0.2,
@@ -944,33 +1150,49 @@ describe('@stylexjs/babel-plugin', () => {
               0.2,
             ],
             [
-              "x10yrbfs",
+              "xop34xu-1lveb7",
               {
-                "ltr": ".x10yrbfs, .x10yrbfs:root{--xwx8imx:green;--xaaua2w:antiquewhite;--xbbre8:6px;}",
+                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xaaua2w:rgba(0, 0, 0, 0.8);}}",
+                "rtl": null,
+              },
+              0.2,
+            ],
+            [
+              "x1odz0le",
+              {
+                "ltr": ".x1odz0le, .x1odz0le:root{--xwx8imx:green;--xaaua2w:antiquewhite;--xbbre8:6px;}",
                 "rtl": null,
               },
               0.5,
             ],
             [
-              "x10yrbfs-1lveb7",
+              "x1odz0le-1lveb7",
               {
-                "ltr": "@media (prefers-color-scheme: dark){.x10yrbfs, .x10yrbfs:root{--xwx8imx:lightgreen;--xaaua2w:floralwhite;}}",
+                "ltr": "@media (prefers-color-scheme: dark){.x1odz0le, .x1odz0le:root{--xaaua2w:floralwhite;}}",
                 "rtl": null,
               },
               0.6000000000000001,
             ],
             [
-              "x10yrbfs-1e6ryz3",
+              "x1odz0le-1e6ryz3",
               {
-                "ltr": "@supports (color: oklab(0 0 0)){@media (prefers-color-scheme: dark){.x10yrbfs, .x10yrbfs:root{--xaaua2w:oklab(0.7 -0.3 -0.4);}}}",
+                "ltr": "@supports (color: oklab(0 0 0)){@media (prefers-color-scheme: dark){.x1odz0le, .x1odz0le:root{--xaaua2w:oklab(0.7 -0.3 -0.4);}}}",
                 "rtl": null,
               },
               0.7,
             ],
             [
-              "x10yrbfs-bdddrq",
+              "x1odz0le-bdddrq",
               {
-                "ltr": "@media print{.x10yrbfs, .x10yrbfs:root{--xwx8imx:transparent;}}",
+                "ltr": "@media print{.x1odz0le, .x1odz0le:root{--xwx8imx:transparent;}}",
+                "rtl": null,
+              },
+              0.6000000000000001,
+            ],
+            [
+              "x1odz0le-28esbo",
+              {
+                "ltr": "@media screen and (prefers-color-scheme: dark){.x1odz0le, .x1odz0le:root{--xwx8imx:lightgreen;}}",
                 "rtl": null,
               },
               0.6000000000000001,
@@ -1011,7 +1233,7 @@ describe('@stylexjs/babel-plugin', () => {
           __varGroupHash__: "xop34xu"
         };
         export const theme = {
-          xop34xu: "x10yrbfs xop34xu",
+          xop34xu: "x1odz0le xop34xu",
           $$css: true
         };"
       `);
@@ -1025,7 +1247,7 @@ describe('@stylexjs/babel-plugin', () => {
           __varGroupHash__: "x1ngxneg"
         };
         export const theme = {
-          x1ngxneg: "x1k4bs7r x1ngxneg",
+          x1ngxneg: "xkyujlh x1ngxneg",
           $$css: true
         };"
       `);
@@ -1042,9 +1264,9 @@ describe('@stylexjs/babel-plugin', () => {
               0.1,
             ],
             [
-              "xop34xu-1lveb7",
+              "xop34xu-28esbo",
               {
-                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;--xaaua2w:rgba(0, 0, 0, 0.8);}}",
+                "ltr": "@media screen and (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;}}",
                 "rtl": null,
               },
               0.2,
@@ -1058,33 +1280,49 @@ describe('@stylexjs/babel-plugin', () => {
               0.2,
             ],
             [
-              "x10yrbfs",
+              "xop34xu-1lveb7",
               {
-                "ltr": ".x10yrbfs, .x10yrbfs:root{--xwx8imx:green;--xaaua2w:antiquewhite;--xbbre8:6px;}",
+                "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xaaua2w:rgba(0, 0, 0, 0.8);}}",
+                "rtl": null,
+              },
+              0.2,
+            ],
+            [
+              "x1odz0le",
+              {
+                "ltr": ".x1odz0le, .x1odz0le:root{--xwx8imx:green;--xaaua2w:antiquewhite;--xbbre8:6px;}",
                 "rtl": null,
               },
               0.5,
             ],
             [
-              "x10yrbfs-1lveb7",
+              "x1odz0le-1lveb7",
               {
-                "ltr": "@media (prefers-color-scheme: dark){.x10yrbfs, .x10yrbfs:root{--xwx8imx:lightgreen;--xaaua2w:floralwhite;}}",
+                "ltr": "@media (prefers-color-scheme: dark){.x1odz0le, .x1odz0le:root{--xaaua2w:floralwhite;}}",
                 "rtl": null,
               },
               0.6000000000000001,
             ],
             [
-              "x10yrbfs-1e6ryz3",
+              "x1odz0le-1e6ryz3",
               {
-                "ltr": "@supports (color: oklab(0 0 0)){@media (prefers-color-scheme: dark){.x10yrbfs, .x10yrbfs:root{--xaaua2w:oklab(0.7 -0.3 -0.4);}}}",
+                "ltr": "@supports (color: oklab(0 0 0)){@media (prefers-color-scheme: dark){.x1odz0le, .x1odz0le:root{--xaaua2w:oklab(0.7 -0.3 -0.4);}}}",
                 "rtl": null,
               },
               0.7,
             ],
             [
-              "x10yrbfs-bdddrq",
+              "x1odz0le-bdddrq",
               {
-                "ltr": "@media print{.x10yrbfs, .x10yrbfs:root{--xwx8imx:transparent;}}",
+                "ltr": "@media print{.x1odz0le, .x1odz0le:root{--xwx8imx:transparent;}}",
+                "rtl": null,
+              },
+              0.6000000000000001,
+            ],
+            [
+              "x1odz0le-28esbo",
+              {
+                "ltr": "@media screen and (prefers-color-scheme: dark){.x1odz0le, .x1odz0le:root{--xwx8imx:lightgreen;}}",
                 "rtl": null,
               },
               0.6000000000000001,
@@ -1105,9 +1343,9 @@ describe('@stylexjs/babel-plugin', () => {
               0.1,
             ],
             [
-              "x1ngxneg-1lveb7",
+              "x1ngxneg-28esbo",
               {
-                "ltr": "@media (prefers-color-scheme: dark){:root, .x1ngxneg{--x103gslp:lightblue;--x1e7put6:rgba(0, 0, 0, 0.8);}}",
+                "ltr": "@media screen and (prefers-color-scheme: dark){:root, .x1ngxneg{--x103gslp:lightblue;}}",
                 "rtl": null,
               },
               0.2,
@@ -1121,33 +1359,49 @@ describe('@stylexjs/babel-plugin', () => {
               0.2,
             ],
             [
-              "x1k4bs7r",
+              "x1ngxneg-1lveb7",
               {
-                "ltr": ".x1k4bs7r, .x1k4bs7r:root{--x103gslp:green;--x1e7put6:antiquewhite;--xm3n3tg:6px;}",
+                "ltr": "@media (prefers-color-scheme: dark){:root, .x1ngxneg{--x1e7put6:rgba(0, 0, 0, 0.8);}}",
+                "rtl": null,
+              },
+              0.2,
+            ],
+            [
+              "xkyujlh",
+              {
+                "ltr": ".xkyujlh, .xkyujlh:root{--x103gslp:green;--x1e7put6:antiquewhite;--xm3n3tg:6px;}",
                 "rtl": null,
               },
               0.5,
             ],
             [
-              "x1k4bs7r-1lveb7",
+              "xkyujlh-1lveb7",
               {
-                "ltr": "@media (prefers-color-scheme: dark){.x1k4bs7r, .x1k4bs7r:root{--x103gslp:lightgreen;--x1e7put6:floralwhite;}}",
+                "ltr": "@media (prefers-color-scheme: dark){.xkyujlh, .xkyujlh:root{--x1e7put6:floralwhite;}}",
                 "rtl": null,
               },
               0.6000000000000001,
             ],
             [
-              "x1k4bs7r-1e6ryz3",
+              "xkyujlh-1e6ryz3",
               {
-                "ltr": "@supports (color: oklab(0 0 0)){@media (prefers-color-scheme: dark){.x1k4bs7r, .x1k4bs7r:root{--x1e7put6:oklab(0.7 -0.3 -0.4);}}}",
+                "ltr": "@supports (color: oklab(0 0 0)){@media (prefers-color-scheme: dark){.xkyujlh, .xkyujlh:root{--x1e7put6:oklab(0.7 -0.3 -0.4);}}}",
                 "rtl": null,
               },
               0.7,
             ],
             [
-              "x1k4bs7r-bdddrq",
+              "xkyujlh-bdddrq",
               {
-                "ltr": "@media print{.x1k4bs7r, .x1k4bs7r:root{--x103gslp:transparent;}}",
+                "ltr": "@media print{.xkyujlh, .xkyujlh:root{--x103gslp:transparent;}}",
+                "rtl": null,
+              },
+              0.6000000000000001,
+            ],
+            [
+              "xkyujlh-28esbo",
+              {
+                "ltr": "@media screen and (prefers-color-scheme: dark){.xkyujlh, .xkyujlh:root{--x103gslp:lightgreen;}}",
                 "rtl": null,
               },
               0.6000000000000001,
@@ -1225,9 +1479,9 @@ describe('@stylexjs/babel-plugin', () => {
                 0.1,
               ],
               [
-                "xop34xu-1lveb7",
+                "xop34xu-28esbo",
                 {
-                  "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;--xaaua2w:rgba(0, 0, 0, 0.8);}}",
+                  "ltr": "@media screen and (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;}}",
                   "rtl": null,
                 },
                 0.2,
@@ -1236,6 +1490,14 @@ describe('@stylexjs/babel-plugin', () => {
                 "xop34xu-bdddrq",
                 {
                   "ltr": "@media print{:root, .xop34xu{--xwx8imx:white;}}",
+                  "rtl": null,
+                },
+                0.2,
+              ],
+              [
+                "xop34xu-1lveb7",
+                {
+                  "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xaaua2w:rgba(0, 0, 0, 0.8);}}",
                   "rtl": null,
                 },
                 0.2,
@@ -1293,9 +1555,9 @@ describe('@stylexjs/babel-plugin', () => {
                 0.1,
               ],
               [
-                "xop34xu-1lveb7",
+                "xop34xu-28esbo",
                 {
-                  "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;--xaaua2w:rgba(0, 0, 0, 0.8);}}",
+                  "ltr": "@media screen and (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;}}",
                   "rtl": null,
                 },
                 0.2,
@@ -1304,6 +1566,14 @@ describe('@stylexjs/babel-plugin', () => {
                 "xop34xu-bdddrq",
                 {
                   "ltr": "@media print{:root, .xop34xu{--xwx8imx:white;}}",
+                  "rtl": null,
+                },
+                0.2,
+              ],
+              [
+                "xop34xu-1lveb7",
+                {
+                  "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xaaua2w:rgba(0, 0, 0, 0.8);}}",
                   "rtl": null,
                 },
                 0.2,
@@ -1362,9 +1632,9 @@ describe('@stylexjs/babel-plugin', () => {
                 0.1,
               ],
               [
-                "xop34xu-1lveb7",
+                "xop34xu-28esbo",
                 {
-                  "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;--xaaua2w:rgba(0, 0, 0, 0.8);}}",
+                  "ltr": "@media screen and (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;}}",
                   "rtl": null,
                 },
                 0.2,
@@ -1373,6 +1643,14 @@ describe('@stylexjs/babel-plugin', () => {
                 "xop34xu-bdddrq",
                 {
                   "ltr": "@media print{:root, .xop34xu{--xwx8imx:white;}}",
+                  "rtl": null,
+                },
+                0.2,
+              ],
+              [
+                "xop34xu-1lveb7",
+                {
+                  "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xaaua2w:rgba(0, 0, 0, 0.8);}}",
                   "rtl": null,
                 },
                 0.2,
@@ -1431,9 +1709,9 @@ describe('@stylexjs/babel-plugin', () => {
                 0.1,
               ],
               [
-                "xop34xu-1lveb7",
+                "xop34xu-28esbo",
                 {
-                  "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;--xaaua2w:rgba(0, 0, 0, 0.8);}}",
+                  "ltr": "@media screen and (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;}}",
                   "rtl": null,
                 },
                 0.2,
@@ -1442,6 +1720,14 @@ describe('@stylexjs/babel-plugin', () => {
                 "xop34xu-bdddrq",
                 {
                   "ltr": "@media print{:root, .xop34xu{--xwx8imx:white;}}",
+                  "rtl": null,
+                },
+                0.2,
+              ],
+              [
+                "xop34xu-1lveb7",
+                {
+                  "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xaaua2w:rgba(0, 0, 0, 0.8);}}",
                   "rtl": null,
                 },
                 0.2,
@@ -1502,9 +1788,9 @@ describe('@stylexjs/babel-plugin', () => {
                 0.1,
               ],
               [
-                "xop34xu-1lveb7",
+                "xop34xu-28esbo",
                 {
-                  "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;--xaaua2w:rgba(0, 0, 0, 0.8);}}",
+                  "ltr": "@media screen and (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;}}",
                   "rtl": null,
                 },
                 0.2,
@@ -1513,6 +1799,14 @@ describe('@stylexjs/babel-plugin', () => {
                 "xop34xu-bdddrq",
                 {
                   "ltr": "@media print{:root, .xop34xu{--xwx8imx:white;}}",
+                  "rtl": null,
+                },
+                0.2,
+              ],
+              [
+                "xop34xu-1lveb7",
+                {
+                  "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xaaua2w:rgba(0, 0, 0, 0.8);}}",
                   "rtl": null,
                 },
                 0.2,
@@ -1578,9 +1872,9 @@ describe('@stylexjs/babel-plugin', () => {
                 0.1,
               ],
               [
-                "xop34xu-1lveb7",
+                "xop34xu-28esbo",
                 {
-                  "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;--xaaua2w:rgba(0, 0, 0, 0.8);}}",
+                  "ltr": "@media screen and (prefers-color-scheme: dark){:root, .xop34xu{--xwx8imx:lightblue;}}",
                   "rtl": null,
                 },
                 0.2,
@@ -1589,6 +1883,14 @@ describe('@stylexjs/babel-plugin', () => {
                 "xop34xu-bdddrq",
                 {
                   "ltr": "@media print{:root, .xop34xu{--xwx8imx:white;}}",
+                  "rtl": null,
+                },
+                0.2,
+              ],
+              [
+                "xop34xu-1lveb7",
+                {
+                  "ltr": "@media (prefers-color-scheme: dark){:root, .xop34xu{--xaaua2w:rgba(0, 0, 0, 0.8);}}",
                   "rtl": null,
                 },
                 0.2,
