@@ -56,6 +56,10 @@ Notes:
   or `import('virtual:stylex:css-only')` from a tiny client shim instead.
 - Ensure your app produces a CSS asset (default Vite behavior). If none exists,
   the plugin writes `stylex.css` in the output.
+- With Vue (`@vitejs/plugin-vue`) or Svelte, place the plugin after the
+  framework plugin and clear `enforce`, so it sees the compiled `.vue`/`.svelte`
+  output: `plugins: [vue(), { ...stylex.vite(), enforce: undefined }]`. Without
+  this, `<script setup>` styles are not compiled in `vite dev`.
 
 Dev HTML injection (baseline):
 

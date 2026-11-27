@@ -95,6 +95,70 @@ export const styles = stylex.create({
     expect(result).not.toBeNull();
   });
 
+  // https://github.com/facebook/stylex/issues/1562
+  describe('Vue single-file components', () => {
+    function createPlugin() {
+      const plugin = unpluginFactory(
+        { dev: true, runtimeInjection: false, devPersistToDisk: false },
+        { framework: 'vite' },
+      );
+      plugin.buildStart();
+      return plugin;
+    }
+
+    // Rules are shared across plugin instances via globalThis; don't leak
+    // them into later tests.
+    afterEach(() => {
+      createPlugin().__stylexGetSharedStore().rulesById.clear();
+    });
+
+    test('transforms a .vue module compiled by @vitejs/plugin-vue', async () => {
+      const plugin = createPlugin();
+      // Shape of what plugin-vue emits for `<script setup>` in `vite dev`:
+      // the script is inlined into the `.vue` module, not a sub-module.
+      const compiled = `import { defineComponent as _defineComponent } from 'vue';
+import * as stylex from '@stylexjs/stylex';
+const _sfc_main = /*@__PURE__*/ _defineComponent({
+  __name: 'App',
+  setup(__props, { expose: __expose }) {
+    __expose();
+    const styles = stylex.create({
+      text: { color: 'rgb(255, 0, 0)', outlineOffset: 73 },
+    });
+    const __returned__ = { styles };
+    return __returned__;
+  },
+});
+export default _sfc_main;
+`;
+      for (const id of ['/src/App.vue', '/src/App.vue?t=1700000000000']) {
+        const result = await plugin.transform.call({}, compiled, id);
+        expect(result).not.toBeNull();
+        expect(result.code).not.toContain('stylex.create(');
+      }
+      expect(plugin.transformInclude('/src/App.vue')).toBe(true);
+      expect(plugin.__stylexCollectCss()).toEqual(
+        expect.stringContaining('73px'),
+      );
+    });
+
+    test('leaves raw SFC source to @vitejs/plugin-vue', async () => {
+      const plugin = createPlugin();
+      const sfc = `<script setup lang="ts">
+import * as stylex from '@stylexjs/stylex';
+const styles = stylex.create({ text: { color: 'red' } });
+</script>
+
+<template>
+  <p v-bind="stylex.attrs(styles.text)">Hello</p>
+</template>
+`;
+      const result = await plugin.transform.call({}, sfc, '/src/App.vue');
+      expect(result).toBeNull();
+      expect(plugin.__stylexCollectCss()).toBe('');
+    });
+  });
+
   test('writes fallback CSS asset when no CSS bundle entry exists', async () => {
     const plugin = unplugin.rollup({
       runtimeInjection: false,
