@@ -225,6 +225,20 @@ function discoverStylexPackages({
 
 const JS_LIKE_RE = /\.[cm]?[jt]sx?(\?|$)/;
 const SVELTE_LIKE_RE = /\.svelte(\?|$)/;
+// In `vite dev` (and in builds of `<script setup>` without `lang="ts"`),
+// @vitejs/plugin-vue inlines the compiled script into the `.vue` module
+// itself instead of a `?vue&type=script&lang.*` sub-module, so `.vue` ids
+// must be transformed too. https://github.com/meta/stylex/issues/1562
+const VUE_LIKE_RE = /\.vue(\?|$)/;
+// When this plugin runs before @vitejs/plugin-vue (the default
+// `enforce: 'pre'`), `.vue` ids still hold the raw SFC, which Babel cannot
+// parse. Leave those for plugin-vue; its script sub-modules are matched by
+// JS_LIKE_RE as before.
+const RAW_SFC_RE = /^\s*<(?:script|template|style)\b/m;
+
+function isTransformableId(id) {
+  return JS_LIKE_RE.test(id) || SVELTE_LIKE_RE.test(id) || VUE_LIKE_RE.test(id);
+}
 
 export const unpluginFactory = (userOptions = {}, metaOptions) => {
   // framework :: 'rollup' | 'vite' | 'rolldown' | 'farm' | 'unloader'
@@ -438,13 +452,15 @@ export const unpluginFactory = (userOptions = {}, metaOptions) => {
     },
 
     transformInclude(id) {
-      return JS_LIKE_RE.test(id) || SVELTE_LIKE_RE.test(id);
+      return isTransformableId(id);
     },
 
     // Core code transform
     async transform(code, id) {
       // Only handle JS-like files; avoid parsing CSS/JSON/etc
-      if (!JS_LIKE_RE.test(id) && !SVELTE_LIKE_RE.test(id)) return null;
+      if (!isTransformableId(id)) return null;
+      if (VUE_LIKE_RE.test(id) && !JS_LIKE_RE.test(id) && RAW_SFC_RE.test(code))
+        return null;
       if (!shouldHandle(code)) {
         await clearCollectedRulesForId(id);
         return null;
