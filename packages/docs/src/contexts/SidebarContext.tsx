@@ -6,18 +6,29 @@
  */
 'use client';
 
-import { createContext, useMemo, useState } from 'react';
+import { usePathname } from 'fumadocs-core/framework';
+import { createContext, useId, useMemo, useState } from 'react';
 
 export const SidebarContext = createContext<
   [
     null | boolean,
-    (_val: ((_old: null | boolean) => boolean) | boolean) => void,
+    (_val: ((_old: null | boolean) => null | boolean) | null | boolean) => void,
+    string,
   ]
->([true, () => {}]);
+>([true, () => {}, '']);
 
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(null);
-  const value = useMemo(() => [open, setOpen], [open]);
+  const sidebarId = useId();
+
+  const pathname = usePathname();
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname);
+    if (open === true) setOpen(null);
+  }
+
+  const value = useMemo(() => [open, setOpen, sidebarId], [open, sidebarId]);
 
   return <SidebarContext value={value as any}>{children}</SidebarContext>;
 }

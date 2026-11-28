@@ -10,14 +10,19 @@ import { SidebarContext } from '@/contexts/SidebarContext';
 import { vars } from '@/theming/vars.stylex';
 import { SidebarIcon } from 'lucide-react';
 import * as stylex from '@stylexjs/stylex';
+import { useMediaQuery } from 'fumadocs-core/utils/use-media-query';
 import { use } from 'react';
 
 export default function SidebarToggle() {
-  const [_open, setOpen] = use(SidebarContext);
+  const [open, setOpen, sidebarId] = use(SidebarContext);
+  const isMobile = useMediaQuery('(max-width: 767.9px)');
+  const expanded = open ?? (isMobile === null ? undefined : !isMobile);
 
   return (
     <button
-      aria-controls="nd-docs-sidebar"
+      aria-controls={sidebarId}
+      aria-expanded={expanded}
+      aria-label="Toggle sidebar"
       onClick={() => {
         setOpen((old) => {
           if (old === null) {
