@@ -83,22 +83,7 @@ const layoutStyles = stylex.create({
 
 function Sidebar() {
   const { root } = useTreeContext();
-  const [open, setOpen] = use(SidebarContext);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (open !== true) return;
-    const mobile = window.matchMedia('(max-width: 767.9px)');
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!mobile.matches || !(target instanceof Element)) return;
-      if (containerRef.current?.contains(target)) return;
-      if (target.closest('[aria-controls="nd-docs-sidebar"]')) return;
-      setOpen(false);
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    return () => document.removeEventListener('pointerdown', onPointerDown);
-  }, [open, setOpen]);
+  const [open, setOpen, sidebarId] = use(SidebarContext);
 
   const children = useMemo(() => {
     function renderItems(items: PageTree.Node[]) {
@@ -115,31 +100,46 @@ function Sidebar() {
   const sidebarRef = useRef<HTMLElement>(null);
 
   return (
-    <div
-      id="nd-docs-sidebar"
-      onClick={(event) => {
-        if (!window.matchMedia('(max-width: 767.9px)').matches) return;
-        if (!(event.target instanceof Element)) return;
-        if (event.target.closest('a') == null) return;
-        setOpen(false);
-      }}
-      ref={containerRef}
-      {...stylex.props(
-        sidebarStyles.container,
-        open === true && sidebarStyles.open,
-        open === false && sidebarStyles.closed,
+    <>
+      {open === true && (
+        <div
+          onClick={() => setOpen(null)}
+          {...stylex.props(sidebarStyles.backdrop)}
+        />
       )}
-    >
-      <div {...stylex.props(sidebarStyles.blurContainer)}>
-        <div {...stylex.props(sidebarStyles.blur)} />
+      <div
+        id={sidebarId}
+        onClick={(event) => {
+          if (
+            event.button !== 0 ||
+            event.metaKey ||
+            event.ctrlKey ||
+            event.shiftKey ||
+            event.altKey
+          ) {
+            return;
+          }
+          if (!(event.target instanceof Element)) return;
+          if (event.target.closest('a') == null) return;
+          setOpen(null);
+        }}
+        {...stylex.props(
+          sidebarStyles.container,
+          open === true && sidebarStyles.open,
+          open === false && sidebarStyles.closed,
+        )}
+      >
+        <div {...stylex.props(sidebarStyles.blurContainer)}>
+          <div {...stylex.props(sidebarStyles.blur)} />
+        </div>
+
+        <aside {...stylex.props(sidebarStyles.base)} ref={sidebarRef}>
+          {children}
+        </aside>
+
+        <div {...stylex.props(sidebarStyles.overlayBlur)} />
       </div>
-
-      <aside {...stylex.props(sidebarStyles.base)} ref={sidebarRef}>
-        {children}
-      </aside>
-
-      <div {...stylex.props(sidebarStyles.overlayBlur)} />
-    </div>
+    </>
   );
 }
 const sidebarStyles = stylex.create({
@@ -149,6 +149,10 @@ const sidebarStyles = stylex.create({
     left: 0,
     zIndex: 10,
     display: 'flex',
+    visibility: {
+      default: 'visible',
+      '@media (max-width: 767.9px)': 'hidden',
+    },
     flexShrink: 0,
     alignSelf: 'flex-start',
     height: 'calc(100dvh - 64px)',
@@ -159,13 +163,24 @@ const sidebarStyles = stylex.create({
     },
     transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
     transitionDuration: '0.15s',
-    transitionProperty: 'transform',
+    transitionProperty: 'transform, visibility',
   },
   open: {
+    visibility: 'visible',
     transform: 'translateX(0)',
   },
   closed: {
+    visibility: 'hidden',
     transform: 'translateX(-100%)',
+  },
+  backdrop: {
+    position: 'fixed',
+    inset: 0,
+    zIndex: 9,
+    display: {
+      default: 'none',
+      '@media (max-width: 767.9px)': 'block',
+    },
   },
   blurContainer: {
     position: 'absolute',
