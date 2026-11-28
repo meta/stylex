@@ -17,6 +17,7 @@ export default function SidebarToggle() {
 
   return (
     <button
+      aria-controls="nd-docs-sidebar"
       onClick={() => {
         setOpen((old) => {
           if (old === null) {
