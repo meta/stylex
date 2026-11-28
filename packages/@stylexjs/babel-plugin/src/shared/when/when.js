@@ -9,6 +9,7 @@
 
 import type { StyleXOptions } from '../common-types';
 
+import { buildRelationalSelector } from '@stylexjs/shared';
 import { defaultOptions } from '../utils/default-options';
 
 function fromProxy(value: mixed): ?string {
@@ -81,7 +82,11 @@ export function ancestor(
   const defaultMarker =
     typeof options === 'string' ? options : getDefaultMarkerClassName(options);
 
-  return `:where(.${defaultMarker}${pseudo} *)`;
+  return buildRelationalSelector({
+    kind: 'ancestor',
+    marker: defaultMarker,
+    pseudo,
+  });
 }
 
 /**
@@ -99,7 +104,11 @@ export function descendant(
   const defaultMarker =
     typeof options === 'string' ? options : getDefaultMarkerClassName(options);
 
-  return `:where(:has(.${defaultMarker}${pseudo}))`;
+  return buildRelationalSelector({
+    kind: 'descendant',
+    marker: defaultMarker,
+    pseudo,
+  });
 }
 
 /**
@@ -117,7 +126,11 @@ export function siblingBefore(
   const defaultMarker =
     typeof options === 'string' ? options : getDefaultMarkerClassName(options);
 
-  return `:where(.${defaultMarker}${pseudo} ~ *)`;
+  return buildRelationalSelector({
+    kind: 'siblingBefore',
+    marker: defaultMarker,
+    pseudo,
+  });
 }
 
 /**
@@ -135,7 +148,11 @@ export function siblingAfter(
   const defaultMarker =
     typeof options === 'string' ? options : getDefaultMarkerClassName(options);
 
-  return `:where(:has(~ .${defaultMarker}${pseudo}))`;
+  return buildRelationalSelector({
+    kind: 'siblingAfter',
+    marker: defaultMarker,
+    pseudo,
+  });
 }
 
 /**
@@ -153,5 +170,9 @@ export function anySibling(
   const defaultMarker =
     typeof options === 'string' ? options : getDefaultMarkerClassName(options);
 
-  return `:where(.${defaultMarker}${pseudo} ~ *, :has(~ .${defaultMarker}${pseudo}))`;
+  return buildRelationalSelector({
+    kind: 'anySibling',
+    marker: defaultMarker,
+    pseudo,
+  });
 }

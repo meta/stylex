@@ -7,6 +7,10 @@
  * @flow strict
  */
 
+import type { RelationalKind } from './relational-selectors';
+
+import { parseRelationalSelector } from './relational-selectors';
+
 // Physical properties that have logical equivalents:
 const longHandPhysical = new Set<string>();
 // Logical properties *and* all other long hand properties:
@@ -725,14 +729,23 @@ export const AT_RULE_PRIORITIES: $ReadOnly<AtRulePriorities> = {
 
 export const PSEUDO_ELEMENT_PRIORITY: number = 5000;
 
-const RELATIONAL_SELECTORS = {
-  ANCESTOR: /^:where\(\.[0-9a-zA-Z_-]+(:[a-zA-Z-]+)\s+\*\)$/,
-  DESCENDANT: /^:where\(:has\(\.[0-9a-zA-Z_-]+(:[a-zA-Z-]+)\)\)$/,
-  SIBLING_BEFORE: /^:where\(\.[0-9a-zA-Z_-]+(:[a-zA-Z-]+)\s+~\s+\*\)$/,
-  SIBLING_AFTER: /^:where\(:has\(~\s\.[0-9a-zA-Z_-]+(:[a-zA-Z-]+)\)\)$/,
-  ANY_SIBLING:
-    /^:where\(\.[0-9a-zA-Z_-]+(:[a-zA-Z-]+)\s+~\s+\*,\s+:has\(~\s\.[0-9a-zA-Z_-]+(:[a-zA-Z-]+)\)\)$/,
+const RELATIONAL_PRIORITIES: $ReadOnly<{ [RelationalKind]: number }> = {
+  ancestor: 10,
+  descendant: 15,
+  anySibling: 20,
+  siblingBefore: 30,
+  siblingAfter: 40,
 };
+
+// Only a single plain pseudo-class gets a relational priority. Anything more
+// involved, such as `:has(> *)` or `[data-x]`, is priced as a plain `:where()`.
+const SIMPLE_PSEUDO = /^:[a-zA-Z-]+$/;
+
+// `when.anySibling` repeats its marker and pseudo in both branches, but a
+// hand-written key might not. Those keys aren't relational selectors for the CSS
+// builder, but they have always been priced like one.
+const MIXED_ANY_SIBLING =
+  /^:where\(\.[0-9a-zA-Z_-]+(:[a-zA-Z-]+)\s+~\s+\*,\s+:has\(~\s\.[0-9a-zA-Z_-]+(:[a-zA-Z-]+)\)\)$/;
 
 const PSEUDO_PART_REGEX = /::[a-zA-Z-]+|:[a-zA-Z-]+(?:\([^)]*\))?/g;
 
@@ -780,31 +793,19 @@ export function getPseudoClassPriority(key: string): number | void {
   const pseudoBase = (p: string): number =>
     (PSEUDO_CLASS_PRIORITIES[p] ?? 40) / 100;
 
-  const ancestorMatch = RELATIONAL_SELECTORS.ANCESTOR.exec(key);
-  if (ancestorMatch) {
-    return 10 + pseudoBase(ancestorMatch[1]);
-  }
-
-  const descendantMatch = RELATIONAL_SELECTORS.DESCENDANT.exec(key);
-  if (descendantMatch) {
-    return 15 + pseudoBase(descendantMatch[1]);
-  }
-
-  const anySiblingMatch = RELATIONAL_SELECTORS.ANY_SIBLING.exec(key);
-  if (anySiblingMatch)
+  const relational = parseRelationalSelector(key);
+  if (relational != null && SIMPLE_PSEUDO.test(relational.pseudo)) {
     return (
-      20 +
-      Math.max(pseudoBase(anySiblingMatch[1]), pseudoBase(anySiblingMatch[2]))
+      RELATIONAL_PRIORITIES[relational.kind] + pseudoBase(relational.pseudo)
     );
-
-  const siblingBeforeMatch = RELATIONAL_SELECTORS.SIBLING_BEFORE.exec(key);
-  if (siblingBeforeMatch) {
-    return 30 + pseudoBase(siblingBeforeMatch[1]);
   }
 
-  const siblingAfterMatch = RELATIONAL_SELECTORS.SIBLING_AFTER.exec(key);
-  if (siblingAfterMatch) {
-    return 40 + pseudoBase(siblingAfterMatch[1]);
+  const mixedAnySibling = MIXED_ANY_SIBLING.exec(key);
+  if (mixedAnySibling) {
+    return (
+      RELATIONAL_PRIORITIES.anySibling +
+      Math.max(pseudoBase(mixedAnySibling[1]), pseudoBase(mixedAnySibling[2]))
+    );
   }
 
   if (key.startsWith(':')) {

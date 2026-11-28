@@ -17,6 +17,20 @@ import {
   AT_RULE_PRIORITIES as _AT_RULE_PRIORITIES,
   PSEUDO_ELEMENT_PRIORITY as _PSEUDO_ELEMENT_PRIORITY,
 } from './utils/property-priorities';
+import {
+  buildRelationalSelector as _buildRelationalSelector,
+  parseRelationalSelector as _parseRelationalSelector,
+} from './utils/relational-selectors';
+
+export type {
+  RelationalKind,
+  RelationalSelector,
+} from './utils/relational-selectors';
+
+export const buildRelationalSelector: typeof _buildRelationalSelector =
+  _buildRelationalSelector;
+export const parseRelationalSelector: typeof _parseRelationalSelector =
+  _parseRelationalSelector;
 
 export const getAtRulePriority: typeof _getAtRulePriority = _getAtRulePriority;
 export const getPseudoElementPriority: typeof _getPseudoElementPriority =
