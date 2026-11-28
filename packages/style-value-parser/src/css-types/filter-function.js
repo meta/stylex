@@ -44,7 +44,7 @@ export class BlurFilterFunction extends FilterFunction {
   }
   static get parser(): TokenParser<BlurFilterFunction> {
     return TokenParser.sequence(
-      TokenParser.tokens.Function,
+      TokenParser.fn('blur'),
       Length.parser.surroundedBy(TokenParser.tokens.Whitespace.optional),
       TokenParser.tokens.CloseParen,
     ).map(([_, radius, _1]) => new BlurFilterFunction(radius));
@@ -62,7 +62,7 @@ export class BrightnessFilterFunction extends FilterFunction {
   }
   static get parser(): TokenParser<BrightnessFilterFunction> {
     return TokenParser.sequence(
-      TokenParser.tokens.Function,
+      TokenParser.fn('brightness'),
       numberOrPercentage
         .map((p) => (typeof p === 'number' ? p : p.value / 100))
         .surroundedBy(TokenParser.tokens.Whitespace.optional),
@@ -82,7 +82,7 @@ export class ContrastFilterFunction extends FilterFunction {
   }
   static get parser(): TokenParser<ContrastFilterFunction> {
     return TokenParser.sequence(
-      TokenParser.tokens.Function,
+      TokenParser.fn('contrast'),
       numberOrPercentage
         .map((p) => (typeof p === 'number' ? p : p.value / 100))
         .surroundedBy(TokenParser.tokens.Whitespace.optional),
@@ -149,7 +149,7 @@ export class GrayscaleFilterFunction extends FilterFunction {
   }
   static get parser(): TokenParser<GrayscaleFilterFunction> {
     return TokenParser.sequence(
-      TokenParser.tokens.Function,
+      TokenParser.fn('grayscale'),
       numberOrPercentage
         .map((p) => (typeof p === 'number' ? p : p.value / 100))
         .surroundedBy(TokenParser.tokens.Whitespace.optional),
@@ -169,7 +169,7 @@ export class HueRotateFilterFunction extends FilterFunction {
   }
   static get parser(): TokenParser<HueRotateFilterFunction> {
     return TokenParser.sequence(
-      TokenParser.tokens.Function,
+      TokenParser.fn('hue-rotate'),
       Angle.parser,
       TokenParser.tokens.CloseParen,
     ).map(([_, angle, _1]) => new HueRotateFilterFunction(angle));
@@ -187,7 +187,7 @@ export class InverFilterFunction extends FilterFunction {
   }
   static get parser(): TokenParser<InverFilterFunction> {
     return TokenParser.sequence(
-      TokenParser.tokens.Function,
+      TokenParser.fn('invert'),
       numberOrPercentage
         .map((p) => (typeof p === 'number' ? p : p.value / 100))
         .surroundedBy(TokenParser.tokens.Whitespace.optional),
@@ -207,7 +207,7 @@ export class OpacityFilterFunction extends FilterFunction {
   }
   static get parser(): TokenParser<OpacityFilterFunction> {
     return TokenParser.sequence(
-      TokenParser.tokens.Function,
+      TokenParser.fn('opacity'),
       numberOrPercentage
         .map((p) => (typeof p === 'number' ? p : p.value / 100))
         .surroundedBy(TokenParser.tokens.Whitespace.optional),
@@ -227,7 +227,7 @@ export class SaturateFilterFunction extends FilterFunction {
   }
   static get parser(): TokenParser<SaturateFilterFunction> {
     return TokenParser.sequence(
-      TokenParser.tokens.Function,
+      TokenParser.fn('saturate'),
       numberOrPercentage
         .map((p) => (typeof p === 'number' ? p : p.value / 100))
         .surroundedBy(TokenParser.tokens.Whitespace.optional),
@@ -247,7 +247,7 @@ export class SepiaFilterFunction extends FilterFunction {
   }
   static get parser(): TokenParser<SepiaFilterFunction> {
     return TokenParser.sequence(
-      TokenParser.tokens.Function,
+      TokenParser.fn('sepia'),
       numberOrPercentage
         .map((p) => (typeof p === 'number' ? p : p.value / 100))
         .surroundedBy(TokenParser.tokens.Whitespace.optional),
