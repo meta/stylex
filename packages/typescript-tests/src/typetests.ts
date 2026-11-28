@@ -307,6 +307,32 @@ const consts = stylex.defineConsts({
 consts.foo satisfies 'bar';
 consts.bar satisfies 123;
 
+const inferredConsts = stylex.defineConsts({
+  foo: 'bar',
+  bar: 123,
+  display: 'flex',
+  media: '@media (min-width: 768px)',
+});
+
+inferredConsts.foo satisfies 'bar';
+inferredConsts.bar satisfies 123;
+inferredConsts.display satisfies 'flex';
+inferredConsts.media satisfies '@media (min-width: 768px)';
+// @ts-expect-error - 'bar' is not assignable to 'baz'
+inferredConsts.foo satisfies 'baz';
+// @ts-expect-error - 123 is not assignable to 456
+inferredConsts.bar satisfies 456;
+
+stylex.create({
+  responsive: {
+    display: inferredConsts.display,
+    color: {
+      default: 'red',
+      [inferredConsts.media]: 'blue',
+    },
+  },
+});
+
 // Styles with explicit `undefined` values
 
 const styles9 = stylex.create({

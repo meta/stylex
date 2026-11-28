@@ -285,8 +285,8 @@ type NestedVarObject<T> =
     }>;
 
 export type StyleX$DefineConsts = <
-  DefaultTokens extends {
-    [key: string]: number | string;
+  const DefaultTokens extends {
+    readonly [key: string]: number | string;
   },
 >(
   tokens: DefaultTokens,
