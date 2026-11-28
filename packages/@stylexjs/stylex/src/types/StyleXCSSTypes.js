@@ -958,6 +958,7 @@ type OptionalArray<T> = Array<T> | T;
 export type SupportedVendorSpecificCSSProperties = Readonly<{
   MozOsxFontSmoothing?: null | 'grayscale',
   WebkitAppearance?: null | appearance,
+  WebkitAppRegion?: null | 'drag' | 'no-drag',
   WebkitFontSmoothing?: null | 'antialiased',
   WebkitTapHighlightColor?: null | color,
 }>;
@@ -969,6 +970,7 @@ export type CSSProperties = Readonly<{
   // ...$Exact<SupportedVendorSpecificCSSProperties>, for TypeScript compatibility
   MozOsxFontSmoothing?: all | 'grayscale',
   WebkitAppearance?: all | appearance,
+  WebkitAppRegion?: all | 'drag' | 'no-drag',
   WebkitFontSmoothing?: all | 'antialiased',
   WebkitTapHighlightColor?: all | color,
 
